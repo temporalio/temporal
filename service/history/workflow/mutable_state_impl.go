@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -813,35 +812,6 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	ms.writeEventToCache(event)
 	ms.currentTransactionAddedStateMachineEventTypes = append(ms.currentTransactionAddedStateMachineEventTypes, t)
 	return event
-}
-
-func (ms *MutableStateImpl) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
-	attrs := reflect.ValueOf(event.Attributes).Elem()
-
-	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
-	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("got an invalid event structure: %v", event.EventType))
-	}
-
-	f := attrs.Field(0).Interface()
-
-	var eventBatchID int64
-	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
-		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
-		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
-	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
-		// WFEStarted is always stored in the first batch of events.
-		eventBatchID = 1
-	} else {
-		// By default events aren't referenceable as they may end up buffered.
-		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
-		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
-	}
-	ref := &tokenspb.HistoryEventRef{
-		EventId:      event.EventId,
-		EventBatchId: eventBatchID,
-	}
-	return proto.Marshal(ref)
 }
 
 func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {

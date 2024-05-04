@@ -35,6 +35,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
@@ -43,8 +44,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -74,7 +73,13 @@ func RegisterExecutor(
 	if err := hsm.RegisterExecutor(registry, TaskTypeBackoff.ID, exec.executeBackoffTask); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutor(registry, TaskTypeTimeout.ID, exec.executeTimeoutTask)
+	if err := hsm.RegisterExecutor(registry, TaskTypeTimeout.ID, exec.executeTimeoutTask); err != nil {
+		return err
+	}
+	if err := hsm.RegisterExecutor(registry, TaskTypeCancelation.ID, exec.executeCancelationTask); err != nil {
+		return err
+	}
+	return hsm.RegisterExecutor(registry, TaskTypeCancelationBackoff.ID, exec.executeCancelationBackoffTask)
 }
 
 type activeExecutor struct {
@@ -82,20 +87,18 @@ type activeExecutor struct {
 }
 
 func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
-	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
-	if err != nil {
-		return fmt.Errorf("failed to get namespace by ID: %w", err)
-	}
-	ctx, cancel := context.WithTimeout(ctx, e.Config.InvocationTaskTimeout(ns.Name().String()))
-	defer cancel()
-
 	service, err := e.NamespaceRegistry.NexusOutgoingService(namespace.ID(ref.WorkflowKey.NamespaceID), task.Destination)
 	if err != nil {
-		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The mapping doesn't exist. Assume the registry's NexusOutgoingService will readthrough to verify this
-			// isn't due to propagation delay and this error indicates that the service mapping was removed and the task
+			// isn't due to propagation delay and this error indicates that the service mapping was removed and the operation
 			// should immediately fail.
-			return queues.NewUnprocessableTaskError(fmt.Sprintf("cannot find service in namespace outgoing task mapping: %s", task.Destination))
+			return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
+				Message: "cannot find service in namespace outgoing registry",
+				Response: &http.Response{
+					StatusCode: http.StatusNotFound,
+				},
+			})
 		}
 		return fmt.Errorf("failed to get nexus outgoing service: %w", err)
 	}
@@ -127,7 +130,15 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
-	rawResult, callErr := client.StartOperation(ctx, args.operationName, args.payload, nexus.StartOperationOptions{
+
+	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
+	if err != nil {
+		return fmt.Errorf("failed to get namespace by ID: %w", err)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, e.Config.RequestTimeout(ns.Name().String()))
+	defer cancel()
+
+	rawResult, callErr := client.StartOperation(callCtx, args.operationName, args.payload, nexus.StartOperationOptions{
 		Header:      header,
 		CallbackURL: callbackURL,
 		RequestID:   args.requestID,
@@ -182,6 +193,7 @@ func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environme
 		if err != nil {
 			return err
 		}
+
 		args.operationName = operation.Operation
 		args.requestID = operation.RequestId
 		eventToken = operation.ScheduledEventToken
@@ -242,6 +254,7 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 	}
 	var unexpectedResponseError *nexus.UnexpectedResponseError
 	var opFailedError *nexus.UnsuccessfulOperationError
+
 	if errors.As(callErr, &opFailedError) {
 		attemptTime := env.Now()
 		return handleUnsuccessfulOperationError(node, operation, opFailedError, &attemptTime)
@@ -347,6 +360,117 @@ func (e activeExecutor) executeTimeoutTask(ctx context.Context, env hsm.Environm
 			})
 
 			return TransitionTimedOut.Apply(op, EventTimedOut{
+				Node: node,
+			})
+		})
+	})
+}
+
+func (e activeExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {
+	service, err := e.NamespaceRegistry.NexusOutgoingService(namespace.ID(ref.WorkflowKey.NamespaceID), task.Destination)
+	if err != nil {
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			// The mapping doesn't exist. Assume the registry's NexusOutgoingService will readthrough to verify this
+			// isn't due to propagation delay and this error indicates that the service mapping was removed and the cancelation
+			// should immediately fail.
+			return e.saveCancelationResult(ctx, env, ref, &nexus.UnexpectedResponseError{
+				Message: "cannot find service in namespace outgoing registry",
+				Response: &http.Response{
+					StatusCode: http.StatusNotFound,
+				},
+			})
+		}
+		return fmt.Errorf("failed to get nexus outgoing service: %w", err)
+	}
+
+	operation, operationID, err := e.loadArgsForCancelation(ctx, env, ref)
+	if err != nil {
+		return fmt.Errorf("failed to load args: %w", err)
+	}
+	client, err := e.ClientProvider(queues.NamespaceIDAndDestination{NamespaceID: ref.WorkflowKey.NamespaceID, Destination: task.Destination}, service)
+	if err != nil {
+		return fmt.Errorf("failed to get client: %w", err)
+	}
+	handle, err := client.NewHandle(operation, operationID)
+	if err != nil {
+		return fmt.Errorf("failed to get handle for operation: %w", err)
+	}
+
+	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
+	if err != nil {
+		return fmt.Errorf("failed to get namespace by ID: %w", err)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, e.Config.RequestTimeout(ns.Name().String()))
+	defer cancel()
+
+	callErr := handle.Cancel(callCtx, nexus.CancelOperationOptions{})
+	return e.saveCancelationResult(ctx, env, ref, callErr)
+}
+
+// loadArgsForCancelation loads the operation name and ID from the operation state machine that's the parent of the
+// cancelation machine the given reference is pointing to.
+func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (operation, operationID string, err error) {
+	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
+		if err := checkParentIsRunning(n.Parent); err != nil {
+			return err
+		}
+		op, err := hsm.MachineData[Operation](n.Parent)
+		if err != nil {
+			return err
+		}
+		if !TransitionCanceled.Possible(op) {
+			// Operation is already in a terminal state.
+			return fmt.Errorf("%w: operation already in terminal state", consts.ErrStaleReference)
+		}
+		operation = op.Operation
+		operationID = op.OperationId
+		return nil
+	})
+	return
+}
+
+func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
+	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
+		if err := checkParentIsRunning(n.Parent); err != nil {
+			return err
+		}
+		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
+			if callErr != nil {
+				var unexpectedResponseErr *nexus.UnexpectedResponseError
+				if errors.As(callErr, &unexpectedResponseErr) {
+					response := unexpectedResponseErr.Response
+					if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
+						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
+							Time: env.Now(),
+							Err:  callErr,
+							Node: n,
+						})
+					}
+				}
+				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
+					Time: env.Now(),
+					Err:  callErr,
+					Node: n,
+				})
+			}
+			// Cancelation request transmitted successfully.
+			// The operation is not yet canceled and may ignore our request, the outcome will be known via the
+			// completion callback.
+			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
+				Time: env.Now(),
+				Node: n,
+			})
+		})
+	})
+}
+
+func (e activeExecutor) executeCancelationBackoffTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationBackoffTask) error {
+	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		if err := checkParentIsRunning(node.Parent); err != nil {
+			return err
+		}
+		return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {
+			return TransitionCancelationRescheduled.Apply(c, EventCancelationRescheduled{
 				Node: node,
 			})
 		})

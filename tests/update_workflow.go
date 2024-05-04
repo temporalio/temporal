@@ -37,10 +37,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -1494,9 +1496,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky, WithRetries(1))
 	s.NoError(err)
 
-	s.Logger.Info("Sleep 10 seconds to make sure stickyPollerUnavailableWindow time has passed.")
-	time.Sleep(10 * time.Second)
-	s.Logger.Info("Sleep 10 seconds is done.")
+	s.Logger.Info("Sleep 10+ seconds to make sure stickyPollerUnavailableWindow time has passed.")
+	time.Sleep(10*time.Second + 100*time.Millisecond)
+	s.Logger.Info("Sleep 10+ seconds is done.")
 
 	// Now send an update. It should try sticky task queue first, but got "StickyWorkerUnavailable" error
 	// and resend it to normal.
@@ -2342,6 +2344,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	s.Contains(err.Error(), "not found")
 	// New normal (but transient) WT will be created but not returned.
 
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
 	_, err = poller.PollAndProcessWorkflowTask()
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
@@ -2835,8 +2839,12 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 
-	// Wait for sticky timeout to fire.
+	// To make sure that update got to the server before test start to wait for StickyScheduleToStartTimeout.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
+	s.Logger.Info("Wait for sticky timeout to fire. Sleep poller.StickyScheduleToStartTimeout+ seconds.", tag.NewDurationTag("StickyScheduleToStartTimeout", poller.StickyScheduleToStartTimeout))
 	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
+	s.Logger.Info("Sleep is done.")
 
 	// Try to process update in workflow, poll from normal task queue.
 	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
@@ -2854,7 +2862,6 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	s.Equal(3, msgHandlerCalls)
 
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
-
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -2949,17 +2956,20 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	s.NoError(err)
 
 	// Now send an update. It will create a speculative WT on normal task queue,
-	// which will time out in 10 seconds and create new normal WT.
+	// which will time out in 5 seconds and create new normal WT.
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 
+	// To make sure that update got to the server before test start to wait for SpeculativeWorkflowTaskScheduleToStartTimeout.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
 	// TODO: it would be nice to shutdown matching before sending an update to emulate case which is actually being tested here.
-	//  But test infrastructure doesn't support it. 10 seconds sleep will cause same observable effect.
-	s.Logger.Info("Sleep 10 seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
-	time.Sleep(10 * time.Second)
-	s.Logger.Info("Sleep 10 seconds is done.")
+	//  But test infrastructure doesn't support it. 5 seconds sleep will cause same observable effect.
+	s.Logger.Info("Sleep 5+ seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
+	time.Sleep(5*time.Second + 100*time.Millisecond)
+	s.Logger.Info("Sleep 5+ seconds is done.")
 
 	// Process update in workflow.
 	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
@@ -4645,7 +4655,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
-		Mutable state cleared, speculative WT is disappeared from server but update registry stays as is.
+		Mutable state cleared, speculative WT and update registry are disappeared from server.
 		Another update come in, and second speculative WT is dispatched to worker with same WT scheduled/started Id but different update Id.
 		The first speculative WT responds back, server rejected it (different start time).
 		The second speculative WT responds back, server accepted it.
@@ -4731,14 +4741,17 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	  9 WorkflowTaskScheduled
 	 10 WorkflowTaskStarted`, wt3.History)
 
-	// DescribeMutableState will clear MS, cause the speculative WT to disappear but the registry for update "1" will stay.
+	// DescribeMutableState will clear MS, cause the speculative WT and update registry to disappear.
 	_, err = s.adminClient.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace,
 		Execution: tv.WorkflowExecution(),
 	})
 	s.NoError(err)
 
-	// Send 2nd update (with DIFFERENT updateId). This will create a 4th WT as speculative.
+	// Make sure UpdateWorkflowExecution call for the update "1" is retried and new (4th) WFT is created as speculative.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
+	// Send 2nd update (with DIFFERENT updateId). It re-use already create 4th WFT.
 	go func() {
 		_, _ = s.sendUpdate(tv, "2")
 	}()
@@ -5203,4 +5216,154 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
 	5 WorkflowExecutionUpdateAccepted
 	6 WorkflowExecutionCompleted
 	`, s.getHistory(s.namespace, tv.WorkflowExecution()))
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
+	tv := testvars.New(s.T().Name())
+
+	tv = s.startWorkflow(tv)
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with empty command list.
+			return nil, nil
+		case 2:
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+`, history)
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			updRequestMsg := task.Messages[0]
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
+
+			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
+			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
+			s.EqualValues(5, updRequestMsg.GetEventId())
+
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Drain first WT.
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	s.NoError(err)
+
+	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		updateResultCh <- s.sendUpdateNoError(tv, "1")
+	}()
+
+	// Wait for update go through and speculative WFT to be created.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
+	type QueryResult struct {
+		Resp *workflowservice.QueryWorkflowResponse
+		Err  error
+	}
+	queryFn := func(resCh chan<- QueryResult) {
+		// There is no query handler, and query timeout is ok for this test.
+		// But first query must not time out before 2nd query reached server,
+		// because 2 queries overflow the query buffer (default size 1),
+		// which leads to clearing of WF context.
+		shortCtx, cancel := context.WithTimeout(NewContext(), 100*time.Millisecond)
+		defer cancel()
+		queryResp, err := s.engine.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
+			Namespace: s.namespace,
+			Execution: tv.WorkflowExecution(),
+			Query: &querypb.WorkflowQuery{
+				QueryType: tv.Any().String(),
+			},
+		})
+		resCh <- QueryResult{Resp: queryResp, Err: err}
+	}
+
+	query1ResultCh := make(chan QueryResult)
+	query2ResultCh := make(chan QueryResult)
+	go queryFn(query1ResultCh)
+	go queryFn(query2ResultCh)
+	query1Res := <-query1ResultCh
+	query2Res := <-query2ResultCh
+	s.Error(query1Res.Err)
+	s.Error(query2Res.Err)
+	s.Nil(query1Res.Resp)
+	s.Nil(query2Res.Resp)
+
+	var queryBufferFullErr *serviceerror.ResourceExhausted
+	if common.IsContextDeadlineExceededErr(query1Res.Err) {
+		s.True(common.IsContextDeadlineExceededErr(query1Res.Err), "one of query errors must be CDE")
+		s.ErrorAs(query2Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
+		s.Contains(query2Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
+	} else {
+		s.ErrorAs(query1Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
+		s.Contains(query1Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
+		s.True(common.IsContextDeadlineExceededErr(query2Res.Err), "one of query errors must be CDE")
+	}
+
+	// "query buffer is full" error clears WF context. If update registry is not cleared together with context (old behaviour),
+	// then update stays there but speculative WFT which supposed to deliver it, is cleared.
+	// Subsequent retry attempts of "UpdateWorkflowExecution" API wouldn't help, because update is deduped by registry,
+	// and new WFT is not created. Update is not delivered to the worker until new WFT is created.
+	// If registry is cleared together with WF context (current behaviour), retries of "UpdateWorkflowExecution"
+	// will create new update and WFT.
+
+	// Wait to make sure that UpdateWorkflowExecution call is retried, update and speculative WFT are recreated.
+	time.Sleep(500 * time.Millisecond)
+
+	// Process update in workflow.
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
+	s.NoError(err)
+	updateResp := res.NewTask
+	updateResult := <-updateResultCh
+	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
+	s.EqualValues(0, updateResp.ResetHistoryEventId)
+
+	s.Equal(2, wtHandlerCalls)
+	s.Equal(2, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled // Was speculative WT...
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.  
+  8 WorkflowExecutionUpdateAccepted
+  9 WorkflowExecutionUpdateCompleted
+`, events)
 }
