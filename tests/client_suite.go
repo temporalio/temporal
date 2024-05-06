@@ -98,19 +98,19 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 	s.maxPendingActivities = limit
 	s.maxPendingCancelRequests = limit
 	s.maxPendingSignals = limit
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.NumPendingChildExecutionsLimitError:             s.maxPendingChildExecutions,
-		dynamicconfig.NumPendingActivitiesLimitError:                  s.maxPendingActivities,
-		dynamicconfig.NumPendingCancelRequestsLimitError:              s.maxPendingCancelRequests,
-		dynamicconfig.NumPendingSignalsLimitError:                     s.maxPendingSignals,
-		dynamicconfig.FrontendEnableNexusAPIs:                         true,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:          true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:      true,
-		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace: limit,
-		nexusoperations.Enabled:                                       true,
-		dynamicconfig.OutboundProcessorEnabled:                        true,
-		dynamicconfig.EnableMutableStateTransitionHistory:             true,
-		dynamicconfig.FrontendRefreshNexusIncomingServicesMinWait:     1 * time.Millisecond,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             s.maxPendingChildExecutions,
+		dynamicconfig.NumPendingActivitiesLimitError.Key():                  s.maxPendingActivities,
+		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              s.maxPendingCancelRequests,
+		dynamicconfig.NumPendingSignalsLimitError.Key():                     s.maxPendingSignals,
+		dynamicconfig.FrontendEnableNexusAPIs.Key():                         true,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
+		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): limit,
+		nexusoperations.Enabled.Key():                                       true,
+		dynamicconfig.OutboundProcessorEnabled.Key():                        true,
+		dynamicconfig.EnableMutableStateTransitionHistory.Key():             true,
+		dynamicconfig.FrontendRefreshNexusIncomingServicesMinWait.Key():     1 * time.Millisecond,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }

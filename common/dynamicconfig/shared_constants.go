@@ -33,7 +33,7 @@ import (
 
 const GlobalDefaultNumTaskQueuePartitions = 4
 
-var defaultNumTaskQueuePartitions = []ConstrainedValue{
+var defaultNumTaskQueuePartitions = []TypedConstrainedValue[int]{
 	// The per-ns worker task queue in all namespaces should only have one partition, since
 	// we'll only run one worker per task queue.
 	{

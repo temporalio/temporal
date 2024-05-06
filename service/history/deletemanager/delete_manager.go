@@ -51,7 +51,6 @@ type (
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
 			ms workflow.MutableState,
-			workflowClosedVersion int64,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
@@ -108,7 +107,6 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
 	ms workflow.MutableState,
-	workflowClosedVersion int64,
 ) error {
 
 	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
@@ -120,7 +118,6 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		return err
 	}
 
-	deleteTask.Version = workflowClosedVersion
 	return m.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: m.shardContext.GetShardID(),
 		// RangeID is set by shardContext

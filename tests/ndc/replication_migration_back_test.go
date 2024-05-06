@@ -116,11 +116,11 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	passiveClusterConfig := clusterConfigs[1]
 	passiveClusterConfig.WorkerConfig = &tests.WorkerConfig{}
-	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.EnableReplicationStream:             true,
-		dynamicconfig.EnableEagerNamespaceRefresher:       true,
-		dynamicconfig.EnableReplicateLocalGeneratedEvents: true,
-		dynamicconfig.NamespaceCacheRefreshInterval:       tests.NamespaceCacheRefreshInterval,
+	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.EnableReplicationStream.Key():             true,
+		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
+		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
+		dynamicconfig.NamespaceCacheRefreshInterval.Key():       tests.NamespaceCacheRefreshInterval,
 	}
 	s.controller = gomock.NewController(s.T())
 	mockActiveStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)

@@ -97,16 +97,16 @@ func NewArchivalMetadata(
 ) ArchivalMetadata {
 	historyConfig := NewArchivalConfig(
 		historyState,
-		dc.GetStringProperty(dynamicconfig.HistoryArchivalState, historyState),
-		dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, historyReadEnabled),
+		dynamicconfig.HistoryArchivalState.WithDefault(historyState).Get(dc),
+		dynamicconfig.EnableReadFromHistoryArchival.WithDefault(historyReadEnabled).Get(dc),
 		namespaceDefaults.History.State,
 		namespaceDefaults.History.URI,
 	)
 
 	visibilityConfig := NewArchivalConfig(
 		visibilityState,
-		dc.GetStringProperty(dynamicconfig.VisibilityArchivalState, visibilityState),
-		dc.GetBoolProperty(dynamicconfig.EnableReadFromVisibilityArchival, visibilityReadEnabled),
+		dynamicconfig.VisibilityArchivalState.WithDefault(visibilityState).Get(dc),
+		dynamicconfig.EnableReadFromVisibilityArchival.WithDefault(visibilityReadEnabled).Get(dc),
 		namespaceDefaults.Visibility.State,
 		namespaceDefaults.Visibility.URI,
 	)
