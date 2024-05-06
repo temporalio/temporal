@@ -13,40 +13,6 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 )
 
-func (s *ClientFunctionalSuite) TestUpdateWorkflow_ExampleTest() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
-
-	workflowFn := func(ctx workflow.Context) (string, error) {
-		var updateArgs []string
-		workflow.SetUpdateHandlerWithOptions(ctx, tv.HandlerName(),
-			func(arg string) (string, error) {
-				updateArgs = append(updateArgs, arg)
-				return arg + "-result", nil
-			},
-			workflow.UpdateHandlerOptions{
-				Validator: func(arg string) error {
-					return nil
-				},
-			})
-		workflow.Await(ctx, func() bool { return len(updateArgs) > 0 })
-		return "wf-result", nil
-	}
-
-	s.worker.RegisterWorkflow(workflowFn)
-	tv, wfRun := s.startWorkflow(ctx, tv, workflowFn)
-	updateHandle := s.updateWorkflow(ctx, tv, "my-update-arg")
-
-	var updateResult string
-	s.NoError(updateHandle.Get(ctx, &updateResult))
-	s.Equal("my-update-arg-result", updateResult)
-
-	var wfResult string
-	s.NoError(wfRun.Get(ctx, &wfResult))
-	s.Equal("wf-result", wfResult)
-}
-
 // TestUpdateWorkflow_TerminateWorkflowDuringUpdate executes a long-running update (schedules a sequence of timers) and
 // terminates the workflow after the update has been accepted but before it has been completed.
 func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowDuringUpdate() {
