@@ -947,6 +947,7 @@ const (
 	// ReplicationEnableUpdateWithNewTaskMerge is the flag controlling whether replication task merging logic
 	// should be enabled for non continuedAsNew workflow UpdateWithNew case.
 	ReplicationEnableUpdateWithNewTaskMerge = "history.ReplicationEnableUpdateWithNewTaskMerge"
+
 	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
 	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
@@ -965,6 +966,10 @@ const (
 	ReplicationProcessorSchedulerQueueSize = "history.ReplicationProcessorSchedulerQueueSize"
 	// ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count
 	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
+	// ReplicationLowPriorityProcessorSchedulerWorkerCount is the low priority replication task executor worker count
+	ReplicationLowPriorityProcessorSchedulerWorkerCount = "history.ReplicationLowPriorityProcessorSchedulerWorkerCount"
+	// ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel
+	ReplicationLowPriorityTaskParallelism = "history.ReplicationLowPriorityTaskParallelism"
 	// EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task
 	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
 	// EnableReplicationTaskBatching is a feature flag for batching replicate history event task

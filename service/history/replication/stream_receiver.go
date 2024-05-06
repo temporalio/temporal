@@ -33,9 +33,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/enums/v1"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/tasks"
 	"golang.org/x/crypto/openpgp/errors"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -48,7 +49,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
+const (
+	ReceiverModeUnset       ReceiverMode = 0
+	ReceiverModeSingleStack ReceiverMode = 1 // default mode. It only uses High Priority Task Tracker for processing tasks.
+	ReceiverModeTieredStack ReceiverMode = 2
+)
+
 type (
+	ReceiverMode   int32
 	StreamReceiver interface {
 		IsValid() bool
 		Key() ClusterShardKeyPair
@@ -66,6 +74,7 @@ type (
 		logger                  log.Logger
 		stream                  Stream
 		taskConverter           ExecutableTaskConverter
+		receiverMode            ReceiverMode
 	}
 )
 
@@ -107,6 +116,7 @@ func NewStreamReceiver(
 			serverShardKey,
 		),
 		taskConverter: taskConverter,
+		receiverMode:  ReceiverModeUnset,
 	}
 }
 
@@ -221,32 +231,56 @@ func (r *StreamReceiverImpl) ackMessage(
 	lowPriorityWaterMarkInfo := r.lowPriorityTaskTracker.LowWatermark()
 	size := r.highPriorityTaskTracker.Size() + r.lowPriorityTaskTracker.Size()
 
-	if highPriorityWaterMarkInfo == nil && lowPriorityWaterMarkInfo == nil {
+	// no task received yet
+	if r.receiverMode == ReceiverModeUnset || (highPriorityWaterMarkInfo == nil && lowPriorityWaterMarkInfo == nil) {
 		return 0, nil
 	}
 
+	var highPriorityWatermark, lowPriorityWatermark *replicationpb.ReplicationState
 	inclusiveLowWaterMark := int64(math.MaxInt64)
 	var inclusiveLowWaterMarkTime time.Time
-	var highPriorityWatermark, lowPriorityWatermark *replicationpb.ReplicationState
-	if highPriorityWaterMarkInfo != nil {
+	if r.receiverMode == ReceiverModeTieredStack {
+		if highPriorityWaterMarkInfo == nil || lowPriorityWaterMarkInfo == nil {
+			// This is to prevent the case: high priority task tracker received a batch of tasks, but low priority task tracker did not get any task yet.
+			// i.e. HighPriorityTracker received watermark 10 and LowPriorityTracker did not receive any tasks yet.
+			// we should avoid ack with {high: 10, low: nil}. If we do, sender will not able to correctly interpret the overall low watermark of the queue,
+			// because it is possible that low priority tracker might receive a batch of tasks with watermark 5 later.
+			// It is also true for the opposite case.
+			r.logger.Info("Tiered stack mode. Have to wait for both high and low priority tracker received at least one batch of tasks before acking.")
+			return 0, nil
+		}
 		highPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
+		}
+		lowPriorityWatermark = &replicationpb.ReplicationState{
+			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,
+			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
 		}
 		if inclusiveLowWaterMark > highPriorityWaterMarkInfo.Watermark {
 			inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = highPriorityWaterMarkInfo.Timestamp
 		}
-	}
-	if lowPriorityWaterMarkInfo != nil {
-		lowPriorityWatermark = &replicationpb.ReplicationState{
-			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,
-			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
-		}
 		if inclusiveLowWaterMark > lowPriorityWaterMarkInfo.Watermark {
 			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
 		}
+	}
+
+	if r.receiverMode == ReceiverModeSingleStack {
+		if highPriorityWaterMarkInfo == nil { // This should not happen, more for a safety check
+			return 0, NewStreamError("Single stack mode. High priority tracker does not have low watermark info", serviceerror.NewInternal("Invalid tracker state"))
+		}
+		if lowPriorityWatermark != nil {
+			return 0, NewStreamError("Single stack mode. Should not receive low priority task", serviceerror.NewInternal("Invalid tracker state"))
+		}
+
+		highPriorityWatermark = &replicationpb.ReplicationState{
+			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
+			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
+		}
+		inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
+		inclusiveLowWaterMarkTime = highPriorityWaterMarkInfo.Timestamp
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
@@ -291,10 +325,16 @@ func (r *StreamReceiverImpl) processMessages(
 		if streamResp.Err != nil {
 			return streamResp.Err
 		}
-		// This should not happen because source side is sending task 1 by 1. Validate here just in case.
+		if err := r.validateAndSetReceiverMode(streamResp.Resp.GetMessages().Priority); err != nil {
+			r.logger.Error("ReplicationTask wrong receiver mode", tag.Error(err))
+			break // exit loop and let stream reconnect to retry task
+		}
+
 		if err = ValidateTasksHaveSamePriority(streamResp.Resp.GetMessages().Priority, streamResp.Resp.GetMessages().ReplicationTasks...); err != nil {
+			// This should not happen because source side is sending task 1 by 1. Validate here just in case.
 			r.logger.Error("ReplicationTask priority check failed", tag.Error(err))
-			break // exit loop and let stream reconnect to retry
+			// Todo: Change to write Tasks to DLQ. As resend task will not help here
+			break // exit loop and let stream reconnect to retry task
 		}
 		convertedTasks := r.taskConverter.Convert(
 			clusterName,
@@ -304,7 +344,12 @@ func (r *StreamReceiverImpl) processMessages(
 		)
 		exclusiveHighWatermark := streamResp.Resp.GetMessages().ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
-		taskTracker, taskScheduler := r.getTrackerAndSchedulerByPriority(tasks.ReplicationTaskPriority(streamResp.Resp.GetMessages().Priority))
+		taskTracker, taskScheduler, err := r.getTrackerAndSchedulerByPriority(streamResp.Resp.GetMessages().Priority)
+		if err != nil {
+			r.logger.Error("Failed to get task tracker and scheduler", tag.Error(err))
+			// Todo: Change to write Tasks to DLQ. As resend task will not help here
+			break // exit loop and let stream reconnect to retry task
+		}
 		for _, task := range taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
@@ -316,19 +361,51 @@ func (r *StreamReceiverImpl) processMessages(
 	return nil
 }
 
-func (r *StreamReceiverImpl) getTrackerAndSchedulerByPriority(priority tasks.ReplicationTaskPriority) (ExecutableTaskTracker, ctasks.Scheduler[TrackableExecutableTask]) {
+func (r *StreamReceiverImpl) getTrackerAndSchedulerByPriority(priority enums.TaskPriority) (ExecutableTaskTracker, ctasks.Scheduler[TrackableExecutableTask], error) {
 	switch priority {
-	case tasks.ReplicationTaskPriorityHigh:
-		return r.highPriorityTaskTracker, r.ProcessToolBox.HighPriorityTaskScheduler
-	case tasks.ReplicationTaskPriorityLow:
-		return r.lowPriorityTaskTracker, r.ProcessToolBox.LowPriorityTaskScheduler
+	case enums.TASK_PRIORITY_UNSPECIFIED, enums.TASK_PRIORITY_HIGH:
+		return r.highPriorityTaskTracker, r.ProcessToolBox.HighPriorityTaskScheduler, nil
+	case enums.TASK_PRIORITY_LOW:
+		return r.lowPriorityTaskTracker, r.ProcessToolBox.LowPriorityTaskScheduler, nil
 	default:
-		panic(fmt.Sprintf("unknown priority %v", priority))
+		return nil, nil, errors.InvalidArgumentError(fmt.Sprintf("Unknown task priority: %v", priority))
 	}
 }
 
-func ValidateTasksHaveSamePriority(messageBatchPriority int32, tasks ...*replicationpb.ReplicationTask) error {
-	if len(tasks) == 0 {
+// Receiver mode can only be set once for the lifetime of the receiver. Receiver mode is set when receiver receive the first task.
+// If the first task is prioritized, receiver mode will be set to ReceiverModeTieredStack. If the first task is not prioritized, receiver mode will be set to ReceiverModeSingleStack.
+// Receiver mode cannot be changed once it is set. If we enabled sender side to send tasks with different priority, we need to change the receiver mode by reconnecting the stream.
+func (r *StreamReceiverImpl) validateAndSetReceiverMode(priority enums.TaskPriority) error {
+	switch r.receiverMode {
+	case ReceiverModeUnset:
+		r.setReceiverMode(priority)
+		return nil
+	case ReceiverModeSingleStack:
+		if priority != enums.TASK_PRIORITY_UNSPECIFIED {
+			return errors.InvalidArgumentError("ReceiverModeSingleStack cannot process prioritized task")
+		}
+	case ReceiverModeTieredStack:
+		if priority == enums.TASK_PRIORITY_UNSPECIFIED {
+			return errors.InvalidArgumentError("ReceiverModeTieredStack cannot process non-prioritized task")
+		}
+	}
+	return nil
+}
+
+func (r *StreamReceiverImpl) setReceiverMode(priority enums.TaskPriority) {
+	if r.receiverMode != ReceiverModeUnset {
+		return
+	}
+	switch priority {
+	case enums.TASK_PRIORITY_UNSPECIFIED:
+		r.receiverMode = ReceiverModeSingleStack
+	default:
+		r.receiverMode = ReceiverModeTieredStack
+	}
+}
+
+func ValidateTasksHaveSamePriority(messageBatchPriority enums.TaskPriority, tasks ...*replicationpb.ReplicationTask) error {
+	if len(tasks) == 0 || messageBatchPriority == enums.TASK_PRIORITY_UNSPECIFIED {
 		return nil
 	}
 	for _, task := range tasks {

@@ -101,14 +101,3 @@ func WorkflowKeyHashFn(
 	idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID + "_" + workflowKey.RunID)
 	return farm.Fingerprint32(idBytes)
 }
-
-func WorkflowKeyHashFnByNamespaceIdWorkflowId(
-	item interface{},
-) uint32 {
-	workflowKey, ok := item.(definition.WorkflowKey)
-	if !ok {
-		return 0
-	}
-	idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
-	return farm.Fingerprint32(idBytes)
-}

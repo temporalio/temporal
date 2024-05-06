@@ -26,7 +26,10 @@ package replication
 
 import (
 	"context"
+	"math/rand"
+	"strconv"
 
+	"github.com/dgryski/go-farm"
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/definition"
@@ -156,12 +159,21 @@ func replicationStreamLowPrioritySchedulerProvider(
 	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 		return NewSequentialTaskQueue(task)
 	}
+	taskQueueHashFunc := func(item interface{}) uint32 {
+		workflowKey, ok := item.(definition.WorkflowKey)
+		if !ok {
+			return 0
+		}
+
+		idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID + "_" + strconv.Itoa(rand.Intn(config.ReplicationLowPriorityTaskParallelism())))
+		return farm.Fingerprint32(idBytes)
+	}
 	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
 		&ctasks.SequentialSchedulerOptions{
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
-			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
+			WorkerCount: config.ReplicationLowPriorityProcessorSchedulerWorkerCount,
 		},
-		WorkflowKeyHashFnByNamespaceIdWorkflowId,
+		taskQueueHashFunc,
 		queueFactory,
 		logger,
 	)

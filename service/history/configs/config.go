@@ -266,12 +266,14 @@ type Config struct {
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
 	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 
-	ReplicationStreamSyncStatusDuration      dynamicconfig.DurationPropertyFn
-	ReplicationProcessorSchedulerQueueSize   dynamicconfig.IntPropertyFn
-	ReplicationProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
-	EnableReplicationEagerRefreshNamespace   dynamicconfig.BoolPropertyFn
-	EnableReplicationTaskBatching            dynamicconfig.BoolPropertyFn
-	EnableReplicateLocalGeneratedEvent       dynamicconfig.BoolPropertyFn
+	ReplicationStreamSyncStatusDuration                 dynamicconfig.DurationPropertyFn
+	ReplicationProcessorSchedulerQueueSize              dynamicconfig.IntPropertyFn
+	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.IntPropertyFn
+	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
+	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
+	EnableReplicationEagerRefreshNamespace              dynamicconfig.BoolPropertyFn
+	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
+	EnableReplicateLocalGeneratedEvent                  dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -480,6 +482,8 @@ func NewConfig(
 		ReplicationStreamSyncStatusDuration:                 dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
 		ReplicationProcessorSchedulerQueueSize:              dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
 		ReplicationProcessorSchedulerWorkerCount:            dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
+		ReplicationLowPriorityProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount, 128),
+		ReplicationLowPriorityTaskParallelism:               dc.GetIntProperty(dynamicconfig.ReplicationLowPriorityTaskParallelism, 8),
 		EnableReplicationEagerRefreshNamespace:              dc.GetBoolProperty(dynamicconfig.EnableEagerNamespaceRefresher, false),
 		EnableReplicationTaskBatching:                       dc.GetBoolProperty(dynamicconfig.EnableReplicationTaskBatching, false),
 		EnableReplicateLocalGeneratedEvent:                  dc.GetBoolProperty(dynamicconfig.EnableReplicateLocalGeneratedEvents, false),

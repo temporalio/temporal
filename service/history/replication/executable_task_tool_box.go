@@ -52,11 +52,12 @@ type (
 		EagerNamespaceRefresher   EagerNamespaceRefresher
 		NDCHistoryResender        xdc.NDCHistoryResender
 		HighPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"HighPriorityTaskScheduler"`
-		LowPriorityTaskScheduler  ctasks.Scheduler[TrackableExecutableTask] `name:"LowPriorityTaskScheduler"`
-		MetricsHandler            metrics.Handler
-		Logger                    log.Logger
-		EventSerializer           serialization.Serializer
-		DLQWriter                 DLQWriter
-		HistoryEventsHandler      eventhandler.HistoryEventsHandler
+		// consider using a single TaskScheduler i.e. InterleavedWeightedRoundRobinScheduler instead of two
+		LowPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"LowPriorityTaskScheduler"`
+		MetricsHandler           metrics.Handler
+		Logger                   log.Logger
+		EventSerializer          serialization.Serializer
+		DLQWriter                DLQWriter
+		HistoryEventsHandler     eventhandler.HistoryEventsHandler
 	}
 )
