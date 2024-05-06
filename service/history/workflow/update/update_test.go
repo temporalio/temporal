@@ -140,7 +140,7 @@ func TestUnsupportedMessageType(t *testing.T) {
 	require.ErrorAs(t, err, &invalidArg)
 }
 
-func TestRequestSendAcceptComplete(t *testing.T) {
+func TestAdmitSendAcceptComplete(t *testing.T) {
 	// this is the most common happy path - an update is created, requested,
 	// accepted, and finally completed
 	t.Parallel()
@@ -190,7 +190,7 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 		upd = update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 	)
 
-	t.Run("request", func(t *testing.T) {
+	t.Run("admit", func(t *testing.T) {
 		err := upd.OnProtocolMessage(ctx, &acpt, store)
 		require.ErrorAs(t, err, &invalidArg,
 			"expected InvalidArgument from %T while in Created state", &acpt)
@@ -268,7 +268,7 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 	protorequire.ProtoEqual(t, mustUnmarshalBody[*updatepb.Response](t, &resp), completedEventData)
 }
 
-func TestRequestSendReject(t *testing.T) {
+func TestAdmitSendReject(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx       = context.Background()
