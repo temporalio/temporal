@@ -246,6 +246,14 @@ func (tv *TestVars) WithHandlerName(handlerName string, key ...string) *TestVars
 	return tv.cloneSet("handler_name", key, handlerName)
 }
 
+func (tv *TestVars) ClientIdentity(key ...string) string {
+	return tv.getOrCreate("client_identity", key).(string)
+}
+
+func (tv *TestVars) WithClientIdentity(identity string, key ...string) *TestVars {
+	return tv.cloneSet("client_identity", key, identity)
+}
+
 func (tv *TestVars) WorkerIdentity(key ...string) string {
 	return tv.getOrCreate("worker_identity", key).(string)
 }
