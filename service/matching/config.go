@@ -70,9 +70,11 @@ type (
 		VersionBuildIdLimitPerQueue              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		AssignmentRuleLimitPerQueue              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		RedirectRuleLimitPerQueue                dynamicconfig.IntPropertyFnWithNamespaceFilter
-		RedirectRuleChainLimitPerQueue           dynamicconfig.IntPropertyFnWithNamespaceFilter
+		RedirectRuleMaxUpstreamBuildIDsPerQueue  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		DeletedRuleRetentionTime                 dynamicconfig.DurationPropertyFnWithNamespaceFilter
 		ReachabilityBuildIdVisibilityGracePeriod dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		ReachabilityCacheOpenWFsTTL              dynamicconfig.DurationPropertyFn
+		ReachabilityCacheClosedWFsTTL            dynamicconfig.DurationPropertyFn
 		TaskQueueLimitPerBuildId                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout               dynamicconfig.DurationPropertyFn
 		BacklogNegligibleAge                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -204,9 +206,11 @@ func NewConfig(
 		VersionBuildIdLimitPerQueue:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
 		AssignmentRuleLimitPerQueue:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.AssignmentRuleLimitPerQueue, 100),
 		RedirectRuleLimitPerQueue:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.RedirectRuleLimitPerQueue, 500),
-		RedirectRuleChainLimitPerQueue:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.RedirectRuleChainLimitPerQueue, 50),
+		RedirectRuleMaxUpstreamBuildIDsPerQueue:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.RedirectRuleMaxUpstreamBuildIDsPerQueue, 50),
 		DeletedRuleRetentionTime:                 dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MatchingDeletedRuleRetentionTime, 14*24*time.Hour),
 		ReachabilityBuildIdVisibilityGracePeriod: dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod, 3*time.Minute),
+		ReachabilityCacheOpenWFsTTL:              dc.GetDurationProperty(dynamicconfig.ReachabilityCacheOpenWFsTTL, time.Minute),
+		ReachabilityCacheClosedWFsTTL:            dc.GetDurationProperty(dynamicconfig.ReachabilityCacheClosedWFsTTL, 10*time.Minute),
 		TaskQueueLimitPerBuildId:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
 		GetUserDataLongPollTimeout:               dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
 		BacklogNegligibleAge:                     dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingBacklogNegligibleAge, 24*365*10*time.Hour),

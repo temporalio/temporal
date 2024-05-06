@@ -541,7 +541,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 			hasError = true
 		} else {
 			// set to default in case the whole MultOp request
-			err = serviceerror.NewMultiOperationAborted("Operation was aborted.")
+			err = errMultiOpAborted
 
 			switch {
 			case lastWorkflowID == "":
@@ -3512,6 +3512,13 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
+	}
+
+	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		metrics.WorkflowExecutionUpdateWaitStageAccepted.With(wh.metricsScope(ctx)).Record(1)
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		metrics.WorkflowExecutionUpdateWaitStageCompleted.With(wh.metricsScope(ctx)).Record(1)
 	}
 
 	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{

@@ -485,7 +485,7 @@ func TestLoadHistoryEventFromToken(t *testing.T) {
 	require.NoError(t, err)
 	firstEventID := event.EventId
 
-	token, err := ms.GenerateEventLoadToken(event)
+	token, err := hsm.GenerateEventLoadToken(event)
 	require.NoError(t, err)
 
 	wfKey := ms.GetWorkflowKey()

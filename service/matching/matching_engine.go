@@ -161,6 +161,8 @@ type (
 		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
 		// Serializes access to the per namespace lock map
 		namespaceUpdateLockMapLock sync.Mutex
+		// Stores results of reachability queries to visibility
+		reachabilityCache reachabilityCache
 	}
 )
 
@@ -195,7 +197,8 @@ func NewEngine(
 	visibilityManager manager.VisibilityManager,
 	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
 ) Engine {
-	return &matchingEngineImpl{
+	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
+	e := &matchingEngineImpl{
 		status:                common.DaemonStatusInitialized,
 		taskManager:           taskManager,
 		historyClient:         historyClient,
@@ -212,7 +215,7 @@ func NewEngine(
 		timeSource:            clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:     visibilityManager,
 		incomingServiceClient: newIncomingServiceClient(nexusIncomingServiceManager),
-		metricsHandler:        metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
+		metricsHandler:        scopedMetricsHandler,
 		partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
@@ -227,6 +230,12 @@ func NewEngine(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
 	}
+	e.reachabilityCache = newReachabilityCache(
+		metrics.NoopMetricsHandler,
+		visibilityManager,
+		e.config.ReachabilityCacheOpenWFsTTL(),
+		e.config.ReachabilityCacheClosedWFsTTL())
+	return e
 }
 
 func (e *matchingEngineImpl) Start() {
@@ -938,13 +947,18 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			reachability, err := getBuildIdTaskReachability(ctx,
-				userData.GetVersioningData(),
-				e.visibilityManager,
-				request.GetNamespaceId(),
-				req.GetNamespace(),
-				req.GetTaskQueue().GetName(),
+				newReachabilityCalculator(
+					userData.GetVersioningData(),
+					e.reachabilityCache,
+					request.GetNamespaceId(),
+					req.GetNamespace(),
+					req.GetTaskQueue().GetName(),
+					e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+				),
+				e.metricsHandler,
+				e.logger,
 				bid,
-				e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()))
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1079,6 +1093,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	updateOptions := UserDataUpdateOptions{}
 	cT := req.GetConflictToken()
 	var getResp *matchingservice.GetWorkerVersioningRulesResponse
+	var maxUpstreamBuildIDs int
 
 	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
@@ -1124,14 +1139,14 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetAddCompatibleRedirectRule(),
 				e.config.RedirectRuleLimitPerQueue(ns.Name().String()),
-				e.config.RedirectRuleChainLimitPerQueue(ns.Name().String()),
+				e.config.RedirectRuleMaxUpstreamBuildIDsPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
 			versioningData, err = ReplaceCompatibleRedirectRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetReplaceCompatibleRedirectRule(),
-				e.config.RedirectRuleChainLimitPerQueue(ns.Name().String()),
+				e.config.RedirectRuleMaxUpstreamBuildIDsPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
 			versioningData, err = DeleteCompatibleRedirectRule(
@@ -1158,6 +1173,14 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		if err != nil {
 			return nil, false, err
 		}
+		// Get max upstream build IDs (min is 0, because we count number of upstream nodes)
+		activeRedirectRules := getActiveRedirectRules(versioningData.GetRedirectRules())
+		for _, rule := range activeRedirectRules {
+			upstream := getUpstreamBuildIds(rule.GetRule().GetTargetBuildId(), activeRedirectRules)
+			if len(upstream)+1 > maxUpstreamBuildIDs {
+				maxUpstreamBuildIDs = len(upstream) + 1
+			}
+		}
 
 		// Clean up tombstones after all fallible tasks are complete, once we know we are committing and replicating the changes.
 		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally.
@@ -1174,9 +1197,18 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
+	// log resulting rule counts
+	assignmentRules := getResp.GetResponse().GetAssignmentRules()
+	redirectRules := getResp.GetResponse().GetCompatibleRedirectRules()
+
+	e.logger.Info("UpdateWorkerVersioningRules completed",
+		tag.WorkerVersioningRedirectRuleCount(len(redirectRules)),
+		tag.WorkerVersioningAssignmentRuleCount(len(assignmentRules)),
+		tag.WorkerVersioningMaxUpstreamBuildIDs(maxUpstreamBuildIDs))
+
 	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
-		AssignmentRules:         getResp.GetResponse().GetAssignmentRules(),
-		CompatibleRedirectRules: getResp.GetResponse().GetCompatibleRedirectRules(),
+		AssignmentRules:         assignmentRules,
+		CompatibleRedirectRules: redirectRules,
 		ConflictToken:           getResp.GetResponse().GetConflictToken(),
 	}}, nil
 }
@@ -1824,7 +1856,9 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(partition tqid.Partit
 	foundTQM, ok := e.partitions[key]
 	if !ok || (unloadPM != nil && foundTQM != unloadPM) {
 		e.partitionsLock.Unlock()
-		unloadPM.Stop()
+		if unloadPM != nil {
+			unloadPM.Stop()
+		}
 		return false
 	}
 	delete(e.partitions, key)

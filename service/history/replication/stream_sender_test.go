@@ -246,6 +246,49 @@ func (s *streamSenderSuite) TestSendCatchUp() {
 	s.Equal(endExclusiveWatermark, taskID)
 }
 
+func (s *streamSenderSuite) TestSendCatchUp_NoReaderState() {
+	endExclusiveWatermark := int64(1234)
+	s.shardContext.EXPECT().GetQueueState(
+		tasks.CategoryReplication,
+	).Return(&persistencespb.QueueState{
+		ExclusiveReaderHighWatermark: nil,
+		ReaderStates:                 map[int64]*persistencespb.QueueReaderState{},
+	}, true)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(endExclusiveWatermark),
+	)
+
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
+		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		return nil
+	})
+
+	taskID, err := s.streamSender.sendCatchUp()
+	s.NoError(err)
+	s.Equal(endExclusiveWatermark, taskID)
+}
+
+func (s *streamSenderSuite) TestSendCatchUp_NoQueueState() {
+	endExclusiveWatermark := int64(1234)
+	s.shardContext.EXPECT().GetQueueState(
+		tasks.CategoryReplication,
+	).Return(nil, false)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(endExclusiveWatermark),
+	)
+
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
+		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		return nil
+	})
+
+	taskID, err := s.streamSender.sendCatchUp()
+	s.NoError(err)
+	s.Equal(endExclusiveWatermark, taskID)
+}
+
 func (s *streamSenderSuite) TestSendLive() {
 	channel := make(chan struct{})
 	watermark0 := rand.Int63()

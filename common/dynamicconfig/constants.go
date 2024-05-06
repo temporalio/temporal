@@ -207,10 +207,10 @@ const (
 	// in the versioning data for a task queue. Update requests which would cause the versioning data to exceed this
 	// number will fail with a FailedPrecondition error.
 	RedirectRuleLimitPerQueue = "limit.wv.RedirectRuleLimitPerQueue"
-	// RedirectRuleChainLimitPerQueue is the max number of compatible redirect rules allowed to be connected
+	// RedirectRuleMaxUpstreamBuildIDsPerQueue is the max number of compatible redirect rules allowed to be connected
 	// in one chain in the versioning data for a task queue. Update requests which would cause the versioning data
 	// to exceed this number will fail with a FailedPrecondition error.
-	RedirectRuleChainLimitPerQueue = "limit.wv.RedirectRuleChainLimitPerQueue"
+	RedirectRuleMaxUpstreamBuildIDsPerQueue = "limit.wv.RedirectRuleMaxUpstreamBuildIDsPerQueue"
 	// MatchingDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and
 	// Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.
 	MatchingDeletedRuleRetentionTime = "matching.wv.DeletedRuleRetentionTime"
@@ -223,6 +223,10 @@ const (
 	// ReachabilityQueryBuildIdLimit limits the number of build ids that can be requested in a single call to the
 	// DescribeTaskQueue API with ReportTaskQueueReachability==true, or to the GetWorkerTaskReachability API.
 	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
+	// 	ReachabilityCacheOpenWFsTTL is the TTL for the reachability open workflows cache.
+	ReachabilityCacheOpenWFsTTL = "matching.wv.reachabilityCacheOpenWFsTTL"
+	//	ReachabilityCacheClosedWFsTTL is the TTL for the reachability closed workflows cache.
+	ReachabilityCacheClosedWFsTTL = "matching.wv.reachabilityCacheClosedWFsTTL"
 	// ReachabilityQuerySetDurationSinceDefault is the minimum period since a version set was demoted from being the
 	// queue default before it is considered unreachable by new workflows.
 	// This setting allows some propagation delay of versioning data for the reachability queries, which may happen for
