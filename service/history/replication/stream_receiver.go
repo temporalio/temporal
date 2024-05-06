@@ -239,7 +239,9 @@ func (r *StreamReceiverImpl) ackMessage(
 	var highPriorityWatermark, lowPriorityWatermark *replicationpb.ReplicationState
 	inclusiveLowWaterMark := int64(math.MaxInt64)
 	var inclusiveLowWaterMarkTime time.Time
-	if r.receiverMode == ReceiverModeTieredStack {
+
+	switch r.receiverMode {
+	case ReceiverModeTieredStack:
 		if highPriorityWaterMarkInfo == nil || lowPriorityWaterMarkInfo == nil {
 			// This is to prevent the case: high priority task tracker received a batch of tasks, but low priority task tracker did not get any task yet.
 			// i.e. HighPriorityTracker received watermark 10 and LowPriorityTracker did not receive any tasks yet.
@@ -265,9 +267,7 @@ func (r *StreamReceiverImpl) ackMessage(
 			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
 		}
-	}
-
-	if r.receiverMode == ReceiverModeSingleStack {
+	case ReceiverModeSingleStack:
 		if highPriorityWaterMarkInfo == nil { // This should not happen, more for a safety check
 			return 0, NewStreamError("Single stack mode. High priority tracker does not have low watermark info", serviceerror.NewInternal("Invalid tracker state"))
 		}
@@ -282,6 +282,7 @@ func (r *StreamReceiverImpl) ackMessage(
 		inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
 		inclusiveLowWaterMarkTime = highPriorityWaterMarkInfo.Timestamp
 	}
+
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &replicationpb.SyncReplicationState{
@@ -327,7 +328,7 @@ func (r *StreamReceiverImpl) processMessages(
 		}
 		if err := r.validateAndSetReceiverMode(streamResp.Resp.GetMessages().Priority); err != nil {
 			r.logger.Error("ReplicationTask wrong receiver mode", tag.Error(err))
-			break // exit loop and let stream reconnect to retry task
+			break // sender mode changed, exit loop and let stream reconnect to retry
 		}
 
 		if err = ValidateTasksHaveSamePriority(streamResp.Resp.GetMessages().Priority, streamResp.Resp.GetMessages().ReplicationTasks...); err != nil {
