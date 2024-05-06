@@ -142,7 +142,7 @@ func (s *mutableStateSuite) SetupTest() {
 
 	namespaceEntry := tests.GlobalNamespaceEntry
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
-	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
@@ -1079,12 +1079,6 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 		false,
 	)
 	s.NoError(err)
-
-	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
-		tests.LocalNamespaceEntry.IsGlobalNamespace(),
-		s.mutableState.GetCurrentVersion(),
-	).Return(cluster.TestCurrentClusterName)
-	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(
 		TransactionPolicyActive,

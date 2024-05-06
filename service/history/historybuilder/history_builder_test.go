@@ -2407,7 +2407,8 @@ func (s *historyBuilderSuite) TestLastEventVersion() {
 	s.True(ok)
 	s.Equal(s.version, version)
 
-	s.historyBuilder.Finish(true)
+	_, err := s.historyBuilder.Finish(true)
+	s.NoError(err)
 	_, ok = s.historyBuilder.LastEventVersion()
 	s.False(ok)
 
