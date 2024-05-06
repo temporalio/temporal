@@ -315,7 +315,7 @@ copyright-check:
 	current_year=$$(date +'%Y'); \
 	for file in $$(git diff --diff-filter=A --name-only origin/main HEAD | grep '\.go$$'); do \
 		if ! grep -q "Copyright (c) $$current_year Temporal Technologies Inc." "$$file"; then \
-			printf $(RED) "New file $$file missing license information."; \
+			printf $(RED) "New file $$file missing license information or information is invalid."; \
 			check_failed=true; \
 		fi; \
 	done; \
