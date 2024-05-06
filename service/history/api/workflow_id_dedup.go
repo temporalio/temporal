@@ -110,7 +110,7 @@ func terminateWorkflowAction(
 			return nil, consts.ErrWorkflowCompleted
 		}
 
-		return UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+		return UpdateWorkflowTerminate, workflow.TerminateWorkflow(
 			mutableState,
 			"TerminateIfRunning WorkflowIdReusePolicy",
 			payloads.EncodeString(fmt.Sprintf("terminated by new runID: %s", newRunID)),

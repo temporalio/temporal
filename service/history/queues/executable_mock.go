@@ -253,20 +253,6 @@ func (mr *MockExecutableMockRecorder) GetType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetType", reflect.TypeOf((*MockExecutable)(nil).GetType))
 }
 
-// GetVersion mocks base method.
-func (m *MockExecutable) GetVersion() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVersion")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetVersion indicates an expected call of GetVersion.
-func (mr *MockExecutableMockRecorder) GetVersion() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockExecutable)(nil).GetVersion))
-}
-
 // GetVisibilityTime mocks base method.
 func (m *MockExecutable) GetVisibilityTime() time.Time {
 	m.ctrl.T.Helper()

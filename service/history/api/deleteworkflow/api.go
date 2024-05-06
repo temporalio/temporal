@@ -90,7 +90,7 @@ func Invoke(
 				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 					mutableState := workflowLease.GetMutableState()
 
-					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+					return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
 						mutableState,
 						"Delete workflow execution",
 						nil,
@@ -115,7 +115,6 @@ func Invoke(
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
 		workflowLease.GetMutableState(),
-		request.GetWorkflowVersion(),
 	); err != nil {
 		return nil, err
 	}

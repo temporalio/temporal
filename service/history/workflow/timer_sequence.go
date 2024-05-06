@@ -126,7 +126,6 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 		WorkflowKey:         t.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: firstTimerTask.Timestamp,
 		EventID:             firstTimerTask.EventID,
-		Version:             t.mutableState.GetCurrentVersion(),
 	})
 	return true, nil
 }
@@ -175,7 +174,6 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 		TimeoutType:         firstTimerTask.TimerType,
 		EventID:             firstTimerTask.EventID,
 		Attempt:             firstTimerTask.Attempt,
-		Version:             t.mutableState.GetCurrentVersion(),
 	})
 	return true, nil
 }

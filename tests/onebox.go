@@ -191,7 +191,7 @@ type (
 func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	testDCClient := newTestDCClient(dynamicconfig.NewNoopClient())
 	for k, v := range params.DynamicConfigOverrides {
-		testDCClient.OverrideValue(t, k, v)
+		testDCClient.OverrideValueByKey(t, k, v)
 	}
 	impl := &temporalImpl{
 		logger:                           params.Logger,
@@ -960,6 +960,6 @@ func sdkClientFactoryProvider(
 		tlsConfig,
 		metricsHandler,
 		logger,
-		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
+		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
 }
