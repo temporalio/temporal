@@ -94,10 +94,10 @@ type OutgoingServiceRegistryConfig struct {
 // NewOutgoingServiceRegistryConfig creates a new [OutgoingServiceRegistryConfig] with the given dynamic configuration.
 func NewOutgoingServiceRegistryConfig(dc *dynamicconfig.Collection) *OutgoingServiceRegistryConfig {
 	return &OutgoingServiceRegistryConfig{
-		MaxURLLength:    dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceURLMaxLength, 1000),
-		MaxNameLength:   dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceNameMaxLength, 200),
-		DefaultPageSize: dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceListDefaultPageSize, 100),
-		MaxPageSize:     dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceListMaxPageSize, 1000),
+		MaxURLLength:    dynamicconfig.NexusOutgoingServiceURLMaxLength.Get(dc),
+		MaxNameLength:   dynamicconfig.NexusOutgoingServiceNameMaxLength.Get(dc),
+		DefaultPageSize: dynamicconfig.NexusOutgoingServiceListDefaultPageSize.Get(dc),
+		MaxPageSize:     dynamicconfig.NexusOutgoingServiceListMaxPageSize.Get(dc),
 	}
 }
 

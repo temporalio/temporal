@@ -97,14 +97,11 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			specBuilder:  specBuilder,
-			activityDeps: params,
-			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
-				dynamicconfig.WorkerEnableScheduler, true),
-			globalNSStartWorkflowRPS: dcCollection.GetFloatPropertyFilteredByNamespace(
-				dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 30.0),
-			maxBlobSize: dcCollection.GetIntPropertyFilteredByNamespace(
-				dynamicconfig.BlobSizeLimitError, eventStorageSize),
+			specBuilder:              specBuilder,
+			activityDeps:             params,
+			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dcCollection),
+			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Get(dcCollection),
+			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dcCollection),
 		},
 	}
 }

@@ -28,20 +28,32 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-// Enabled toggles accepting of API requests and workflow commands that create or modify Nexus operations.
-const Enabled = dynamicconfig.Key("component.nexusoperations.enabled")
+var Enabled = dynamicconfig.NewNamespaceBoolSetting(
+	"component.nexusoperations.enabled",
+	false,
+	`Enabled toggles accepting of API requests and workflow commands that create or modify Nexus operations.`,
+)
 
-// RequestTimeout is the timeout for making a single nexus start or cancel request.
-const RequestTimeout = dynamicconfig.Key("component.nexusoperations.request.timeout")
+var RequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"component.nexusoperations.request.timeout",
+	time.Second*10,
+	`RequestTimeout is the timeout for making a single nexus start or cancel request.`,
+)
 
-// MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
-// Once the limit is reached, ScheduleNexusOperation commands will be rejected.
-const MaxConcurrentOperations = dynamicconfig.Key("component.nexusoperations.limit.operation.concurrency")
+var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
+	"component.nexusoperations.limit.operation.concurrency",
+	1000,
+	`MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
+Once the limit is reached, ScheduleNexusOperation commands will be rejected.`,
+)
 
-// MaxOperationNameLength limits the maximum allowed length for a Nexus Operation name.
-// ScheduleNexusOperation commands with an operation name that exceeds this limit will be rejected.
-// Uses Go's len() function to determine the length.
-const MaxOperationNameLength = dynamicconfig.Key("component.nexusoperations.limit.operation.name.length")
+var MaxOperationNameLength = dynamicconfig.NewNamespaceIntSetting(
+	"component.nexusoperations.limit.operation.name.length",
+	1000,
+	`MaxOperationNameLength limits the maximum allowed length for a Nexus Operation name.
+ScheduleNexusOperation commands with an operation name that exceeds this limit will be rejected.
+Uses Go's len() function to determine the length.`,
+)
 
 type Config struct {
 	Enabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -52,10 +64,10 @@ type Config struct {
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled: dc.GetBoolPropertyFnWithNamespaceFilter(Enabled, false),
+		Enabled: Enabled.Get(dc),
 		// TODO(bergundy): This should be controllable per namespace + destination.
-		RequestTimeout:          dc.GetDurationPropertyFilteredByNamespace(RequestTimeout, time.Second*10),
-		MaxConcurrentOperations: dc.GetIntPropertyFilteredByNamespace(MaxConcurrentOperations, 1000),
-		MaxOperationNameLength:  dc.GetIntPropertyFilteredByNamespace(MaxOperationNameLength, 1000),
+		RequestTimeout:          RequestTimeout.Get(dc),
+		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
+		MaxOperationNameLength:  MaxOperationNameLength.Get(dc),
 	}
 }
