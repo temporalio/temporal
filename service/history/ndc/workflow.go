@@ -52,7 +52,6 @@ type (
 		GetMutableState() workflow.MutableState
 		GetReleaseFn() wcache.ReleaseCacheFunc
 		GetVectorClock() (int64, int64, error)
-		LastWriteByLocalCluster() (bool, error)
 
 		HappensAfter(that Workflow) (bool, error)
 		Revive() error
@@ -106,16 +105,6 @@ func (r *WorkflowImpl) GetVectorClock() (int64, int64, error) {
 
 	lastEventTaskID := r.mutableState.GetExecutionInfo().LastEventTaskId
 	return lastWriteVersion, lastEventTaskID, nil
-}
-
-func (r *WorkflowImpl) LastWriteByLocalCluster() (bool, error) {
-	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
-	if err != nil {
-		return false, err
-	}
-	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
-	currentCluster := r.clusterMetadata.GetCurrentClusterName()
-	return lastWriteCluster == currentCluster, nil
 }
 
 func (r *WorkflowImpl) HappensAfter(

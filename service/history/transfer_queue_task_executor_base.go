@@ -272,12 +272,17 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	// If task version is EmptyVersion it means "don't check task version".
 	// This can happen when task was created from explicit user API call.
 	// Or the namespace is a local namespace which will not have version conflict.
-	if task.GetVersion() != common.EmptyVersion {
+	taskVersion := common.EmptyVersion
+	if taskWithVersion, ok := task.(tasks.HasVersion); ok {
+		taskVersion = taskWithVersion.GetVersion()
+	}
+
+	if taskVersion != common.EmptyVersion {
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, taskVersion, task)
 		if err != nil {
 			return err
 		}
