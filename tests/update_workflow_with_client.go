@@ -6,27 +6,36 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 )
 
-// TestUpdateWorkflow_TerminateWorkflowDuringUpdate executes a long-running update (schedules a sequence of timers) and
-// terminates the workflow after the update has been accepted but before it has been completed.
+// TestUpdateWorkflow_TerminateWorkflowDuringUpdate executes a long-running update (schedules a sequence of activity
+// calls) and terminates the workflow after the update has been accepted but before it has been completed. It checks
+// that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
 func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowDuringUpdate() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
 
+	activityDone := make(chan struct{})
+	activityFn := func(ctx context.Context) error {
+		activityDone <- struct{}{}
+		return nil
+	}
+
 	workflowFn := func(ctx workflow.Context) error {
-		l := workflow.GetLogger(ctx)
 		workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
+			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: 10 * time.Second,
+			})
 			for {
-				l.Info("in update handler; about to sleep\n")
-				workflow.Sleep(ctx, time.Duration(time.Second))
-				l.Info("in update handler; after sleep\n")
+				s.NoError(workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil))
 				if false {
 					// appease compiler
 					break
@@ -39,20 +48,23 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowDuringUpdate
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)
+	s.worker.RegisterActivity(activityFn)
 	tv, wfRun := s.startWorkflow(ctx, tv, workflowFn)
 
 	updateHandle := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-id", "my-update-arg")
 
-	time.Sleep(5 * time.Second)
+	select {
+	case <-activityDone:
+	case <-ctx.Done():
+		s.FailNow("timed out waiting for activity to be called by update handler")
+	}
 	s.NoError(s.sdkClient.TerminateWorkflow(ctx, tv.WorkflowID(), tv.RunID(), "reason"))
 
-	var updateResult string
-	s.NoError(updateHandle.Get(ctx, &updateResult))
-	s.Equal("my-update-arg-result", updateResult)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(updateHandle.Get(ctx, nil), &notFound)
 
-	var wfResult string
-	s.NoError(wfRun.Get(ctx, &wfResult))
-	s.Equal("wf-result", wfResult)
+	var wee *temporal.WorkflowExecutionError
+	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
 }
 
 func (s *ClientFunctionalSuite) startWorkflow(ctx context.Context, tv *testvars.TestVars, workflowFn interface{}) (*testvars.TestVars, sdkclient.WorkflowRun) {
@@ -62,12 +74,6 @@ func (s *ClientFunctionalSuite) startWorkflow(ctx context.Context, tv *testvars.
 	}, workflowFn)
 	s.NoError(err)
 	return tv.WithRunID(run.GetRunID()), run
-}
-
-func (s *ClientFunctionalSuite) updateWorkflow(ctx context.Context, tv *testvars.TestVars, arg string) sdkclient.WorkflowUpdateHandle {
-	handle, err := s.sdkClient.UpdateWorkflow(ctx, tv.WorkflowID(), tv.RunID(), tv.HandlerName(), arg)
-	s.NoError(err)
-	return handle
 }
 
 func (s *ClientFunctionalSuite) updateWorkflowWaitAccepted(ctx context.Context, tv *testvars.TestVars, updateID string, arg string) sdkclient.WorkflowUpdateHandle {
