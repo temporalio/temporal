@@ -54,8 +54,6 @@ type (
 		logger        log.Logger
 
 		renewRangeIDFn renewRangeIDFn
-
-		maxAssignedTaskIDs map[tasks.Category]int64
 	}
 )
 
@@ -72,7 +70,6 @@ func newTaskKeyGenerator(
 		timeSource:         timeSource,
 		logger:             logger,
 		renewRangeIDFn:     renewRangeIDFn,
-		maxAssignedTaskIDs: make(map[tasks.Category]int64),
 	}
 }
 
@@ -93,7 +90,6 @@ func (a *taskKeyGenerator) setTaskKeys(
 					return err
 				}
 				task.SetTaskID(id)
-				a.maxAssignedTaskIDs[category] = id
 
 				taskScheduledTime := now
 				if isScheduledTask {
@@ -135,12 +131,6 @@ func (a *taskKeyGenerator) setTaskKeys(
 	}
 
 	return nil
-}
-
-func (a *taskKeyGenerator) maxAssignedTaskID(
-	category tasks.Category,
-) int64 {
-	return a.maxAssignedTaskIDs[category]
 }
 
 func (a *taskKeyGenerator) peekTaskKey(
