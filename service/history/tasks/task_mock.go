@@ -195,6 +195,43 @@ func (mr *MockTaskMockRecorder) SetVisibilityTime(timestamp interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVisibilityTime", reflect.TypeOf((*MockTask)(nil).SetVisibilityTime), timestamp)
 }
 
+// MockHasVersion is a mock of HasVersion interface.
+type MockHasVersion struct {
+	ctrl     *gomock.Controller
+	recorder *MockHasVersionMockRecorder
+}
+
+// MockHasVersionMockRecorder is the mock recorder for MockHasVersion.
+type MockHasVersionMockRecorder struct {
+	mock *MockHasVersion
+}
+
+// NewMockHasVersion creates a new mock instance.
+func NewMockHasVersion(ctrl *gomock.Controller) *MockHasVersion {
+	mock := &MockHasVersion{ctrl: ctrl}
+	mock.recorder = &MockHasVersionMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHasVersion) EXPECT() *MockHasVersionMockRecorder {
+	return m.recorder
+}
+
+// GetVersion mocks base method.
+func (m *MockHasVersion) GetVersion() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVersion")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetVersion indicates an expected call of GetVersion.
+func (mr *MockHasVersionMockRecorder) GetVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockHasVersion)(nil).GetVersion))
+}
+
 // MockHasStateMachineTaskType is a mock of HasStateMachineTaskType interface.
 type MockHasStateMachineTaskType struct {
 	ctrl     *gomock.Controller
