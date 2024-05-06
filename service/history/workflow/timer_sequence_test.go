@@ -175,7 +175,6 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_AfterWorkflowExp
 func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowExpiry() {
 	now := time.Now().UTC()
 	timerExpiry := timestamppb.New(now.Add(100))
-	currentVersion := int64(999)
 	timerInfo := &persistencespb.TimerInfo{
 		Version:        123,
 		TimerId:        "some random timer ID",
@@ -193,7 +192,6 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowEx
 	var timerInfoUpdated = common.CloneProto(timerInfo) // make a copy
 	timerInfoUpdated.TaskStatus = TimerTaskStatusCreated
 	s.mockMutableState.EXPECT().UpdateUserTimer(protomock.Eq(timerInfoUpdated)).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -209,7 +207,6 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowEx
 func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_NoWorkflowExpiry() {
 	now := time.Now().UTC()
 	timerExpiry := timestamppb.New(now.Add(100))
-	currentVersion := int64(999)
 	timerInfo := &persistencespb.TimerInfo{
 		Version:        123,
 		TimerId:        "some random timer ID",
@@ -227,7 +224,6 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_NoWorkflowExpiry
 	var timerInfoUpdated = common.CloneProto(timerInfo) // make a copy
 	timerInfoUpdated.TaskStatus = TimerTaskStatusCreated
 	s.mockMutableState.EXPECT().UpdateUserTimer(protomock.Eq(timerInfoUpdated)).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -354,7 +350,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_AfterWorkflo
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkflowExpiry() {
 	now := time.Now().UTC()
-	currentVersion := int64(999)
 	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduledEventId:        234,
@@ -380,7 +375,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedScheduleToStart
 	s.mockMutableState.EXPECT().UpdateActivity(protomock.Eq(activityInfoUpdated)).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -397,7 +391,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowExpiry() {
 	now := time.Now().UTC()
-	currentVersion := int64(999)
 	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduledEventId:        234,
@@ -423,7 +416,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedScheduleToStart
 	s.mockMutableState.EXPECT().UpdateActivity(protomock.Eq(activityInfoUpdated)).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -468,7 +460,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_AfterWor
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWorkflowExpiry() {
 	now := time.Now().UTC()
-	currentVersion := int64(999)
 	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduledEventId:        234,
@@ -496,7 +487,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedHeartbeat
 	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(protomock.Eq(activityInfoUpdated), taskVisibilityTimestamp).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -513,7 +503,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkflowExpiry() {
 	now := time.Now().UTC()
-	currentVersion := int64(999)
 	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduledEventId:        234,
@@ -541,7 +530,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedHeartbeat
 	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(protomock.Eq(activityInfoUpdated), taskVisibilityTimestamp).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
