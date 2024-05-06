@@ -187,6 +187,7 @@ func NewWorkflowVersionCheck(
 		return nil
 	}
 
+	// we are creating a new workflow, so workflow must be running here,
 	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
 		clusterMetadata := shard.GetClusterMetadata()
 		namespaceEntry := newMutableState.GetNamespaceEntry()

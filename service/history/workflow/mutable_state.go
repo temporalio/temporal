@@ -237,12 +237,14 @@ type (
 		GetFirstRunID(ctx context.Context) (string, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetCurrentVersion() int64
+		GetStartVersion() (int64, error)
+		GetCloseVersion() (int64, error)
+		GetLastWriteVersion() (int64, error)
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetStartedWorkflowTask() *WorkflowTaskInfo
 		GetPendingWorkflowTask() *WorkflowTaskInfo
 		GetLastFirstEventIDTxnID() (int64, int64)
-		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
 		GetLastWorkflowTaskStartedEventID() int64
 		GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo
@@ -254,7 +256,6 @@ type (
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() time.Duration
 		GetSignalInfo(int64) (*persistencespb.SignalInfo, bool)
-		GetStartVersion() (int64, error)
 		GetUserTimerInfoByEventID(int64) (*persistencespb.TimerInfo, bool)
 		GetUserTimerInfo(string) (*persistencespb.TimerInfo, bool)
 		GetWorkflowType() *commonpb.WorkflowType

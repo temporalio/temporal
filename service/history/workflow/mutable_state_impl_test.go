@@ -45,12 +45,14 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common"
@@ -138,10 +140,14 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
+	namespaceEntry := tests.GlobalNamespaceEntry
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -1346,25 +1352,25 @@ func (s *mutableStateSuite) TestRolloverAutoResetPointsWithExpiringTime() {
 	t3 := timestamppb.New(base.Add(4 * time.Hour))
 
 	points := []*workflowpb.ResetPointInfo{
-		&workflowpb.ResetPointInfo{
+		{
 			BuildId:                      "buildid1",
 			RunId:                        runId1,
 			FirstWorkflowTaskCompletedId: 32,
 			ExpireTime:                   t1,
 		},
-		&workflowpb.ResetPointInfo{
+		{
 			BuildId:                      "buildid2",
 			RunId:                        runId1,
 			FirstWorkflowTaskCompletedId: 63,
 			ExpireTime:                   t1,
 		},
-		&workflowpb.ResetPointInfo{
+		{
 			BuildId:                      "buildid3",
 			RunId:                        runId2,
 			FirstWorkflowTaskCompletedId: 94,
 			ExpireTime:                   t2,
 		},
-		&workflowpb.ResetPointInfo{
+		{
 			BuildId:                      "buildid4",
 			RunId:                        runId3,
 			FirstWorkflowTaskCompletedId: 125,
@@ -1373,13 +1379,13 @@ func (s *mutableStateSuite) TestRolloverAutoResetPointsWithExpiringTime() {
 
 	newPoints := rolloverAutoResetPointsWithExpiringTime(&workflowpb.ResetPoints{Points: points}, runId3, now.AsTime(), retention)
 	expected := []*workflowpb.ResetPointInfo{
-		&workflowpb.ResetPointInfo{
+		{
 			BuildId:                      "buildid3",
 			RunId:                        runId2,
 			FirstWorkflowTaskCompletedId: 94,
 			ExpireTime:                   t2,
 		},
-		&workflowpb.ResetPointInfo{
+		{
 			BuildId:                      "buildid4",
 			RunId:                        runId3,
 			FirstWorkflowTaskCompletedId: 125,
@@ -1564,4 +1570,56 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 			},
 		)
 	}
+}
+
+func (s *mutableStateSuite) TestGetCloseVersion() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		&historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{},
+		},
+	)
+	s.NoError(err)
+	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	s.NoError(err)
+
+	_, err = s.mutableState.GetCloseVersion()
+	s.Error(err) // workflow still open
+
+	namespaceEntry, err := s.mockShard.GetNamespaceRegistry().GetNamespaceByID(tests.NamespaceID)
+	s.NoError(err)
+	expectedVersion := namespaceEntry.FailoverVersion()
+
+	_, err = s.mutableState.AddCompletedWorkflowEvent(
+		5,
+		&commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		"",
+	)
+	s.NoError(err)
+	// get close version in the transaction that closes the workflow
+	closeVersion, err := s.mutableState.GetCloseVersion()
+	s.NoError(err)
+	s.Equal(expectedVersion, closeVersion)
+
+	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	s.NoError(err)
+
+	// get close version after workflow is closed
+	closeVersion, err = s.mutableState.GetCloseVersion()
+	s.NoError(err)
+	s.Equal(expectedVersion, closeVersion)
+
+	// verify close version doesn't change after workflow is closed
+	err = s.mutableState.UpdateCurrentVersion(12345, true)
+	s.NoError(err)
+	closeVersion, err = s.mutableState.GetCloseVersion()
+	s.NoError(err)
+	s.Equal(expectedVersion, closeVersion)
 }

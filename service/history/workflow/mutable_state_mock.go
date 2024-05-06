@@ -1831,6 +1831,21 @@ func (mr *MockMutableStateMockRecorder) GetChildExecutionInitiatedEvent(arg0, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChildExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetChildExecutionInitiatedEvent), arg0, arg1)
 }
 
+// GetCloseVersion mocks base method.
+func (m *MockMutableState) GetCloseVersion() (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCloseVersion")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCloseVersion indicates an expected call of GetCloseVersion.
+func (mr *MockMutableStateMockRecorder) GetCloseVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloseVersion", reflect.TypeOf((*MockMutableState)(nil).GetCloseVersion))
+}
+
 // GetCompletionEvent mocks base method.
 func (m *MockMutableState) GetCompletionEvent(arg0 context.Context) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()

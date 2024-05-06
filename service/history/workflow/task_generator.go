@@ -201,12 +201,15 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closedTime time.Time,
 	deleteAfterClose bool,
 ) error {
-	currentVersion := r.mutableState.GetCurrentVersion()
+	closeVersion, err := r.mutableState.GetCloseVersion()
+	if err != nil {
+		return err
+	}
 
 	closeExecutionTask := &tasks.CloseExecutionTask{
 		// TaskID, Visiblitytimestamp is set by shard
 		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		Version:          currentVersion,
+		Version:          closeVersion,
 		DeleteAfterClose: deleteAfterClose,
 	}
 	closeTasks := []tasks.Task{
@@ -233,7 +236,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			&tasks.CloseExecutionVisibilityTask{
 				// TaskID, VisibilityTimestamp is set by shard
 				WorkflowKey: r.mutableState.GetWorkflowKey(),
-				Version:     currentVersion,
+				Version:     closeVersion,
 			},
 		)
 		if r.archivalEnabled() {
@@ -255,7 +258,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				// TaskID is set by the shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
 				VisibilityTimestamp: archiveTime,
-				Version:             currentVersion,
+				Version:             closeVersion,
 			}
 			closeTasks = append(closeTasks, task)
 		} else if err := r.GenerateDeleteHistoryEventTask(closedTime); err != nil {
@@ -365,7 +368,11 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time) 
 	if err != nil {
 		return err
 	}
-	currentVersion := r.mutableState.GetCurrentVersion()
+	closeVersion, err := r.mutableState.GetCloseVersion()
+	if err != nil {
+		return err
+	}
+
 	branchToken, err := r.mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return err
@@ -377,7 +384,7 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time) 
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: deleteTime,
-		Version:             currentVersion,
+		Version:             closeVersion,
 		BranchToken:         branchToken,
 	})
 	return nil
@@ -581,7 +588,9 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		// this is only called in RetryActivity when workflow is still running
+		// but ideally should use activity version explicitly
 		Version:             r.mutableState.GetCurrentVersion(),
 		VisibilityTimestamp: visibilityTimestamp,
 		EventID:             eventID,
@@ -699,6 +708,8 @@ func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask() error {
 
 func (r *TaskGeneratorImpl) GenerateWorkflowResetTasks() error {
 
+	// this is only called in closeTransactionHandleWorkflowReset
+	// where workfow is still running
 	currentVersion := r.mutableState.GetCurrentVersion()
 
 	r.mutableState.AddTasks(&tasks.ResetWorkflowTask{
