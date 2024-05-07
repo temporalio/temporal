@@ -460,7 +460,13 @@ func (u *Update) onAcceptanceMsg(
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
 ) error {
-	if err := u.checkState(acpt, stateSent); err != nil {
+	// Normally update goes from stateAdmitted to stateSent and then to stateAccepted,
+	// therefore the only valid state here is stateSent.
+	// But if update registry is cleared after update was sent to the worker,
+	// it will be recreated by retries in stateAdmitted, and then worker can accept previous (cleared) update
+	// with the same UpdateId. Because it is, in fact, the same update, server should process this accept message w/o error.
+	// Therefore, stateAdmitted is also a valid state.
+	if err := u.checkStateSet(acpt, stateSet(stateSent|stateAdmitted)); err != nil {
 		return err
 	}
 	if err := validateAcceptanceMsg(acpt); err != nil {
@@ -530,7 +536,8 @@ func (u *Update) onRejectionMsg(
 	rej *updatepb.Rejection,
 	effects effect.Controller,
 ) error {
-	if err := u.checkState(rej, stateSent); err != nil {
+	// See comment in onAcceptanceMsg about stateAdmitted.
+	if err := u.checkStateSet(rej, stateSet(stateSent|stateAdmitted)); err != nil {
 		return err
 	}
 	if err := validateRejectionMsg(rej); err != nil {
