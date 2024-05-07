@@ -2727,7 +2727,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 	// TODO: remove this after 1.24.0-m3
 	if resp == nil {
 		resp = &workflowservice.DescribeTaskQueueResponse{}
-		unknown := []byte(resp.ProtoReflect().GetUnknown())
+		unknown := []byte(matchingResponse.ProtoReflect().GetUnknown())
 		for len(unknown) > 0 {
 			num, typ, n := protowire.ConsumeTag(unknown)
 			if n < 0 {
