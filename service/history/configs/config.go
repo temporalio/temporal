@@ -392,8 +392,8 @@ func NewConfig(
 		EventsCacheTTL:                    dynamicconfig.EventsCacheTTL.Get(dc),
 		EnableHostLevelEventsCache:        dynamicconfig.EnableHostLevelEventsCache.Get(dc),
 
-		RangeSizeBits:                  20, // 20 bits for sequencer, 2^20 sequence number for any range
-    
+		RangeSizeBits: 20, // 20 bits for sequencer, 2^20 sequence number for any range
+
 		AcquireShardInterval:           dynamicconfig.AcquireShardInterval.Get(dc),
 		AcquireShardConcurrency:        dynamicconfig.AcquireShardConcurrency.Get(dc),
 		ShardIOConcurrency:             dynamicconfig.ShardIOConcurrency.Get(dc),
@@ -477,8 +477,8 @@ func NewConfig(
 		ReplicationStreamSyncStatusDuration:                 dynamicconfig.ReplicationStreamSyncStatusDuration.Get(dc),
 		ReplicationProcessorSchedulerQueueSize:              dynamicconfig.ReplicationProcessorSchedulerQueueSize.Get(dc),
 		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Get(dc),
-    ReplicationLowPriorityProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount, 128),
-    ReplicationLowPriorityTaskParallelism:               dc.GetIntProperty(dynamicconfig.ReplicationLowPriorityTaskParallelism, 4),
+		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Get(dc),
+		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationEagerRefreshNamespace:              dynamicconfig.EnableEagerNamespaceRefresher.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicateLocalGeneratedEvent:                  dynamicconfig.EnableReplicateLocalGeneratedEvents.Get(dc),
@@ -490,7 +490,6 @@ func NewConfig(
 		ShardUpdateMinTasksCompleted:     dynamicconfig.ShardUpdateMinTasksCompleted.Get(dc),
 		ShardSyncMinInterval:             dynamicconfig.ShardSyncMinInterval.Get(dc),
 		ShardSyncTimerJitterCoefficient:  dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient.Get(dc),
-
 
 		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: go.temporal.io/server/issues/294
