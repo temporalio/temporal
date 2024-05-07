@@ -243,7 +243,7 @@ func (r *StreamReceiverImpl) ackMessage(
 			// we should avoid ack with {high: 10, low: nil}. If we do, sender will not able to correctly interpret the overall low watermark of the queue,
 			// because it is possible that low priority tracker might receive a batch of tasks with watermark 5 later.
 			// It is also true for the opposite case.
-			r.logger.Info("Tiered stack mode. Have to wait for both high and low priority tracker received at least one batch of tasks before acking.")
+			r.logger.Warn("Tiered stack mode. Have to wait for both high and low priority tracker received at least one batch of tasks before acking.")
 			return 0, nil
 		}
 		highPriorityWatermark = &replicationpb.ReplicationState{
