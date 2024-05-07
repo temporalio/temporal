@@ -370,7 +370,7 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 		if !ok {
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
+				serviceerror.NewNotFound(fmt.Sprintf("update %s not found", message.ProtocolInstanceId)))
 		}
 
 		if err := upd.OnProtocolMessage(
@@ -383,7 +383,7 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 	default:
 		return handler.failWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %q", protocolType)))
+			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %s", protocolType)))
 	}
 
 	return nil
@@ -416,7 +416,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
 	}
 	return handler.failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-		serviceerror.NewInvalidArgument(fmt.Sprintf("ProtocolMessageCommand referenced absent message ID %q", attr.MessageId)),
+		serviceerror.NewInvalidArgument(fmt.Sprintf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId)),
 	)
 }
 

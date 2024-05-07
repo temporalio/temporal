@@ -78,6 +78,8 @@ type (
 		// Abort all incomplete updates in the registry.
 		Abort(reason AbortReason)
 
+		Contains(protocolInstanceID string) bool
+
 		// Clear registry and abort all waiters.
 		Clear()
 
@@ -96,6 +98,7 @@ type (
 		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		GetCurrentVersion() int64
+		IsWorkflowExecutionRunning() bool
 	}
 
 	registry struct {
@@ -186,12 +189,18 @@ func NewRegistry(
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
-			r.updates[updID] = newAccepted(
+			u := newAccepted(
 				updID,
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
+			if !r.store.IsWorkflowExecutionRunning() {
+				// If workflow is completed, accepted update will never be completed.
+				// This will return "workflow completed" error to the pollers of outcome of accepted updates.
+				u.abort(AbortReasonWorkflowCompleted)
+			}
+			r.updates[updID] = u
 		} else if updInfo.GetCompletion() != nil {
 			r.completedCount++
 		}
@@ -216,6 +225,11 @@ func (r *registry) Abort(reason AbortReason) {
 	for _, upd := range r.updates {
 		upd.abort(reason)
 	}
+}
+
+// Contains returns true iff the update ID exists in the registry.
+func (r *registry) Contains(id string) bool {
+	return r.updates[id] != nil
 }
 
 // RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
@@ -313,6 +327,7 @@ func (r *registry) remover(id string) updateOpt {
 
 func (r *registry) checkLimits(_ context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
+		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -321,6 +336,7 @@ func (r *registry) checkLimits(_ context.Context) error {
 	}
 
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
+		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
@@ -374,6 +390,7 @@ func (r *registry) GetSize() int {
 	for key, update := range r.updates {
 		size += len(key) + update.GetSize()
 	}
+	r.instrumentation.updateRegistrySize(size)
 	return size
 }
 

@@ -91,16 +91,16 @@ type AdvancedVisibilitySuite struct {
 
 // This cluster use customized threshold for history config
 func (s *AdvancedVisibilitySuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.VisibilityDisableOrderByClause:             false,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
-		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs:     true,
-		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
-		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
-		dynamicconfig.BuildIdScavengerEnabled:                    true,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.VisibilityDisableOrderByClause.Key():             false,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
+		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
+		dynamicconfig.ReachabilityTaskQueueScanLimit.Key():             2,
+		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():              1,
+		dynamicconfig.BuildIdScavengerEnabled.Key():                    true,
 		// Allow the scavenger to remove any build id regardless of when it was last default for a set.
-		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
+		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
 
 	if UsingSQLAdvancedVisibility() {

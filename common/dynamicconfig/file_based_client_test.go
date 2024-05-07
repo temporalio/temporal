@@ -89,7 +89,7 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 	s.Nil(cvs)
 
 	defaultValue := true
-	v := s.collection.GetBoolProperty(unknownKey, defaultValue)()
+	v := GlobalBoolSetting{key: unknownKey, def: defaultValue}.Get(s.collection)()
 	s.Equal(defaultValue, v)
 }
 
@@ -97,36 +97,36 @@ func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
 	cvs := s.client.GetValue(testCaseInsensitivePropertyKey)
 	s.Equal(1, len(cvs))
 
-	v := s.collection.GetBoolProperty(testCaseInsensitivePropertyKey, false)()
+	v := GlobalBoolSetting{key: testCaseInsensitivePropertyKey, def: false}.Get(s.collection)()
 	s.Equal(true, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue() {
-	v := s.collection.GetIntProperty(testGetIntPropertyKey, 1)()
+	v := GlobalIntSetting{key: testGetIntPropertyKey, def: 1}.Get(s.collection)()
 	s.Equal(1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
-	v := s.collection.GetIntPropertyFilteredByNamespace(testGetIntPropertyKey, 500)("samples-namespace")
+	v := NamespaceIntSetting{key: testGetIntPropertyKey, def: 500}.Get(s.collection)("samples-namespace")
 	s.Equal(1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
 	defaultValue := 2000
-	v := s.collection.GetIntPropertyFilteredByNamespace(testGetIntPropertyKey, defaultValue)("global-samples-namespace")
+	v := NamespaceIntSetting{key: testGetIntPropertyKey, def: defaultValue}.Get(s.collection)("global-samples-namespace")
 	s.Equal(defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo() {
 	expectedValue := 1001
-	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 	expectedValue := 1003
-	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
 		// this is contrived, but simulates something that doesn't match workflow or activity
 		"global-samples-namespace", "test-tq", enumspb.TaskQueueType(3),
 	)
@@ -135,62 +135,71 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo() {
 	expectedValue := 1002
-	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 	expectedValue := 1005
-	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
 		"some-other-namespace", "other-test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
 	expectedValue := 1004
-	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
 		"another-namespace", "test-tq", 0)
 	s.Equal(expectedValue, v)
 	expectedValue = 1005
-	v = s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+	v = TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
 		"another-namespace", "other-test-tq", 0)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
 	// should return 1001 as the most specific match
-	v1 := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 1001)(
+	v1 := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 1001}.Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	v2 := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+	v2 := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(v1, v2)
 }
 
+func (s *fileBasedClientSuite) TestGetIntValue_FilterByDestination() {
+	dc := DestinationIntSetting{key: testGetIntPropertyFilteredByDestinationKey, def: 5}.Get(s.collection)
+	s.Equal(10, dc("foo", "bar"))
+	s.Equal(20, dc("test-namespace-id", "test-destination-1"))
+	s.Equal(30, dc("test-namespace-id", "random-destination"))
+	s.Equal(40, dc("random-namespace-id", "test-destination-1"))
+	s.Equal(50, dc("test-namespace-id", "test-destination-2"))
+}
+
 func (s *fileBasedClientSuite) TestGetFloatValue() {
-	v := s.collection.GetFloat64Property(testGetFloat64PropertyKey, 1)()
+	v := GlobalFloatSetting{key: testGetFloat64PropertyKey, def: 1}.Get(s.collection)()
 	s.Equal(12.0, v)
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
 	defaultValue := 1.0
-	v := s.collection.GetFloatPropertyFilteredByNamespace(testGetFloat64PropertyKey, defaultValue)("samples-namespace")
+	v := NamespaceFloatSetting{key: testGetFloat64PropertyKey, def: defaultValue}.Get(s.collection)("samples-namespace")
 	s.Equal(defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetBoolValue() {
-	v := s.collection.GetBoolProperty(testGetBoolPropertyKey, true)()
+	v := GlobalBoolSetting{key: testGetBoolPropertyKey, def: true}.Get(s.collection)()
 	s.Equal(false, v)
 }
 
 func (s *fileBasedClientSuite) TestGetStringValue() {
-	v := s.collection.GetStringPropertyFnWithNamespaceFilter(testGetStringPropertyKey, "defaultString")("random-namespace")
+	v := NamespaceStringSetting{key: testGetStringPropertyKey, def: "defaultString"}.Get(s.collection)("random-namespace")
 	s.Equal("constrained-string", v)
 }
 
 func (s *fileBasedClientSuite) TestGetMapValue() {
 	var defaultVal map[string]interface{}
-	v := s.collection.GetMapProperty(testGetMapPropertyKey, defaultVal)()
+	v := GlobalMapSetting{key: testGetMapPropertyKey, def: defaultVal}.Get(s.collection)()
 	expectedVal := map[string]interface{}{
 		"key1": "1",
 		"key2": 1,
@@ -207,38 +216,38 @@ func (s *fileBasedClientSuite) TestGetMapValue() {
 
 func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
 	var defaultVal map[string]interface{}
-	v := s.collection.GetMapPropertyFnWithNamespaceFilter(testGetMapPropertyKey, defaultVal)("random-namespace")
+	v := NamespaceMapSetting{key: testGetMapPropertyKey, def: defaultVal}.Get(s.collection)("random-namespace")
 	s.Equal(defaultVal, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue() {
-	v := s.collection.GetDurationProperty(testGetDurationPropertyKey, time.Second)()
+	v := GlobalDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)()
 	s.Equal(time.Minute, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_DefaultSeconds() {
-	v := s.collection.GetDurationPropertyFilteredByNamespace(testGetDurationPropertyKey, time.Second)("samples-namespace")
+	v := NamespaceDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)("samples-namespace")
 	s.Equal(2*time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
-	v := s.collection.GetDurationPropertyFilteredByNamespace(testGetDurationPropertyKey, time.Second)("broken-namespace")
+	v := NamespaceDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)("broken-namespace")
 	s.Equal(time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
-	v := s.collection.GetDurationPropertyFilteredByTaskQueueInfo(testGetDurationPropertyKey, time.Second)(
+	v := TaskQueueDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)(
 		"samples-namespace", "longIdleTimeTaskqueue", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	expectedValue := time.Second * 10
-	v := s.collection.GetDurationPropertyFilteredByTaskType(testGetDurationPropertyFilteredByTaskTypeKey, 0)(
+	v := TaskTypeDurationSetting{key: testGetDurationPropertyFilteredByTaskTypeKey, def: 0}.Get(s.collection)(
 		enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
 	)
 	s.Equal(expectedValue, v)
-	v = s.collection.GetDurationPropertyFilteredByTaskType(testGetDurationPropertyFilteredByTaskTypeKey, 0)(
+	v = TaskTypeDurationSetting{key: testGetDurationPropertyFilteredByTaskTypeKey, def: 0}.Get(s.collection)(
 		enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 	)
 	s.Equal(expectedValue, v)

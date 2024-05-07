@@ -823,6 +823,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			); err != nil {
 				return nil, err
 			}
+			updateRegistry.Abort(update.AbortReasonWorkflowCompleted)
 		}
 
 		return nil, updateErr

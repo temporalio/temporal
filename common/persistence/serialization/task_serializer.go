@@ -614,7 +614,6 @@ func (s *TaskSerializer) transferDeleteExecutionTaskToProto(
 		WorkflowId:     deleteExecutionTask.WorkflowKey.WorkflowID,
 		RunId:          deleteExecutionTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
-		Version:        deleteExecutionTask.Version,
 		TaskId:         deleteExecutionTask.TaskID,
 		VisibilityTime: timestamppb.New(deleteExecutionTask.VisibilityTimestamp),
 	}
@@ -631,7 +630,6 @@ func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
 		),
 		VisibilityTimestamp: deleteExecutionTask.VisibilityTime.AsTime(),
 		TaskID:              deleteExecutionTask.TaskId,
-		Version:             deleteExecutionTask.Version,
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		ProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -717,7 +715,6 @@ func (s *TaskSerializer) timerActivityTaskToProto(
 		TaskType:            enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 		TimeoutType:         activityTimer.TimeoutType,
 		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED,
-		Version:             activityTimer.Version,
 		ScheduleAttempt:     activityTimer.Attempt,
 		EventId:             activityTimer.EventID,
 		TaskId:              activityTimer.TaskID,
@@ -739,7 +736,6 @@ func (s *TaskSerializer) timerActivityTaskFromProto(
 		EventID:             activityTimer.EventId,
 		Attempt:             activityTimer.ScheduleAttempt,
 		TimeoutType:         activityTimer.TimeoutType,
-		Version:             activityTimer.Version,
 	}
 }
 
@@ -788,7 +784,6 @@ func (s *TaskSerializer) timerUserTaskToProto(
 		TaskType:            enumsspb.TASK_TYPE_USER_TIMER,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_UNSPECIFIED,
 		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED,
-		Version:             userTimer.Version,
 		ScheduleAttempt:     0,
 		EventId:             userTimer.EventID,
 		TaskId:              userTimer.TaskID,
@@ -808,7 +803,6 @@ func (s *TaskSerializer) timerUserTaskFromProto(
 		VisibilityTimestamp: userTimer.VisibilityTime.AsTime(),
 		TaskID:              userTimer.TaskId,
 		EventID:             userTimer.EventId,
-		Version:             userTimer.Version,
 	}
 }
 
@@ -903,7 +897,6 @@ func (s *TaskSerializer) stateMachineTimerTaskToProto(task *tasks.StateMachineTi
 		NamespaceId:      task.NamespaceID,
 		WorkflowId:       task.WorkflowID,
 		RunId:            task.RunID,
-		Version:          task.GetVersion(),
 		TaskId:           task.TaskID,
 		VisibilityTime:   timestamppb.New(task.VisibilityTimestamp),
 		StateMachineInfo: task.Info,
@@ -981,7 +974,6 @@ func (s *TaskSerializer) visibilityUpsertTaskToProto(
 		WorkflowId:     upsertVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:          upsertVisibilityTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
-		Version:        upsertVisibilityTask.Version,
 		TaskId:         upsertVisibilityTask.TaskID,
 		VisibilityTime: timestamppb.New(upsertVisibilityTask.VisibilityTimestamp),
 	}
@@ -998,7 +990,6 @@ func (s *TaskSerializer) visibilityUpsertTaskFromProto(
 		),
 		VisibilityTimestamp: upsertVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:              upsertVisibilityTask.TaskId,
-		Version:             upsertVisibilityTask.Version,
 	}
 }
 
@@ -1039,7 +1030,6 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		WorkflowId:            deleteVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:                 deleteVisibilityTask.WorkflowKey.RunID,
 		TaskType:              enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
-		Version:               deleteVisibilityTask.Version,
 		TaskId:                deleteVisibilityTask.TaskID,
 		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
@@ -1057,7 +1047,6 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		),
 		VisibilityTimestamp:            deleteVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:                         deleteVisibilityTask.TaskId,
-		Version:                        deleteVisibilityTask.Version,
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 	}
 }

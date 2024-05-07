@@ -44,34 +44,28 @@ const (
 func GetVisibilityPersistenceMaxReadQPS(
 	dc *dynamicconfig.Collection,
 ) dynamicconfig.IntPropertyFn {
-	return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxReadQPS, 9000)
+	return dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc)
 }
 
 //nolint:revive
 func GetVisibilityPersistenceMaxWriteQPS(
 	dc *dynamicconfig.Collection,
 ) dynamicconfig.IntPropertyFn {
-	return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxWriteQPS, 9000)
+	return dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc)
 }
 
 //nolint:revive
 func GetEnableReadFromSecondaryVisibilityConfig(
 	dc *dynamicconfig.Collection,
 ) dynamicconfig.BoolPropertyFnWithNamespaceFilter {
-	return dc.GetBoolPropertyFnWithNamespaceFilter(
-		dynamicconfig.EnableReadFromSecondaryVisibility,
-		false,
-	)
+	return dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc)
 }
 
 //nolint:revive
 func GetSecondaryVisibilityWritingModeConfig(
 	dc *dynamicconfig.Collection,
 ) dynamicconfig.StringPropertyFn {
-	return dc.GetStringProperty(
-		dynamicconfig.SecondaryVisibilityWritingMode,
-		SecondaryVisibilityWritingModeOff,
-	)
+	return dynamicconfig.SecondaryVisibilityWritingMode.Get(dc)
 }
 
 func AllowListForValidation(

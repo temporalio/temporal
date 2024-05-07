@@ -160,10 +160,8 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 		{
 			Name: "wrong task type",
 			Configure: func(p *params) {
-				version := p.Task.GetVersion()
 				p.Task = &tasks.DeleteExecutionTask{
 					WorkflowKey: p.WorkflowKey,
-					Version:     version,
 				}
 				p.ExpectArchive = false
 				p.ExpectAddTask = false

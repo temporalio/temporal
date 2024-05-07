@@ -35,6 +35,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	history "go.temporal.io/api/history/v1"
 	workflow "go.temporal.io/server/service/history/workflow"
+	update "go.temporal.io/server/service/history/workflow/update"
 )
 
 // MockEventsReapplier is a mock of EventsReapplier interface.
@@ -61,16 +62,16 @@ func (m *MockEventsReapplier) EXPECT() *MockEventsReapplierMockRecorder {
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockEventsReapplier) ReapplyEvents(ctx context.Context, ms workflow.MutableState, historyEvents []*history.HistoryEvent, runID string) ([]*history.HistoryEvent, error) {
+func (m *MockEventsReapplier) ReapplyEvents(ctx context.Context, ms workflow.MutableState, updateRegistry update.Registry, historyEvents []*history.HistoryEvent, runID string) ([]*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, ms, historyEvents, runID)
+	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, ms, updateRegistry, historyEvents, runID)
 	ret0, _ := ret[0].([]*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ReapplyEvents indicates an expected call of ReapplyEvents.
-func (mr *MockEventsReapplierMockRecorder) ReapplyEvents(ctx, ms, historyEvents, runID interface{}) *gomock.Call {
+func (mr *MockEventsReapplierMockRecorder) ReapplyEvents(ctx, ms, updateRegistry, historyEvents, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEventsReapplier)(nil).ReapplyEvents), ctx, ms, historyEvents, runID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEventsReapplier)(nil).ReapplyEvents), ctx, ms, updateRegistry, historyEvents, runID)
 }

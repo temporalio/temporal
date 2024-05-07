@@ -74,7 +74,6 @@ func newComponent(
 		atWorkerCfg: workercommon.NewActivityWorkerConcurrencyConfig(
 			params.DynamicCollection,
 			dynamicconfig.WorkerDeleteNamespaceActivityLimitsConfig,
-			map[string]any{},
 		),
 		visibilityManager: params.VisibilityManager,
 		metadataManager:   params.MetadataManager,

@@ -59,8 +59,8 @@ type RawHistorySuite struct {
 }
 
 func (s *RawHistorySuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.SendRawWorkflowHistory: true,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.SendRawWorkflowHistory.Key(): true,
 	}
 	s.setupSuite("testdata/es_cluster.yaml")
 }

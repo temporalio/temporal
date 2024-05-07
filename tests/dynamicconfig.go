@@ -40,28 +40,28 @@ const NamespaceCacheRefreshInterval = time.Second
 var (
 	// Override values for dynamic configs
 	staticOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendRPS:                                         3000,
-		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance:        50,
-		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance: 1,
-		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts:       1,
-		dynamicconfig.SecondaryVisibilityWritingMode:                      visibility.SecondaryVisibilityWritingModeOff,
-		dynamicconfig.WorkflowTaskHeartbeatTimeout:                        5 * time.Second,
-		dynamicconfig.ReplicationTaskFetcherAggregationInterval:           200 * time.Millisecond,
-		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:                50 * time.Millisecond,
-		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:              time.Millisecond,
-		dynamicconfig.ClusterMetadataRefreshInterval:                      100 * time.Millisecond,
-		dynamicconfig.NamespaceCacheRefreshInterval:                       NamespaceCacheRefreshInterval,
-		dynamicconfig.FrontendEnableUpdateWorkflowExecution:               true,
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted:  true,
-		dynamicconfig.FrontendAccessHistoryFraction:                       0.5,
-		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge:             true,
-		dynamicconfig.ValidateUTF8SampleRPCRequest:                        1.0,
-		dynamicconfig.ValidateUTF8SampleRPCResponse:                       1.0,
-		dynamicconfig.ValidateUTF8SamplePersistence:                       1.0,
-		dynamicconfig.ValidateUTF8FailRPCRequest:                          true,
-		dynamicconfig.ValidateUTF8FailRPCResponse:                         true,
-		dynamicconfig.ValidateUTF8FailPersistence:                         true,
-		dynamicconfig.EnableWorkflowExecutionTimeoutTimer:                 true,
+		dynamicconfig.FrontendRPS.Key():                                         3000,
+		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
+		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
+		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,
+		dynamicconfig.SecondaryVisibilityWritingMode.Key():                      visibility.SecondaryVisibilityWritingModeOff,
+		dynamicconfig.WorkflowTaskHeartbeatTimeout.Key():                        5 * time.Second,
+		dynamicconfig.ReplicationTaskFetcherAggregationInterval.Key():           200 * time.Millisecond,
+		dynamicconfig.ReplicationTaskFetcherErrorRetryWait.Key():                50 * time.Millisecond,
+		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
+		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
+		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
+		dynamicconfig.FrontendEnableUpdateWorkflowExecution.Key():               true,
+		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key():  true,
+		dynamicconfig.FrontendAccessHistoryFraction.Key():                       0.5,
+		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
+		dynamicconfig.ValidateUTF8SampleRPCRequest.Key():                        1.0,
+		dynamicconfig.ValidateUTF8SampleRPCResponse.Key():                       1.0,
+		dynamicconfig.ValidateUTF8SamplePersistence.Key():                       1.0,
+		dynamicconfig.ValidateUTF8FailRPCRequest.Key():                          true,
+		dynamicconfig.ValidateUTF8FailRPCResponse.Key():                         true,
+		dynamicconfig.ValidateUTF8FailPersistence.Key():                         true,
+		dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Key():                 true,
 	}
 )
 
@@ -87,7 +87,11 @@ func (d *dcClient) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedV
 
 // OverrideValue overrides a value for the duration of a test. Once the test completes
 // the previous value (if any) will be restored
-func (d *dcClient) OverrideValue(t *testing.T, name dynamicconfig.Key, value any) {
+func (d *dcClient) OverrideValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
+	d.OverrideValueByKey(t, setting.Key(), value)
+}
+
+func (d *dcClient) OverrideValueByKey(t *testing.T, name dynamicconfig.Key, value any) {
 	d.Lock()
 	defer d.Unlock()
 	priorValue, existed := d.overrides[name]
@@ -105,10 +109,10 @@ func (d *dcClient) OverrideValue(t *testing.T, name dynamicconfig.Key, value any
 	})
 }
 
-func (d *dcClient) RemoveOverride(name dynamicconfig.Key) {
+func (d *dcClient) RemoveOverride(setting dynamicconfig.GenericSetting) {
 	d.Lock()
 	defer d.Unlock()
-	delete(d.overrides, name)
+	delete(d.overrides, setting.Key())
 }
 
 // newTestDCClient - returns a dynamic config client for functional testing

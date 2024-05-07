@@ -33,6 +33,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -109,7 +110,11 @@ func (u *Updater) Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		wfKey,
-		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) { return u.ApplyRequest(ctx, lease) },
+		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			ms := lease.GetMutableState()
+			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			return u.ApplyRequest(ctx, updateReg, ms)
+		},
 		nil,
 		u.shardCtx,
 		u.workflowConsistencyChecker,
@@ -124,9 +129,9 @@ func (u *Updater) Invoke(
 
 func (u *Updater) ApplyRequest(
 	ctx context.Context,
-	workflowLease api.WorkflowLease,
+	updateReg update.Registry,
+	ms workflow.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
-	ms := workflowLease.GetMutableState()
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
 	}
@@ -149,8 +154,19 @@ func (u *Updater) ApplyRequest(
 		return nil, serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 	}
 
+	// If workflow attempted to close itself on previous WFT completion,
+	// and has another WFT running, which most likely will try to complete workflow again,
+	// then don't admit new updates.
+	if ms.IsWorkflowCloseAttempted() && ms.HasStartedWorkflowTask() {
+		u.shardCtx.GetLogger().Info("Fail update because workflow is closing.",
+			tag.WorkflowNamespace(u.req.Request.Namespace),
+			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
+			tag.WorkflowID(u.wfKey.WorkflowID),
+			tag.WorkflowRunID(u.wfKey.RunID))
+		return nil, consts.ErrWorkflowClosing
+	}
+
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
-	updateReg := workflowLease.GetContext().UpdateRegistry(ctx, ms)
 	var (
 		alreadyExisted bool
 		err            error
@@ -226,7 +242,10 @@ func (u *Updater) OnSuccess(
 	// Speculative WT was created and needs to be added directly to matching w/o transfer task.
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
-	if u.scheduledEventID != common.EmptyEventID {
+	usesSpeculativeWFT := u.scheduledEventID != common.EmptyEventID
+	if usesSpeculativeWFT {
+		metrics.WorkflowExecutionUpdateSpeculativeWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
+
 		err := u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
@@ -254,6 +273,8 @@ func (u *Updater) OnSuccess(
 			// If subsequent attempt succeeds within current context timeout, caller of this API will get a valid response.
 			err = nil
 		}
+	} else {
+		metrics.WorkflowExecutionUpdateNormalWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
 	}
 
 	namespaceID := namespace.ID(u.req.GetNamespaceId())
