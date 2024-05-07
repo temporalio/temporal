@@ -191,11 +191,11 @@ func precedenceTaskQueue(namespace string, taskQueue string, taskType enumspb.Ta
 	}
 }
 
-func precedenceDestination(namespaceID string, destination string) []Constraints {
+func precedenceDestination(namespace string, destination string) []Constraints {
 	return []Constraints{
-		{NamespaceID: namespaceID, Destination: destination},
+		{Namespace: namespace, Destination: destination},
 		{Destination: destination},
-		{NamespaceID: namespaceID},
+		{Namespace: namespace},
 		{},
 	}
 }

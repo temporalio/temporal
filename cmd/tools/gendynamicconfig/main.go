@@ -104,7 +104,7 @@ var (
 		},
 		{
 			Name:   "Destination",
-			GoArgs: "namespaceID string, destination string",
+			GoArgs: "namespace string, destination string",
 		},
 	}
 )
