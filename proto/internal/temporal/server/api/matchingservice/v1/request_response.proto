@@ -191,7 +191,8 @@ message DescribeTaskQueueRequest {
 }
 
 message DescribeTaskQueueResponse {
-    temporal.api.workflowservice.v1.DescribeTaskQueueResponse desc_response = 1;
+    reserved 1 to 2;
+    temporal.api.workflowservice.v1.DescribeTaskQueueResponse desc_response = 3;
 }
 
 message DescribeTaskQueuePartitionRequest {
