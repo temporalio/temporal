@@ -347,17 +347,7 @@ func TestAdmitAcceptOrReject(t *testing.T) {
 		effects = effect.Immediate(ctx)
 		meta    = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
 		req     = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt    = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
-			AcceptedRequestMessageId:         "random",
-			AcceptedRequestSequencingEventId: 2208,
-		})}
-		acceptedEventData = struct {
-			updateID                         string
-			acceptedRequestMessageId         string
-			acceptedRequestSequencingEventId int64
-			acceptedRequest                  *updatepb.Request
-		}{}
-		store = mockEventStore{
+		store   = mockEventStore{
 			Controller: effects,
 			AddWorkflowExecutionUpdateAcceptedEventFunc: func(
 				updateID string,
@@ -365,10 +355,6 @@ func TestAdmitAcceptOrReject(t *testing.T) {
 				acceptedRequestSequencingEventId int64,
 				acceptedRequest *updatepb.Request,
 			) (*historypb.HistoryEvent, error) {
-				acceptedEventData.updateID = updateID
-				acceptedEventData.acceptedRequestMessageId = acceptedRequestMessageId
-				acceptedEventData.acceptedRequestSequencingEventId = acceptedRequestSequencingEventId
-				acceptedEventData.acceptedRequest = acceptedRequest
 				return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
 			},
 		}
@@ -381,6 +367,10 @@ func TestAdmitAcceptOrReject(t *testing.T) {
 
 		// Note: no upd.Send call.
 
+		acpt := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         "random",
+			AcceptedRequestSequencingEventId: 2208,
+		})}
 		err = upd.OnProtocolMessage(ctx, &acpt, store)
 		require.NoError(t, err)
 
