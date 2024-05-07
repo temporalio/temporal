@@ -3878,7 +3878,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
-	s.ErrorContains(err, fmt.Sprintf("update %q not found", tv.UpdateID("1")))
+	s.ErrorContains(err, fmt.Sprintf("update %s not found", tv.UpdateID("1")))
 
 	<-updateResultCh
 
