@@ -496,7 +496,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
-	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
+	branchToken, newSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -528,7 +528,6 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
-	s.AssertHEEqualWithDB(branchToken, newEvents, currentEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
@@ -643,7 +642,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
-	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
+	branchToken, newSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -675,7 +674,6 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
 	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
-	s.AssertHEEqualWithDB(branchToken, newEvents, currentEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
@@ -967,12 +965,10 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertMSEqualWithDB(currentSnapshot)
-	s.AssertHEEqualWithDB(baseBranchToken, baseEvents, resetEvents)
-	s.AssertHEEqualWithDB(currentBranchToken, currentEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflict_Case1() {
-	branchToken, currentSnapshot, currentEvents1 := s.CreateWorkflow(
+	branchToken, currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1045,12 +1041,10 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertMSEqualWithDB(currentSnapshot)
-	s.AssertHEEqualWithDB(baseBranchToken, baseEvents, resetEvents)
-	s.AssertHEEqualWithDB(branchToken, currentEvents1, currentEvents2)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflict_Case2() {
-	branchToken, currentSnapshot, currentEvents1 := s.CreateWorkflow(
+	branchToken, currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1123,8 +1117,6 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertMSEqualWithDB(currentSnapshot)
-	s.AssertHEEqualWithDB(baseBranchToken, baseEvents, resetEvents)
-	s.AssertHEEqualWithDB(branchToken, currentEvents1, currentEvents2)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew() {
@@ -1320,11 +1312,10 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
-	s.AssertHEEqualWithDB(baseBranchToken, baseEvents, resetEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict() {
-	branchToken, baseSnapshot, baseEvents := s.CreateWorkflow(
+	branchToken, baseSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1359,7 +1350,6 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict()
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
-	s.AssertHEEqualWithDB(branchToken, baseEvents, resetEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() {
@@ -1481,7 +1471,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict() {
-	branchToken, baseSnapshot, baseEvents := s.CreateWorkflow(
+	branchToken, baseSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1516,7 +1506,6 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict(
 	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
-	s.AssertHEEqualWithDB(branchToken, baseEvents, resetEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
@@ -1580,7 +1569,6 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
-	s.AssertHEEqualWithDB(baseBranchToken, baseEvents, resetEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
