@@ -29,7 +29,7 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateA
 	}
 
 	workflowFn := func(ctx workflow.Context) error {
-		workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
+		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
 			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 10 * time.Second,
 			})
@@ -41,8 +41,8 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateA
 				}
 			}
 			return nil
-		})
-		workflow.Await(ctx, func() bool { return false })
+		}))
+		s.NoError(workflow.Await(ctx, func() bool { return false }))
 		return errors.New("unreachable")
 	}
 
@@ -75,7 +75,7 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateA
 	}
 
 	workflowFn := func(ctx workflow.Context) error {
-		workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
+		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
 			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 10 * time.Second,
 			})
@@ -87,8 +87,8 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateA
 				}
 			}
 			return nil
-		})
-		workflow.Await(ctx, func() bool { return false })
+		}))
+		s.NoError(workflow.Await(ctx, func() bool { return false }))
 		return errors.New("unreachable")
 	}
 

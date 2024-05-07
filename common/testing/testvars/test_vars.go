@@ -246,6 +246,7 @@ func (tv *TestVars) WithHandlerName(handlerName string, key ...string) *TestVars
 	return tv.cloneSet("handler_name", key, handlerName)
 }
 
+//revive:disable:unchecked-type-assertion
 func (tv *TestVars) ClientIdentity(key ...string) string {
 	return tv.getOrCreate("client_identity", key).(string)
 }
