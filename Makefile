@@ -229,15 +229,16 @@ $(PROTO_OUT):
 clean-proto: gomodtidy
 	@rm -rf $(PROTO_OUT)/*
 
-protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS)
-	@./cmd/tools/getproto/run.sh --out $(API_BINPB)
+$(API_BINPB): go.mod go.sum $(PROTO_FILES)
+	@./cmd/tools/getproto/run.sh --out $@
+
+protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
 	@$(PROTOGEN) \
 		--descriptor_set_in=$(API_BINPB) \
 		--root=proto/internal \
 		--rewrite-enum=BuildId_State:BuildId \
 		-p go-grpc_out=$(PROTO_PATHS) \
 		-p go-helpers_out=$(PROTO_PATHS)
-	@rm -f $(API_BINPB)
 	@mv -f "$(PROTO_OUT)/temporal/server/api/"* "$(PROTO_OUT)"
 
 # All gRPC generated service files paths relative to PROTO_OUT.
@@ -324,17 +325,13 @@ lint-code: $(GOLANGCI_LINT)
 lint: lint-code lint-actions lint-api lint-protos
 	@printf $(COLOR) "Run linters..."
 
-lint-api: $(API_LINTER)
+lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
-	@./cmd/tools/getproto/run.sh --out $(API_BINPB)
 	$(call silent_exec, $(API_LINTER) --set-exit-status -I=$(PROTO_ROOT)/internal --descriptor-set-in $(API_BINPB) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
-	@rm -f $(API_BINPB)
 
-lint-protos: $(BUF)
+lint-protos: $(BUF) $(API_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
-	@./cmd/tools/getproto/run.sh --out $(API_BINPB)
 	@protoc --descriptor_set_in=$(API_BINPB) -I=proto/internal $(PROTO_FILES) -o /dev/stdout | (cd proto/internal && $(ROOT)/$(BUF) lint -)
-	@rm -f $(API_BINPB)
 
 # TODO: fix this to work with getproto + API_BINPB
 # buf-build: $(BUF)
