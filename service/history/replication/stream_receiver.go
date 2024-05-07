@@ -233,7 +233,8 @@ func (r *StreamReceiverImpl) ackMessage(
 	inclusiveLowWaterMark := int64(-1)
 	var inclusiveLowWaterMarkTime time.Time
 
-	switch r.receiverMode {
+	receiverMode := ReceiverMode(atomic.LoadInt32((*int32)(&r.receiverMode)))
+	switch receiverMode {
 	case ReceiverModeUnset:
 		return 0, nil
 	case ReceiverModeTieredStack:
@@ -369,7 +370,8 @@ func (r *StreamReceiverImpl) getTrackerAndSchedulerByPriority(priority enums.Tas
 // If the first task is prioritized, receiver mode will be set to ReceiverModeTieredStack. If the first task is not prioritized, receiver mode will be set to ReceiverModeSingleStack.
 // Receiver mode cannot be changed once it is set. If we enabled sender side to send tasks with different priority, we need to change the receiver mode by reconnecting the stream.
 func (r *StreamReceiverImpl) validateAndSetReceiverMode(priority enums.TaskPriority) error {
-	switch r.receiverMode {
+	receiverMode := ReceiverMode(atomic.LoadInt32((*int32)(&r.receiverMode)))
+	switch receiverMode {
 	case ReceiverModeUnset:
 		r.setReceiverMode(priority)
 		return nil
@@ -391,9 +393,9 @@ func (r *StreamReceiverImpl) setReceiverMode(priority enums.TaskPriority) {
 	}
 	switch priority {
 	case enums.TASK_PRIORITY_UNSPECIFIED:
-		r.receiverMode = ReceiverModeSingleStack
+		atomic.StoreInt32((*int32)(&r.receiverMode), int32(ReceiverModeSingleStack))
 	case enums.TASK_PRIORITY_HIGH, enums.TASK_PRIORITY_LOW:
-		r.receiverMode = ReceiverModeTieredStack
+		atomic.StoreInt32((*int32)(&r.receiverMode), int32(ReceiverModeTieredStack))
 	}
 }
 
