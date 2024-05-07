@@ -125,7 +125,7 @@ func (s *ClientFunctionalSuite) startWorkflow(ctx context.Context, tv *testvars.
 func (s *ClientFunctionalSuite) updateWorkflowWaitAdmitted(ctx context.Context, tv *testvars.TestVars, arg string) {
 	go func() { _, _ = s.updateWorkflowWaitAccepted(ctx, tv, arg) }()
 	s.Eventually(func() bool {
-		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED})
+		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED})
 		if err == nil {
 			s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
 			return true
