@@ -2306,6 +2306,12 @@ If the service configures with archival feature enabled, update worker.historySc
 		30.0,
 		`SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules`,
 	)
+	SchedulerLocalActivitySleepLimit = NewNamespaceDurationSetting(
+		"worker.schedulerLocalActivitySleepLimit",
+		1*time.Second,
+		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
+close to or more than the workflow task timeout)`,
+	)
 	WorkerDeleteNamespaceActivityLimitsConfig = NewGlobalMapSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		map[string]any{},
