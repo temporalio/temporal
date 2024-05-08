@@ -266,6 +266,7 @@ type Config struct {
 	EnableReplicationEagerRefreshNamespace   dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskBatching            dynamicconfig.BoolPropertyFn
 	EnableReplicateLocalGeneratedEvent       dynamicconfig.BoolPropertyFn
+	EnableReplicationTaskTieredProcessing    dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn

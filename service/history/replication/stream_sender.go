@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/configs"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -67,6 +68,7 @@ type (
 		clientShardKey ClusterShardKey
 		serverShardKey ClusterShardKey
 		shutdownChan   channel.ShutdownOnce
+		config         *configs.Config
 	}
 )
 
@@ -142,7 +144,7 @@ func (s *StreamSenderImpl) Key() ClusterShardKeyPair {
 	}
 }
 
-func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
+func (s *StreamSenderImpl) recvEventLoop(priority enumsspb.TaskPriority) (retErr error) {
 	var panicErr error
 	defer func() {
 		if panicErr != nil {
@@ -163,11 +165,12 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		}
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
+
 			if attr.SyncReplicationState.GetInclusiveLowWatermark() != inclusiveLowWatermark {
 				inclusiveLowWatermark = attr.SyncReplicationState.GetInclusiveLowWatermark()
 				s.logger.Debug(fmt.Sprintf("StreamSender received new inclusiveLowWatermark: %v", inclusiveLowWatermark))
 			}
-			if err := s.recvSyncReplicationState(attr.SyncReplicationState); err != nil {
+			if err := s.recvSyncReplicationStateSingleStack(attr.SyncReplicationState); err != nil {
 				s.logger.Error("ReplicationServiceError StreamSender unable to handle SyncReplicationState", tag.Error(err))
 				return err
 			}
@@ -188,7 +191,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 	return nil
 }
 
-func (s *StreamSenderImpl) sendEventLoop() (retErr error) {
+func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr error) {
 	var panicErr error
 	defer func() {
 		if panicErr != nil {
@@ -202,13 +205,14 @@ func (s *StreamSenderImpl) sendEventLoop() (retErr error) {
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification()
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
 
-	catchupEndExclusiveWatermark, err := s.sendCatchUp()
+	catchupEndExclusiveWatermark, err := s.sendCatchUp(priority)
 	if err != nil {
 		s.logger.Error("ReplicationServiceError StreamSender unable to catch up replication tasks", tag.Error(err))
 		return err
 	}
 	s.logger.Debug(fmt.Sprintf("StreamSender sendCatchUp finished with catchupEndExclusiveWatermark %v", catchupEndExclusiveWatermark))
 	if err := s.sendLive(
+		priority,
 		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
 	); err != nil {
@@ -218,7 +222,49 @@ func (s *StreamSenderImpl) sendEventLoop() (retErr error) {
 	return nil
 }
 
-func (s *StreamSenderImpl) recvSyncReplicationState(
+func (s *StreamSenderImpl) recvSyncReplicationStateSingleStack(
+	attr *replicationspb.SyncReplicationState,
+) error {
+	if attr.HighPriorityState != nil || attr.LowPriorityState != nil {
+		return NewStreamError("ReplicationServiceError StreamSender encountered unsupported SyncReplicationState", nil)
+	}
+	inclusiveLowWatermark := attr.GetInclusiveLowWatermark()
+	inclusiveLowWatermarkTime := attr.GetInclusiveLowWatermarkTime()
+
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	readerState := &persistencespb.QueueReaderState{
+		Scopes: []*persistencespb.QueueSliceScope{{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(
+					tasks.NewImmediateKey(inclusiveLowWatermark),
+				),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+					tasks.NewImmediateKey(math.MaxInt64),
+				),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}},
+	}
+	if err := s.shardContext.UpdateReplicationQueueReaderState(
+		readerID,
+		readerState,
+	); err != nil {
+		return err
+	}
+	return s.shardContext.UpdateRemoteReaderInfo(
+		readerID,
+		inclusiveLowWatermark-1,
+		inclusiveLowWatermarkTime.AsTime(),
+	)
+}
+
+func (s *StreamSenderImpl) recvSyncReplicationStateTieredStack(
 	attr *replicationspb.SyncReplicationState,
 ) error {
 	inclusiveLowWatermark := attr.GetInclusiveLowWatermark()
@@ -257,7 +303,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	)
 }
 
-func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
+func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, error) {
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
@@ -282,6 +328,7 @@ func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
 		}
 	}
 	if err := s.sendTasks(
+		priority,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
 	); err != nil {
@@ -291,6 +338,7 @@ func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
 }
 
 func (s *StreamSenderImpl) sendLive(
+	priority enumsspb.TaskPriority,
 	newTaskNotificationChan <-chan struct{},
 	beginInclusiveWatermark int64,
 ) error {
@@ -299,6 +347,7 @@ func (s *StreamSenderImpl) sendLive(
 		case <-newTaskNotificationChan:
 			endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 			if err := s.sendTasks(
+				priority,
 				beginInclusiveWatermark,
 				endExclusiveWatermark,
 			); err != nil {
@@ -312,6 +361,7 @@ func (s *StreamSenderImpl) sendLive(
 }
 
 func (s *StreamSenderImpl) sendTasks(
+	priority enumsspb.TaskPriority,
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
 ) error {
@@ -331,6 +381,7 @@ func (s *StreamSenderImpl) sendTasks(
 					ReplicationTasks:           nil,
 					ExclusiveHighWatermark:     endExclusiveWatermark,
 					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
+					Priority:                   priority,
 				},
 			},
 		})
@@ -358,6 +409,9 @@ Loop:
 		if err != nil {
 			return err
 		}
+		if !(priority == enumsspb.TASK_PRIORITY_UNSPECIFIED || priority == s.getTaskPriority(item)) {
+			continue Loop
+		}
 		task, err := s.taskConverter.Convert(item)
 		if err != nil {
 			return err
@@ -365,6 +419,7 @@ Loop:
 		if task == nil {
 			continue Loop
 		}
+		task.Priority = priority
 		s.logger.Debug("StreamSender send replication task", tag.TaskID(task.SourceTaskId))
 		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -372,6 +427,7 @@ Loop:
 					ReplicationTasks:           []*replicationspb.ReplicationTask{task},
 					ExclusiveHighWatermark:     task.SourceTaskId + 1,
 					ExclusiveHighWatermarkTime: task.VisibilityTime,
+					Priority:                   priority,
 				},
 			},
 		}); err != nil {
@@ -390,6 +446,7 @@ Loop:
 				ReplicationTasks:           nil,
 				ExclusiveHighWatermark:     endExclusiveWatermark,
 				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
+				Priority:                   priority,
 			},
 		},
 	})
@@ -402,4 +459,13 @@ func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowRe
 		return NewStreamError("ReplicationStreamError send failed", err)
 	}
 	return nil
+}
+
+func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriority {
+	switch t := task.(type) {
+	case *tasks.SyncWorkflowStateTask:
+		return t.Priority
+	default:
+		return enumsspb.TASK_PRIORITY_HIGH
+	}
 }

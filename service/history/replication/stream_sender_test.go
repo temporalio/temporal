@@ -144,7 +144,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_Success() {
 		replicationState.InclusiveLowWatermarkTime.AsTime(),
 	).Return(nil)
 
-	err := s.streamSender.recvSyncReplicationState(replicationState)
+	err := s.streamSender.recvSyncReplicationStateSingleStack(replicationState)
 	s.NoError(err)
 }
 
@@ -185,7 +185,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_Error() {
 		},
 	).Return(ownershipLost)
 
-	err := s.streamSender.recvSyncReplicationState(replicationState)
+	err := s.streamSender.recvSyncReplicationStateSingleStack(replicationState)
 	s.Error(err)
 	s.Equal(ownershipLost, err)
 }
