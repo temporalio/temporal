@@ -1149,14 +1149,8 @@ func (s *FunctionalSuite) TestActivityTaskCompleteForceCompletion() {
 	err = sdkClient.CompleteActivityByID(ctx, s.namespace, run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
 	s.NoError(err)
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 0, len(description.PendingActivities))
-		assert.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.GetWorkflowExecutionInfo().Status)
-	},
-		10*time.Second,
-		500*time.Millisecond)
+	// Ensure the activity is completed and the workflow is unblcked.
+	s.NoError(run.Get(ctx, nil))
 }
 
 func (s *FunctionalSuite) TestActivityTaskCompleteRejectCompletion() {

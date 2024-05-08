@@ -112,7 +112,7 @@ func Invoke(
 				_, err := mutableState.AddActivityTaskStartedEvent(ai, scheduledEventID,
 					"",
 					req.GetCompleteRequest().GetIdentity(),
-					mutableState.GetMostRecentWorkerVersionStamp())
+					nil)
 				if err != nil {
 					return nil, err
 				}
