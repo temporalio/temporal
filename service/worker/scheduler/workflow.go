@@ -795,10 +795,10 @@ func (s *scheduler) wfWatcherReturned(f workflow.Future) {
 	id := s.watchingWorkflowId
 	s.watchingWorkflowId = ""
 	s.watchingFuture = nil
-	s.processWatcherResult(id, f)
+	s.processWatcherResult(id, f, true)
 }
 
-func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
+func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool) {
 	var res schedspb.WatchWorkflowResponse
 	err := f.Get(s.ctx, &res)
 	if err != nil {
@@ -808,7 +808,9 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 
 	if res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		// this should only happen for a refresh, not a long-poll
-		s.logger.Debug("watcher returned for running workflow")
+		if long {
+			s.logger.Warn("watcher returned for running workflow", "workflow", id)
+		}
 		return
 	}
 
@@ -817,7 +819,10 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 	if idx := slices.IndexFunc(s.Info.RunningWorkflows, match); idx >= 0 {
 		s.Info.RunningWorkflows = slices.Delete(s.Info.RunningWorkflows, idx, idx+1)
 	} else {
-		s.logger.Error("closed workflow not found in running list", "workflow", id)
+		// This could happen if the watcher activity gets interrupted and is retried after the
+		// heartbeat timeout, but in the meantime we have done a refresh through a local activity.
+		// This often happens when the worker is restarted.
+		s.logger.Warn("closed workflow not found in running list", "workflow", id)
 	}
 
 	// handle pause-on-failure
@@ -845,6 +850,11 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 	} else if res.GetFailure() != nil {
 		// leave LastCompletionResult from previous run
 		s.State.ContinuedFailure = res.GetFailure()
+	}
+
+	// Update desired time of next start if it's buffered. This is used for metrics only.
+	if long && len(s.State.BufferedStarts) > 0 {
+		s.State.BufferedStarts[0].DesiredTime = res.CloseTime
 	}
 
 	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure)
@@ -1320,7 +1330,8 @@ func (s *scheduler) startWorkflow(
 
 		if !start.Manual {
 			// record metric only for _scheduled_ actions, not trigger/backfill, otherwise it's not meaningful
-			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(start.ActualTime.AsTime()))
+			desiredTime := util.Coalesce(start.DesiredTime, start.ActualTime)
+			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(desiredTime.AsTime()))
 		}
 
 		return &schedpb.ScheduleActionResult{
@@ -1374,7 +1385,7 @@ func (s *scheduler) refreshWorkflows(executions []*commonpb.WorkflowExecution) {
 		futures[i] = workflow.ExecuteLocalActivity(ctx, s.a.WatchWorkflow, req)
 	}
 	for i, ex := range executions {
-		s.processWatcherResult(ex.WorkflowId, futures[i])
+		s.processWatcherResult(ex.WorkflowId, futures[i], false)
 	}
 }
 

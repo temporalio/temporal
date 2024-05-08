@@ -39,6 +39,9 @@ message BufferedStart {
     // Nominal (pre-jitter) and Actual (post-jitter) time of action
     google.protobuf.Timestamp nominal_time = 1;
     google.protobuf.Timestamp actual_time = 2;
+    // Desired time is usually actual time, but for starts that are blocked behind another action,
+    // is set to the close time of the previous action for more meaningful metrics.
+    google.protobuf.Timestamp desired_time = 5;
     // Overridden overlap policy
     temporal.api.enums.v1.ScheduleOverlapPolicy overlap_policy = 3;
     // Trigger-immediately or backfill
@@ -97,6 +100,8 @@ message WatchWorkflowResponse {
         temporal.api.common.v1.Payloads result = 2;
         temporal.api.failure.v1.Failure failure = 3;
     }
+    // Timestamp of close event
+    google.protobuf.Timestamp close_time = 4;
 }
 
 message StartWorkflowRequest {

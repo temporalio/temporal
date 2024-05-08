@@ -324,7 +324,7 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 		if r.request.LongPoll {
 			return nil, errTryAgain // not closed yet, just try again
 		}
-		return r.makeResponse(nil, nil), nil
+		return r.makeResponse(nil, nil, nil), nil
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		if attrs := event.GetWorkflowExecutionCompletedEventAttributes(); attrs == nil {
 			return nil, errNoAttrs
@@ -339,7 +339,7 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 					tag.WorkflowID(r.request.Execution.WorkflowId))
 				result = nil
 			}
-			return r.makeResponse(result, nil), nil
+			return r.makeResponse(result, nil, event.EventTime), nil
 		}
 	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:
 		if attrs := event.GetWorkflowExecutionFailedEventAttributes(); attrs == nil {
@@ -354,10 +354,10 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 					tag.WorkflowID(r.request.Execution.WorkflowId))
 				failure = nil
 			}
-			return r.makeResponse(nil, failure), nil
+			return r.makeResponse(nil, failure, event.EventTime), nil
 		}
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:
-		return r.makeResponse(nil, nil), nil
+		return r.makeResponse(nil, nil, event.GetEventTime()), nil
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		if attrs := event.GetWorkflowExecutionContinuedAsNewEventAttributes(); attrs == nil {
 			return nil, errNoAttrs
@@ -370,7 +370,7 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 		} else if len(attrs.NewExecutionRunId) > 0 {
 			return nil, errFollow(attrs.NewExecutionRunId)
 		} else {
-			return r.makeResponse(nil, nil), nil
+			return r.makeResponse(nil, nil, event.EventTime), nil
 		}
 	}
 	return nil, errUnkownWorkflowStatus
@@ -380,8 +380,11 @@ func (r responseBuilder) isTooBig(m proto.Message) bool {
 	return proto.Size(m) > r.resultStorageNumberSize
 }
 
-func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure) *schedspb.WatchWorkflowResponse {
-	res := &schedspb.WatchWorkflowResponse{Status: r.workflowStatus}
+func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure, closeTime *timestamppb.Timestamp) *schedspb.WatchWorkflowResponse {
+	res := &schedspb.WatchWorkflowResponse{
+		Status:    r.workflowStatus,
+		CloseTime: closeTime,
+	}
 	if result != nil {
 		res.ResultFailure = &schedspb.WatchWorkflowResponse_Result{Result: result}
 	} else if failure != nil {
