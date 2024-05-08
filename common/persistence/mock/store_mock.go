@@ -37,6 +37,161 @@ import (
 	persistence "go.temporal.io/server/common/persistence"
 )
 
+// MockDataStoreFactory is a mock of DataStoreFactory interface.
+type MockDataStoreFactory struct {
+	ctrl     *gomock.Controller
+	recorder *MockDataStoreFactoryMockRecorder
+}
+
+// MockDataStoreFactoryMockRecorder is the mock recorder for MockDataStoreFactory.
+type MockDataStoreFactoryMockRecorder struct {
+	mock *MockDataStoreFactory
+}
+
+// NewMockDataStoreFactory creates a new mock instance.
+func NewMockDataStoreFactory(ctrl *gomock.Controller) *MockDataStoreFactory {
+	mock := &MockDataStoreFactory{ctrl: ctrl}
+	mock.recorder = &MockDataStoreFactoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDataStoreFactory) EXPECT() *MockDataStoreFactoryMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockDataStoreFactory) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockDataStoreFactoryMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockDataStoreFactory)(nil).Close))
+}
+
+// NewClusterMetadataStore mocks base method.
+func (m *MockDataStoreFactory) NewClusterMetadataStore() (persistence.ClusterMetadataStore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewClusterMetadataStore")
+	ret0, _ := ret[0].(persistence.ClusterMetadataStore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewClusterMetadataStore indicates an expected call of NewClusterMetadataStore.
+func (mr *MockDataStoreFactoryMockRecorder) NewClusterMetadataStore() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClusterMetadataStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewClusterMetadataStore))
+}
+
+// NewExecutionStore mocks base method.
+func (m *MockDataStoreFactory) NewExecutionStore() (persistence.ExecutionStore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewExecutionStore")
+	ret0, _ := ret[0].(persistence.ExecutionStore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewExecutionStore indicates an expected call of NewExecutionStore.
+func (mr *MockDataStoreFactoryMockRecorder) NewExecutionStore() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewExecutionStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewExecutionStore))
+}
+
+// NewMetadataStore mocks base method.
+func (m *MockDataStoreFactory) NewMetadataStore() (persistence.MetadataStore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewMetadataStore")
+	ret0, _ := ret[0].(persistence.MetadataStore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewMetadataStore indicates an expected call of NewMetadataStore.
+func (mr *MockDataStoreFactoryMockRecorder) NewMetadataStore() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewMetadataStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewMetadataStore))
+}
+
+// NewNexusIncomingServiceStore mocks base method.
+func (m *MockDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusIncomingServiceStore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewNexusIncomingServiceStore")
+	ret0, _ := ret[0].(persistence.NexusIncomingServiceStore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewNexusIncomingServiceStore indicates an expected call of NewNexusIncomingServiceStore.
+func (mr *MockDataStoreFactoryMockRecorder) NewNexusIncomingServiceStore() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewNexusIncomingServiceStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewNexusIncomingServiceStore))
+}
+
+// NewQueue mocks base method.
+func (m *MockDataStoreFactory) NewQueue(queueType persistence.QueueType) (persistence.Queue, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewQueue", queueType)
+	ret0, _ := ret[0].(persistence.Queue)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewQueue indicates an expected call of NewQueue.
+func (mr *MockDataStoreFactoryMockRecorder) NewQueue(queueType interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewQueue", reflect.TypeOf((*MockDataStoreFactory)(nil).NewQueue), queueType)
+}
+
+// NewQueueV2 mocks base method.
+func (m *MockDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewQueueV2")
+	ret0, _ := ret[0].(persistence.QueueV2)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewQueueV2 indicates an expected call of NewQueueV2.
+func (mr *MockDataStoreFactoryMockRecorder) NewQueueV2() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewQueueV2", reflect.TypeOf((*MockDataStoreFactory)(nil).NewQueueV2))
+}
+
+// NewShardStore mocks base method.
+func (m *MockDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewShardStore")
+	ret0, _ := ret[0].(persistence.ShardStore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewShardStore indicates an expected call of NewShardStore.
+func (mr *MockDataStoreFactoryMockRecorder) NewShardStore() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewShardStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewShardStore))
+}
+
+// NewTaskStore mocks base method.
+func (m *MockDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewTaskStore")
+	ret0, _ := ret[0].(persistence.TaskStore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewTaskStore indicates an expected call of NewTaskStore.
+func (mr *MockDataStoreFactoryMockRecorder) NewTaskStore() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewTaskStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewTaskStore))
+}
+
 // MockShardStore is a mock of ShardStore interface.
 type MockShardStore struct {
 	ctrl     *gomock.Controller

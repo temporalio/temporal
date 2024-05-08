@@ -1,0 +1,188 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package faultinjection
+
+import (
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence"
+)
+
+type (
+	FaultInjectionDataStoreFactory struct {
+		baseFactory persistence.DataStoreFactory
+		config      *config.FaultInjection
+
+		TaskStore                 *FaultInjectionTaskStore
+		ShardStore                *FaultInjectionShardStore
+		MetadataStore             *FaultInjectionMetadataStore
+		ExecutionStore            *FaultInjectionExecutionStore
+		Queue                     *FaultInjectionQueue
+		QueueV2                   *FaultInjectionQueueV2
+		ClusterMDStore            *FaultInjectionClusterMetadataStore
+		NexusIncomingServiceStore *FaultInjectionNexusIncomingServiceStore
+	}
+)
+
+func NewFaultInjectionDatastoreFactory(
+	config *config.FaultInjection,
+	baseFactory persistence.DataStoreFactory,
+) *FaultInjectionDataStoreFactory {
+	return &FaultInjectionDataStoreFactory{
+		baseFactory: baseFactory,
+		config:      config,
+	}
+}
+
+func (d *FaultInjectionDataStoreFactory) Close() {
+	d.baseFactory.Close()
+}
+
+func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
+	if d.TaskStore == nil {
+		baseStore, err := d.baseFactory.NewTaskStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.TaskStoreName]; ok {
+			d.TaskStore = NewFaultInjectionTaskStore(
+				baseStore,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		}
+	}
+	return d.TaskStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {
+	if d.ShardStore == nil {
+		baseStore, err := d.baseFactory.NewShardStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.ShardStoreName]; ok {
+			d.ShardStore = NewFaultInjectionShardStore(
+				baseStore,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		}
+	}
+	return d.ShardStore, nil
+}
+func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.MetadataStore, error) {
+	if d.MetadataStore == nil {
+		baseStore, err := d.baseFactory.NewMetadataStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.MetadataStoreName]; ok {
+			d.MetadataStore = NewFaultInjectionMetadataStore(
+				baseStore,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		}
+	}
+	return d.MetadataStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewExecutionStore() (persistence.ExecutionStore, error) {
+	if d.ExecutionStore == nil {
+		baseStore, err := d.baseFactory.NewExecutionStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.ExecutionStoreName]; ok {
+			d.ExecutionStore = NewFaultInjectionExecutionStore(
+				baseStore,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		}
+	}
+	return d.ExecutionStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueType) (persistence.Queue, error) {
+	if d.Queue == nil {
+		baseQueue, err := d.baseFactory.NewQueue(queueType)
+		if err != nil {
+			return baseQueue, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.QueueName]; ok {
+			d.Queue = NewFaultInjectionQueue(
+				baseQueue,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		}
+	}
+	return d.Queue, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
+	if d.QueueV2 == nil {
+		baseQueue, err := d.baseFactory.NewQueueV2()
+		if err != nil {
+			return baseQueue, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.QueueV2Name]; ok {
+			d.QueueV2 = NewFaultInjectionQueueV2(
+				baseQueue,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		}
+	}
+	return d.QueueV2, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.ClusterMetadataStore, error) {
+	if d.ClusterMDStore == nil {
+		baseStore, err := d.baseFactory.NewClusterMetadataStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.ClusterMDStoreName]; ok {
+			d.ClusterMDStore = NewFaultInjectionClusterMetadataStore(
+				baseStore,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		}
+
+	}
+	return d.ClusterMDStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusIncomingServiceStore, error) {
+	if d.NexusIncomingServiceStore == nil {
+		baseStore, err := d.baseFactory.NewNexusIncomingServiceStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.NexusIncomingServiceStoreName]; ok {
+			d.NexusIncomingServiceStore = NewFaultInjectionNexusIncomingServiceStore(
+				baseStore,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		}
+	}
+	return d.NexusIncomingServiceStore, nil
+}

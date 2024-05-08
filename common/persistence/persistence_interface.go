@@ -51,6 +51,27 @@ type (
 	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
 
+	// DataStoreFactory is a low level interface to be implemented by a datastore
+	// Examples of datastores are cassandra, mysql etc
+	DataStoreFactory interface {
+		// Close closes the factory
+		Close()
+		// NewTaskStore returns a new task store
+		NewTaskStore() (TaskStore, error)
+		// NewShardStore returns a new shard store
+		NewShardStore() (ShardStore, error)
+		// NewMetadataStore returns a new metadata store
+		NewMetadataStore() (MetadataStore, error)
+		// NewExecutionStore returns a new execution store
+		NewExecutionStore() (ExecutionStore, error)
+		NewQueue(queueType QueueType) (Queue, error)
+		NewQueueV2() (QueueV2, error)
+		// NewClusterMetadataStore returns a new metadata store
+		NewClusterMetadataStore() (ClusterMetadataStore, error)
+		// NewNexusIncomingServiceStore returns a new nexus service store
+		NewNexusIncomingServiceStore() (NexusIncomingServiceStore, error)
+	}
+
 	// ShardStore is a lower level of ShardManager
 	ShardStore interface {
 		Closeable

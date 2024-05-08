@@ -30,33 +30,14 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/faultinjection"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/resolver"
 )
 
 type (
-	// DataStoreFactory is a low level interface to be implemented by a datastore
-	// Examples of datastores are cassandra, mysql etc
-	DataStoreFactory interface {
-		// Close closes the factory
-		Close()
-		// NewTaskStore returns a new task store
-		NewTaskStore() (p.TaskStore, error)
-		// NewShardStore returns a new shard store
-		NewShardStore() (p.ShardStore, error)
-		// NewMetadataStore returns a new metadata store
-		NewMetadataStore() (p.MetadataStore, error)
-		// NewExecutionStore returns a new execution store
-		NewExecutionStore() (p.ExecutionStore, error)
-		NewQueue(queueType p.QueueType) (p.Queue, error)
-		NewQueueV2() (p.QueueV2, error)
-		// NewClusterMetadataStore returns a new metadata store
-		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
-		// NewNexusEndpointStore returns a new nexus endpoint store
-		NewNexusEndpointStore() (p.NexusEndpointStore, error)
-	}
 
 	// AbstractDataStoreFactory creates a DataStoreFactory, can be used to implement custom datastore support outside
 	// of the Temporal core.
@@ -67,7 +48,7 @@ type (
 			clusterName string,
 			logger log.Logger,
 			metricsHandler metrics.Handler,
-		) DataStoreFactory
+		) persistence.DataStoreFactory
 	}
 )
 
@@ -78,9 +59,9 @@ func DataStoreFactoryProvider(
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) (DataStoreFactory, *FaultInjectionDataStoreFactory) {
+) persistence.DataStoreFactory {
 
-	var dataStoreFactory DataStoreFactory
+	var dataStoreFactory persistence.DataStoreFactory
 	defaultCfg := config.DataStores[config.DefaultStore]
 	switch {
 	case defaultCfg.Cassandra != nil:
@@ -93,13 +74,11 @@ func DataStoreFactoryProvider(
 		logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
 	}
 
-	var faultInjection *FaultInjectionDataStoreFactory
 	if defaultCfg.FaultInjection != nil {
-		faultInjection = NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, dataStoreFactory)
-		dataStoreFactory = faultInjection
+		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, dataStoreFactory)
 	}
 
-	return dataStoreFactory, faultInjection
+	return dataStoreFactory
 }
 func DataStoreFactoryLifetimeHooks(
 	lc fx.Lifecycle,

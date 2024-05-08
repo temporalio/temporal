@@ -22,46 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
-
-import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-)
+package faultinjection
 
 type (
-	errorGeneratorSuite struct {
-		suite.Suite
-		*require.Assertions
+	faultGenerator interface {
+		generate() *fault
 	}
 )
-
-func TestErrorGeneratorSuite(t *testing.T) {
-	s := new(errorGeneratorSuite)
-	suite.Run(t, s)
-}
-
-func (s *errorGeneratorSuite) SetupSuite() {}
-
-func (s *errorGeneratorSuite) TearDownSuite() {}
-
-func (s *errorGeneratorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-
-}
-
-func (s *errorGeneratorSuite) TearDownTest() {}
-
-func (s *errorGeneratorSuite) TestZeroRateCanUpdateToNonZero() {
-	testObject := NewDefaultErrorGenerator(0.0, defaultErrors)
-	testObject.UpdateRate(1)
-	s.NotNil(testObject.Generate())
-}
-
-func (s *errorGeneratorSuite) TestAfterUpdateToZeroRateGenerateReturnsNoErrors() {
-	testObject := NewDefaultErrorGenerator(1.0, defaultErrors)
-	testObject.UpdateRate(0)
-	s.Nil(testObject.Generate())
-}

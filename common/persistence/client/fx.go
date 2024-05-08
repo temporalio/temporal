@@ -54,7 +54,7 @@ type (
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory                   DataStoreFactory
+		DataStoreFactory                   persistence.DataStoreFactory
 		EventBlobCache                     persistence.XDCCache
 		Cfg                                *config.Persistence
 		PersistenceMaxQPS                  PersistenceMaxQps

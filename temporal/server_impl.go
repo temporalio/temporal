@@ -172,7 +172,7 @@ func initSystemNamespaces(
 ) error {
 	clusterName := persistenceClient.ClusterName(currentClusterName)
 	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
-	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
 		cfg,

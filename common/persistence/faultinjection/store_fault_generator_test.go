@@ -22,24 +22,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client_test
+package faultinjection
 
 import (
 	"context"
 	"errors"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/mock"
 )
 
 type (
 	testDataStoreFactory struct {
-		client.DataStoreFactory
+		persistence.DataStoreFactory
 		err                 error
 		enqueueRequests     int
 		readRequests        int
@@ -112,55 +113,20 @@ func TestFaultInjectionDataStoreFactory_NewQueueV2_CreateErr(t *testing.T) {
 
 	t.Parallel()
 
+	ctrl := gomock.NewController(t)
+	dataStoreFactory := mock.NewMockDataStoreFactory(ctrl)
+
 	errCreate := errors.New("error creating QueueV2")
-	dataStoreFactory := &testDataStoreFactory{
-		err: errCreate,
-	}
-	factory := client.NewFaultInjectionDatastoreFactory(&config.FaultInjection{
-		Rate:    1.0,
-		Targets: config.FaultInjectionTargets{},
-	}, dataStoreFactory)
+	dataStoreFactory.EXPECT().NewQueueV2().Return(nil, errCreate).Times(1)
+
+	factory := NewFaultInjectionDatastoreFactory(&config.FaultInjection{}, dataStoreFactory)
 
 	_, err := factory.NewQueueV2()
 	assert.ErrorIs(t, err, errCreate)
 }
 
-func TestFaultInjectionDataStoreFactory_NewQueueV2_FlatErrorRate(t *testing.T) {
-	// Tests fault injection for QueueV2 with a flat error rate across all methods.
-
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name      string
-		errorRate float64
-		expectErr bool
-	}{
-		{
-			name:      "No errors",
-			errorRate: 0.0,
-			expectErr: false,
-		},
-		{
-			name:      "All errors",
-			errorRate: 1.0,
-			expectErr: true,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			faultInjectionConfig := &config.FaultInjection{
-				Rate:    tc.errorRate,
-				Targets: config.FaultInjectionTargets{},
-			}
-			expectErr := tc.expectErr
-
-			testFaultInjectionConfig(t, faultInjectionConfig, expectErr)
-		})
-	}
-}
-
 func TestFaultInjectionDataStoreFactory_NewQueueV2_MethodConfig(t *testing.T) {
-	// Tests fault injection for QueueV2 with a per-method error config and no flat error rate.
+	// Tests fault injection for QueueV2.
 
 	t.Parallel()
 
@@ -189,7 +155,6 @@ func TestFaultInjectionDataStoreFactory_NewQueueV2_MethodConfig(t *testing.T) {
 				},
 			}
 			faultInjectionConfig := &config.FaultInjection{
-				Rate: 0.0,
 				Targets: config.FaultInjectionTargets{
 					DataStores: map[config.DataStoreName]config.FaultInjectionDataStoreConfig{
 						config.QueueV2Name: {
@@ -214,7 +179,7 @@ func testFaultInjectionConfig(t *testing.T, faultInjectionConfig *config.FaultIn
 	t.Helper()
 
 	dataStoreFactory := &testDataStoreFactory{}
-	factory := client.NewFaultInjectionDatastoreFactory(faultInjectionConfig, dataStoreFactory)
+	factory := NewFaultInjectionDatastoreFactory(faultInjectionConfig, dataStoreFactory)
 
 	q, err := factory.NewQueueV2()
 	require.NoError(t, err)
