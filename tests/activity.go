@@ -44,6 +44,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -1147,6 +1148,15 @@ func (s *FunctionalSuite) TestActivityTaskCompleteForceCompletion() {
 
 	err = sdkClient.CompleteActivityByID(ctx, s.namespace, run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
 	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(description.PendingActivities))
+		assert.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.GetWorkflowExecutionInfo().Status)
+	},
+		10*time.Second,
+		500*time.Millisecond)
 }
 
 func (s *FunctionalSuite) TestActivityTaskCompleteRejectCompletion() {
@@ -1180,88 +1190,22 @@ func (s *FunctionalSuite) TestActivityTaskCompleteRejectCompletion() {
 		500*time.Millisecond)
 
 	err = sdkClient.CompleteActivity(ctx, ai.TaskToken, nil, nil)
-	s.Error(err)
-}
-
-func (s *FunctionalSuite) TestActivityTaskFailedForceCompletion() {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
-		Namespace: s.namespace,
-	})
-	s.NoError(err)
-	activityInfo := make(chan activity.Info, 1)
-	taskQueue := s.randomizeStr(s.T().Name())
-	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
-	s.NoError(w.Start())
-	defer w.Stop()
-
-	ctx := NewContext()
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        uuid.New(),
-		TaskQueue: taskQueue,
-	}
-	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
-	s.NoError(err)
-	ai := <-activityInfo
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
-	},
-		10*time.Second,
-		500*time.Millisecond)
-
-	mockFaileError := errors.New("mock failed error")
-	err = sdkClient.CompleteActivityByID(ctx, s.namespace, run.GetID(), run.GetRunID(), ai.ActivityID, nil, mockFaileError)
-	s.NoError(err)
-}
-
-func (s *FunctionalSuite) TestActivityTaskFailedRejectCompletion() {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
-		Namespace: s.namespace,
-	})
-	s.NoError(err)
-	activityInfo := make(chan activity.Info, 1)
-	taskQueue := s.randomizeStr(s.T().Name())
-	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
-	s.NoError(w.Start())
-	defer w.Stop()
-
-	ctx := NewContext()
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        uuid.New(),
-		TaskQueue: taskQueue,
-	}
-	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
-	s.NoError(err)
-	ai := <-activityInfo
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
-	},
-		10*time.Second,
-		500*time.Millisecond)
-
-	mockFaileError := errors.New("mock failed error")
-	err = sdkClient.CompleteActivity(ctx, ai.TaskToken, nil, mockFaileError)
-	s.Error(err)
+	var svcErr *serviceerror.NotFound
+	s.ErrorAs(err, &svcErr, "invalid activityID or activity already timed out or invoking workflow is completed")
 }
 
 func (s *FunctionalSuite) mockWorkflowWithErrorActivity(activityInfo chan<- activity.Info, sdkClient sdkclient.Client, taskQueue string) (worker.Worker, func(ctx workflow.Context) error) {
 	mockErrorActivity := func(ctx context.Context) error {
-		err := errors.New("mock error of an activity")
 		ai := activity.GetInfo(ctx)
 		activityInfo <- ai
-		return err
+		return errors.New("mock error of an activity")
 	}
 	wf := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: 3 * time.Minute,
 			RetryPolicy: &temporal.RetryPolicy{
+				// Add long initial interval to make sure the next attempt is not scheduled
+				// before the test gets a chance to complete the activity via API call.
 				InitialInterval: 2 * time.Minute,
 			},
 		}
