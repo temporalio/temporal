@@ -74,7 +74,6 @@ type (
 )
 
 var Module = fx.Options(
-	BeanModule,
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
