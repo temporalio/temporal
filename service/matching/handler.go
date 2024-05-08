@@ -30,6 +30,9 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -289,7 +292,27 @@ func (h *Handler) DescribeTaskQueue(
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.DescribeTaskQueue(ctx, request)
+	resp, err := h.engine.DescribeTaskQueue(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: remove after 1.24.0-m3
+	if len(resp.DescResponse.Pollers) > 0 || resp.DescResponse.TaskQueueStatus != nil {
+		// Expand pollerinfo and task queue status into tags 1 and 2 for old frontend to handle
+		// proto incompatibility. This only works without ugly protowire code because
+		// workflowservice.DescribeTaskQueueResponse and the previous version of
+		// matchingservice.DescribeTaskQueueResponse have the same first two fields.
+		oldResp := &workflowservice.DescribeTaskQueueResponse{
+			Pollers:         resp.DescResponse.Pollers,
+			TaskQueueStatus: resp.DescResponse.TaskQueueStatus,
+		}
+		if b, err := proto.Marshal(oldResp); err == nil {
+			resp.ProtoReflect().SetUnknown(protoreflect.RawFields(b))
+		}
+	}
+
+	return resp, nil
 }
 
 // DescribeTaskQueuePartition returns information about the target task queue partition.

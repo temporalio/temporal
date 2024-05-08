@@ -44,7 +44,7 @@ type (
 	}
 
 	ErrorGenerator interface {
-		Generate() error
+		Generate() *fault
 		UpdateRate(rate float64)
 		UpdateWeights(weights []FaultWeight)
 		Rate() float64
@@ -55,7 +55,7 @@ type (
 		weight     float64
 	}
 
-	ErrorFactory func(string) error
+	ErrorFactory func(string) *fault
 
 	FaultMetadata struct {
 		errFactory ErrorFactory
@@ -130,7 +130,7 @@ func NewDefaultErrorGenerator(rate float64, errorWeights []FaultWeight) *Default
 	return result
 }
 
-func (p *DefaultErrorGenerator) Generate() error {
+func (p *DefaultErrorGenerator) Generate() *fault {
 	if p.rate.Load() <= 0 {
 		return nil
 	}
@@ -139,7 +139,7 @@ func (p *DefaultErrorGenerator) Generate() error {
 	defer p.Unlock()
 
 	if roll := p.r.Float64(); roll < p.rate.Load() {
-		var result error
+		var result *fault
 		for _, fm := range p.faultMetadata {
 			if roll < fm.threshold {
 				msg := fmt.Sprintf(

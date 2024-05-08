@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -413,7 +412,6 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		WorkflowVersion:    common.EmptyVersion,
 		ClosedWorkflowOnly: false,
 	})
 	return err

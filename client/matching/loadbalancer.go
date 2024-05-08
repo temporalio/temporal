@@ -88,10 +88,10 @@ func NewLoadBalancer(
 ) LoadBalancer {
 	lb := &defaultLoadBalancer{
 		namespaceIDToName:   namespaceIDToName,
-		nReadPartitions:     dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions),
-		nWritePartitions:    dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
-		forceReadPartition:  dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
-		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceWritePartition, -1),
+		nReadPartitions:     dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		nWritePartitions:    dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
+		forceReadPartition:  dynamicconfig.TestMatchingLBForceReadPartition.Get(dc),
+		forceWritePartition: dynamicconfig.TestMatchingLBForceWritePartition.Get(dc),
 		lock:                sync.RWMutex{},
 		taskQueueLBs:        make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}

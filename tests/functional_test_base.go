@@ -124,11 +124,11 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
 	maps.Copy(clusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryScannerEnabled:    false,
-		dynamicconfig.TaskQueueScannerEnabled:  false,
-		dynamicconfig.ExecutionsScannerEnabled: false,
-		dynamicconfig.BuildIdScavengerEnabled:  false,
-		dynamicconfig.FrontendEnableNexusAPIs:  true,
+		dynamicconfig.HistoryScannerEnabled.Key():    false,
+		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
+		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
+		dynamicconfig.BuildIdScavengerEnabled.Key():  false,
+		dynamicconfig.FrontendEnableNexusAPIs.Key():  true,
 	})
 	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
 	clusterConfig.ServiceFxOptions = params.ServiceOptions
@@ -193,7 +193,7 @@ func ApplyTestClusterParams(options []Option) TestClusterParams {
 // If the Logger is not set, this method creates a new log.TestLogger which logs to stdout and stderr.
 func (s *FunctionalTestBase) setupLogger() {
 	if s.Logger == nil {
-		s.Logger = log.NewTestLogger()
+		s.Logger = log.NewNoopLogger()
 	}
 }
 

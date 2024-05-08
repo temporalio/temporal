@@ -41,12 +41,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -3089,7 +3090,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
 			},
 		})
 		assert.Error(s.T(), err1)
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		var notFound *serviceerror.NotFound
+		assert.ErrorAs(s.T(), err1, &notFound)
+		assert.Equal(s.T(), "workflow execution already completed", err1.Error())
 		assert.Nil(s.T(), updateResponse)
 		updateResultCh <- struct{}{}
 	}
@@ -3187,7 +3190,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 			},
 		})
 		assert.Error(s.T(), err1)
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		var notFound *serviceerror.NotFound
+		assert.ErrorAs(s.T(), err1, &notFound)
+		assert.Equal(s.T(), "workflow execution already completed", err1.Error())
 		assert.Nil(s.T(), updateResponse)
 		updateResultCh <- struct{}{}
 	}
@@ -3226,7 +3231,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
+func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 	type testCase struct {
 		Name          string
 		Description   string
@@ -3237,17 +3242,17 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 	}
 	testCases := []testCase{
 		{
-			Name:          "requested",
-			Description:   "update in stateRequested must be rejected by server with server generated rejection failure",
-			UpdateErr:     "",
-			UpdateFailure: "Workflow Update is rejected because Workflow Execution is completed.",
+			Name:          "admitted",
+			Description:   "update in stateAdmitted must get an error",
+			UpdateErr:     "workflow execution already completed",
+			UpdateFailure: "",
 			Commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },
 			Messages:      func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
 		},
 		{
 			Name:          "accepted",
-			Description:   "update in stateAccepted must get an error because there is no way for workflow to complete it and already accepted update can't be rejected",
-			UpdateErr:     "context deadline exceeded",
+			Description:   "update in stateAccepted must get an error",
+			UpdateErr:     "workflow execution already completed",
 			UpdateFailure: "",
 			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
@@ -3873,7 +3878,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
-	s.ErrorContains(err, fmt.Sprintf("update %q not found", tv.UpdateID("1")))
+	s.ErrorContains(err, fmt.Sprintf("update %s not found", tv.UpdateID("1")))
 
 	<-updateResultCh
 
@@ -5162,8 +5167,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted: true,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
 	}
 	tv := testvars.New(s.T().Name())
 	tv = s.startWorkflow(tv)
