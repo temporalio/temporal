@@ -74,6 +74,14 @@ type (
 )
 
 var Module = fx.Options(
+	fx.Provide(ClusterMetadataManagerProvider),
+	fx.Provide(MetadataManagerProvider),
+	fx.Provide(TaskManagerProvider),
+	fx.Provide(NamespaceReplicationQueueProvider),
+	fx.Provide(ShardManagerProvider),
+	fx.Provide(ExecutionManagerProvider),
+	fx.Provide(HistoryTaskQueueManagerProvider),
+	fx.Provide(NexusIncomingServiceManagerProvider),
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
@@ -150,4 +158,33 @@ func HealthSignalAggregatorProvider(
 	}
 
 	return persistence.NoopHealthSignalAggregator
+}
+
+func ClusterMetadataManagerProvider(factory Factory) (persistence.ClusterMetadataManager, error) {
+	return factory.NewClusterMetadataManager()
+}
+
+func MetadataManagerProvider(factory Factory) (persistence.MetadataManager, error) {
+	return factory.NewMetadataManager()
+}
+func TaskManagerProvider(factory Factory) (persistence.TaskManager, error) {
+	return factory.NewTaskManager()
+}
+
+func NamespaceReplicationQueueProvider(factory Factory) (persistence.NamespaceReplicationQueue, error) {
+	return factory.NewNamespaceReplicationQueue()
+}
+func ShardManagerProvider(factory Factory) (persistence.ShardManager, error) {
+	return factory.NewShardManager()
+}
+func ExecutionManagerProvider(factory Factory) (persistence.ExecutionManager, error) {
+	return factory.NewExecutionManager()
+}
+
+func HistoryTaskQueueManagerProvider(factory Factory) (persistence.HistoryTaskQueueManager, error) {
+	return factory.NewHistoryTaskQueueManager()
+}
+
+func NexusIncomingServiceManagerProvider(factory Factory) (persistence.NexusIncomingServiceManager, error) {
+	return factory.NewNexusIncomingServiceManager()
 }
