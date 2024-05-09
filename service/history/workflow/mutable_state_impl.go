@@ -5003,36 +5003,38 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	transactionPolicy TransactionPolicy,
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 
-	if err := ms.prepareCloseTransaction(
+	if err := ms.closeTransactionWithPolicyCheck(
 		transactionPolicy,
 	); err != nil {
 		return nil, nil, err
 	}
 
-	// It is important to convert speculative WT to normal before prepareEventsAndReplicationTasks,
-	// because prepareEventsAndReplicationTasks will move internal buffered events to the history,
-	// and WT related events (WTScheduled, in particular) need to go first.
-	if err := ms.workflowTaskManager.convertSpeculativeWorkflowTaskToNormal(); err != nil {
+	if err := ms.closeTransactionHandleWorkflowTask(
+		transactionPolicy,
+	); err != nil {
 		return nil, nil, err
 	}
 
-	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.prepareEventsAndReplicationTasks(transactionPolicy)
+	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if len(workflowEventsSeq) > 0 {
-		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
-		lastEvent := lastEvents[len(lastEvents)-1]
-		if err := ms.updateWithLastWriteEvent(
-			lastEvent,
-			transactionPolicy,
-		); err != nil {
-			return nil, nil, err
-		}
+	if err := ms.closeTransactionUpdateTransitionHistory(
+		transactionPolicy,
+		workflowEventsSeq,
+	); err != nil {
+		return nil, nil, err
 	}
 
-	// update last update time
+	if err := ms.closeTransactionPrepareTasks(
+		transactionPolicy,
+		workflowEventsSeq,
+	); err != nil {
+		return nil, nil, err
+	}
+
+	ms.executionInfo.StateTransitionCount += 1
 	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.shard.GetTimeSource().Now())
 
 	// We generate checksum here based on the assumption that the returned
@@ -5086,17 +5088,19 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	transactionPolicy TransactionPolicy,
 ) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
 
-	if err := ms.prepareCloseTransaction(
+	if err := ms.closeTransactionWithPolicyCheck(
 		transactionPolicy,
 	); err != nil {
 		return nil, nil, err
 	}
 
-	if err := ms.workflowTaskManager.convertSpeculativeWorkflowTaskToNormal(); err != nil {
+	if err := ms.closeTransactionHandleWorkflowTask(
+		transactionPolicy,
+	); err != nil {
 		return nil, nil, err
 	}
 
-	workflowEventsSeq, bufferEvents, _, err := ms.prepareEventsAndReplicationTasks(transactionPolicy)
+	workflowEventsSeq, bufferEvents, _, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -5106,18 +5110,21 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with buffered events")
 	}
 
-	if len(workflowEventsSeq) > 0 {
-		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
-		lastEvent := lastEvents[len(lastEvents)-1]
-		if err := ms.updateWithLastWriteEvent(
-			lastEvent,
-			transactionPolicy,
-		); err != nil {
-			return nil, nil, err
-		}
+	if err := ms.closeTransactionUpdateTransitionHistory(
+		transactionPolicy,
+		workflowEventsSeq,
+	); err != nil {
+		return nil, nil, err
 	}
 
-	// update last update time
+	if err := ms.closeTransactionPrepareTasks(
+		transactionPolicy,
+		workflowEventsSeq,
+	); err != nil {
+		return nil, nil, err
+	}
+
+	ms.executionInfo.StateTransitionCount += 1
 	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.shard.GetTimeSource().Now())
 
 	// We generate checksum here based on the assumption that the returned
@@ -5178,41 +5185,30 @@ func (ms *MutableStateImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 	return ms.taskGenerator.GenerateMigrationTasks()
 }
 
-func (ms *MutableStateImpl) prepareCloseTransaction(
+func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
 	transactionPolicy TransactionPolicy,
 ) error {
-
-	if err := ms.closeTransactionWithPolicyCheck(
-		transactionPolicy,
-	); err != nil {
-		return err
-	}
-
 	if err := ms.closeTransactionHandleBufferedEventsLimit(
 		transactionPolicy,
 	); err != nil {
 		return err
 	}
 
-	if err := ms.closeTransactionHandleWorkflowReset(
+	if err := ms.closeTransactionHandleWorkflowTaskScheduling(
 		transactionPolicy,
 	); err != nil {
 		return err
 	}
 
-	ms.executionInfo.StateTransitionCount += 1
+	return ms.closeTransactionHandleSpeculativeWorkflowTask(transactionPolicy)
+}
 
-	if ms.config.EnableNexus() {
-		ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
-			ms.executionInfo.TransitionHistory,
-			ms.GetCurrentVersion(),
-			ms.executionInfo.StateTransitionCount,
-		)
-	}
-
-	// TODO(bergundy): Collapse timer tasks.
-	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
-		return err
+func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
+	transactionPolicy TransactionPolicy,
+) error {
+	if transactionPolicy == TransactionPolicyPassive ||
+		!ms.IsWorkflowExecutionRunning() {
+		return nil
 	}
 
 	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
@@ -5233,6 +5229,74 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 		}
 	}
 
+	return nil
+}
+
+func (ms *MutableStateImpl) closeTransactionHandleSpeculativeWorkflowTask(
+	transactionPolicy TransactionPolicy,
+) error {
+	if transactionPolicy == TransactionPolicyPassive ||
+		!ms.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	// It is important to convert speculative WT to normal before prepareEventsAndReplicationTasks,
+	// because prepareEventsAndReplicationTasks will move internal buffered events to the history,
+	// and WT related events (WTScheduled, in particular) need to go first.
+	return ms.workflowTaskManager.convertSpeculativeWorkflowTaskToNormal()
+}
+
+func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
+	transactionPolicy TransactionPolicy,
+	workflowEventsSeq []*persistence.WorkflowEvents,
+) error {
+
+	if len(workflowEventsSeq) > 0 {
+		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
+		lastEvent := lastEvents[len(lastEvents)-1]
+		if err := ms.updateWithLastWriteEvent(
+			lastEvent,
+			transactionPolicy,
+		); err != nil {
+			return err
+		}
+	}
+
+	if transactionPolicy != TransactionPolicyActive {
+		return nil
+	}
+
+	if !ms.config.EnableNexus() {
+		return nil
+	}
+
+	if !ms.HSM().Dirty() && len(workflowEventsSeq) == 0 && len(ms.syncActivityTasks) == 0 {
+		return nil
+	}
+
+	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
+		ms.executionInfo.TransitionHistory,
+		ms.GetCurrentVersion(),
+	)
+
+	return nil
+}
+
+func (ms *MutableStateImpl) closeTransactionPrepareTasks(
+	transactionPolicy TransactionPolicy,
+	workflowEventsSeq []*persistence.WorkflowEvents,
+) error {
+	if err := ms.closeTransactionHandleWorkflowResetTask(
+		transactionPolicy,
+	); err != nil {
+		return err
+	}
+
+	// TODO(bergundy): Collapse timer tasks.
+	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
+		return err
+	}
+
 	ms.closeTransactionCollapseVisibilityTasks()
 
 	// TODO merge active & passive task generation
@@ -5240,7 +5304,35 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	//  since we only generate at most one activity & user timer,
 	//  regardless of how many activity & user timer created
 	//  so the calculation must be at the very end
-	return ms.closeTransactionHandleActivityUserTimerTasks(transactionPolicy)
+	if err := ms.closeTransactionHandleActivityUserTimerTasks(transactionPolicy); err != nil {
+		return err
+	}
+
+	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, workflowEventsSeq)
+}
+
+func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
+	transactionPolicy TransactionPolicy,
+	workflowEventsSeq []*persistence.WorkflowEvents,
+) error {
+
+	for _, workflowEvents := range workflowEventsSeq {
+		if err := ms.eventsToReplicationTask(transactionPolicy, workflowEvents.Events); err != nil {
+			return err
+		}
+	}
+
+	ms.InsertTasks[tasks.CategoryReplication] = append(
+		ms.InsertTasks[tasks.CategoryReplication],
+		ms.syncActivityToReplicationTask(transactionPolicy)...,
+	)
+
+	if transactionPolicy == TransactionPolicyPassive &&
+		len(ms.InsertTasks[tasks.CategoryReplication]) > 0 {
+		return serviceerror.NewInternal("should not generate replication task when close transaction as passive")
+	}
+
+	return nil
 }
 
 func (ms *MutableStateImpl) cleanupTransaction(
@@ -5288,7 +5380,7 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	return nil
 }
 
-func (ms *MutableStateImpl) prepareEventsAndReplicationTasks(
+func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	transactionPolicy TransactionPolicy,
 ) ([]*persistence.WorkflowEvents, []*historypb.HistoryEvent, bool, error) {
 
@@ -5333,22 +5425,6 @@ func (ms *MutableStateImpl) prepareEventsAndReplicationTasks(
 		workflowEventsSeq,
 	); err != nil {
 		return nil, nil, false, err
-	}
-
-	for _, workflowEvents := range workflowEventsSeq {
-		if err := ms.eventsToReplicationTask(transactionPolicy, workflowEvents.Events); err != nil {
-			return nil, nil, false, err
-		}
-	}
-
-	ms.InsertTasks[tasks.CategoryReplication] = append(
-		ms.InsertTasks[tasks.CategoryReplication],
-		ms.syncActivityToReplicationTask(transactionPolicy)...,
-	)
-
-	if transactionPolicy == TransactionPolicyPassive &&
-		len(ms.InsertTasks[tasks.CategoryReplication]) > 0 {
-		return nil, nil, false, serviceerror.NewInternal("should not generate replication task when close transaction as passive")
 	}
 
 	return workflowEventsSeq, newBufferBatch, clearBuffer, nil
@@ -5669,7 +5745,7 @@ func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 	return nil
 }
 
-func (ms *MutableStateImpl) closeTransactionHandleWorkflowReset(
+func (ms *MutableStateImpl) closeTransactionHandleWorkflowResetTask(
 	transactionPolicy TransactionPolicy,
 ) error {
 
