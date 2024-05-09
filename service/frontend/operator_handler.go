@@ -90,7 +90,7 @@ type (
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
-		endpointsClient        *NexusEndpointClient
+		nexusEndpointClient    *NexusEndpointClient
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -135,7 +135,7 @@ func NewOperatorHandlerImpl(
 		clusterMetadataManager: args.clusterMetadataManager,
 		clusterMetadata:        args.clusterMetadata,
 		clientFactory:          args.clientFactory,
-		endpointsClient:        args.nexusEndpointClient,
+		nexusEndpointClient:    args.nexusEndpointClient,
 	}
 
 	return handler
@@ -836,7 +836,7 @@ func (h *OperatorHandlerImpl) CreateNexusEndpoint(
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.endpointsClient.Create(ctx, request)
+	return h.nexusEndpointClient.Create(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) UpdateNexusEndpoint(
@@ -847,7 +847,7 @@ func (h *OperatorHandlerImpl) UpdateNexusEndpoint(
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.endpointsClient.Update(ctx, request)
+	return h.nexusEndpointClient.Update(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) DeleteNexusEndpoint(
@@ -858,7 +858,7 @@ func (h *OperatorHandlerImpl) DeleteNexusEndpoint(
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.endpointsClient.Delete(ctx, request)
+	return h.nexusEndpointClient.Delete(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) GetNexusEndpoint(
@@ -869,7 +869,7 @@ func (h *OperatorHandlerImpl) GetNexusEndpoint(
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.endpointsClient.Get(ctx, request)
+	return h.nexusEndpointClient.Get(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) ListNexusEndpoints(
@@ -880,5 +880,5 @@ func (h *OperatorHandlerImpl) ListNexusEndpoints(
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.endpointsClient.List(ctx, request)
+	return h.nexusEndpointClient.List(ctx, request)
 }

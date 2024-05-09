@@ -81,6 +81,10 @@ func TestGet(t *testing.T) {
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEndpoint, endpoint)
 
+	endpoint, err = reg.GetByName(context.Background(), testEndpoint.Spec.Name)
+	require.NoError(t, err)
+	protoassert.ProtoEqual(t, testEndpoint, endpoint)
+
 	reg.dataLock.RLock()
 	defer reg.dataLock.RUnlock()
 	assert.Equal(t, int64(1), reg.tableVersion)
@@ -115,6 +119,10 @@ func TestGetNotFound(t *testing.T) {
 
 	endpoint, err := reg.GetByID(context.Background(), uuid.NewString())
 	var notFound *serviceerror.NotFound
+	assert.ErrorAs(t, err, &notFound)
+	assert.Nil(t, endpoint)
+
+	endpoint, err = reg.GetByName(context.Background(), uuid.NewString())
 	assert.ErrorAs(t, err, &notFound)
 	assert.Nil(t, endpoint)
 
