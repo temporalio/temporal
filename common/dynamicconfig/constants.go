@@ -1254,12 +1254,12 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 	)
 	EnableHostHistoryCache = NewGlobalBoolSetting(
 		"history.enableHostHistoryCache",
-		false,
+		true,
 		`EnableHostHistoryCache controls if the history cache is host level`,
 	)
 	HistoryCacheHostLevelMaxSize = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSize",
-		256000,
+		128000,
 		`HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache`,
 	)
 	HistoryCacheHostLevelMaxSizeBytes = NewGlobalIntSetting(
