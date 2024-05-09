@@ -2089,6 +2089,11 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events`,
 	)
+	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
+		"history.EnableReplicationTaskTieredProcessing",
+		false,
+		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
+	)
 
 	// keys for worker
 
