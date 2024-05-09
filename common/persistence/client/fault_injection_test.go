@@ -146,7 +146,6 @@ func TestFaultInjectionDataStoreFactory_NewQueueV2_FlatErrorRate(t *testing.T) {
 			expectErr: true,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			faultInjectionConfig := &config.FaultInjection{
@@ -181,7 +180,6 @@ func TestFaultInjectionDataStoreFactory_NewQueueV2_MethodConfig(t *testing.T) {
 			expectErr: true,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

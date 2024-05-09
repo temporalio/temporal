@@ -49,7 +49,6 @@ func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
 			err:  errors.New("some error"),
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

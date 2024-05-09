@@ -272,7 +272,6 @@ func TestHandleScheduleCommand(t *testing.T) {
 		},
 	}
 	for _, tc := range timeoutCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			tcx := newTestContext(t, defaultConfig)
 

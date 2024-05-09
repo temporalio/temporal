@@ -137,7 +137,6 @@ func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 	}
 
 	for i, tc := range testCases {
-		tc := tc
 		s.Run(tc.name, func() {
 			id := fmt.Sprintf("functional-start-workflow-terminate-test-%v", i)
 

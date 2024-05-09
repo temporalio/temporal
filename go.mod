@@ -1,6 +1,6 @@
 module go.temporal.io/server
 
-go 1.21
+go 1.22
 
 require (
 	cloud.google.com/go/storage v1.40.0
@@ -82,9 +82,6 @@ require (
 	modernc.org/cc/v3 v3.41.0 // indirect
 	modernc.org/ccgo/v3 v3.17.0 // indirect
 	modernc.org/opt v0.1.3 // indirect
-)
-
-require (
 	cloud.google.com/go v0.112.2 // indirect
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	cloud.google.com/go/iam v1.1.7 // indirect

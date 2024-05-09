@@ -127,7 +127,6 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 	defer dc.RemoveOverride(dynamicconfig.FrontendMaxCallbacksPerWorkflow)
 
 	for _, tc := range cases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			dc.OverrideValue(s.T(), dynamicconfig.FrontendEnableCallbackAttachment, tc.allow)
 			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
