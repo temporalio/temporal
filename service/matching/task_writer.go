@@ -94,7 +94,7 @@ func newTaskWriter(
 		maxReadLevel: noTaskIDs.start - 1,
 		logger:       backlogMgr.logger,
 		idAlloc:      backlogMgr.db,
-		writeLoop: goro.NewHandle(backlogMgr.contextInfoProvider(context.Background())),
+		writeLoop:    goro.NewHandle(backlogMgr.contextInfoProvider(context.Background())),
 	}
 }
 
