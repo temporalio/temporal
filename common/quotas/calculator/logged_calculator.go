@@ -99,7 +99,7 @@ func (c *LoggedNamespaceCalculator) getOrCreateQuotaLogger(
 
 	quotaLogger, ok := c.quotaLoggers[namespace]
 	if !ok {
-		quotaLogger = newQuotaLogger(c.logger)
+		quotaLogger = newQuotaLogger(log.With(c.logger, tag.WorkflowNamespace(namespace)))
 		c.quotaLoggers[namespace] = quotaLogger
 	}
 
