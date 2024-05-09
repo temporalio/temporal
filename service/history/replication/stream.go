@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -71,7 +72,7 @@ func WrapEventLoop(
 ) {
 	defer streamStopper()
 
-	for {
+	for i := 0; i < 50; i++ {
 		err := originalEventLoop()
 
 		if err == nil { // shutdown case
@@ -85,14 +86,17 @@ func WrapEventLoop(
 				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
+		} else {
+			metrics.ReplicationServiceError.With(metricsHandler).Record(
+				int64(1),
+				metrics.ServiceErrorTypeTag(err),
+				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+				metrics.ToClusterIDTag(toClusterKey.ClusterID),
+			)
+		}
+		if !IsRetryableError(err) {
 			return
 		}
-		metrics.ReplicationServiceError.With(metricsHandler).Record(
-			int64(1),
-			metrics.ServiceErrorTypeTag(err),
-			metrics.FromClusterIDTag(fromClusterKey.ClusterID),
-			metrics.ToClusterIDTag(toClusterKey.ClusterID),
-		)
 
 		time.Sleep(retryInterval)
 	}
@@ -101,4 +105,13 @@ func WrapEventLoop(
 func IsStreamError(err error) bool {
 	var streamError *StreamError
 	return errors.As(err, &streamError)
+}
+
+func IsRetryableError(err error) bool {
+	switch err.(type) {
+	case *StreamError, *persistence.ShardOwnershipLostError:
+		return false
+	default:
+		return true
+	}
 }
