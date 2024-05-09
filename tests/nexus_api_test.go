@@ -717,7 +717,7 @@ func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 			Error:     handlerError,
 		})
 		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil {
+		if err != nil && ctx.Err() == nil {
 			panic(err)
 		}
 	} else if response != nil {
@@ -728,7 +728,7 @@ func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 			Response:  response,
 		})
 		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil {
+		if err != nil && ctx.Err() == nil {
 			panic(err)
 		}
 	}
