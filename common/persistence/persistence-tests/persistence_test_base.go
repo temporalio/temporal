@@ -91,12 +91,12 @@ type (
 		ShardMgr                  persistence.ShardManager
 		AbstractDataStoreFactory  client.AbstractDataStoreFactory
 		VisibilityStoreFactory    visibility.VisibilityStoreFactory
-		Factory                     client.Factory
-		ExecutionManager            persistence.ExecutionManager
-		TaskMgr                     persistence.TaskManager
-		ClusterMetadataManager      persistence.ClusterMetadataManager
-		MetadataManager             persistence.MetadataManager
-		NamespaceReplicationQueue   persistence.NamespaceReplicationQueue
+		Factory                   client.Factory
+		ExecutionManager          persistence.ExecutionManager
+		TaskMgr                   persistence.TaskManager
+		ClusterMetadataManager    persistence.ClusterMetadataManager
+		MetadataManager           persistence.MetadataManager
+		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		NexusEndpointManager      persistence.NexusEndpointManager
 		ShardInfo                 *persistencespb.ShardInfo
 		TaskIDGenerator           TransferTaskIDGenerator
