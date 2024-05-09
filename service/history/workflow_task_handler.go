@@ -366,8 +366,8 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 
 	switch protocolType {
 	case update.ProtocolV1:
-		upd, ok := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
-		if !ok {
+		upd := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
+		if upd == nil {
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
 				serviceerror.NewNotFound(fmt.Sprintf("update %s not found", message.ProtocolInstanceId)))
