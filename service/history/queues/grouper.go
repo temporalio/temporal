@@ -59,7 +59,42 @@ type NamespaceIDAndDestination struct {
 	Destination string
 }
 
-// StateMachineTaskTypeNamespaceIDAndDestination is the key for grouping tasks by task type namespace ID and destination.
+type GrouperNamespaceIDAndDestination struct {
+}
+
+func (g GrouperNamespaceIDAndDestination) Key(task tasks.Task) (key any) {
+	return g.KeyTyped(task)
+}
+
+func (GrouperNamespaceIDAndDestination) KeyTyped(task tasks.Task) (key NamespaceIDAndDestination) {
+	destGetter, ok := task.(tasks.HasDestination)
+	var dest string
+	if ok {
+		dest = destGetter.GetDestination()
+	}
+	return NamespaceIDAndDestination{
+		NamespaceID: task.GetNamespaceID(),
+		Destination: dest,
+	}
+}
+
+func (GrouperNamespaceIDAndDestination) Predicate(keys []any) tasks.Predicate {
+	pred := predicates.Empty[tasks.Task]()
+	for _, anyKey := range keys {
+		// Assume predicate is only called with keys returned from GrouperNamespaceIDAndDestination.Key()
+		key := anyKey.(NamespaceIDAndDestination)
+		pred = predicates.Or(pred, predicates.And(
+			tasks.NewNamespacePredicate([]string{key.NamespaceID}),
+			tasks.NewDestinationPredicate([]string{key.Destination}),
+		))
+	}
+	return pred
+}
+
+var _ Grouper = GrouperNamespaceIDAndDestination{}
+
+// StateMachineTaskTypeNamespaceIDAndDestination is the key for grouping tasks
+// by state machine task type, namespace ID and destination.
 type StateMachineTaskTypeNamespaceIDAndDestination struct {
 	StateMachineTaskType int32
 	NamespaceID          string
