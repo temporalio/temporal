@@ -94,7 +94,7 @@ func initPersistenceLazyLoadedServiceResolver(
 
 func (p PersistenceLazyLoadedServiceResolver) MemberCount() int {
 	if value := p.Load(); value != nil {
-		return value.(membership.ServiceResolver).MemberCount()
+		return value.(membership.ServiceResolver).AvailableMemberCount()
 	}
 	return 0
 }

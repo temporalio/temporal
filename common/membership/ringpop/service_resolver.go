@@ -234,6 +234,20 @@ func (r *serviceResolver) MemberCount() int {
 	return len(hosts)
 }
 
+func (r *serviceResolver) AvailableMemberCount() int {
+	_, hosts := r.ring()
+	n := 0
+	for _, host := range hosts {
+		if drainingStr, ok := host.Label(drainingKey); ok {
+			if draining, _ := strconv.ParseBool(drainingStr); draining {
+				continue
+			}
+		}
+		n++
+	}
+	return n
+}
+
 func (r *serviceResolver) Members() []membership.HostInfo {
 	_, hosts := r.ring()
 	servers := make([]membership.HostInfo, 0, len(hosts))
