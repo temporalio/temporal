@@ -583,8 +583,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			namespaceName := "test-namespace"
 			mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
-			mockRegistry.EXPECT().GetNamespace(namespace.Name("")).Return(&namespace.Namespace{}, nil).AnyTimes()
+			mockRegistry.EXPECT().GetNamespace(namespace.Name(namespaceName)).Return(&namespace.Namespace{}, nil).AnyTimes()
 			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(t))
 			serviceResolver.EXPECT().MemberCount().Return(tc.frontendServiceCount).AnyTimes()
 
@@ -653,7 +654,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numRequests; i++ {
 				_, err = client.StartWorkflowExecution(
 					context.Background(),
-					&workflowservice.StartWorkflowExecutionRequest{},
+					&workflowservice.StartWorkflowExecutionRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -664,7 +667,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numVisibilityRequests; i++ {
 				_, err = client.ListWorkflowExecutions(
 					context.Background(),
-					&workflowservice.ListWorkflowExecutionsRequest{},
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -675,7 +680,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numReplicationInducingRequests; i++ {
 				_, err = client.RegisterNamespace(
 					context.Background(),
-					&workflowservice.RegisterNamespaceRequest{},
+					&workflowservice.RegisterNamespaceRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
