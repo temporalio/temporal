@@ -28,28 +28,28 @@ import (
 )
 
 type (
-	NexusIncomingServicesRow struct {
-		ServiceID    []byte
+	NexusEndpointsRow struct {
+		ID           []byte
 		Version      int64
 		Data         []byte
 		DataEncoding string
 	}
 
-	ListNexusIncomingServicesRequest struct {
-		LastServiceID []byte
-		Limit         int
+	ListNexusEndpointsRequest struct {
+		LastID []byte
+		Limit  int
 	}
 
-	// NexusIncomingServices is the SQL persistence interface for incoming Nexus services
-	NexusIncomingServices interface {
-		InitializeNexusIncomingServicesTableVersion(ctx context.Context) (sql.Result, error)
-		IncrementNexusIncomingServicesTableVersion(ctx context.Context, lastKnownTableVersion int64) (sql.Result, error)
-		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
+	// NexusEndpoints is the SQL persistence interface for Nexus endpoints
+	NexusEndpoints interface {
+		InitializeNexusEndpointsTableVersion(ctx context.Context) (sql.Result, error)
+		IncrementNexusEndpointsTableVersion(ctx context.Context, lastKnownTableVersion int64) (sql.Result, error)
+		GetNexusEndpointsTableVersion(ctx context.Context) (int64, error)
 
-		InsertIntoNexusIncomingServices(ctx context.Context, row *NexusIncomingServicesRow) (sql.Result, error)
-		UpdateNexusIncomingService(ctx context.Context, row *NexusIncomingServicesRow) (sql.Result, error)
-		GetNexusIncomingServiceByID(ctx context.Context, serviceID []byte) (*NexusIncomingServicesRow, error)
-		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) ([]NexusIncomingServicesRow, error)
-		DeleteFromNexusIncomingServices(ctx context.Context, serviceID []byte) (sql.Result, error)
+		InsertIntoNexusEndpoints(ctx context.Context, row *NexusEndpointsRow) (sql.Result, error)
+		UpdateNexusEndpoint(ctx context.Context, row *NexusEndpointsRow) (sql.Result, error)
+		GetNexusEndpointByID(ctx context.Context, serviceID []byte) (*NexusEndpointsRow, error)
+		ListNexusEndpoints(ctx context.Context, request *ListNexusEndpointsRequest) ([]NexusEndpointsRow, error)
+		DeleteFromNexusEndpoints(ctx context.Context, id []byte) (sql.Result, error)
 	}
 )

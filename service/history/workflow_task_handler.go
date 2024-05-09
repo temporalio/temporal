@@ -335,7 +335,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
-		err := ch(handler.mutableState, validator, handler.workflowTaskCompletedID, command)
+		err := ch(ctx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
 		var failWFTErr workflow.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
 			if failWFTErr.FailWorkflow {

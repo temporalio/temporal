@@ -21,7 +21,7 @@ require (
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.9
-	github.com/nexus-rpc/sdk-go v0.0.7
+	github.com/nexus-rpc/sdk-go v0.0.8-0.20240502185337-2b47041a2cc2
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
@@ -44,7 +44,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.26.0
 	go.opentelemetry.io/otel/sdk v1.26.0
 	go.opentelemetry.io/otel/sdk/metric v1.26.0
-	go.temporal.io/api v1.32.1-0.20240425235436-fa9b9c7c3dc8
+	go.temporal.io/api v1.32.1-0.20240506171507-d8690dde1d05
 	go.temporal.io/sdk v1.26.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0

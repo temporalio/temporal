@@ -118,10 +118,10 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			clusterMetadataStore.EXPECT().GetClusterMetadata(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
 			dataStoreFactory.EXPECT().NewClusterMetadataStore().AnyTimes().Return(clusterMetadataStore, nil)
 
-			nexusStore := mock.NewMockNexusIncomingServiceStore(ctr)
-			nexusStore.EXPECT().DeleteNexusIncomingService(gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
-			nexusStore.EXPECT().ListNexusIncomingServices(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
-			dataStoreFactory.EXPECT().NewNexusIncomingServiceStore().AnyTimes().Return(nexusStore, nil)
+			nexusStore := mock.NewMockNexusEndpointStore(ctr)
+			nexusStore.EXPECT().DeleteNexusEndpoint(gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
+			nexusStore.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
+			dataStoreFactory.EXPECT().NewNexusEndpointStore().AnyTimes().Return(nexusStore, nil)
 
 			taskStore := mock.NewMockTaskStore(ctr)
 			taskStore.EXPECT().GetTasks(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
@@ -160,7 +160,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			executionManager, _ := factory.NewExecutionManager()
 			metadataManager, _ := factory.NewMetadataManager()
 			clusterMetadataManager, _ := factory.NewClusterMetadataManager()
-			nexusManager, _ := factory.NewNexusIncomingServiceManager()
+			nexusManager, _ := factory.NewNexusEndpointManager()
 			namespaceQueue, _ := factory.NewNamespaceReplicationQueue()
 
 			// Make calls to different manager objects to verify that RPS is enforced.
@@ -193,9 +193,9 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 					},
 				},
 				{
-					name: "DeleteNexusIncomingService",
+					name: "DeleteNexusEndpoint",
 					call: func() error {
-						return nexusManager.DeleteNexusIncomingService(context.Background(), &persistence.DeleteNexusIncomingServiceRequest{})
+						return nexusManager.DeleteNexusEndpoint(context.Background(), &persistence.DeleteNexusEndpointRequest{})
 					},
 				},
 				{

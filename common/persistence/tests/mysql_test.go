@@ -592,17 +592,17 @@ func TestMySQLQueueV2(t *testing.T) {
 	RunQueueV2TestSuiteForSQL(t, testData.Factory)
 }
 
-func TestMySQLNexusIncomingServicePersistence(t *testing.T) {
+func TestMySQLNexusEndpointPersistence(t *testing.T) {
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
-	store, err := testData.Factory.NewNexusIncomingServiceStore()
+	store, err := testData.Factory.NewNexusEndpointStore()
 	if err != nil {
-		t.Fatalf("unable to create MySQL NexusIncomingServiceStore: %v", err)
+		t.Fatalf("unable to create MySQL NexusEndpointStore: %v", err)
 	}
 
 	tableVersion := atomic.Int64{}
 	t.Run("Generic", func(t *testing.T) {
-		RunNexusIncomingServiceTestSuite(t, store, &tableVersion)
+		RunNexusEndpointTestSuite(t, store, &tableVersion)
 	})
 }
