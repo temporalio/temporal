@@ -32,6 +32,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
@@ -69,12 +71,15 @@ func (d *plugin) CreateDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	metrics metrics.Handler,
 ) (sqlplugin.DB, error) {
-	conn, err := d.createDBConnection(cfg, r)
-	if err != nil {
-		return nil, err
+	connect := func() (*sqlx.DB, error) {
+		return d.createDBConnection(cfg, r)
 	}
-	db := newDB(dbKind, cfg.DatabaseName, d.d, conn, nil)
+	needsRefresh := d.d.IsConnNeedsRefreshError
+	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metrics)
+	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }
 
@@ -83,12 +88,15 @@ func (d *plugin) CreateAdminDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	metrics metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
-	conn, err := d.createDBConnection(cfg, r)
-	if err != nil {
-		return nil, err
+	connect := func() (*sqlx.DB, error) {
+		return d.createDBConnection(cfg, r)
 	}
-	db := newDB(dbKind, cfg.DatabaseName, d.d, conn, nil)
+	needsRefresh := d.d.IsConnNeedsRefreshError
+	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metrics)
+	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }
 

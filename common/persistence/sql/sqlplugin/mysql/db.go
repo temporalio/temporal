@@ -26,6 +26,8 @@ package mysql
 
 import (
 	"context"
+	"database/sql/driver"
+	"errors"
 	"fmt"
 
 	"github.com/go-sql-driver/mysql"
@@ -58,6 +60,11 @@ const ErrDupEntryCode = 1062
 func (mdb *db) IsDupEntryError(err error) bool {
 	sqlErr, ok := err.(*mysql.MySQLError)
 	return ok && sqlErr.Number == ErrDupEntryCode
+}
+
+// Time to reset
+func (mdb *db) isConnNeedsRefreshError(err error) bool {
+	return errors.Is(err, driver.ErrBadConn)
 }
 
 // newDB returns an instance of DB, which is a logical
@@ -99,6 +106,10 @@ func (mdb *db) Commit() error {
 // Rollback triggers rollback of a previously started transaction
 func (mdb *db) Rollback() error {
 	return mdb.tx.Rollback()
+}
+
+func (mdb *db) Refresh() error {
+	panic("unimplemented")
 }
 
 // Close closes the connection to the mysql db

@@ -52,7 +52,7 @@ func (pdb *db) InsertIntoShards(
 	ctx context.Context,
 	row *sqlplugin.ShardsRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		createShardQry,
 		row.ShardID,
 		row.RangeID,
@@ -66,7 +66,7 @@ func (pdb *db) UpdateShards(
 	ctx context.Context,
 	row *sqlplugin.ShardsRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		updateShardQry,
 		row.RangeID,
 		row.Data,
@@ -81,7 +81,7 @@ func (pdb *db) SelectFromShards(
 	filter sqlplugin.ShardsFilter,
 ) (*sqlplugin.ShardsRow, error) {
 	var row sqlplugin.ShardsRow
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&row,
 		getShardQry,
 		filter.ShardID,
@@ -97,8 +97,11 @@ func (pdb *db) ReadLockShards(
 	ctx context.Context,
 	filter sqlplugin.ShardsFilter,
 ) (int64, error) {
+	if pdb.tx == nil {
+		panic("cannot acquire shard read lock without a transaction")
+	}
 	var rangeID int64
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&rangeID,
 		readLockShardQry,
 		filter.ShardID,
@@ -112,7 +115,10 @@ func (pdb *db) WriteLockShards(
 	filter sqlplugin.ShardsFilter,
 ) (int64, error) {
 	var rangeID int64
-	err := pdb.conn.GetContext(ctx,
+	if pdb.tx == nil {
+		panic("cannot acquire shard write lock without a transaction")
+	}
+	err := pdb.GetContext(ctx,
 		&rangeID,
 		lockShardQry,
 		filter.ShardID,

@@ -28,6 +28,8 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql/session"
@@ -52,6 +54,8 @@ func (p *plugin) CreateDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	_ log.Logger,
+	_ metrics.Handler,
 ) (sqlplugin.DB, error) {
 	conn, err := p.createDBConnection(dbKind, cfg, r)
 	if err != nil {
@@ -66,6 +70,8 @@ func (p *plugin) CreateAdminDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	_ log.Logger,
+	_ metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
 	conn, err := p.createDBConnection(dbKind, cfg, r)
 	if err != nil {

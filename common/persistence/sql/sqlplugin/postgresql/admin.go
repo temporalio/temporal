@@ -71,6 +71,15 @@ const (
 	dropTableQuery = "DROP TABLE %v"
 )
 
+// Exec executes a sql statement
+func (pdb *db) Exec(stmt string, args ...any) error {
+	_, err := pdb.DB().Exec(stmt, args...)
+	if err != nil {
+		pdb.handleError(err)
+	}
+	return err
+}
+
 // CreateSchemaVersionTables sets up the schema version tables
 func (pdb *db) CreateSchemaVersionTables() error {
 	if err := pdb.Exec(createSchemaVersionTableQuery); err != nil {
@@ -82,7 +91,10 @@ func (pdb *db) CreateSchemaVersionTables() error {
 // ReadSchemaVersion returns the current schema version for the keyspace
 func (pdb *db) ReadSchemaVersion(database string) (string, error) {
 	var version string
-	err := pdb.db.Get(&version, readSchemaVersionQuery, database)
+	err := pdb.DB().Get(&version, readSchemaVersionQuery, database)
+	if err != nil {
+		pdb.handleError(err)
+	}
 	return version, err
 }
 
@@ -94,19 +106,20 @@ func (pdb *db) UpdateSchemaVersion(database string, newVersion string, minCompat
 // WriteSchemaUpdateLog adds an entry to the schema update history table
 func (pdb *db) WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error {
 	now := time.Now().UTC()
-	return pdb.Exec(writeSchemaUpdateHistoryQuery, now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, desc)
-}
-
-// Exec executes a sql statement
-func (pdb *db) Exec(stmt string, args ...interface{}) error {
-	_, err := pdb.db.Exec(stmt, args...)
+	err := pdb.Exec(writeSchemaUpdateHistoryQuery, now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, desc)
+	if err != nil {
+		pdb.handleError(err)
+	}
 	return err
 }
 
 // ListTables returns a list of tables in this database
 func (pdb *db) ListTables(database string) ([]string, error) {
 	var tables []string
-	err := pdb.db.Select(&tables, listTablesQuery)
+	err := pdb.Select(&tables, listTablesQuery)
+	if err != nil {
+		pdb.handleError(err)
+	}
 	return tables, err
 }
 
