@@ -78,7 +78,7 @@ func WrapEventLoop(
 		if err == nil { // shutdown case
 			return
 		}
-		// if it is stream error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
+
 		if streamError, ok := err.(*StreamError); ok {
 			metrics.ReplicationStreamError.With(metricsHandler).Record(
 				int64(1),
@@ -94,6 +94,7 @@ func WrapEventLoop(
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
 		}
+		// if it is not a retryable error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
 		if !IsRetryableError(err) {
 			return
 		}
