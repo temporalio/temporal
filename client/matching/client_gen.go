@@ -75,11 +75,11 @@ func (c *clientImpl) CancelOutstandingPoll(
 	return client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
-func (c *clientImpl) CreateNexusIncomingService(
+func (c *clientImpl) CreateNexusEndpoint(
 	ctx context.Context,
-	request *matchingservice.CreateNexusIncomingServiceRequest,
+	request *matchingservice.CreateNexusEndpointRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
+) (*matchingservice.CreateNexusEndpointResponse, error) {
 
 	p, err := tqid.NormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
@@ -91,14 +91,14 @@ func (c *clientImpl) CreateNexusIncomingService(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.CreateNexusIncomingService(ctx, request, opts...)
+	return client.CreateNexusEndpoint(ctx, request, opts...)
 }
 
-func (c *clientImpl) DeleteNexusIncomingService(
+func (c *clientImpl) DeleteNexusEndpoint(
 	ctx context.Context,
-	request *matchingservice.DeleteNexusIncomingServiceRequest,
+	request *matchingservice.DeleteNexusEndpointRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
+) (*matchingservice.DeleteNexusEndpointResponse, error) {
 
 	p, err := tqid.NormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
@@ -110,7 +110,7 @@ func (c *clientImpl) DeleteNexusIncomingService(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DeleteNexusIncomingService(ctx, request, opts...)
+	return client.DeleteNexusEndpoint(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeTaskQueue(
@@ -265,11 +265,11 @@ func (c *clientImpl) GetWorkerVersioningRules(
 	return client.GetWorkerVersioningRules(ctx, request, opts...)
 }
 
-func (c *clientImpl) ListNexusIncomingServices(
+func (c *clientImpl) ListNexusEndpoints(
 	ctx context.Context,
-	request *matchingservice.ListNexusIncomingServicesRequest,
+	request *matchingservice.ListNexusEndpointsRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.ListNexusIncomingServicesResponse, error) {
+) (*matchingservice.ListNexusEndpointsResponse, error) {
 
 	p, err := tqid.NormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
@@ -281,7 +281,7 @@ func (c *clientImpl) ListNexusIncomingServices(
 	}
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.ListNexusIncomingServices(ctx, request, opts...)
+	return client.ListNexusEndpoints(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListTaskQueuePartitions(
@@ -398,11 +398,11 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	return client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateNexusIncomingService(
+func (c *clientImpl) UpdateNexusEndpoint(
 	ctx context.Context,
-	request *matchingservice.UpdateNexusIncomingServiceRequest,
+	request *matchingservice.UpdateNexusEndpointRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
+) (*matchingservice.UpdateNexusEndpointResponse, error) {
 
 	p, err := tqid.NormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
@@ -414,7 +414,7 @@ func (c *clientImpl) UpdateNexusIncomingService(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.UpdateNexusIncomingService(ctx, request, opts...)
+	return client.UpdateNexusEndpoint(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateTaskQueueUserData(

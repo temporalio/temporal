@@ -237,7 +237,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	// replication, so we use a context with a timeout to ensure that the test doesn't hang forever when we try to
 	// receive from a channel.
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	// Register a namespace.

@@ -61,8 +61,8 @@ type (
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
 		// NewHistoryTaskQueueManager returns a new manager for history task queues
 		NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, error)
-		// NewNexusIncomingServiceManager returns a new manager for nexus services
-		NewNexusIncomingServiceManager() (p.NexusIncomingServiceManager, error)
+		// NewNexusEndpointManager returns a new manager for nexus endpoints
+		NewNexusEndpointManager() (p.NexusEndpointManager, error)
 	}
 
 	factoryImpl struct {
@@ -228,20 +228,20 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, e
 	return p.NewHistoryTaskQueueManager(q, serialization.NewSerializer()), nil
 }
 
-func (f *factoryImpl) NewNexusIncomingServiceManager() (p.NexusIncomingServiceManager, error) {
-	store, err := f.dataStoreFactory.NewNexusIncomingServiceStore()
+func (f *factoryImpl) NewNexusEndpointManager() (p.NexusEndpointManager, error) {
+	store, err := f.dataStoreFactory.NewNexusEndpointStore()
 	if err != nil {
 		return nil, err
 	}
 
-	result := p.NewNexusIncomingServiceManager(store, f.serializer, f.logger)
+	result := p.NewNexusEndpointManager(store, f.serializer, f.logger)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
-		result = p.NewNexusIncomingServicePersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+		result = p.NewNexusEndpointPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewNexusIncomingServicePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = p.NewNexusEndpointPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewNexusIncomingServicePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = p.NewNexusEndpointPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 

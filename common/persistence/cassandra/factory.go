@@ -122,9 +122,9 @@ func (f *Factory) NewQueueV2() (p.QueueV2, error) {
 	return NewQueueV2Store(f.session, f.logger), nil
 }
 
-// NewNexusIncomingServiceStore returns a new NexusIncomingServiceStore
-func (f *Factory) NewNexusIncomingServiceStore() (p.NexusIncomingServiceStore, error) {
-	return NewNexusIncomingServiceStore(f.session, f.logger), nil
+// NewNexusEndpointStore returns a new NexusEndpointStore
+func (f *Factory) NewNexusEndpointStore() (p.NexusEndpointStore, error) {
+	return NewNexusEndpointStore(f.session, f.logger), nil
 }
 
 // Close closes the factory

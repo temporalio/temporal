@@ -466,45 +466,48 @@ message CallbackInfo {
 
 // NexusOperationInfo contains the state of a nexus operation.
 message NexusOperationInfo {
-    // Service name.
+    // Endpoint name. 
     // Resolved to a URL via the outgoing service registry for this workflow's namespace.
-    string service = 1;
+    string endpoint = 1;
+
+    // Service name.
+    string service = 2;
     // Operation name.
-    string operation = 2;
+    string operation = 3;
 
     // If set the state machine will remove itself from the HSM tree on completion.
-    bool delete_on_completion = 3;
+    bool delete_on_completion = 4;
 
     // Token for fetching the scheduled event.
-    bytes scheduled_event_token = 4;
+    bytes scheduled_event_token = 5;
 
     // Operation ID. Only set for asynchronous operations after a successful StartOperation call.
-    string operation_id = 5;
+    string operation_id = 6;
 
     // Schedule-to-close timeout for this operation.
     // This is the only timeout settable by a workflow.
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "since" is needed here. --)
-    google.protobuf.Duration schedule_to_close_timeout = 6;
+    google.protobuf.Duration schedule_to_close_timeout = 7;
 
     // The time when the operation was scheduled.
-    google.protobuf.Timestamp scheduled_time = 7;
+    google.protobuf.Timestamp scheduled_time = 8;
 
     // Unique request ID allocated for all retry attempts of the StartOperation request.
-    string request_id = 8;
+    string request_id = 9;
 
-    temporal.server.api.enums.v1.NexusOperationState state = 9;
+    temporal.server.api.enums.v1.NexusOperationState state = 10;
 
     // The number of attempts made to deliver the start operation request.
     // This number represents a minimum bound since the attempt is incremented after the request completes.
-    int32 attempt = 10;
+    int32 attempt = 11;
 
     // The time when the last attempt completed.
-    google.protobuf.Timestamp last_attempt_complete_time = 11;
+    google.protobuf.Timestamp last_attempt_complete_time = 12;
     // The last attempt's failure, if any.
-    temporal.api.failure.v1.Failure last_attempt_failure = 12;
+    temporal.api.failure.v1.Failure last_attempt_failure = 13;
     // The time when the next attempt is scheduled.
-    google.protobuf.Timestamp next_attempt_schedule_time = 13;
+    google.protobuf.Timestamp next_attempt_schedule_time = 14;
 }
 
 // NexusOperationCancellationInfo contains the state of a nexus operation cancelation.
