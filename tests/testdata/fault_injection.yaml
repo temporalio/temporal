@@ -5,28 +5,28 @@ faultInjection:
         methods:
           CreateWorkflowExecution:
             errors:
-              ResourceExhausted: 0.05
-              Timeout: 0.05
-              ExecuteAndTimeout: 0.05
+              ResourceExhausted: 0.005
+              Timeout: 0.005
+              ExecuteAndTimeout: 0.005
           UpdateWorkflowExecution:
             errors:
-              ResourceExhausted: 0.10
-              Timeout: 0.05
-              ExecuteAndTimeout: 0.05
+              ResourceExhausted: 0.010
+              Timeout: 0.005
+              ExecuteAndTimeout: 0.005
           GetWorkflowExecution:
             errors:
-              ResourceExhausted: 0.05
-              Timeout: 0.05
+              ResourceExhausted: 0.005
+              Timeout: 0.005
           GetCurrentExecution:
             errors:
-              ResourceExhausted: 0.05
-              Timeout: 0.05
+              ResourceExhausted: 0.005
+              Timeout: 0.005
           AppendHistoryNodes:
             errors:
-              ResourceExhausted: 0.05
-              Timeout: 0.05
-              ExecuteAndTimeout: 0.05
+              ResourceExhausted: 0.005
+              Timeout: 0.005
+              ExecuteAndTimeout: 0.005
           ReadHistoryBranch:
             errors:
-              ResourceExhausted: 0.05
-              Timeout: 0.10
+              ResourceExhausted: 0.005
+              Timeout: 0.010
