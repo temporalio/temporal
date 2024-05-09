@@ -31,62 +31,62 @@ import (
 )
 
 type (
-	faultInjectionNexusIncomingServiceStore struct {
-		baseStore persistence.NexusIncomingServiceStore
+	faultInjectionNexusEndpointStore struct {
+		baseStore persistence.NexusEndpointStore
 		generator faultGenerator
 	}
 )
 
-func newFaultInjectionNexusIncomingServiceStore(
-	baseStore persistence.NexusIncomingServiceStore,
+func newFaultInjectionNexusEndpointStore(
+	baseStore persistence.NexusEndpointStore,
 	generator faultGenerator,
-) *faultInjectionNexusIncomingServiceStore {
-	return &faultInjectionNexusIncomingServiceStore{
+) *faultInjectionNexusEndpointStore {
+	return &faultInjectionNexusEndpointStore{
 		baseStore: baseStore,
 		generator: generator,
 	}
 }
 
-func (n *faultInjectionNexusIncomingServiceStore) GetName() string {
+func (n *faultInjectionNexusEndpointStore) GetName() string {
 	return n.baseStore.GetName()
 }
 
-func (n *faultInjectionNexusIncomingServiceStore) Close() {
+func (n *faultInjectionNexusEndpointStore) Close() {
 	n.baseStore.Close()
 }
 
-func (n *faultInjectionNexusIncomingServiceStore) GetNexusIncomingService(
+func (n *faultInjectionNexusEndpointStore) GetNexusEndpoint(
 	ctx context.Context,
-	request *persistence.GetNexusIncomingServiceRequest,
-) (*persistence.InternalNexusIncomingService, error) {
-	return inject1(n.generator.generate(), func() (*persistence.InternalNexusIncomingService, error) {
-		return n.baseStore.GetNexusIncomingService(ctx, request)
+	request *persistence.GetNexusEndpointRequest,
+) (*persistence.InternalNexusEndpoint, error) {
+	return inject1(n.generator.generate(), func() (*persistence.InternalNexusEndpoint, error) {
+		return n.baseStore.GetNexusEndpoint(ctx, request)
 	})
 }
 
-func (n *faultInjectionNexusIncomingServiceStore) ListNexusIncomingServices(
+func (n *faultInjectionNexusEndpointStore) ListNexusEndpoints(
 	ctx context.Context,
-	request *persistence.ListNexusIncomingServicesRequest,
-) (*persistence.InternalListNexusIncomingServicesResponse, error) {
-	return inject1(n.generator.generate(), func() (*persistence.InternalListNexusIncomingServicesResponse, error) {
-		return n.baseStore.ListNexusIncomingServices(ctx, request)
+	request *persistence.ListNexusEndpointsRequest,
+) (*persistence.InternalListNexusEndpointsResponse, error) {
+	return inject1(n.generator.generate(), func() (*persistence.InternalListNexusEndpointsResponse, error) {
+		return n.baseStore.ListNexusEndpoints(ctx, request)
 	})
 }
 
-func (n *faultInjectionNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
+func (n *faultInjectionNexusEndpointStore) CreateOrUpdateNexusEndpoint(
 	ctx context.Context,
-	request *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest,
+	request *persistence.InternalCreateOrUpdateNexusEndpointRequest,
 ) error {
 	return inject0(n.generator.generate(), func() error {
-		return n.baseStore.CreateOrUpdateNexusIncomingService(ctx, request)
+		return n.baseStore.CreateOrUpdateNexusEndpoint(ctx, request)
 	})
 }
 
-func (n *faultInjectionNexusIncomingServiceStore) DeleteNexusIncomingService(
+func (n *faultInjectionNexusEndpointStore) DeleteNexusEndpoint(
 	ctx context.Context,
-	request *persistence.DeleteNexusIncomingServiceRequest,
+	request *persistence.DeleteNexusEndpointRequest,
 ) error {
 	return inject0(n.generator.generate(), func() error {
-		return n.baseStore.DeleteNexusIncomingService(ctx, request)
+		return n.baseStore.DeleteNexusEndpoint(ctx, request)
 	})
 }

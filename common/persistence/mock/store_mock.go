@@ -117,19 +117,19 @@ func (mr *MockDataStoreFactoryMockRecorder) NewMetadataStore() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewMetadataStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewMetadataStore))
 }
 
-// NewNexusIncomingServiceStore mocks base method.
-func (m *MockDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusIncomingServiceStore, error) {
+// NewNexusEndpointStore mocks base method.
+func (m *MockDataStoreFactory) NewNexusEndpointStore() (persistence.NexusEndpointStore, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewNexusIncomingServiceStore")
-	ret0, _ := ret[0].(persistence.NexusIncomingServiceStore)
+	ret := m.ctrl.Call(m, "NewNexusEndpointStore")
+	ret0, _ := ret[0].(persistence.NexusEndpointStore)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// NewNexusIncomingServiceStore indicates an expected call of NewNexusIncomingServiceStore.
-func (mr *MockDataStoreFactoryMockRecorder) NewNexusIncomingServiceStore() *gomock.Call {
+// NewNexusEndpointStore indicates an expected call of NewNexusEndpointStore.
+func (mr *MockDataStoreFactoryMockRecorder) NewNexusEndpointStore() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewNexusIncomingServiceStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewNexusIncomingServiceStore))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewNexusEndpointStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewNexusEndpointStore))
 }
 
 // NewQueue mocks base method.

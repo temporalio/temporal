@@ -68,8 +68,8 @@ type (
 		NewQueueV2() (QueueV2, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (ClusterMetadataStore, error)
-		// NewNexusIncomingServiceStore returns a new nexus service store
-		NewNexusIncomingServiceStore() (NexusIncomingServiceStore, error)
+		// NewNexusEndpointStore returns a new nexus service store
+		NewNexusEndpointStore() (NexusEndpointStore, error)
 	}
 
 	// ShardStore is a lower level of ShardManager

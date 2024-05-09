@@ -34,14 +34,14 @@ type (
 		baseFactory persistence.DataStoreFactory
 		fiConfig    *config.FaultInjection
 
-		taskStore                 persistence.TaskStore
-		shardStore                persistence.ShardStore
-		metadataStore             persistence.MetadataStore
-		executionStore            persistence.ExecutionStore
-		queue                     persistence.Queue
-		queueV2                   persistence.QueueV2
-		clusterMDStore            persistence.ClusterMetadataStore
-		nexusIncomingServiceStore persistence.NexusIncomingServiceStore
+		taskStore          persistence.TaskStore
+		shardStore         persistence.ShardStore
+		metadataStore      persistence.MetadataStore
+		executionStore     persistence.ExecutionStore
+		queue              persistence.Queue
+		queueV2            persistence.QueueV2
+		clusterMDStore     persistence.ClusterMetadataStore
+		nexusEndpointStore persistence.NexusEndpointStore
 	}
 )
 
@@ -184,20 +184,20 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 	return d.clusterMDStore, nil
 }
 
-func (d *FaultInjectionDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusIncomingServiceStore, error) {
-	if d.nexusIncomingServiceStore == nil {
-		baseStore, err := d.baseFactory.NewNexusIncomingServiceStore()
+func (d *FaultInjectionDataStoreFactory) NewNexusEndpointStore() (persistence.NexusEndpointStore, error) {
+	if d.nexusEndpointStore == nil {
+		baseStore, err := d.baseFactory.NewNexusEndpointStore()
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.NexusIncomingServiceStoreName]; ok && len(storeConfig.Methods) > 0 {
-			d.nexusIncomingServiceStore = newFaultInjectionNexusIncomingServiceStore(
+		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.NexusEndpointStoreName]; ok && len(storeConfig.Methods) > 0 {
+			d.nexusEndpointStore = newFaultInjectionNexusEndpointStore(
 				baseStore,
 				newStoreFaultGenerator(&storeConfig),
 			)
 		} else {
-			d.nexusIncomingServiceStore = baseStore
+			d.nexusEndpointStore = baseStore
 		}
 	}
-	return d.nexusIncomingServiceStore, nil
+	return d.nexusEndpointStore, nil
 }
