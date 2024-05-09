@@ -31,35 +31,35 @@ import (
 )
 
 type (
-	FaultInjectionShardStore struct {
+	faultInjectionShardStore struct {
 		baseStore persistence.ShardStore
 		generator faultGenerator
 	}
 )
 
-func NewFaultInjectionShardStore(
+func newFaultInjectionShardStore(
 	baseStore persistence.ShardStore,
 	generator faultGenerator,
-) *FaultInjectionShardStore {
-	return &FaultInjectionShardStore{
+) *faultInjectionShardStore {
+	return &faultInjectionShardStore{
 		baseStore: baseStore,
 		generator: generator,
 	}
 }
 
-func (s *FaultInjectionShardStore) Close() {
+func (s *faultInjectionShardStore) Close() {
 	s.baseStore.Close()
 }
 
-func (s *FaultInjectionShardStore) GetName() string {
+func (s *faultInjectionShardStore) GetName() string {
 	return s.baseStore.GetName()
 }
 
-func (s *FaultInjectionShardStore) GetClusterName() string {
+func (s *faultInjectionShardStore) GetClusterName() string {
 	return s.baseStore.GetClusterName()
 }
 
-func (s *FaultInjectionShardStore) GetOrCreateShard(
+func (s *faultInjectionShardStore) GetOrCreateShard(
 	ctx context.Context,
 	request *persistence.InternalGetOrCreateShardRequest,
 ) (*persistence.InternalGetOrCreateShardResponse, error) {
@@ -68,7 +68,7 @@ func (s *FaultInjectionShardStore) GetOrCreateShard(
 	})
 }
 
-func (s *FaultInjectionShardStore) UpdateShard(
+func (s *faultInjectionShardStore) UpdateShard(
 	ctx context.Context,
 	request *persistence.InternalUpdateShardRequest,
 ) error {
@@ -77,7 +77,7 @@ func (s *FaultInjectionShardStore) UpdateShard(
 	})
 }
 
-func (s *FaultInjectionShardStore) AssertShardOwnership(
+func (s *faultInjectionShardStore) AssertShardOwnership(
 	ctx context.Context,
 	request *persistence.AssertShardOwnershipRequest,
 ) error {

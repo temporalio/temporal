@@ -33,27 +33,27 @@ import (
 )
 
 type (
-	FaultInjectionQueue struct {
+	faultInjectionQueue struct {
 		baseStore persistence.Queue
 		generator faultGenerator
 	}
 )
 
-func NewFaultInjectionQueue(
+func newFaultInjectionQueue(
 	baseStore persistence.Queue,
 	generator faultGenerator,
-) *FaultInjectionQueue {
-	return &FaultInjectionQueue{
+) *faultInjectionQueue {
+	return &faultInjectionQueue{
 		baseStore: baseStore,
 		generator: generator,
 	}
 }
 
-func (q *FaultInjectionQueue) Close() {
+func (q *faultInjectionQueue) Close() {
 	q.baseStore.Close()
 }
 
-func (q *FaultInjectionQueue) Init(
+func (q *faultInjectionQueue) Init(
 	ctx context.Context,
 	blob *commonpb.DataBlob,
 ) error {
@@ -63,7 +63,7 @@ func (q *FaultInjectionQueue) Init(
 	})
 }
 
-func (q *FaultInjectionQueue) EnqueueMessage(
+func (q *faultInjectionQueue) EnqueueMessage(
 	ctx context.Context,
 	blob *commonpb.DataBlob,
 ) error {
@@ -72,7 +72,7 @@ func (q *FaultInjectionQueue) EnqueueMessage(
 	})
 }
 
-func (q *FaultInjectionQueue) ReadMessages(
+func (q *faultInjectionQueue) ReadMessages(
 	ctx context.Context,
 	lastMessageID int64,
 	maxCount int,
@@ -82,7 +82,7 @@ func (q *FaultInjectionQueue) ReadMessages(
 	})
 }
 
-func (q *FaultInjectionQueue) DeleteMessagesBefore(
+func (q *faultInjectionQueue) DeleteMessagesBefore(
 	ctx context.Context,
 	messageID int64,
 ) error {
@@ -91,7 +91,7 @@ func (q *FaultInjectionQueue) DeleteMessagesBefore(
 	})
 }
 
-func (q *FaultInjectionQueue) UpdateAckLevel(
+func (q *faultInjectionQueue) UpdateAckLevel(
 	ctx context.Context,
 	metadata *persistence.InternalQueueMetadata,
 ) error {
@@ -100,7 +100,7 @@ func (q *FaultInjectionQueue) UpdateAckLevel(
 	})
 }
 
-func (q *FaultInjectionQueue) GetAckLevels(
+func (q *faultInjectionQueue) GetAckLevels(
 	ctx context.Context,
 ) (*persistence.InternalQueueMetadata, error) {
 	return inject1(q.generator.generate(), func() (*persistence.InternalQueueMetadata, error) {
@@ -108,7 +108,7 @@ func (q *FaultInjectionQueue) GetAckLevels(
 	})
 }
 
-func (q *FaultInjectionQueue) EnqueueMessageToDLQ(
+func (q *faultInjectionQueue) EnqueueMessageToDLQ(
 	ctx context.Context,
 	blob *commonpb.DataBlob,
 ) (int64, error) {
@@ -117,7 +117,7 @@ func (q *FaultInjectionQueue) EnqueueMessageToDLQ(
 	})
 }
 
-func (q *FaultInjectionQueue) ReadMessagesFromDLQ(
+func (q *faultInjectionQueue) ReadMessagesFromDLQ(
 	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
@@ -129,7 +129,7 @@ func (q *FaultInjectionQueue) ReadMessagesFromDLQ(
 	})
 }
 
-func (q *FaultInjectionQueue) DeleteMessageFromDLQ(
+func (q *faultInjectionQueue) DeleteMessageFromDLQ(
 	ctx context.Context,
 	messageID int64,
 ) error {
@@ -138,7 +138,7 @@ func (q *FaultInjectionQueue) DeleteMessageFromDLQ(
 	})
 }
 
-func (q *FaultInjectionQueue) RangeDeleteMessagesFromDLQ(
+func (q *faultInjectionQueue) RangeDeleteMessagesFromDLQ(
 	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
@@ -148,7 +148,7 @@ func (q *FaultInjectionQueue) RangeDeleteMessagesFromDLQ(
 	})
 }
 
-func (q *FaultInjectionQueue) UpdateDLQAckLevel(
+func (q *faultInjectionQueue) UpdateDLQAckLevel(
 	ctx context.Context,
 	metadata *persistence.InternalQueueMetadata,
 ) error {
@@ -157,7 +157,7 @@ func (q *FaultInjectionQueue) UpdateDLQAckLevel(
 	})
 }
 
-func (q *FaultInjectionQueue) GetDLQAckLevels(
+func (q *faultInjectionQueue) GetDLQAckLevels(
 	ctx context.Context,
 ) (*persistence.InternalQueueMetadata, error) {
 	return inject1(q.generator.generate(), func() (*persistence.InternalQueueMetadata, error) {

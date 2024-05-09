@@ -31,31 +31,31 @@ import (
 )
 
 type (
-	FaultInjectionClusterMetadataStore struct {
+	faultInjectionClusterMetadataStore struct {
 		baseStore persistence.ClusterMetadataStore
 		generator faultGenerator
 	}
 )
 
-func NewFaultInjectionClusterMetadataStore(
+func newFaultInjectionClusterMetadataStore(
 	baseStore persistence.ClusterMetadataStore,
 	generator faultGenerator,
-) *FaultInjectionClusterMetadataStore {
-	return &FaultInjectionClusterMetadataStore{
+) *faultInjectionClusterMetadataStore {
+	return &faultInjectionClusterMetadataStore{
 		baseStore: baseStore,
 		generator: generator,
 	}
 }
 
-func (c *FaultInjectionClusterMetadataStore) Close() {
+func (c *faultInjectionClusterMetadataStore) Close() {
 	c.baseStore.Close()
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetName() string {
+func (c *faultInjectionClusterMetadataStore) GetName() string {
 	return c.baseStore.GetName()
 }
 
-func (c *FaultInjectionClusterMetadataStore) ListClusterMetadata(
+func (c *faultInjectionClusterMetadataStore) ListClusterMetadata(
 	ctx context.Context,
 	request *persistence.InternalListClusterMetadataRequest,
 ) (*persistence.InternalListClusterMetadataResponse, error) {
@@ -64,7 +64,7 @@ func (c *FaultInjectionClusterMetadataStore) ListClusterMetadata(
 	})
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(
+func (c *faultInjectionClusterMetadataStore) GetClusterMetadata(
 	ctx context.Context,
 	request *persistence.InternalGetClusterMetadataRequest,
 ) (*persistence.InternalGetClusterMetadataResponse, error) {
@@ -73,7 +73,7 @@ func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(
 	})
 }
 
-func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(
+func (c *faultInjectionClusterMetadataStore) SaveClusterMetadata(
 	ctx context.Context,
 	request *persistence.InternalSaveClusterMetadataRequest,
 ) (bool, error) {
@@ -82,7 +82,7 @@ func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(
 	})
 }
 
-func (c *FaultInjectionClusterMetadataStore) DeleteClusterMetadata(
+func (c *faultInjectionClusterMetadataStore) DeleteClusterMetadata(
 	ctx context.Context,
 	request *persistence.InternalDeleteClusterMetadataRequest,
 ) error {
@@ -91,7 +91,7 @@ func (c *FaultInjectionClusterMetadataStore) DeleteClusterMetadata(
 	})
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetClusterMembers(
+func (c *faultInjectionClusterMetadataStore) GetClusterMembers(
 	ctx context.Context,
 	request *persistence.GetClusterMembersRequest,
 ) (*persistence.GetClusterMembersResponse, error) {
@@ -100,7 +100,7 @@ func (c *FaultInjectionClusterMetadataStore) GetClusterMembers(
 	})
 }
 
-func (c *FaultInjectionClusterMetadataStore) UpsertClusterMembership(
+func (c *faultInjectionClusterMetadataStore) UpsertClusterMembership(
 	ctx context.Context,
 	request *persistence.UpsertClusterMembershipRequest,
 ) error {
@@ -109,7 +109,7 @@ func (c *FaultInjectionClusterMetadataStore) UpsertClusterMembership(
 	})
 }
 
-func (c *FaultInjectionClusterMetadataStore) PruneClusterMembership(
+func (c *faultInjectionClusterMetadataStore) PruneClusterMembership(
 	ctx context.Context,
 	request *persistence.PruneClusterMembershipRequest,
 ) error {

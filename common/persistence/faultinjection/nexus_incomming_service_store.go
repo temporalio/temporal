@@ -31,31 +31,31 @@ import (
 )
 
 type (
-	FaultInjectionNexusIncomingServiceStore struct {
+	faultInjectionNexusIncomingServiceStore struct {
 		baseStore persistence.NexusIncomingServiceStore
 		generator faultGenerator
 	}
 )
 
-func NewFaultInjectionNexusIncomingServiceStore(
+func newFaultInjectionNexusIncomingServiceStore(
 	baseStore persistence.NexusIncomingServiceStore,
 	generator faultGenerator,
-) *FaultInjectionNexusIncomingServiceStore {
-	return &FaultInjectionNexusIncomingServiceStore{
+) *faultInjectionNexusIncomingServiceStore {
+	return &faultInjectionNexusIncomingServiceStore{
 		baseStore: baseStore,
 		generator: generator,
 	}
 }
 
-func (n *FaultInjectionNexusIncomingServiceStore) GetName() string {
+func (n *faultInjectionNexusIncomingServiceStore) GetName() string {
 	return n.baseStore.GetName()
 }
 
-func (n *FaultInjectionNexusIncomingServiceStore) Close() {
+func (n *faultInjectionNexusIncomingServiceStore) Close() {
 	n.baseStore.Close()
 }
 
-func (n *FaultInjectionNexusIncomingServiceStore) GetNexusIncomingService(
+func (n *faultInjectionNexusIncomingServiceStore) GetNexusIncomingService(
 	ctx context.Context,
 	request *persistence.GetNexusIncomingServiceRequest,
 ) (*persistence.InternalNexusIncomingService, error) {
@@ -64,7 +64,7 @@ func (n *FaultInjectionNexusIncomingServiceStore) GetNexusIncomingService(
 	})
 }
 
-func (n *FaultInjectionNexusIncomingServiceStore) ListNexusIncomingServices(
+func (n *faultInjectionNexusIncomingServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *persistence.ListNexusIncomingServicesRequest,
 ) (*persistence.InternalListNexusIncomingServicesResponse, error) {
@@ -73,7 +73,7 @@ func (n *FaultInjectionNexusIncomingServiceStore) ListNexusIncomingServices(
 	})
 }
 
-func (n *FaultInjectionNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
+func (n *faultInjectionNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest,
 ) error {
@@ -82,7 +82,7 @@ func (n *FaultInjectionNexusIncomingServiceStore) CreateOrUpdateNexusIncomingSer
 	})
 }
 
-func (n *FaultInjectionNexusIncomingServiceStore) DeleteNexusIncomingService(
+func (n *faultInjectionNexusIncomingServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *persistence.DeleteNexusIncomingServiceRequest,
 ) error {

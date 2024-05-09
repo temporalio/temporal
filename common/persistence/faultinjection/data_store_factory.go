@@ -34,14 +34,14 @@ type (
 		baseFactory persistence.DataStoreFactory
 		config      *config.FaultInjection
 
-		TaskStore                 *FaultInjectionTaskStore
-		ShardStore                *FaultInjectionShardStore
-		MetadataStore             *FaultInjectionMetadataStore
-		ExecutionStore            *FaultInjectionExecutionStore
-		Queue                     *FaultInjectionQueue
-		QueueV2                   *FaultInjectionQueueV2
-		ClusterMDStore            *FaultInjectionClusterMetadataStore
-		NexusIncomingServiceStore *FaultInjectionNexusIncomingServiceStore
+		taskStore                 persistence.TaskStore
+		shardStore                persistence.ShardStore
+		metadataStore             persistence.MetadataStore
+		executionStore            persistence.ExecutionStore
+		queue                     persistence.Queue
+		queueV2                   persistence.QueueV2
+		clusterMDStore            persistence.ClusterMetadataStore
+		nexusIncomingServiceStore persistence.NexusIncomingServiceStore
 	}
 )
 
@@ -60,129 +60,144 @@ func (d *FaultInjectionDataStoreFactory) Close() {
 }
 
 func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
-	if d.TaskStore == nil {
+	if d.taskStore == nil {
 		baseStore, err := d.baseFactory.NewTaskStore()
 		if err != nil {
 			return nil, err
 		}
 		if storeConfig, ok := d.config.Targets.DataStores[config.TaskStoreName]; ok {
-			d.TaskStore = NewFaultInjectionTaskStore(
+			d.taskStore = newFaultInjectionTaskStore(
 				baseStore,
 				newStoreFaultGenerator(&storeConfig),
 			)
+		} else {
+			d.taskStore = baseStore
 		}
 	}
-	return d.TaskStore, nil
+	return d.taskStore, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {
-	if d.ShardStore == nil {
+	if d.shardStore == nil {
 		baseStore, err := d.baseFactory.NewShardStore()
 		if err != nil {
 			return nil, err
 		}
 		if storeConfig, ok := d.config.Targets.DataStores[config.ShardStoreName]; ok {
-			d.ShardStore = NewFaultInjectionShardStore(
+			d.shardStore = newFaultInjectionShardStore(
 				baseStore,
 				newStoreFaultGenerator(&storeConfig),
 			)
+		} else {
+			d.shardStore = baseStore
 		}
 	}
-	return d.ShardStore, nil
+	return d.shardStore, nil
 }
 func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.MetadataStore, error) {
-	if d.MetadataStore == nil {
+	if d.metadataStore == nil {
 		baseStore, err := d.baseFactory.NewMetadataStore()
 		if err != nil {
 			return nil, err
 		}
 		if storeConfig, ok := d.config.Targets.DataStores[config.MetadataStoreName]; ok {
-			d.MetadataStore = NewFaultInjectionMetadataStore(
+			d.metadataStore = newFaultInjectionMetadataStore(
 				baseStore,
 				newStoreFaultGenerator(&storeConfig),
 			)
+		} else {
+			d.metadataStore = baseStore
 		}
 	}
-	return d.MetadataStore, nil
+	return d.metadataStore, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) NewExecutionStore() (persistence.ExecutionStore, error) {
-	if d.ExecutionStore == nil {
+	if d.executionStore == nil {
 		baseStore, err := d.baseFactory.NewExecutionStore()
 		if err != nil {
 			return nil, err
 		}
 		if storeConfig, ok := d.config.Targets.DataStores[config.ExecutionStoreName]; ok {
-			d.ExecutionStore = NewFaultInjectionExecutionStore(
+			d.executionStore = newFaultInjectionExecutionStore(
 				baseStore,
 				newStoreFaultGenerator(&storeConfig),
 			)
+		} else {
+			d.executionStore = baseStore
 		}
 	}
-	return d.ExecutionStore, nil
+	return d.executionStore, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueType) (persistence.Queue, error) {
-	if d.Queue == nil {
+	if d.queue == nil {
 		baseQueue, err := d.baseFactory.NewQueue(queueType)
 		if err != nil {
 			return baseQueue, err
 		}
 		if storeConfig, ok := d.config.Targets.DataStores[config.QueueName]; ok {
-			d.Queue = NewFaultInjectionQueue(
+			d.queue = newFaultInjectionQueue(
 				baseQueue,
 				newStoreFaultGenerator(&storeConfig),
 			)
+		} else {
+			d.queue = baseQueue
 		}
 	}
-	return d.Queue, nil
+	return d.queue, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
-	if d.QueueV2 == nil {
+	if d.queueV2 == nil {
 		baseQueue, err := d.baseFactory.NewQueueV2()
 		if err != nil {
 			return baseQueue, err
 		}
 		if storeConfig, ok := d.config.Targets.DataStores[config.QueueV2Name]; ok {
-			d.QueueV2 = NewFaultInjectionQueueV2(
+			d.queueV2 = newFaultInjectionQueueV2(
 				baseQueue,
 				newStoreFaultGenerator(&storeConfig),
 			)
+		} else {
+			d.queueV2 = baseQueue
 		}
 	}
-	return d.QueueV2, nil
+	return d.queueV2, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.ClusterMetadataStore, error) {
-	if d.ClusterMDStore == nil {
+	if d.clusterMDStore == nil {
 		baseStore, err := d.baseFactory.NewClusterMetadataStore()
 		if err != nil {
 			return nil, err
 		}
 		if storeConfig, ok := d.config.Targets.DataStores[config.ClusterMDStoreName]; ok {
-			d.ClusterMDStore = NewFaultInjectionClusterMetadataStore(
+			d.clusterMDStore = newFaultInjectionClusterMetadataStore(
 				baseStore,
 				newStoreFaultGenerator(&storeConfig),
 			)
+		} else {
+			d.clusterMDStore = baseStore
 		}
-
 	}
-	return d.ClusterMDStore, nil
+	return d.clusterMDStore, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusIncomingServiceStore, error) {
-	if d.NexusIncomingServiceStore == nil {
+	if d.nexusIncomingServiceStore == nil {
 		baseStore, err := d.baseFactory.NewNexusIncomingServiceStore()
 		if err != nil {
 			return nil, err
 		}
 		if storeConfig, ok := d.config.Targets.DataStores[config.NexusIncomingServiceStoreName]; ok {
-			d.NexusIncomingServiceStore = NewFaultInjectionNexusIncomingServiceStore(
+			d.nexusIncomingServiceStore = newFaultInjectionNexusIncomingServiceStore(
 				baseStore,
 				newStoreFaultGenerator(&storeConfig),
 			)
+		} else {
+			d.nexusIncomingServiceStore = baseStore
 		}
 	}
-	return d.NexusIncomingServiceStore, nil
+	return d.nexusIncomingServiceStore, nil
 }

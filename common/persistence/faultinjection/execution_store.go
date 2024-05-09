@@ -31,32 +31,32 @@ import (
 )
 
 type (
-	FaultInjectionExecutionStore struct {
+	faultInjectionExecutionStore struct {
 		persistence.HistoryBranchUtilImpl
 		baseStore persistence.ExecutionStore
 		generator faultGenerator
 	}
 )
 
-func NewFaultInjectionExecutionStore(
+func newFaultInjectionExecutionStore(
 	baseStore persistence.ExecutionStore,
 	generator faultGenerator,
-) *FaultInjectionExecutionStore {
-	return &FaultInjectionExecutionStore{
+) *faultInjectionExecutionStore {
+	return &faultInjectionExecutionStore{
 		baseStore: baseStore,
 		generator: generator,
 	}
 }
 
-func (e *FaultInjectionExecutionStore) Close() {
+func (e *faultInjectionExecutionStore) Close() {
 	e.baseStore.Close()
 }
 
-func (e *FaultInjectionExecutionStore) GetName() string {
+func (e *faultInjectionExecutionStore) GetName() string {
 	return e.baseStore.GetName()
 }
 
-func (e *FaultInjectionExecutionStore) GetWorkflowExecution(
+func (e *faultInjectionExecutionStore) GetWorkflowExecution(
 	ctx context.Context,
 	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.InternalGetWorkflowExecutionResponse, error) {
@@ -65,7 +65,7 @@ func (e *FaultInjectionExecutionStore) GetWorkflowExecution(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) SetWorkflowExecution(
+func (e *faultInjectionExecutionStore) SetWorkflowExecution(
 	ctx context.Context,
 	request *persistence.InternalSetWorkflowExecutionRequest,
 ) error {
@@ -74,7 +74,7 @@ func (e *FaultInjectionExecutionStore) SetWorkflowExecution(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) UpdateWorkflowExecution(
+func (e *faultInjectionExecutionStore) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.InternalUpdateWorkflowExecutionRequest,
 ) error {
@@ -83,7 +83,7 @@ func (e *FaultInjectionExecutionStore) UpdateWorkflowExecution(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) ConflictResolveWorkflowExecution(
+func (e *faultInjectionExecutionStore) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *persistence.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
@@ -92,7 +92,7 @@ func (e *FaultInjectionExecutionStore) ConflictResolveWorkflowExecution(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) CreateWorkflowExecution(
+func (e *faultInjectionExecutionStore) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.InternalCreateWorkflowExecutionRequest,
 ) (*persistence.InternalCreateWorkflowExecutionResponse, error) {
@@ -101,7 +101,7 @@ func (e *FaultInjectionExecutionStore) CreateWorkflowExecution(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) DeleteWorkflowExecution(
+func (e *faultInjectionExecutionStore) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *persistence.DeleteWorkflowExecutionRequest,
 ) error {
@@ -110,7 +110,7 @@ func (e *FaultInjectionExecutionStore) DeleteWorkflowExecution(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) DeleteCurrentWorkflowExecution(
+func (e *faultInjectionExecutionStore) DeleteCurrentWorkflowExecution(
 	ctx context.Context,
 	request *persistence.DeleteCurrentWorkflowExecutionRequest,
 ) error {
@@ -119,7 +119,7 @@ func (e *FaultInjectionExecutionStore) DeleteCurrentWorkflowExecution(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) GetCurrentExecution(
+func (e *faultInjectionExecutionStore) GetCurrentExecution(
 	ctx context.Context,
 	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.InternalGetCurrentExecutionResponse, error) {
@@ -128,7 +128,7 @@ func (e *FaultInjectionExecutionStore) GetCurrentExecution(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) ListConcreteExecutions(
+func (e *faultInjectionExecutionStore) ListConcreteExecutions(
 	ctx context.Context,
 	request *persistence.ListConcreteExecutionsRequest,
 ) (*persistence.InternalListConcreteExecutionsResponse, error) {
@@ -137,7 +137,7 @@ func (e *FaultInjectionExecutionStore) ListConcreteExecutions(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) AddHistoryTasks(
+func (e *faultInjectionExecutionStore) AddHistoryTasks(
 	ctx context.Context,
 	request *persistence.InternalAddHistoryTasksRequest,
 ) error {
@@ -146,7 +146,7 @@ func (e *FaultInjectionExecutionStore) AddHistoryTasks(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) GetHistoryTasks(
+func (e *faultInjectionExecutionStore) GetHistoryTasks(
 	ctx context.Context,
 	request *persistence.GetHistoryTasksRequest,
 ) (*persistence.InternalGetHistoryTasksResponse, error) {
@@ -155,7 +155,7 @@ func (e *FaultInjectionExecutionStore) GetHistoryTasks(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) CompleteHistoryTask(
+func (e *faultInjectionExecutionStore) CompleteHistoryTask(
 	ctx context.Context,
 	request *persistence.CompleteHistoryTaskRequest,
 ) error {
@@ -164,7 +164,7 @@ func (e *FaultInjectionExecutionStore) CompleteHistoryTask(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) RangeCompleteHistoryTasks(
+func (e *faultInjectionExecutionStore) RangeCompleteHistoryTasks(
 	ctx context.Context,
 	request *persistence.RangeCompleteHistoryTasksRequest,
 ) error {
@@ -173,7 +173,7 @@ func (e *FaultInjectionExecutionStore) RangeCompleteHistoryTasks(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) PutReplicationTaskToDLQ(
+func (e *faultInjectionExecutionStore) PutReplicationTaskToDLQ(
 	ctx context.Context,
 	request *persistence.PutReplicationTaskToDLQRequest,
 ) error {
@@ -182,7 +182,7 @@ func (e *FaultInjectionExecutionStore) PutReplicationTaskToDLQ(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) GetReplicationTasksFromDLQ(
+func (e *faultInjectionExecutionStore) GetReplicationTasksFromDLQ(
 	ctx context.Context,
 	request *persistence.GetReplicationTasksFromDLQRequest,
 ) (*persistence.InternalGetHistoryTasksResponse, error) {
@@ -191,7 +191,7 @@ func (e *FaultInjectionExecutionStore) GetReplicationTasksFromDLQ(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(
+func (e *faultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(
 	ctx context.Context,
 	request *persistence.DeleteReplicationTaskFromDLQRequest,
 ) error {
@@ -200,7 +200,7 @@ func (e *FaultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(
+func (e *faultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	ctx context.Context,
 	request *persistence.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
@@ -209,7 +209,7 @@ func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) IsReplicationDLQEmpty(
+func (e *faultInjectionExecutionStore) IsReplicationDLQEmpty(
 	ctx context.Context,
 	request *persistence.GetReplicationTasksFromDLQRequest,
 ) (bool, error) {
@@ -218,7 +218,7 @@ func (e *FaultInjectionExecutionStore) IsReplicationDLQEmpty(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) AppendHistoryNodes(
+func (e *faultInjectionExecutionStore) AppendHistoryNodes(
 	ctx context.Context,
 	request *persistence.InternalAppendHistoryNodesRequest,
 ) error {
@@ -227,7 +227,7 @@ func (e *FaultInjectionExecutionStore) AppendHistoryNodes(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) DeleteHistoryNodes(
+func (e *faultInjectionExecutionStore) DeleteHistoryNodes(
 	ctx context.Context,
 	request *persistence.InternalDeleteHistoryNodesRequest,
 ) error {
@@ -236,7 +236,7 @@ func (e *FaultInjectionExecutionStore) DeleteHistoryNodes(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) ReadHistoryBranch(
+func (e *faultInjectionExecutionStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *persistence.InternalReadHistoryBranchRequest,
 ) (*persistence.InternalReadHistoryBranchResponse, error) {
@@ -245,7 +245,7 @@ func (e *FaultInjectionExecutionStore) ReadHistoryBranch(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) ForkHistoryBranch(
+func (e *faultInjectionExecutionStore) ForkHistoryBranch(
 	ctx context.Context,
 	request *persistence.InternalForkHistoryBranchRequest,
 ) error {
@@ -254,7 +254,7 @@ func (e *FaultInjectionExecutionStore) ForkHistoryBranch(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) DeleteHistoryBranch(
+func (e *faultInjectionExecutionStore) DeleteHistoryBranch(
 	ctx context.Context,
 	request *persistence.InternalDeleteHistoryBranchRequest,
 ) error {
@@ -263,7 +263,7 @@ func (e *FaultInjectionExecutionStore) DeleteHistoryBranch(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) GetHistoryTreeContainingBranch(
+func (e *faultInjectionExecutionStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
 	request *persistence.InternalGetHistoryTreeContainingBranchRequest,
 ) (*persistence.InternalGetHistoryTreeContainingBranchResponse, error) {
@@ -272,7 +272,7 @@ func (e *FaultInjectionExecutionStore) GetHistoryTreeContainingBranch(
 	})
 }
 
-func (e *FaultInjectionExecutionStore) GetAllHistoryTreeBranches(
+func (e *faultInjectionExecutionStore) GetAllHistoryTreeBranches(
 	ctx context.Context,
 	request *persistence.GetAllHistoryTreeBranchesRequest,
 ) (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {

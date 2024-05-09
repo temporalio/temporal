@@ -31,23 +31,23 @@ import (
 )
 
 type (
-	FaultInjectionQueueV2 struct {
+	faultInjectionQueueV2 struct {
 		baseStore persistence.QueueV2
 		generator faultGenerator
 	}
 )
 
-func NewFaultInjectionQueueV2(
+func newFaultInjectionQueueV2(
 	baseQueue persistence.QueueV2,
 	generator faultGenerator,
-) *FaultInjectionQueueV2 {
-	return &FaultInjectionQueueV2{
+) *faultInjectionQueueV2 {
+	return &faultInjectionQueueV2{
 		baseStore: baseQueue,
 		generator: generator,
 	}
 }
 
-func (f *FaultInjectionQueueV2) EnqueueMessage(
+func (f *faultInjectionQueueV2) EnqueueMessage(
 	ctx context.Context,
 	request *persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
@@ -56,7 +56,7 @@ func (f *FaultInjectionQueueV2) EnqueueMessage(
 	})
 }
 
-func (f *FaultInjectionQueueV2) ReadMessages(
+func (f *faultInjectionQueueV2) ReadMessages(
 	ctx context.Context,
 	request *persistence.InternalReadMessagesRequest,
 ) (*persistence.InternalReadMessagesResponse, error) {
@@ -65,7 +65,7 @@ func (f *FaultInjectionQueueV2) ReadMessages(
 	})
 }
 
-func (f *FaultInjectionQueueV2) CreateQueue(
+func (f *faultInjectionQueueV2) CreateQueue(
 	ctx context.Context,
 	request *persistence.InternalCreateQueueRequest,
 ) (*persistence.InternalCreateQueueResponse, error) {
@@ -74,7 +74,7 @@ func (f *FaultInjectionQueueV2) CreateQueue(
 	})
 }
 
-func (f *FaultInjectionQueueV2) RangeDeleteMessages(
+func (f *faultInjectionQueueV2) RangeDeleteMessages(
 	ctx context.Context,
 	request *persistence.InternalRangeDeleteMessagesRequest,
 ) (*persistence.InternalRangeDeleteMessagesResponse, error) {
@@ -83,7 +83,7 @@ func (f *FaultInjectionQueueV2) RangeDeleteMessages(
 	})
 }
 
-func (f *FaultInjectionQueueV2) ListQueues(
+func (f *faultInjectionQueueV2) ListQueues(
 	ctx context.Context,
 	request *persistence.InternalListQueuesRequest,
 ) (*persistence.InternalListQueuesResponse, error) {
