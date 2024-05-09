@@ -92,7 +92,7 @@ func initPersistenceLazyLoadedServiceResolver(
 	logger.Info("Initialized service resolver for persistence rate limiting", tag.Service(serviceName))
 }
 
-func (p PersistenceLazyLoadedServiceResolver) MemberCount() int {
+func (p PersistenceLazyLoadedServiceResolver) AvailableMemberCount() int {
 	if value := p.Load(); value != nil {
 		return value.(membership.ServiceResolver).AvailableMemberCount()
 	}
