@@ -114,15 +114,15 @@ func newQuotaLogger(
 	}
 }
 
-func (l *quotaLogger[T]) updateQuota(newQutoa T) {
-	currentQuota := l.currentValue.Swap(newQutoa)
+func (l *quotaLogger[T]) updateQuota(newQuota T) {
+	currentQuota := l.currentValue.Swap(newQuota)
 
-	if currentQuota != nil && newQutoa == currentQuota.(T) {
+	if currentQuota != nil && newQuota == currentQuota.(T) {
 		return
 	}
 
 	l.logger.Info("Quota changed",
 		tag.NewAnyTag("current-quota", currentQuota),
-		tag.NewAnyTag("new-quota", newQutoa),
+		tag.NewAnyTag("new-quota", newQuota),
 	)
 }
