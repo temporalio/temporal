@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/service/history/api/respondworkflowtaskfailedrequest"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -538,7 +539,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskFailed(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskFailedRequest,
 ) error {
-	return e.workflowTaskHandler.handleWorkflowTaskFailed(ctx, req)
+	return respondworkflowtaskfailedrequest.Invoke(ctx, req, e.shardContext, e.tokenSerializer, e.workflowConsistencyChecker)
 }
 
 // RespondActivityTaskCompleted completes an activity task.
