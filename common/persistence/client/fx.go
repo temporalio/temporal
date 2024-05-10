@@ -91,6 +91,7 @@ var Module = fx.Options(
 	fx.Invoke(NexusEndpointManagerLifetimeHooks),
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
+	fx.Invoke(DataStoreFactoryLifetimeHooks),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(EventBlobCacheProvider),
 )
