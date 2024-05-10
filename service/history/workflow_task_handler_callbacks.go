@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -37,10 +38,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
-	"go.temporal.io/server/common/dynamicconfig"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -59,9 +57,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -75,8 +71,6 @@ import (
 type (
 	// workflow task business logic handler
 	workflowTaskHandlerCallbacks interface {
-		handleWorkflowTaskStarted(context.Context,
-			*historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error)
 		handleWorkflowTaskCompleted(context.Context,
 			*historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error)
 		verifyFirstWorkflowTaskScheduled(context.Context, *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error
@@ -126,145 +120,6 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		persistenceVisibilityMgr:       historyEngine.persistenceVisibilityMgr,
 		commandHandlerRegistry:         historyEngine.commandHandlerRegistry,
 	}
-}
-
-func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
-	ctx context.Context,
-	req *historyservice.RecordWorkflowTaskStartedRequest,
-) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
-	scheduledEventID := req.GetScheduledEventId()
-	requestID := req.GetRequestId()
-
-	var workflowKey definition.WorkflowKey
-	var resp *historyservice.RecordWorkflowTaskStartedResponse
-
-	err = api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		req.Clock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.WorkflowExecution.WorkflowId,
-			req.WorkflowExecution.RunId,
-		),
-		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowLease.GetMutableState()
-			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx, nil)
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
-			metricsScope := handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
-
-			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-			// some extreme cassandra failure cases.
-			if workflowTask == nil && scheduledEventID >= mutableState.GetNextEventID() {
-				metrics.StaleMutableStateCounter.With(metricsScope).Record(1)
-				// Reload workflow execution history
-				// ErrStaleState will trigger updateWorkflow function to reload the mutable state
-				return nil, consts.ErrStaleState
-			}
-
-			// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
-			// task is not outstanding than it is most probably a duplicate and complete the task.
-			if workflowTask == nil {
-				// Looks like WorkflowTask already completed as a result of another call.
-				// It is OK to drop the task at this point.
-				return nil, serviceerror.NewNotFound("Workflow task not found.")
-			}
-
-			workflowKey = mutableState.GetWorkflowKey()
-			updateAction := &api.UpdateWorkflowAction{}
-
-			if workflowTask.StartedEventID != common.EmptyEventID {
-				// If workflow task is started as part of the current request scope then return a positive response
-				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
-					if err != nil {
-						return nil, err
-					}
-					updateAction.Noop = true
-					return updateAction, nil
-				}
-
-				// Looks like WorkflowTask already started as a result of another call.
-				// It is OK to drop the task at this point.
-				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
-			}
-
-			// Assuming a workflow is running on a sticky task queue by a workerA.
-			// After workerA is dead for more than 10s, matching will return StickyWorkerUnavailable error when history
-			// tries to push a new workflow task. When history sees that error, it will fall back to push the task to
-			// its original normal task queue without clear its stickiness to avoid an extra persistence write.
-			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
-			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
-			// Sending down partial history will cost the worker an extra fetch to server for the full history.
-			currentTaskQueue := mutableState.CurrentTaskQueue()
-			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
-				currentTaskQueue.GetName() != req.PollRequest.TaskQueue.GetName() {
-				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
-				// and sticky queue never has partition, so it does not matter.
-				mutableState.ClearStickyTaskQueue()
-			}
-
-			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
-				scheduledEventID,
-				requestID,
-				req.PollRequest.TaskQueue,
-				req.PollRequest.Identity,
-				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
-			)
-			if err != nil {
-				// Unable to add WorkflowTaskStarted event to history
-				return nil, err
-			}
-
-			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-				updateAction.Noop = true
-			}
-
-			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)
-			namespaceName := namespaceEntry.Name()
-			taskQueue := workflowTask.TaskQueue
-			metrics.TaskScheduleToStartLatency.With(metrics.GetPerTaskQueueScope(
-				metricsScope,
-				namespaceName.String(),
-				taskQueue.GetName(),
-				taskQueue.GetKind(),
-			)).Record(workflowScheduleToStartLatency,
-				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-			)
-
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
-			if err != nil {
-				return nil, err
-			}
-
-			return updateAction, nil
-		},
-		nil,
-		handler.shardContext,
-		handler.workflowConsistencyChecker,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if dynamicconfig.AccessHistory(handler.config.FrontendAccessHistoryFraction, handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryHandleWorkflowTaskStartedTag))) {
-		maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
-		err = handler.setHistoryForRecordWfTaskStartedResp(ctx, workflowKey, maxHistoryPageSize, resp)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
@@ -765,7 +620,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	//nolint:staticcheck
 	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, updateRegistry, newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
+		resp.StartedResponse, err = recordworkflowtaskstarted.CreateRecordWorkflowTaskStartedResponse(
+			ctx,
+			ms,
+			updateRegistry,
+			newWorkflowTask,
+			request.GetIdentity(),
+			request.GetForceCreateNewWorkflowTask(),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -830,141 +692,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 		return consts.ErrWorkflowNotReady
 	}
 
-	return nil
-}
-
-func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
-	ctx context.Context,
-	ms workflow.MutableState,
-	updateRegistry update.Registry,
-	workflowTask *workflow.WorkflowTaskInfo,
-	identity string,
-	wtHeartbeat bool,
-) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-
-	response := &historyservice.RecordWorkflowTaskStartedResponse{}
-	response.WorkflowType = ms.GetWorkflowType()
-	executionInfo := ms.GetExecutionInfo()
-	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
-		response.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
-	}
-
-	// Starting workflowTask could result in different scheduledEventID if workflowTask was transient and new events came in
-	// before it was started.
-	response.ScheduledEventId = workflowTask.ScheduledEventID
-	response.StartedEventId = workflowTask.StartedEventID
-	response.StickyExecutionEnabled = ms.IsStickyTaskQueueSet()
-	response.NextEventId = ms.GetNextEventID()
-	response.Attempt = workflowTask.Attempt
-	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
-		Name: executionInfo.TaskQueue,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	response.ScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
-	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
-	response.Version = workflowTask.Version
-
-	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
-	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
-
-	currentBranchToken, err := ms.GetCurrentBranchToken()
-	if err != nil {
-		return nil, err
-	}
-	response.BranchToken = currentBranchToken
-
-	qr := ms.GetQueryRegistry()
-	bufferedQueryIDs := qr.GetBufferedIDs()
-	if len(bufferedQueryIDs) > 0 {
-		response.Queries = make(map[string]*querypb.WorkflowQuery, len(bufferedQueryIDs))
-		for _, bufferedQueryID := range bufferedQueryIDs {
-			input, err := qr.GetQueryInput(bufferedQueryID)
-			if err != nil {
-				continue
-			}
-			response.Queries[bufferedQueryID] = input
-		}
-	}
-
-	// If there are updates in the registry which were already sent to worker but still
-	// are not processed and not rejected by server, it means that WT that was used to
-	// deliver those updates failed, got timed out, or got lost.
-	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
-	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
-	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID)
-
-	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
-		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
-	}
-
-	return response, nil
-}
-
-func (handler *workflowTaskHandlerCallbacksImpl) setHistoryForRecordWfTaskStartedResp(
-	ctx context.Context,
-	workflowKey definition.WorkflowKey,
-	maximumPageSize int32,
-	response *historyservice.RecordWorkflowTaskStartedResponse,
-) (retError error) {
-
-	firstEventID := common.FirstEventID
-	nextEventID := response.GetNextEventId()
-	if response.GetStickyExecutionEnabled() {
-		// sticky tasks only need partial history
-		firstEventID = response.GetPreviousStartedEventId() + 1
-	}
-
-	// TODO below is a temporal solution to guard against invalid event batch
-	//  when data inconsistency occurs
-	//  long term solution should check event batch pointing backwards within history store
-	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			api.TrimHistoryNode(
-				ctx,
-				handler.shardContext,
-				handler.workflowConsistencyChecker,
-				handler.eventNotifier,
-				workflowKey.GetNamespaceID(),
-				workflowKey.GetWorkflowID(),
-				workflowKey.GetRunID(),
-			)
-		}
-	}()
-
-	history, persistenceToken, err := api.GetHistory(
-		ctx,
-		handler.shardContext,
-		namespace.ID(workflowKey.GetNamespaceID()),
-		&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
-		firstEventID,
-		nextEventID,
-		maximumPageSize,
-		nil,
-		response.GetTransientWorkflowTask(),
-		response.GetBranchToken(),
-		handler.persistenceVisibilityMgr,
-	)
-	if err != nil {
-		return err
-	}
-
-	var continuation []byte
-	if len(persistenceToken) != 0 {
-		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-			RunId:                 workflowKey.GetRunID(),
-			FirstEventId:          firstEventID,
-			NextEventId:           nextEventID,
-			PersistenceToken:      persistenceToken,
-			TransientWorkflowTask: response.GetTransientWorkflowTask(),
-			BranchToken:           response.GetBranchToken(),
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	response.History = history
-	response.NextPageToken = continuation
 	return nil
 }
 

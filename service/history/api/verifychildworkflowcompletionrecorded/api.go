@@ -34,14 +34,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
 	ctx context.Context,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
-	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.VerifyChildExecutionCompletionRecordedResponse, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
