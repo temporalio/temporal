@@ -107,9 +107,7 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
@@ -283,9 +281,7 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
@@ -442,8 +438,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *workflow.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
