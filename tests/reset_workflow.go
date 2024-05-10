@@ -83,9 +83,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	isFirstTaskProcessed := false
 	isSecondTaskProcessed := false
 	var firstActivityCompletionEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !isFirstTaskProcessed {
 			// Schedule 3 activities on first workflow task
 			isFirstTaskProcessed = true
@@ -113,7 +111,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 		} else if !isSecondTaskProcessed {
 			// Confirm one activity completion on second workflow task
 			isSecondTaskProcessed = true
-			for _, event := range history.Events[previousStartedEventID:] {
+			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
 					firstActivityCompletionEvent = event
 					return []*commandpb.Command{}, nil
@@ -337,8 +335,7 @@ func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueRespo
 
 }
 
-func (t *resetTest) wftHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
-
+func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	commands := []*commandpb.Command{}
 
 	// There's an initial empty WFT; then come `totalSignals` signals, followed by `totalUpdates` updates, each in
@@ -568,9 +565,7 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 	// workflow logic
 	resetRunID := ""
 	workflowComplete := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if len(resetRunID) == 0 {
 			signalRequest.RequestId = uuid.New()
 			_, err := s.engine.SignalWorkflowExecution(NewContext(), signalRequest)
@@ -716,9 +711,7 @@ func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 	// workflow logic
 	workflowComplete := false
 	isWorkflowTaskProcessed := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !isWorkflowTaskProcessed {
 			isWorkflowTaskProcessed = true
 			return []*commandpb.Command{}, nil
