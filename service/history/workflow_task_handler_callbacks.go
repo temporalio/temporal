@@ -75,7 +75,6 @@ import (
 type (
 	// workflow task business logic handler
 	workflowTaskHandlerCallbacks interface {
-		handleWorkflowTaskScheduled(context.Context, *historyservice.ScheduleWorkflowTaskRequest) error
 		handleWorkflowTaskStarted(context.Context,
 			*historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error)
 		handleWorkflowTaskCompleted(context.Context,
@@ -127,53 +126,6 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		persistenceVisibilityMgr:       historyEngine.persistenceVisibilityMgr,
 		commandHandlerRegistry:         historyEngine.commandHandlerRegistry,
 	}
-}
-
-func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
-	ctx context.Context,
-	req *historyservice.ScheduleWorkflowTaskRequest,
-) error {
-
-	_, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-
-	return api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		req.ChildClock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.WorkflowExecution.WorkflowId,
-			req.WorkflowExecution.RunId,
-		),
-		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowLease.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			if req.IsFirstWorkflowTask && mutableState.HadOrHasWorkflowTask() {
-				return &api.UpdateWorkflowAction{
-					Noop: true,
-				}, nil
-			}
-
-			startEvent, err := mutableState.GetStartEvent(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := mutableState.AddFirstWorkflowTaskScheduled(req.ParentClock, startEvent, false); err != nil {
-				return nil, err
-			}
-
-			return &api.UpdateWorkflowAction{}, nil
-		},
-		nil,
-		handler.shardContext,
-		handler.workflowConsistencyChecker,
-	)
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
