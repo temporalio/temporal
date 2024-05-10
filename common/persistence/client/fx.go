@@ -169,27 +169,27 @@ func HealthSignalAggregatorProvider(
 func DataStoreFactoryProvider(
 	clusterName ClusterName,
 	r resolver.ServiceResolver,
-	config *config.Persistence,
+	cfg *config.Persistence,
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) persistence.DataStoreFactory {
 
 	var dataStoreFactory persistence.DataStoreFactory
-	defaultCfg := config.DataStores[config.DefaultStore]
+	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
 	switch {
-	case defaultCfg.Cassandra != nil:
-		dataStoreFactory = cassandra.NewFactory(*defaultCfg.Cassandra, r, string(clusterName), logger, metricsHandler)
-	case defaultCfg.SQL != nil:
-		dataStoreFactory = sql.NewFactory(*defaultCfg.SQL, r, string(clusterName), logger)
-	case defaultCfg.CustomDataStoreConfig != nil:
-		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
+	case defaultStoreCfg.Cassandra != nil:
+		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler)
+	case defaultStoreCfg.SQL != nil:
+		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger)
+	case defaultStoreCfg.CustomDataStoreConfig != nil:
+		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultStoreCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
 	default:
 		logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
 	}
 
-	if defaultCfg.FaultInjection != nil {
-		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, dataStoreFactory)
+	if defaultStoreCfg.FaultInjection != nil {
+		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultStoreCfg.FaultInjection, dataStoreFactory)
 	}
 
 	return dataStoreFactory
