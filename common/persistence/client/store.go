@@ -25,6 +25,8 @@
 package client
 
 import (
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -98,4 +100,10 @@ func DataStoreFactoryProvider(
 	}
 
 	return dataStoreFactory, faultInjection
+}
+func DataStoreFactoryLifetimeHooks(
+	lc fx.Lifecycle,
+	factory DataStoreFactory,
+) {
+	lc.Append(fx.StopHook(factory.Close))
 }

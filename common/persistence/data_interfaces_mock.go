@@ -1355,6 +1355,18 @@ func (m *MockHistoryTaskQueueManager) EXPECT() *MockHistoryTaskQueueManagerMockR
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockHistoryTaskQueueManager) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockHistoryTaskQueueManagerMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).Close))
+}
+
 // CreateQueue mocks base method.
 func (m *MockHistoryTaskQueueManager) CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error) {
 	m.ctrl.T.Helper()
