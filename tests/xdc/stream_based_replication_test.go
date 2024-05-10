@@ -130,7 +130,7 @@ func (s *streamBasedReplicationTestSuite) TearDownSuite() {
 }
 
 func (s *streamBasedReplicationTestSuite) SetupTest() {
-	s.setupTest()
+	s.setupTest(true)
 }
 
 func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplicationScenario() {

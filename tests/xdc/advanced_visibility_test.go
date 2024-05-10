@@ -27,6 +27,7 @@
 package xdc
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -34,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -52,6 +54,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -82,6 +85,8 @@ type AdvVisCrossDCTestSuite struct {
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
+
+	startTime time.Time
 }
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
@@ -138,6 +143,8 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
+	s.startTime = time.Now()
+
 	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
 	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
 	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
@@ -158,11 +165,44 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.testSearchAttributeVal = "test value"
 }
 
+func (s *AdvVisCrossDCTestSuite) waitForClusterConnected() {
+	s.logger.Debug("wait for clusters to be synced")
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		s.logger.Debug("check if replication tasks are replicated to cluster 2")
+		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		if !(assert.NoError(c, err) &&
+			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
+			return
+		}
+		shard := resp.Shards[0]
+		if !(assert.NotNil(c, shard) &&
+			assert.True(c, shard.MaxReplicationTaskId > 0) &&
+			assert.NotNil(c, shard.ShardLocalTime) &&
+			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
+			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
+			assert.NotNil(c, shard.RemoteClusters)) {
+			return
+		}
+		standbyAckInfo, ok := shard.RemoteClusters[clusterNameAdvVis[1]]
+		if !(assert.True(c, ok) &&
+			assert.NotNil(c, standbyAckInfo) &&
+			assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId) &&
+			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
+			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
+			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
+			return
+		}
+		s.logger.Debug("clusters synced")
+	}, 60*time.Second, 1*time.Second)
+}
+
 func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	s.waitForClusterConnected()
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {

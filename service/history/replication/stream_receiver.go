@@ -270,7 +270,6 @@ func (r *StreamReceiverImpl) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, tasks...) {
-			r.logger.Debug(fmt.Sprintf("REMOVEME StreamReceiver processMessages submit task to scheduler, task %+v", task), tag.TaskID(task.TaskID()))
 			r.ProcessToolBox.TaskScheduler.Submit(task)
 		}
 	}

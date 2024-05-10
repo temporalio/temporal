@@ -66,7 +66,7 @@ func (s *NexusOutgoingServicesTestSuite) SetupSuite() {
 }
 
 func (s *NexusOutgoingServicesTestSuite) SetupTest() {
-	s.setupTest()
+	s.setupTest(true)
 }
 
 func (s *NexusOutgoingServicesTestSuite) TearDownSuite() {

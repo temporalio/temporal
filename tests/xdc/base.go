@@ -160,14 +160,18 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 }
 
 func (s *xdcBaseSuite) waitForClusterConnected() {
-	s.logger.Debug("wait for cluster to be connected")
+	s.logger.Debug("wait for clusters to be synced")
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Debug("check if stream is established")
+		s.logger.Debug("check if replication tasks are replicated to cluster 2")
 		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		s.logger.Debug("get replication status response", tag.Error(err))
+		s.logger.Debug("check 1")
 		if !(assert.NoError(c, err) &&
 			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
+			s.logger.Debug("check failed 1")
 			return
 		}
+		s.logger.Debug("check 2")
 		shard := resp.Shards[0]
 		if !(assert.NotNil(c, shard) &&
 			assert.True(c, shard.MaxReplicationTaskId > 0) &&
@@ -175,17 +179,21 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
 			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
 			assert.NotNil(c, shard.RemoteClusters)) {
+			s.logger.Debug("check failed 2")
 			return
 		}
+		s.logger.Debug("check 3")
 		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
 		if !(assert.True(c, ok) &&
 			assert.NotNil(c, standbyAckInfo) &&
+			assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId) &&
 			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
 			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
 			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
+			s.logger.Debug("check failed 3")
 			return
 		}
-		s.logger.Debug("cluster connected")
+		s.logger.Debug("clusters synced")
 	}, 60*time.Second, 1*time.Second)
 }
 
@@ -194,11 +202,13 @@ func (s *xdcBaseSuite) tearDownSuite() {
 	s.NoError(s.cluster2.TearDownCluster())
 }
 
-func (s *xdcBaseSuite) setupTest() {
+func (s *xdcBaseSuite) setupTest(waitForClusterConnected bool) {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 
-	s.waitForClusterConnected()
+	if waitForClusterConnected {
+		s.waitForClusterConnected()
+	}
 }

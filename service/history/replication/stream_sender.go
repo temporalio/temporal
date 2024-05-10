@@ -366,7 +366,7 @@ Loop:
 		if task == nil {
 			continue Loop
 		}
-		s.logger.Debug(fmt.Sprintf("REMOVEME StreamSender send replication task, task: %+v", task), tag.TaskID(task.SourceTaskId))
+		s.logger.Debug(fmt.Sprintf("StreamSender send replication task, task: %+v", task), tag.TaskID(task.SourceTaskId))
 		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
