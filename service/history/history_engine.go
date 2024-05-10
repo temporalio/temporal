@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/service/history/api/respondworkflowtaskfailed"
+	"go.temporal.io/server/service/history/api/scheduleworkflowtask"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -508,7 +509,7 @@ func (e *historyEngineImpl) ScheduleWorkflowTask(
 	ctx context.Context,
 	req *historyservice.ScheduleWorkflowTaskRequest,
 ) error {
-	return e.workflowTaskHandler.handleWorkflowTaskScheduled(ctx, req)
+	return scheduleworkflowtask.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
