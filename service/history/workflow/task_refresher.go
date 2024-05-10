@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -148,7 +149,21 @@ func (r *TaskRefresherImpl) RefreshTasks(
 		return err
 	}
 
-	return r.refreshTasksForWorkflowSearchAttr(mutableState, taskGenerator)
+	if err := r.refreshTasksForWorkflowSearchAttr(
+		mutableState,
+		taskGenerator,
+	); err != nil {
+		return err
+	}
+
+	if err := r.refreshTasksForSubStateMachines(
+		mutableState,
+		taskGenerator,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
@@ -448,4 +463,35 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	}
 
 	return taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
+	mutableState MutableState,
+	taskGenerator TaskGenerator,
+) error {
+	mutableState.HSM().Walk(func(node *hsm.Node) error {
+		return hsm.MachineTransition(
+			node,
+			func(
+				taskRegenerator hsm.TaskRegenerator,
+			) (hsm.TransitionOutput, error) {
+				tasks, err := taskRegenerator.RegenerateTasks(node)
+				if err != nil {
+					return hsm.TransitionOutput{}, err
+				}
+				return hsm.TransitionOutput{
+					Tasks: tasks,
+				}, nil
+			},
+		)
+	})
+
+	// Not all callers of TaskRefresher goes through the closeTransaction process.
+	// So we need to explicitly make sure those tasks are actually generated and
+	// added to mutable state here.
+	// The generation logic must also be idempotent, so that if the logic does go through
+	// closeTransaction, no duplicate tasks are generated.
+	return taskGenerator.GenerateDirtySubStateMachineTasks(
+		r.shard.StateMachineRegistry(),
+	)
 }

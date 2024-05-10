@@ -354,6 +354,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 			}
 		}
 	}
+	tree.ClearOutputTasks()
 	return nil
 }
 
