@@ -158,7 +158,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if err := r.refreshTasksForSubStateMachines(
 		mutableState,
-		taskGenerator,
 	); err != nil {
 		return err
 	}
@@ -467,33 +466,57 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 
 func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	mutableState MutableState,
-	taskGenerator TaskGenerator,
 ) error {
-	if err := mutableState.HSM().Walk(func(node *hsm.Node) error {
-		return hsm.MachineTransition(
-			node,
-			func(
-				taskRegenerator hsm.TaskRegenerator,
-			) (hsm.TransitionOutput, error) {
-				tasks, err := taskRegenerator.RegenerateTasks(node)
-				if err != nil {
-					return hsm.TransitionOutput{}, err
-				}
-				return hsm.TransitionOutput{
-					Tasks: tasks,
-				}, nil
-			},
-		)
-	}); err != nil {
-		return err
-	}
 
-	// Not all callers of TaskRefresher goes through the closeTransaction process.
-	// So we need to explicitly make sure those tasks are actually generated and
-	// added to mutable state here.
-	// The generation logic must also be idempotent, so that if the logic does go through
-	// closeTransaction, no duplicate tasks are generated.
-	return taskGenerator.GenerateDirtySubStateMachineTasks(
-		r.shard.StateMachineRegistry(),
-	)
+	// NOTE: Not all callers of TaskRefresher goes through the closeTransaction process.
+	// If we were to regenerate tasks here by doing a state machine transition and return
+	// a TransitionOutput, then, we need to
+	//   1. Call taskGenerator.GenerateDirtySubStateMachineTasks explictly to make sure
+	//      tasks are added to mutable state.
+	//   2. Make GenerateDirtySubStateMachineTasks idempotent, so that if the logic
+	//      does go through closeTransaction, no duplicate tasks are generated.
+	//   3. Explicitly clear transition state for sub state machines when not going through
+	//      closeTransaction path.
+	//   4. Sub state machine will be marked as dirty, causing task refresh being counted
+	//      as a state transition. (if the logic does go through closeTransaction path,
+	//      though we don't actually have such cases today)
+	// With the implementation below, we avoid the above complexities by directly generating
+	// tasks and adding them to mutable state immediately.
+
+	// Task refresher is only meant for regenerating tasks that has been generated before,
+	// in previous state transitions, so we can use the last versioned transition here.
+	// In replication case, task refresher should be called after applying the state from source
+	// cluster, which updated the transition history.
+	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+	if len(transitionHistory) == 0 {
+		// transition history not enabled.
+		return nil
+	}
+	versionedTransition := transitionHistory[len(transitionHistory)-1]
+
+	return mutableState.HSM().Walk(func(node *hsm.Node) error {
+		taskRegenerator, err := hsm.MachineData[hsm.TaskRegenerator](node)
+		if err != nil {
+			return err
+		}
+
+		tasks, err := taskRegenerator.RegenerateTasks(node)
+		if err != nil {
+			return err
+		}
+
+		for _, task := range tasks {
+			if err := generateSubStateMachineTask(
+				mutableState,
+				r.shard.StateMachineRegistry(),
+				node,
+				node.Path(),
+				task,
+				versionedTransition,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

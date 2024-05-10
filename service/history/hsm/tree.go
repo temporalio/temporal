@@ -192,18 +192,6 @@ func (n *Node) ClearTransactionState() {
 	}
 }
 
-// ClearOutputTasks resets all tasks in transition outputs in the tree.
-// This makes task generation logic idempotent.
-// NOTE: this doesn't change if a node is dirty or not.
-func (n *Node) ClearOutputTasks() {
-	for idx := range n.cache.outputs {
-		n.cache.outputs[idx].Tasks = nil
-	}
-	for _, child := range n.cache.children {
-		child.ClearOutputTasks()
-	}
-}
-
 // Walk applies the given function to all nodes rooted at the current node.
 func (n *Node) Walk(fn func(*Node) error) error {
 	if n == nil {

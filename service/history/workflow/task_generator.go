@@ -306,55 +306,19 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 		}
 		for _, output := range pao.Outputs {
 			for _, task := range output.Tasks {
-				ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
-				if !ok {
-					return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
-				}
-				data, err := ser.Serialize(task)
-				if err != nil {
-					return err
-				}
-				ppath := make([]*persistencespb.StateMachineKey, len(pao.Path))
-				for i, k := range pao.Path {
-					ppath[i] = &persistencespb.StateMachineKey{
-						Type: k.Type,
-						Id:   k.ID,
-					}
-				}
-				// Only set transition count if a task is non-concurrent.
-				transitionCount := int64(0)
-				if !task.Concurrent() {
-					transitionCount = node.TransitionCount()
-				}
-				smt := tasks.StateMachineTask{
-					WorkflowKey: r.mutableState.GetWorkflowKey(),
-					Info: &persistencespb.StateMachineTaskInfo{
-						Ref: &persistencespb.StateMachineRef{
-							Path:                                 ppath,
-							MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
-							MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
-							MachineTransitionCount:               transitionCount,
-						},
-						Type: task.Type().ID,
-						Data: data,
-					},
-				}
-				switch kind := task.Kind().(type) {
-				case hsm.TaskKindOutbound:
-					r.mutableState.AddTasks(&tasks.StateMachineOutboundTask{
-						StateMachineTask: smt,
-						Destination:      kind.Destination,
-					})
-				case hsm.TaskKindTimer:
-					smt.VisibilityTimestamp = kind.Deadline
-					r.mutableState.AddTasks(&tasks.StateMachineTimerTask{
-						StateMachineTask: smt,
-					})
+				if err := generateSubStateMachineTask(
+					r.mutableState,
+					stateMachineRegistry,
+					node,
+					pao.Path,
+					task,
+					versionedTransition,
+				); err != nil {
+					return nil
 				}
 			}
 		}
 	}
-	tree.ClearOutputTasks()
 	return nil
 }
 
@@ -822,4 +786,61 @@ func (r *TaskGeneratorImpl) archivalEnabled() bool {
 		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED ||
 		r.archivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival() &&
 			namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
+}
+
+func generateSubStateMachineTask(
+	mutableState MutableState,
+	stateMachineRegistry *hsm.Registry,
+	node *hsm.Node,
+	subStateMachinePath []hsm.Key,
+	task hsm.Task,
+	versionedTransition *persistencespb.VersionedTransition,
+) error {
+	ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
+	if !ok {
+		return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
+	}
+	data, err := ser.Serialize(task)
+	if err != nil {
+		return err
+	}
+	ppath := make([]*persistencespb.StateMachineKey, len(subStateMachinePath))
+	for i, k := range subStateMachinePath {
+		ppath[i] = &persistencespb.StateMachineKey{
+			Type: k.Type,
+			Id:   k.ID,
+		}
+	}
+	// Only set transition count if a task is non-concurrent.
+	transitionCount := int64(0)
+	if !task.Concurrent() {
+		transitionCount = node.TransitionCount()
+	}
+	smt := tasks.StateMachineTask{
+		WorkflowKey: mutableState.GetWorkflowKey(),
+		Info: &persistencespb.StateMachineTaskInfo{
+			Ref: &persistencespb.StateMachineRef{
+				Path:                                 ppath,
+				MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
+				MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
+				MachineTransitionCount:               transitionCount,
+			},
+			Type: task.Type().ID,
+			Data: data,
+		},
+	}
+	switch kind := task.Kind().(type) {
+	case hsm.TaskKindOutbound:
+		mutableState.AddTasks(&tasks.StateMachineOutboundTask{
+			StateMachineTask: smt,
+			Destination:      kind.Destination,
+		})
+	case hsm.TaskKindTimer:
+		smt.VisibilityTimestamp = kind.Deadline
+		mutableState.AddTasks(&tasks.StateMachineTimerTask{
+			StateMachineTask: smt,
+		})
+	}
+
+	return nil
 }
