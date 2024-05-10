@@ -137,7 +137,6 @@ func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 	}
 
 	for i, tc := range testCases {
-		tc := tc
 		s.Run(tc.name, func() {
 			id := fmt.Sprintf("functional-start-workflow-terminate-test-%v", i)
 
@@ -211,8 +210,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {
 	s.NoError(startErr)
 
 	delayEndTime := time.Now()
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		delayEndTime = time.Now()
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -274,8 +272,7 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -420,8 +417,7 @@ func (s *FunctionalSuite) TestSequentialWorkflow() {
 	workflowComplete := false
 	activityCount := int32(10)
 	activityCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -518,8 +514,7 @@ func (s *FunctionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	commandCount := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if commandCount < 2 {
 			commandCount++
@@ -592,8 +587,7 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	activityCount := int32(4)
 	activityCounter := int32(0)
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -712,9 +706,8 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 
 	attemptCount := 1
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		executions = append(executions, execution)
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		executions = append(executions, task.WorkflowExecution)
 		attemptCount++
 		if attemptCount > maximumAttempts {
 			return []*commandpb.Command{
@@ -844,9 +837,8 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) workflowTaskHandler {
 		attemptCount := 1
 
-		wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-			previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-			*executions = append(*executions, execution)
+		wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			*executions = append(*executions, task.WorkflowExecution)
 			attemptCount++
 			if attemptCount > attempts {
 				return []*commandpb.Command{
@@ -998,7 +990,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			Namespace: s.namespace,
 			TaskQueue: tv.TaskQueue(),
 			Identity:  tv.WorkerIdentity(),
-			WorkflowTaskHandler: func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				return nil, nil
 			},
 			MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {

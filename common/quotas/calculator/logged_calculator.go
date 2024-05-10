@@ -99,7 +99,7 @@ func (c *LoggedNamespaceCalculator) getOrCreateQuotaLogger(
 
 	quotaLogger, ok := c.quotaLoggers[namespace]
 	if !ok {
-		quotaLogger = newQuotaLogger(c.logger)
+		quotaLogger = newQuotaLogger(log.With(c.logger, tag.WorkflowNamespace(namespace)))
 		c.quotaLoggers[namespace] = quotaLogger
 	}
 
@@ -114,15 +114,15 @@ func newQuotaLogger(
 	}
 }
 
-func (l *quotaLogger[T]) updateQuota(newQutoa T) {
-	currentQuota := l.currentValue.Swap(newQutoa)
+func (l *quotaLogger[T]) updateQuota(newQuota T) {
+	currentQuota := l.currentValue.Swap(newQuota)
 
-	if currentQuota != nil && newQutoa == currentQuota.(T) {
+	if currentQuota != nil && newQuota == currentQuota.(T) {
 		return
 	}
 
 	l.logger.Info("Quota changed",
 		tag.NewAnyTag("current-quota", currentQuota),
-		tag.NewAnyTag("new-quota", newQutoa),
+		tag.NewAnyTag("new-quota", newQuota),
 	)
 }

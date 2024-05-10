@@ -168,18 +168,6 @@ func RepeatSlice[T any](xs []T, n int) []T {
 	return ys
 }
 
-// Coalesce returns the first non-zero value of its arguments, or the zero value for the type
-// if all are zero.
-func Coalesce[T comparable](vals ...T) T {
-	var zero T
-	for _, v := range vals {
-		if v != zero {
-			return v
-		}
-	}
-	return zero
-}
-
 // Ptr returns a pointer to a copy of v.
 func Ptr[T any](v T) *T {
 	return &v

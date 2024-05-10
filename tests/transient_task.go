@@ -33,7 +33,6 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -77,15 +76,14 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 	failWorkflowTask := true
 	signalCount := 0
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if failWorkflowTask {
 			failWorkflowTask = false
 			return nil, errors.New("Workflow panic")
 		}
 
 		// Count signals
-		for _, event := range history.Events[previousStartedEventID:] {
+		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 				signalCount++
 			}
@@ -177,11 +175,9 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	var sawFields []fields
 	// record value for failed wft
 	var failedTaskSawSize int64
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		// find workflow task started event
-		event := history.Events[len(history.Events)-1]
+		event := task.History.Events[len(task.History.Events)-1]
 		s.Equal(event.GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 		attrs := event.GetWorkflowTaskStartedEventAttributes()
 		s.Logger.Info("wtHandler", tag.Counter(stage))
@@ -366,9 +362,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 	// workflow logic
 	workflowComplete := false
 	continueAsNewAndSignal := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, workflowType *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !continueAsNewAndSignal {
 			continueAsNewAndSignal = true
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
@@ -387,7 +381,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-					WorkflowType:        workflowType,
+					WorkflowType:        task.WorkflowType,
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               nil,
 					WorkflowRunTimeout:  durationpb.New(1000 * time.Second),

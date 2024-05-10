@@ -72,6 +72,7 @@ func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventTok
 
 	node, err := node.AddChild(hsm.Key{Type: OperationMachineType.ID, ID: id}, Operation{
 		&persistencespb.NexusOperationInfo{
+			Endpoint:               attrs.Endpoint,
 			Service:                attrs.Service,
 			Operation:              attrs.Operation,
 			ScheduledTime:          event.EventTime,
@@ -148,7 +149,7 @@ func (o Operation) transitionTasks(node *hsm.Node) ([]hsm.Task, error) {
 	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
 		return []hsm.Task{BackoffTask{Deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
-		return []hsm.Task{InvocationTask{Destination: o.Service}}, nil
+		return []hsm.Task{InvocationTask{Destination: o.Endpoint}}, nil
 	default:
 		return nil, nil
 	}
@@ -466,7 +467,7 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	}
 	switch c.State() { // nolint:exhaustive
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
-		return []hsm.Task{CancelationTask{Destination: op.Service}}, nil
+		return []hsm.Task{CancelationTask{Destination: op.Endpoint}}, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
 		return []hsm.Task{CancelationBackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	default:

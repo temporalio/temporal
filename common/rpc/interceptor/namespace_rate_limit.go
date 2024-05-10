@@ -78,11 +78,13 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	ns := MustGetNamespaceName(ni.namespaceRegistry, req)
-	md, _ := metadata.FromIncomingContext(ctx)
-	if err := ni.Allow(ns, info.FullMethod, headers.GRPCHeaderGetter{Metadata: md}); err != nil {
-		return nil, err
+	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
+		md, _ := metadata.FromIncomingContext(ctx)
+		if err := ni.Allow(ns, info.FullMethod, headers.GRPCHeaderGetter{Metadata: md}); err != nil {
+			return nil, err
+		}
 	}
+
 	return handler(ctx, req)
 }
 

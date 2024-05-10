@@ -181,14 +181,14 @@ type (
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
-	// NexusIncomingServiceStore is a store for managing Nexus services
-	NexusIncomingServiceStore interface {
+	// NexusEndpointStore is a store for managing Nexus endpoints
+	NexusEndpointStore interface {
 		Closeable
 		GetName() string
-		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
-		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
-		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*InternalNexusIncomingService, error)
-		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
+		CreateOrUpdateNexusEndpoint(ctx context.Context, request *InternalCreateOrUpdateNexusEndpointRequest) error
+		DeleteNexusEndpoint(ctx context.Context, request *DeleteNexusEndpointRequest) error
+		GetNexusEndpoint(ctx context.Context, request *GetNexusEndpointRequest) (*InternalNexusEndpoint, error)
+		ListNexusEndpoints(ctx context.Context, request *ListNexusEndpointsRequest) (*InternalListNexusEndpointsResponse, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -741,21 +741,21 @@ type (
 		RecordExpiry time.Time
 	}
 
-	InternalNexusIncomingService struct {
-		ServiceID string
-		Version   int64
-		Data      *commonpb.DataBlob
+	InternalNexusEndpoint struct {
+		ID      string
+		Version int64
+		Data    *commonpb.DataBlob
 	}
 
-	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
+	InternalCreateOrUpdateNexusEndpointRequest struct {
 		LastKnownTableVersion int64
-		Service               InternalNexusIncomingService
+		Endpoint              InternalNexusEndpoint
 	}
 
-	InternalListNexusIncomingServicesResponse struct {
+	InternalListNexusEndpointsResponse struct {
 		TableVersion  int64
 		NextPageToken []byte
-		Services      []InternalNexusIncomingService
+		Endpoints     []InternalNexusEndpoint
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we

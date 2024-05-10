@@ -74,9 +74,17 @@ type (
 )
 
 var Module = fx.Options(
-	BeanModule,
+	fx.Provide(managerProvider(Factory.NewClusterMetadataManager)),
+	fx.Provide(managerProvider(Factory.NewMetadataManager)),
+	fx.Provide(managerProvider(Factory.NewTaskManager)),
+	fx.Provide(managerProvider(Factory.NewNamespaceReplicationQueue)),
+	fx.Provide(managerProvider(Factory.NewShardManager)),
+	fx.Provide(managerProvider(Factory.NewExecutionManager)),
+	fx.Provide(managerProvider(Factory.NewHistoryTaskQueueManager)),
+	fx.Provide(managerProvider(Factory.NewNexusEndpointManager)),
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
+	fx.Invoke(DataStoreFactoryLifetimeHooks),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(EventBlobCacheProvider),
 )
@@ -151,4 +159,16 @@ func HealthSignalAggregatorProvider(
 	}
 
 	return persistence.NoopHealthSignalAggregator
+}
+
+func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, error)) func(Factory, fx.Lifecycle) (T, error) {
+	return func(f Factory, lc fx.Lifecycle) (T, error) {
+		manager, err := newManagerFn(f) // passing receiver (Factory) as first argument.
+		if err != nil {
+			var nilT T
+			return nilT, err
+		}
+		lc.Append(fx.StopHook(manager.Close))
+		return manager, nil
+	}
 }

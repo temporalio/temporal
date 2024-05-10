@@ -282,11 +282,11 @@ func NexusMethodTag(value string) Tag {
 	return &tagImpl{key: nexusMethodTagName, value: value}
 }
 
-func NexusServiceTag(value string) Tag {
+func NexusEndpointTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: nexusServiceTagName, value: value}
+	return &tagImpl{key: nexusEndpointTagName, value: value}
 }
 
 // HttpStatusTag returns a new httpStatusTag.

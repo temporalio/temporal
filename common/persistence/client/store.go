@@ -25,6 +25,8 @@
 package client
 
 import (
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -52,8 +54,8 @@ type (
 		NewQueueV2() (p.QueueV2, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
-		// NewNexusIncomingServiceStore returns a new nexus service store
-		NewNexusIncomingServiceStore() (p.NexusIncomingServiceStore, error)
+		// NewNexusEndpointStore returns a new nexus endpoint store
+		NewNexusEndpointStore() (p.NexusEndpointStore, error)
 	}
 
 	// AbstractDataStoreFactory creates a DataStoreFactory, can be used to implement custom datastore support outside
@@ -98,4 +100,10 @@ func DataStoreFactoryProvider(
 	}
 
 	return dataStoreFactory, faultInjection
+}
+func DataStoreFactoryLifetimeHooks(
+	lc fx.Lifecycle,
+	factory DataStoreFactory,
+) {
+	lc.Append(fx.StopHook(factory.Close))
 }

@@ -88,27 +88,27 @@ type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr                    persistence.ShardManager
-		AbstractDataStoreFactory    client.AbstractDataStoreFactory
-		VisibilityStoreFactory      visibility.VisibilityStoreFactory
-		FaultInjection              *client.FaultInjectionDataStoreFactory
-		Factory                     client.Factory
-		ExecutionManager            persistence.ExecutionManager
-		TaskMgr                     persistence.TaskManager
-		ClusterMetadataManager      persistence.ClusterMetadataManager
-		MetadataManager             persistence.MetadataManager
-		NamespaceReplicationQueue   persistence.NamespaceReplicationQueue
-		NexusIncomingServiceManager persistence.NexusIncomingServiceManager
-		ShardInfo                   *persistencespb.ShardInfo
-		TaskIDGenerator             TransferTaskIDGenerator
-		ClusterMetadata             cluster.Metadata
-		SearchAttributesManager     searchattribute.Manager
-		PersistenceRateLimiter      quotas.RequestRateLimiter
-		PersistenceHealthSignals    persistence.HealthSignalAggregator
-		ReadLevel                   int64
-		ReplicationReadLevel        int64
-		DefaultTestCluster          PersistenceTestCluster
-		Logger                      log.Logger
+		ShardMgr                  persistence.ShardManager
+		AbstractDataStoreFactory  client.AbstractDataStoreFactory
+		VisibilityStoreFactory    visibility.VisibilityStoreFactory
+		FaultInjection            *client.FaultInjectionDataStoreFactory
+		Factory                   client.Factory
+		ExecutionManager          persistence.ExecutionManager
+		TaskMgr                   persistence.TaskManager
+		ClusterMetadataManager    persistence.ClusterMetadataManager
+		MetadataManager           persistence.MetadataManager
+		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
+		NexusEndpointManager      persistence.NexusEndpointManager
+		ShardInfo                 *persistencespb.ShardInfo
+		TaskIDGenerator           TransferTaskIDGenerator
+		ClusterMetadata           cluster.Metadata
+		SearchAttributesManager   searchattribute.Manager
+		PersistenceRateLimiter    quotas.RequestRateLimiter
+		PersistenceHealthSignals  persistence.HealthSignalAggregator
+		ReadLevel                 int64
+		ReplicationReadLevel      int64
+		DefaultTestCluster        PersistenceTestCluster
+		Logger                    log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -240,8 +240,8 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ExecutionManager, err = factory.NewExecutionManager()
 	s.fatalOnError("NewExecutionManager", err)
 
-	s.NexusIncomingServiceManager, err = factory.NewNexusIncomingServiceManager()
-	s.fatalOnError("NewNexusIncomingServiceManager", err)
+	s.NexusEndpointManager, err = factory.NewNexusEndpointManager()
+	s.fatalOnError("NewNexusEndpointManager", err)
 
 	s.Factory = factory
 	s.FaultInjection = faultInjection
@@ -279,7 +279,7 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.ExecutionManager.Close()
 	s.ShardMgr.Close()
 	s.ExecutionManager.Close()
-	s.NexusIncomingServiceManager.Close()
+	s.NexusEndpointManager.Close()
 	s.NamespaceReplicationQueue.Stop()
 	s.Factory.Close()
 	s.DefaultTestCluster.TearDownTestDatabase()

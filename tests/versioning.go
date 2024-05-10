@@ -72,8 +72,8 @@ const (
 	// use > 2 pollers by default to expose more timing situations
 	numPollers = 4
 	// These TTLs need to be greater than the time it takes for a workflow execution status change to show up in visibility
-	testReachabilityCacheOpenWFsTTL   = 10 * time.Second
-	testReachabilityCacheClosedWFsTTL = 10 * time.Second
+	testReachabilityCacheOpenWFsTTL   = 3 * time.Millisecond
+	testReachabilityCacheClosedWFsTTL = 6 * time.Millisecond
 )
 
 func (s *VersioningIntegSuite) SetupSuite() {
@@ -3703,33 +3703,16 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
 		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by visibility (db)
 	})
-	openWFsTTLTimer := time.NewTimer(testReachabilityCacheOpenWFsTTL)
 
 	// 5. Signal workflow with build id A so that it completes
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
-	// 6. Wait for A to show up as closed in visibility db (cache TTL must be longer than this wait time)
+	// 6. Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
 	s.Eventually(func() bool {
-		listResp, err := s.engine.ListClosedWorkflowExecutions(ctx, &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 10,
+		return s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
 		})
-		s.Nil(err)
-		return len(listResp.GetExecutions()) > 0
 	}, 5*time.Second, 50*time.Millisecond)
-
-	// 7. Query reachability(A) --> reachable by reachability cache
-	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
-		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by visibility cache (before TTL)
-	})
-
-	// 8. Wait for testReachabilityCacheOpenWFsTTL to pass
-	<-openWFsTTLTimer.C
-
-	// 9. Query reachability(A) --> closed_only by visibility db, populating reachability closed WF cache with A: true
-	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
-		"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
-	})
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReachability() {
@@ -3789,25 +3772,17 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by visibility
 		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
 	})
-	openWFsTTLTimer := time.NewTimer(testReachabilityCacheOpenWFsTTL)
 
-	// unblock the workflow on A and wait for it to close
+	// unblock the workflow on A so that it closes
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
-	s.Eventually(func() bool {
-		listResp, err := s.engine.ListClosedWorkflowExecutions(ctx, &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 10,
-		})
-		s.Nil(err)
-		return len(listResp.GetExecutions()) > 0
-	}, 5*time.Second, 50*time.Millisecond)
 
-	// now A is only reachable by closed workflows
-	<-openWFsTTLTimer.C
-	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A", "B"}}, map[string]enumspb.BuildIdTaskReachability{
-		"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_workflows_only by visibility
-		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,             // reachable by default assignment rule
-	})
+	// Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
+	s.Eventually(func() bool {
+		return s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
+			"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,             // reachable by default assignment rule
+		})
+	}, 5*time.Second, 50*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
@@ -4364,6 +4339,38 @@ func (s *VersioningIntegSuite) getBuildIdReachability(
 		s.Assert().True(ok, "build id %s was not expected", buildId)
 		s.Assert().Equal(expected, vi.GetTaskReachability(), "build id %s has unexpected reachability", buildId)
 	}
+}
+
+func (s *VersioningIntegSuite) checkBuildIdReachability(
+	ctx context.Context,
+	taskQueue string,
+	versions *taskqueuepb.TaskQueueVersionSelection,
+	expectedReachability map[string]enumspb.BuildIdTaskReachability) bool {
+	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:              s.namespace,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+		Versions:               versions,
+		TaskQueueTypes:         nil, // both types
+		ReportPollers:          false,
+		ReportTaskReachability: true,
+	})
+	if err != nil {
+		return false
+	}
+	if resp == nil {
+		return false
+	}
+	for buildId, vi := range resp.GetVersionsInfo() {
+		expected, ok := expectedReachability[buildId]
+		if !ok {
+			return false // build id was not expected
+		}
+		if expected != vi.GetTaskReachability() {
+			return false // build id has unexpected reachability
+		}
+	}
+	return true
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.

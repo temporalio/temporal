@@ -828,7 +828,7 @@ func (t *hrsuTest) acceptUpdateMessageHandler(resp *workflowservice.PollWorkflow
 	}, nil
 }
 
-func (t *hrsuTest) acceptUpdateWFTHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
+func (t *hrsuTest) acceptUpdateWFTHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
@@ -866,7 +866,7 @@ func (c *hrsuTestCluster) updateResult(updateId string) string {
 	return fmt.Sprintf("%s-%s-result", c.name, updateId)
 }
 
-func (t *hrsuTest) completeUpdateWFTHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
+func (t *hrsuTest) completeUpdateWFTHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
@@ -879,7 +879,7 @@ func (t *hrsuTest) respondWithErrorMessageHandler(resp *workflowservice.PollWork
 	return []*protocolpb.Message{}, errors.New("fake error while handling workflow task (message handler)")
 }
 
-func (t *hrsuTest) respondWithErrorWFTHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
+func (t *hrsuTest) respondWithErrorWFTHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	return []*commandpb.Command{}, errors.New("fake error while handling workflow task (WFT handler)")
 }
 
