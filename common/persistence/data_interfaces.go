@@ -1204,6 +1204,7 @@ type (
 	// task queue manager, but the actual history task queues are not managed by this object. Instead, this object is
 	// responsible for managing a generic queue of history tasks (which is what the history task DLQ is).
 	HistoryTaskQueueManager interface {
+		Closeable
 		EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error)
 		ReadRawTasks(
 			ctx context.Context,

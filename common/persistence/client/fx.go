@@ -74,21 +74,14 @@ type (
 )
 
 var Module = fx.Options(
-	fx.Provide(ClusterMetadataManagerProvider),
-	fx.Invoke(ClusterMetadataManagerLifetimeHooks),
-	fx.Provide(MetadataManagerProvider),
-	fx.Invoke(MetadataManagerLifetimeHooks),
-	fx.Provide(TaskManagerProvider),
-	fx.Invoke(TaskManagerLifetimeHooks),
-	fx.Provide(NamespaceReplicationQueueProvider),
-	fx.Invoke(NamespaceReplicationQueueLifetimeHooks),
-	fx.Provide(ShardManagerProvider),
-	fx.Invoke(ShardManagerLifetimeHooks),
-	fx.Provide(ExecutionManagerProvider),
-	fx.Invoke(ExecutionManagerLifetimeHooks),
-	fx.Provide(HistoryTaskQueueManagerProvider),
-	fx.Provide(NexusEndpointManagerProvider),
-	fx.Invoke(NexusEndpointManagerLifetimeHooks),
+	fx.Provide(managerProvider(Factory.NewClusterMetadataManager)),
+	fx.Provide(managerProvider(Factory.NewMetadataManager)),
+	fx.Provide(managerProvider(Factory.NewTaskManager)),
+	fx.Provide(managerProvider(Factory.NewNamespaceReplicationQueue)),
+	fx.Provide(managerProvider(Factory.NewShardManager)),
+	fx.Provide(managerProvider(Factory.NewExecutionManager)),
+	fx.Provide(managerProvider(Factory.NewHistoryTaskQueueManager)),
+	fx.Provide(managerProvider(Factory.NewNexusEndpointManager)),
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
 	fx.Invoke(DataStoreFactoryLifetimeHooks),
@@ -168,76 +161,14 @@ func HealthSignalAggregatorProvider(
 	return persistence.NoopHealthSignalAggregator
 }
 
-func ClusterMetadataManagerProvider(factory Factory) (persistence.ClusterMetadataManager, error) {
-	return factory.NewClusterMetadataManager()
-}
-func ClusterMetadataManagerLifetimeHooks(
-	lc fx.Lifecycle,
-	manager persistence.ClusterMetadataManager,
-) {
-	lc.Append(fx.StopHook(manager.Close))
-}
-
-func MetadataManagerProvider(factory Factory) (persistence.MetadataManager, error) {
-	return factory.NewMetadataManager()
-}
-func MetadataManagerLifetimeHooks(
-	lc fx.Lifecycle,
-	manager persistence.MetadataManager,
-) {
-	lc.Append(fx.StopHook(manager.Close))
-}
-
-func TaskManagerProvider(factory Factory) (persistence.TaskManager, error) {
-	return factory.NewTaskManager()
-}
-func TaskManagerLifetimeHooks(
-	lc fx.Lifecycle,
-	manager persistence.TaskManager,
-) {
-	lc.Append(fx.StopHook(manager.Close))
-}
-
-func NamespaceReplicationQueueProvider(factory Factory) (persistence.NamespaceReplicationQueue, error) {
-	return factory.NewNamespaceReplicationQueue()
-}
-func NamespaceReplicationQueueLifetimeHooks(
-	lc fx.Lifecycle,
-	manager persistence.NamespaceReplicationQueue,
-) {
-	lc.Append(fx.StopHook(manager.Stop))
-}
-
-func ShardManagerProvider(factory Factory) (persistence.ShardManager, error) {
-	return factory.NewShardManager()
-}
-func ShardManagerLifetimeHooks(
-	lc fx.Lifecycle,
-	manager persistence.ShardManager,
-) {
-	lc.Append(fx.StopHook(manager.Close))
-}
-
-func ExecutionManagerProvider(factory Factory) (persistence.ExecutionManager, error) {
-	return factory.NewExecutionManager()
-}
-func ExecutionManagerLifetimeHooks(
-	lc fx.Lifecycle,
-	manager persistence.ExecutionManager,
-) {
-	lc.Append(fx.StopHook(manager.Close))
-}
-
-func HistoryTaskQueueManagerProvider(factory Factory) (persistence.HistoryTaskQueueManager, error) {
-	return factory.NewHistoryTaskQueueManager()
-}
-
-func NexusEndpointManagerProvider(factory Factory) (persistence.NexusEndpointManager, error) {
-	return factory.NewNexusEndpointManager()
-}
-func NexusEndpointManagerLifetimeHooks(
-	lc fx.Lifecycle,
-	manager persistence.NexusEndpointManager,
-) {
-	lc.Append(fx.StopHook(manager.Close))
+func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, error)) func(Factory, fx.Lifecycle) (T, error) {
+	return func(f Factory, lc fx.Lifecycle) (T, error) {
+		manager, err := newManagerFn(f) // passing receiver (Factory) as first argument.
+		if err != nil {
+			var nilT T
+			return nilT, err
+		}
+		lc.Append(fx.StopHook(manager.Close))
+		return manager, nil
+	}
 }

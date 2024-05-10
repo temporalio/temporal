@@ -103,6 +103,7 @@ type (
 
 	// NamespaceReplicationQueue is used to publish and list namespace replication tasks
 	NamespaceReplicationQueue interface {
+		Closeable
 		Publish(ctx context.Context, task *replicationspb.ReplicationTask) error
 		GetReplicationMessages(
 			ctx context.Context,
@@ -145,6 +146,10 @@ func (q *namespaceReplicationQueueImpl) Stop() {
 	close(q.done)
 
 	q.gorogrp.Cancel()
+}
+
+func (q *namespaceReplicationQueueImpl) Close() {
+	q.Stop()
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
