@@ -70,7 +70,7 @@ TEST_TIMEOUT := 30m
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
-API_BINPB := proto/api.binpb
+API_BINPB := $(PROTO_ROOT)/api.binpb
 PROTO_OUT := api
 PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
 PROTO_PATHS = paths=source_relative:$(PROTO_OUT)
@@ -230,6 +230,7 @@ clean-proto: gomodtidy
 	@rm -rf $(PROTO_OUT)/*
 
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
+	@printf $(COLOR) "Generate api.binpb..."
 	@./cmd/tools/getproto/run.sh --out $@
 
 protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
