@@ -132,7 +132,7 @@ func (w *taskWriter) initReadWriteState(ctx context.Context) error {
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
 	w.backlogMgr.db.SetMaxReadLevel(w.taskIDBlock.start - 1)
-	w.backlogMgr.taskAckManager.setAckLevel(state.ackLevel)
+	w.backlogMgr.db.setAckLevel(state.ackLevel)
 	return nil
 }
 

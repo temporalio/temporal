@@ -291,11 +291,11 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	// Create queue Manager and set queue state
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 	tlm.backlogMgr.db.rangeID = int64(1)
-	tlm.backlogMgr.db.ackLevel = int64(0)
-	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
+	tlm.backlogMgr.db.ackLevel.Store(int64(0))
+	tlm.backlogMgr.db.setAckLevel(tlm.backlogMgr.db.ackLevel.Load())
 
 	for i := int64(0); i < taskCount; i++ {
-		tlm.backlogMgr.taskAckManager.addTask(startTaskID + i)
+		tlm.backlogMgr.db.addTask(startTaskID + i)
 	}
 
 	includeTaskStatus := false
@@ -316,7 +316,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	// Add a poller and complete all tasks
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{})
 	for i := int64(0); i < taskCount; i++ {
-		tlm.backlogMgr.taskAckManager.completeTask(startTaskID + i)
+		tlm.backlogMgr.db.completeTask(startTaskID + i)
 	}
 
 	descResp = tlm.LegacyDescribeTaskQueue(includeTaskStatus)

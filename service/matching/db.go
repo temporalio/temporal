@@ -27,8 +27,10 @@ package matching
 import (
 	"context"
 	"fmt"
+	"github.com/emirpasic/gods/maps/treemap"
+	godsutils "github.com/emirpasic/gods/utils"
+	"go.uber.org/atomic"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/metrics"
@@ -55,11 +57,16 @@ type (
 		backlogMgr              *backlogManagerImpl // accessing taskWriter and taskReader
 		queue                   *PhysicalTaskQueueKey
 		rangeID                 int64
-		ackLevel                int64
 		store                   persistence.TaskManager
 		logger                  log.Logger
 		approximateBacklogCount atomic.Int64
 		maxReadLevel            atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
+
+		outstandingTasks *treemap.Map  // TaskID->acked
+		readLevel        *atomic.Int64 // Maximum TaskID inserted into outstandingTasks
+		ackLevel         *atomic.Int64 // Maximum TaskID below which all tasks are acked
+		backlogCounter   atomic.Int64  // already present backlogCounter
+
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -84,11 +91,111 @@ func newTaskQueueDB(
 	logger log.Logger,
 ) *taskQueueDB {
 	return &taskQueueDB{
-		backlogMgr: backlogMgr,
-		queue:      queue,
-		store:      store,
-		logger:     logger,
+		backlogMgr:       backlogMgr,
+		queue:            queue,
+		store:            store,
+		logger:           logger,
+		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
+		readLevel:        atomic.NewInt64(-1),
+		ackLevel:         atomic.NewInt64(-1),
 	}
+}
+
+// Registers task as in-flight and moves read level to it. Tasks can be added in increasing order of taskID only.
+func (db *taskQueueDB) addTask(taskID int64) {
+	db.Lock()
+	defer db.Unlock()
+	if db.readLevel.Load() >= taskID {
+		db.logger.Fatal("Next task ID is less than current read level.",
+			tag.TaskID(taskID),
+			tag.ReadLevel(db.readLevel.Load()))
+	}
+	db.readLevel.Store(taskID)
+	if _, found := db.outstandingTasks.Get(taskID); found {
+		db.logger.Fatal("Already present in outstanding tasks", tag.TaskID(taskID))
+	}
+	db.outstandingTasks.Put(taskID, false)
+	db.backlogCounter.Inc()
+}
+
+func (db *taskQueueDB) getReadLevel() int64 {
+	return db.readLevel.Load()
+}
+
+func (db *taskQueueDB) setReadLevel(readLevel int64) {
+	db.Lock()
+	defer db.Unlock()
+	db.readLevel.Store(readLevel)
+}
+
+func (db *taskQueueDB) setReadLevelAfterGap(newReadLevel int64) {
+	db.Lock()
+	defer db.Unlock()
+	if db.ackLevel.Load() == db.readLevel.Load() {
+		// This is called after we read a range and find no tasks. The range we read was m.readLevel to newReadLevel.
+		// (We know this because nothing should change m.readLevel except the getTasksPump loop itself, after initialization.
+		// And getTasksPump doesn't start until it gets a signal from taskWriter that it's initialized the levels.)
+		// If we've acked all tasks up to m.readLevel, and there are no tasks between that and newReadLevel, then we've
+		// acked all tasks up to newReadLevel too. This lets us advance the ack level on a task queue with no activity
+		// but where the rangeid has moved higher, to prevent excessive reads on the next load.
+		db.ackLevel.Store(newReadLevel)
+	}
+	db.readLevel.Store(newReadLevel)
+}
+
+func (db *taskQueueDB) getAckLevel() int64 {
+	return db.ackLevel.Load()
+}
+
+// Moves ack level to the new level if it is higher than the current one.
+// Also updates the read level if it is lower than the ackLevel.
+func (db *taskQueueDB) setAckLevel(ackLevel int64) {
+	db.Lock()
+	defer db.Unlock()
+	if ackLevel > db.ackLevel.Load() {
+		db.ackLevel.Store(ackLevel)
+	}
+	if ackLevel > db.readLevel.Load() {
+		db.readLevel.Store(ackLevel)
+	}
+}
+
+func (db *taskQueueDB) completeTask(taskID int64) int64 {
+	db.Lock()
+	defer db.Unlock()
+
+	macked, found := db.outstandingTasks.Get(taskID)
+	if !found {
+		return db.ackLevel.Load()
+	}
+
+	acked := macked.(bool)
+	if acked {
+		// don't adjust ack level if nothing has changed
+		return db.ackLevel.Load()
+	}
+
+	// TODO the ack level management should be done by a dedicated coroutine
+	//  this is only a temporarily solution
+	db.outstandingTasks.Put(taskID, true)
+	db.backlogCounter.Dec()
+
+	// Adjust the ack level as far as we can
+	for {
+		min, acked := db.outstandingTasks.Min()
+		if min == nil || !acked.(bool) {
+			return db.ackLevel.Load()
+		}
+		db.ackLevel.Store(min.(int64))
+		db.outstandingTasks.Remove(min)
+		// reducing our backlog since a task gets acked
+		db.backlogMgr.db.approximateBacklogCount.Add(int64(-1))
+	}
+
+}
+
+func (db *taskQueueDB) getBacklogCountHint() int64 {
+	return db.backlogCounter.Load()
 }
 
 // RangeID returns the current persistence view of rangeID
@@ -127,7 +234,7 @@ func (db *taskQueueDB) RenewLease(
 			return taskQueueState{}, err
 		}
 	}
-	return taskQueueState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
+	return taskQueueState{rangeID: db.rangeID, ackLevel: db.ackLevel.Load()}, nil
 }
 
 func (db *taskQueueDB) takeOverTaskQueueLocked(
@@ -150,7 +257,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}); err != nil {
 			return err
 		}
-		db.ackLevel = response.TaskQueueInfo.AckLevel
+		db.ackLevel.Store(response.TaskQueueInfo.AckLevel)
 		db.rangeID = response.RangeID + 1
 		db.approximateBacklogCount.Store(response.TaskQueueInfo.ApproximateBacklogCount)
 		return nil
@@ -189,26 +296,24 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 // UpdateState updates the queue state with the given values
 func (db *taskQueueDB) UpdateState(
 	ctx context.Context,
-	ackLevel int64,
 ) error {
 	db.Lock()
 	defer db.Unlock()
 
+	fmt.Printf("I am inside UpdateState!\n")
 	// Resetting approximateBacklogCounter to fix the count divergence issue
-	maxReadLevel := db.GetMaxReadLevel()
-	if ackLevel == maxReadLevel {
+	if db.getAckLevel() == db.GetMaxReadLevel() {
 		db.approximateBacklogCount.Store(0)
 	}
 
 	queueInfo := db.cachedQueueInfo()
-	queueInfo.AckLevel = ackLevel
 	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 		RangeID:       db.rangeID,
 		TaskQueueInfo: queueInfo,
 		PrevRangeID:   db.rangeID,
 	})
 	if err == nil {
-		db.ackLevel = ackLevel
+		db.emitTaskLagMetric()
 		db.emitApproximateBacklogCount()
 	}
 	return err
@@ -344,7 +449,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		Name:                    db.queue.PersistenceName(),
 		TaskType:                db.queue.TaskType(),
 		Kind:                    db.queue.Partition().Kind(),
-		AckLevel:                db.ackLevel,
+		AckLevel:                db.ackLevel.Load(),
 		ExpiryTime:              db.expiryTime(),
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
 		ApproximateBacklogCount: db.approximateBacklogCount.Load(),
@@ -355,4 +460,10 @@ func (db *taskQueueDB) emitApproximateBacklogCount() {
 	// note: this metric is called after persisting the updated BacklogCount
 	approximateBacklogCount := db.getApproximateBacklogCount()
 	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
+}
+
+func (db *taskQueueDB) emitTaskLagMetric() {
+	// note: this metric is only an estimation for the lag.
+	// taskID in DB may not be continuous, especially when task list ownership changes.
+	db.backlogMgr.metricsHandler.Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(db.GetMaxReadLevel() - db.getAckLevel()))
 }

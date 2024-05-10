@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"golang.org/x/exp/rand"
 	"testing"
 	"time"
 
@@ -95,11 +96,11 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	// TODO: do not create pq manager, directly create backlog manager
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 	tlm.backlogMgr.db.rangeID = int64(1)
-	tlm.backlogMgr.db.ackLevel = int64(0)
-	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
-	tlm.backlogMgr.taskAckManager.setReadLevel(tlm.backlogMgr.db.ackLevel)
-	require.Equal(t, int64(0), tlm.backlogMgr.taskAckManager.getAckLevel())
-	require.Equal(t, int64(0), tlm.backlogMgr.taskAckManager.getReadLevel())
+	tlm.backlogMgr.db.ackLevel.Store(int64(0))
+	tlm.backlogMgr.db.setAckLevel(tlm.backlogMgr.db.ackLevel.Load())
+	tlm.backlogMgr.db.setReadLevel(tlm.backlogMgr.db.ackLevel.Load())
+	require.Equal(t, int64(0), tlm.backlogMgr.db.getAckLevel())
+	require.Equal(t, int64(0), tlm.backlogMgr.db.getReadLevel())
 
 	// Add all expired tasks
 	tasks := []*persistencespb.AllocatedTaskInfo{
@@ -120,8 +121,8 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	}
 
 	require.NoError(t, tlm.backlogMgr.taskReader.addTasksToBuffer(context.TODO(), tasks))
-	require.Equal(t, int64(0), tlm.backlogMgr.taskAckManager.getAckLevel())
-	require.Equal(t, int64(12), tlm.backlogMgr.taskAckManager.getReadLevel())
+	require.Equal(t, int64(0), tlm.backlogMgr.db.getAckLevel())
+	require.Equal(t, int64(12), tlm.backlogMgr.db.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
 	require.NoError(t, tlm.backlogMgr.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
@@ -140,8 +141,8 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 			TaskId: 14,
 		},
 	}))
-	require.Equal(t, int64(0), tlm.backlogMgr.taskAckManager.getAckLevel())
-	require.Equal(t, int64(14), tlm.backlogMgr.taskAckManager.getReadLevel())
+	require.Equal(t, int64(0), tlm.backlogMgr.db.getAckLevel())
+	require.Equal(t, int64(14), tlm.backlogMgr.db.getReadLevel())
 }
 
 func TestTaskWriterShutdown(t *testing.T) {
@@ -197,15 +198,15 @@ func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 
 	backlogMgr := newBacklogMgr(controller)
 
-	backlogMgr.taskAckManager.addTask(int64(1))
+	backlogMgr.db.addTask(int64(1))
 	// Manually updating the backlog size since adding tasks to the outstanding map does not increment the counter
 	backlogMgr.db.updateApproximateBacklogCount(int64(1))
 	require.Equal(t, int64(1), backlogMgr.db.getApproximateBacklogCount(), "1 task in the backlog")
-	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	require.Equal(t, int64(1), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
-	require.Equal(t, int64(1), backlogMgr.taskAckManager.completeTask(1), "should move ack level and decrease backlog counter on completion")
+	require.Equal(t, int64(-1), backlogMgr.db.getAckLevel(), "should only move ack level on completion")
+	require.Equal(t, int64(1), backlogMgr.db.getReadLevel(), "read level should be 1 since a task has been added")
+	require.Equal(t, int64(1), backlogMgr.db.completeTask(1), "should move ack level and decrease backlog counter on completion")
 
-	require.Equal(t, int64(1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
+	require.Equal(t, int64(1), backlogMgr.db.getAckLevel(), "should only move ack level on completion")
 	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount(), "0 tasks in the backlog")
 
 }
@@ -216,25 +217,25 @@ func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 
 	backlogMgr := newBacklogMgr(controller)
 
-	backlogMgr.taskAckManager.addTask(int64(1))
-	backlogMgr.taskAckManager.addTask(int64(2))
-	backlogMgr.taskAckManager.addTask(int64(3))
+	backlogMgr.db.addTask(int64(1))
+	backlogMgr.db.addTask(int64(2))
+	backlogMgr.db.addTask(int64(3))
 
 	// Manually updating the backlog size since adding tasks to the outstanding map does not increment the counter
 	backlogMgr.db.updateApproximateBacklogCount(int64(3))
 
 	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "1 task in the backlog")
-	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	require.Equal(t, int64(3), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
+	require.Equal(t, int64(-1), backlogMgr.db.getAckLevel(), "should only move ack level on completion")
+	require.Equal(t, int64(3), backlogMgr.db.getReadLevel(), "read level should be 1 since a task has been added")
 
 	// Completing tasks
-	require.Equal(t, int64(-1), backlogMgr.taskAckManager.completeTask(2), "should not move the ack level")
+	require.Equal(t, int64(-1), backlogMgr.db.completeTask(2), "should not move the ack level")
 	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "should not decrease the backlog counter as ack level has not gone up")
 
-	require.Equal(t, int64(-1), backlogMgr.taskAckManager.completeTask(3), "should not move the ack level")
+	require.Equal(t, int64(-1), backlogMgr.db.completeTask(3), "should not move the ack level")
 	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "should not decrease the backlog counter as ack level has not gone up")
 
-	require.Equal(t, int64(3), backlogMgr.taskAckManager.completeTask(1), "should move the ack level")
+	require.Equal(t, int64(3), backlogMgr.db.completeTask(1), "should move the ack level")
 	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount(), "should decrease the backlog counter to 0 as no more tasks in the backlog")
 
 }
@@ -307,4 +308,90 @@ func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
 
 func defaultContextInfoProvider(ctx context.Context) context.Context {
 	return ctx
+}
+
+func TestBacklogManager_AddingTasksIncreasesBacklogCounter(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	backlogMgr := newBacklogMgr(controller)
+
+	t.Parallel()
+	backlogMgr.db.addTask(1)
+	require.Equal(t, backlogMgr.db.getBacklogCountHint(), int64(1))
+	backlogMgr.db.addTask(12)
+	require.Equal(t, backlogMgr.db.getBacklogCountHint(), int64(2))
+}
+
+func TestBacklogManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
+	t.Parallel()
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	backlogMgr := newBacklogMgr(controller)
+
+	backlogMgr.db.addTask(1)
+
+	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
+	// this happens since we decrease the counter on completion of a task
+	backlogMgr.db.updateApproximateBacklogCount(1)
+	require.Equal(t, int64(-1), backlogMgr.db.getAckLevel(), "should only move ack level on completion")
+	require.Equal(t, int64(1), backlogMgr.db.completeTask(1), "should move ack level on completion")
+
+	backlogMgr.db.addTask(2)
+	backlogMgr.db.addTask(3)
+	backlogMgr.db.addTask(12)
+	backlogMgr.db.updateApproximateBacklogCount(3)
+
+	require.Equal(t, int64(1), backlogMgr.db.completeTask(3), "task 2 is not complete, we should not move ack level")
+	require.Equal(t, int64(3), backlogMgr.db.completeTask(2), "both tasks 2 and 3 are complete")
+}
+
+func BenchmarkBacklogManager_AddTask(b *testing.B) {
+	controller := gomock.NewController(b)
+	defer controller.Finish()
+
+	tasks := make([]int, 1000)
+	for i := 0; i < len(tasks); i++ {
+		tasks[i] = i
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Add 1000 tasks in order and complete them in a random order.
+		// This will cause our ack level to jump as we complete them
+		b.StopTimer()
+		backlogMgr := newBacklogMgr(controller)
+		rand.Shuffle(len(tasks), func(i, j int) {
+			tasks[i], tasks[j] = tasks[j], tasks[i]
+		})
+		b.StartTimer()
+		for i := 0; i < len(tasks); i++ {
+			tasks[i] = i
+			backlogMgr.db.addTask(int64(i))
+		}
+	}
+}
+
+func BenchmarkBacklogManager_CompleteTask(b *testing.B) {
+	controller := gomock.NewController(b)
+	defer controller.Finish()
+
+	tasks := make([]int, 1000)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Add 1000 tasks in order and complete them in a random order.
+		// This will cause our ack level to jump as we complete them
+		b.StopTimer()
+		backlogMgr := newBacklogMgr(controller)
+		for i := 0; i < len(tasks); i++ {
+			tasks[i] = i
+			backlogMgr.db.addTask(int64(i))
+		}
+		rand.Shuffle(len(tasks), func(i, j int) {
+			tasks[i], tasks[j] = tasks[j], tasks[i]
+		})
+		b.StartTimer()
+
+		for i := 0; i < len(tasks); i++ {
+			backlogMgr.db.completeTask(int64(i))
+		}
+	}
 }

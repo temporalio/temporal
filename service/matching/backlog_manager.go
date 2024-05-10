@@ -78,7 +78,6 @@ type (
 		taskWriter          *taskWriter
 		taskReader          *taskReader // reads tasks from db and async matches it with poller
 		taskGC              *taskGC
-		taskAckManager      ackManager // tracks ackLevel for delivered messages
 		config              *taskQueueConfig
 		logger              log.Logger
 		throttledLogger     log.ThrottledLogger
@@ -117,7 +116,6 @@ func newBacklogManager(
 	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
-	bmg.taskAckManager = newAckManager(bmg)
 	bmg.taskGC = newTaskGC(bmg.db, config)
 
 	return bmg
@@ -153,12 +151,12 @@ func (c *backlogManagerImpl) Stop() {
 	// Ignore any errors.
 	// Note that it's fine to GC even if the update ack level fails because we did match the
 	// tasks, the next owner will just read over an empty range.
-	ackLevel := c.taskAckManager.getAckLevel()
+	ackLevel := c.db.getAckLevel()
 	if ackLevel >= 0 && !c.skipFinalUpdate.Load() {
 		ctx, cancel := c.newIOContext()
 		defer cancel()
 
-		_ = c.db.UpdateState(ctx, ackLevel)
+		_ = c.db.UpdateState(ctx)
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.taskWriter.Stop()
@@ -197,14 +195,14 @@ func (c *backlogManagerImpl) processSpooledTask(
 }
 
 func (c *backlogManagerImpl) BacklogCountHint() int64 {
-	return c.taskAckManager.getBacklogCountHint()
+	return c.db.getBacklogCountHint()
 }
 
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
-		ReadLevel:        c.taskAckManager.getReadLevel(),
-		AckLevel:         c.taskAckManager.getAckLevel(),
+		ReadLevel:        c.db.getReadLevel(),
+		AckLevel:         c.db.getAckLevel(),
 		BacklogCountHint: c.BacklogCountHint(),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
@@ -218,8 +216,8 @@ func (c *backlogManagerImpl) String() string {
 	rangeID := c.db.RangeID()
 	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
 	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
-	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.taskAckManager.getReadLevel())
+	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.db.ackLevel)
+	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.db.getReadLevel())
 
 	return buf.String()
 }
@@ -259,7 +257,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		c.taskReader.Signal()
 	}
 
-	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
+	ackLevel := c.db.completeTask(task.GetTaskId())
 
 	// TODO: completeTaskFunc and task.finish() should take in a context
 	ctx, cancel := c.newIOContext()

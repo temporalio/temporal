@@ -185,7 +185,7 @@ Loop:
 			tr.retrier.Reset()
 
 			if len(batch.tasks) == 0 {
-				tr.backlogMgr.taskAckManager.setReadLevelAfterGap(batch.readLevel)
+				tr.backlogMgr.db.setReadLevelAfterGap(batch.readLevel)
 				if !batch.isReadBatchDone {
 					tr.Signal()
 				}
@@ -236,7 +236,7 @@ type getTasksBatchResponse struct {
 // Also return a bool to indicate whether read is finished
 func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
-	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
+	readLevel := tr.backlogMgr.db.getReadLevel()
 	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
 
 	// counter i is used to break and let caller check whether taskqueue is still alive and need resume read.
@@ -275,7 +275,7 @@ func (tr *taskReader) addTasksToBuffer(
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
-			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())
+			tr.backlogMgr.db.setReadLevel(t.GetTaskId())
 			continue
 		}
 		if err := tr.addSingleTaskToBuffer(ctx, t); err != nil {
@@ -289,7 +289,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 	ctx context.Context,
 	task *persistencespb.AllocatedTaskInfo,
 ) error {
-	tr.backlogMgr.taskAckManager.addTask(task.GetTaskId())
+	tr.backlogMgr.db.addTask(task.GetTaskId())
 	select {
 	case tr.taskBuffer <- task:
 		return nil
@@ -299,10 +299,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 }
 
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
-	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	tr.emitTaskLagMetric(ackLevel)
-	err := tr.backlogMgr.db.UpdateState(ctx, ackLevel)
-
+	err := tr.backlogMgr.db.UpdateState(ctx)
 	return err
 }
 
@@ -316,13 +313,6 @@ func (tr *taskReader) throttledLogger() log.ThrottledLogger {
 
 func (tr *taskReader) taggedMetricsHandler() metrics.Handler {
 	return tr.backlogMgr.metricsHandler
-}
-
-func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
-	// note: this metric is only an estimation for the lag.
-	// taskID in DB may not be continuous, especially when task list ownership changes.
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
-	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(maxReadLevel - ackLevel))
 }
 
 func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {

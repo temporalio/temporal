@@ -235,15 +235,14 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 	return pm
 }
 
-func (s *matchingEngineSuite) TestAckManager() {
+func (s *matchingEngineSuite) TestBacklogManagerAckLevel() {
 	controller := gomock.NewController(s.T())
 	defer controller.Finish()
 	backlogMgr := newBacklogMgr(controller)
-	m := newAckManager(backlogMgr)
 
-	m.setAckLevel(100)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(100, m.getReadLevel())
+	backlogMgr.db.setAckLevel(100)
+	s.EqualValues(100, backlogMgr.db.getAckLevel())
+	s.EqualValues(100, backlogMgr.db.getReadLevel())
 	const t1 = 200
 	const t2 = 220
 	const t3 = 320
@@ -251,97 +250,96 @@ func (s *matchingEngineSuite) TestAckManager() {
 	const t5 = 360
 	const t6 = 380
 
-	m.addTask(t1)
+	backlogMgr.db.addTask(t1)
 	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
 	// this happens since we decrease the counter on completion of a task
 	backlogMgr.db.updateApproximateBacklogCount(1)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t1, m.getReadLevel())
+	s.EqualValues(100, backlogMgr.db.getAckLevel())
+	s.EqualValues(t1, backlogMgr.db.getReadLevel())
 
-	m.addTask(t2)
+	backlogMgr.db.addTask(t2)
 	backlogMgr.db.updateApproximateBacklogCount(1)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
+	s.EqualValues(100, backlogMgr.db.getAckLevel())
+	s.EqualValues(t2, backlogMgr.db.getReadLevel())
 
-	m.completeTask(t2)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
+	backlogMgr.db.completeTask(t2)
+	s.EqualValues(100, backlogMgr.db.getAckLevel())
+	s.EqualValues(t2, backlogMgr.db.getReadLevel())
 
-	m.completeTask(t1)
-	s.EqualValues(t2, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
+	backlogMgr.db.completeTask(t1)
+	s.EqualValues(t2, backlogMgr.db.getAckLevel())
+	s.EqualValues(t2, backlogMgr.db.getReadLevel())
 
-	m.setAckLevel(300)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(300, m.getReadLevel())
+	backlogMgr.db.setAckLevel(300)
+	s.EqualValues(300, backlogMgr.db.getAckLevel())
+	s.EqualValues(300, backlogMgr.db.getReadLevel())
 
-	m.addTask(t3)
+	backlogMgr.db.addTask(t3)
 	backlogMgr.db.updateApproximateBacklogCount(1)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(t3, m.getReadLevel())
+	s.EqualValues(300, backlogMgr.db.getAckLevel())
+	s.EqualValues(t3, backlogMgr.db.getReadLevel())
 
-	m.addTask(t4)
+	backlogMgr.db.addTask(t4)
 	backlogMgr.db.updateApproximateBacklogCount(1)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
+	s.EqualValues(300, backlogMgr.db.getAckLevel())
+	s.EqualValues(t4, backlogMgr.db.getReadLevel())
 
-	m.completeTask(t3)
-	s.EqualValues(t3, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
+	backlogMgr.db.completeTask(t3)
+	s.EqualValues(t3, backlogMgr.db.getAckLevel())
+	s.EqualValues(t4, backlogMgr.db.getReadLevel())
 
-	m.completeTask(t4)
-	s.EqualValues(t4, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
+	backlogMgr.db.completeTask(t4)
+	s.EqualValues(t4, backlogMgr.db.getAckLevel())
+	s.EqualValues(t4, backlogMgr.db.getReadLevel())
 
-	m.setReadLevel(t5)
-	s.EqualValues(t5, m.getReadLevel())
+	backlogMgr.db.setReadLevel(t5)
+	s.EqualValues(t5, backlogMgr.db.getReadLevel())
 
-	m.setAckLevel(t5)
-	m.setReadLevelAfterGap(t6)
-	s.EqualValues(t6, m.getReadLevel())
-	s.EqualValues(t6, m.getAckLevel())
+	backlogMgr.db.setAckLevel(t5)
+	backlogMgr.db.setReadLevelAfterGap(t6)
+	s.EqualValues(t6, backlogMgr.db.getReadLevel())
+	s.EqualValues(t6, backlogMgr.db.getAckLevel())
 }
 
-func (s *matchingEngineSuite) TestAckManager_Sort() {
+func (s *matchingEngineSuite) TestBacklogManager_SortAckLevels() {
 	controller := gomock.NewController(s.T())
 	defer controller.Finish()
 	backlogMgr := newBacklogMgr(controller)
-	m := newAckManager(backlogMgr)
 
 	const t0 = 100
-	m.setAckLevel(t0)
-	s.EqualValues(t0, m.getAckLevel())
-	s.EqualValues(t0, m.getReadLevel())
+	backlogMgr.db.setAckLevel(t0)
+	s.EqualValues(t0, backlogMgr.db.getAckLevel())
+	s.EqualValues(t0, backlogMgr.db.getReadLevel())
 	const t1 = 200
 	const t2 = 220
 	const t3 = 320
 	const t4 = 340
 	const t5 = 360
 
-	m.addTask(t1)
-	m.addTask(t2)
-	m.addTask(t3)
-	m.addTask(t4)
-	m.addTask(t5)
+	backlogMgr.db.addTask(t1)
+	backlogMgr.db.addTask(t2)
+	backlogMgr.db.addTask(t3)
+	backlogMgr.db.addTask(t4)
+	backlogMgr.db.addTask(t5)
 
 	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
 	// this happens since we decrease the counter on completion of a task
 	backlogMgr.db.updateApproximateBacklogCount(5)
 
-	m.completeTask(t2)
-	s.EqualValues(t0, m.getAckLevel())
+	backlogMgr.db.completeTask(t2)
+	s.EqualValues(t0, backlogMgr.db.getAckLevel())
 
-	m.completeTask(t1)
-	s.EqualValues(t2, m.getAckLevel())
+	backlogMgr.db.completeTask(t1)
+	s.EqualValues(t2, backlogMgr.db.getAckLevel())
 
-	m.completeTask(t5)
-	s.EqualValues(t2, m.getAckLevel())
+	backlogMgr.db.completeTask(t5)
+	s.EqualValues(t2, backlogMgr.db.getAckLevel())
 
-	m.completeTask(t4)
-	s.EqualValues(t2, m.getAckLevel())
+	backlogMgr.db.completeTask(t4)
+	s.EqualValues(t2, backlogMgr.db.getAckLevel())
 
-	m.completeTask(t3)
-	s.EqualValues(t5, m.getAckLevel())
+	backlogMgr.db.completeTask(t3)
+	s.EqualValues(t5, backlogMgr.db.getAckLevel())
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResult() {
@@ -1795,14 +1793,14 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(tlMgr.backlogMgr.db.GetMaxReadLevel())
+	tlMgr.backlogMgr.db.setReadLevel(tlMgr.backlogMgr.db.GetMaxReadLevel())
 	batch, err := tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(0, len(batch.tasks))
 	s.EqualValues(tlMgr.backlogMgr.db.GetMaxReadLevel(), batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(0)
+	tlMgr.backlogMgr.db.setReadLevel(0)
 	batch, err = tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(rangeSize, len(batch.tasks))
@@ -1814,7 +1812,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// reset the ackManager readLevel to the buffer size and consume
 	// the in-memory tasks by calling Poll API - assert ackMgr state
 	// at the end
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(int64(expectedBufSize))
+	tlMgr.backlogMgr.db.setReadLevel(int64(expectedBufSize))
 
 	// complete rangeSize events
 	for i := int64(0); i < rangeSize; i++ {
@@ -1863,7 +1861,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	// the following few lines get clobbered as part of the taskWriter.Start()
 	time.Sleep(100 * time.Millisecond)
 
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(0)
+	tlMgr.backlogMgr.db.setReadLevel(0)
 	tlMgr.backlogMgr.db.SetMaxReadLevel(maxReadLevel)
 	batch, err := tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Empty(batch.tasks)
@@ -1871,7 +1869,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	s.False(batch.isReadBatchDone)
 	s.NoError(err)
 
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(batch.readLevel)
+	tlMgr.backlogMgr.db.setReadLevel(batch.readLevel)
 	batch, err = tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Empty(batch.tasks)
 	s.Equal(maxReadLevel, batch.readLevel)
@@ -1989,8 +1987,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.Truef(-3 <= delta && delta <= 1, "remaining %d, getTaskCount %d", remaining, s.taskManager.getTaskCount(dbq))
 		}
 		// ensure full gc for the next case (twice in case one doesn't get the gc lock)
-		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.taskAckManager.getAckLevel())
-		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.taskAckManager.getAckLevel())
+		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.db.getAckLevel())
+		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.db.getAckLevel())
 	}
 }
 
@@ -3018,8 +3016,6 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklogCounter() {
-	// This test should fail since we are not persisting the ack level with every write.
-	s.T().Skip("Skipping this until AckLevel is persisted with task creation")
 
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
 	// Increasing the UpdateAckInterval so that it does not get fired
@@ -3041,11 +3037,11 @@ func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklog
 	firstTaskID := s.matchingEngine.config.RangeSize + 1
 	for i := int64(0); i < taskCount-1; i++ {
 		taskID := i + firstTaskID
-		pgMgr.backlogMgr.taskAckManager.completeTask(taskID)
+		pgMgr.backlogMgr.db.completeTask(taskID)
 	}
 
-	// Only one task remains and the AckLevel should also have gone up
-	s.EqualValues(int64(1), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+	// Only one task remains and the AckLevel has also gone up
+	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), int64(1))
 
 	// Adding a new task which should persist the backlog count and the ackLevel
 	s.addWorkflowTasks(false, 1, 1, taskQueue, workflowExecution, nil)
@@ -3066,9 +3062,9 @@ func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklog
 	pgMgr, ok = tqm_loaded_Impl.defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
-	s.EqualValues(int64(2), pgMgr.backlogMgr.db.getApproximateBacklogCount()) // since there are 2 tasks in the backlog
-	// AckLevel must move to the second last task (taskID 29 in this case) since ackLevel has been persisted with task creation
-	s.EqualValues(firstTaskID+taskCount-2, pgMgr.backlogMgr.taskAckManager.getAckLevel()) // this check will be modified since ackLevel will move inside of db
+	s.EqualValues(int64(2), pgMgr.backlogMgr.db.getApproximateBacklogCount()) // since 2 tasks in the backlog
+	// AckLevel must move to the second last task (taskID 29 here) since ackLevel is persisted with task creation now
+	s.EqualValues(int64(firstTaskID+taskCount-2), pgMgr.backlogMgr.db.getAckLevel())
 
 }
 
