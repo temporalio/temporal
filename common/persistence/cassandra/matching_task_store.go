@@ -654,6 +654,10 @@ func (d *MatchingTaskStore) CountTaskQueuesByBuildId(ctx context.Context, reques
 	return count, err
 }
 
+func (d *MatchingTaskStore) CountTasksFromTaskQueue(ctx context.Context, request *p.CountTasksFromTaskQueueRequest) (int, error) {
+	return 0, nil
+}
+
 func (d *MatchingTaskStore) GetName() string {
 	return cassandraPersistenceName
 }

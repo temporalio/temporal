@@ -139,6 +139,17 @@ func (m *taskManagerImpl) GetTaskQueue(
 	if err != nil {
 		return nil, err
 	}
+
+	numTasks, err := m.taskStore.CountTasksFromTaskQueue(ctx, &CountTasksFromTaskQueueRequest{
+		NamespaceID: request.NamespaceID,
+		TaskQueue:   request.TaskQueue,
+		TaskType:    request.TaskType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	taskQueueInfo.ApproximateBacklogCount = max(taskQueueInfo.ApproximateBacklogCount, int64(numTasks))
+
 	return &GetTaskQueueResponse{
 		TaskQueueInfo: taskQueueInfo,
 		RangeID:       response.RangeID,

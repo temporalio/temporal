@@ -559,6 +559,12 @@ type (
 		BuildID     string
 	}
 
+	CountTasksFromTaskQueueRequest struct {
+		NamespaceID string
+		TaskQueue   string
+		TaskType    enumspb.TaskQueueType
+	}
+
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
 	ListTaskQueueRequest struct {
 		PageSize  int

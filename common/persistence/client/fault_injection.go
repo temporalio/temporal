@@ -1149,6 +1149,10 @@ func (t *FaultInjectionTaskStore) CountTaskQueuesByBuildId(ctx context.Context, 
 	return t.baseTaskStore.CountTaskQueuesByBuildId(ctx, request)
 }
 
+func (t *FaultInjectionTaskStore) CountTasksFromTaskQueue(ctx context.Context, request *persistence.CountTasksFromTaskQueueRequest) (int, error) {
+	return 0, nil
+}
+
 func (t *FaultInjectionTaskStore) UpdateRate(rate float64) {
 	t.ErrorGenerator.UpdateRate(rate)
 }
