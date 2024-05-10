@@ -469,7 +469,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
-	mutableState.HSM().Walk(func(node *hsm.Node) error {
+	if err := mutableState.HSM().Walk(func(node *hsm.Node) error {
 		return hsm.MachineTransition(
 			node,
 			func(
@@ -484,7 +484,9 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 				}, nil
 			},
 		)
-	})
+	}); err != nil {
+		return err
+	}
 
 	// Not all callers of TaskRefresher goes through the closeTransaction process.
 	// So we need to explicitly make sure those tasks are actually generated and
