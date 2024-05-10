@@ -159,7 +159,6 @@ func TestHistoryReplicationDLQSuite(t *testing.T) {
 			enableReplicationStream: false,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s := &historyReplicationDLQSuite{
 				enableReplicationStream: tc.enableReplicationStream,

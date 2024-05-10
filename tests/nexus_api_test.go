@@ -214,7 +214,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.outcome, func(t *testing.T) {
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.endpoint.Spec.Target.GetWorker().TaskQueue))
@@ -354,7 +353,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			s.testCluster.host.SetOnAuthorize(tc.onAuthorize)
 			defer s.testCluster.host.SetOnAuthorize(nil)
@@ -468,7 +466,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, taskQueue))
@@ -583,7 +580,6 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.outcome, func(t *testing.T) {
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.endpoint.Spec.Target.GetWorker().TaskQueue))

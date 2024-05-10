@@ -88,7 +88,6 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			expectedScope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
