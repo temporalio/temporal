@@ -285,7 +285,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 				Config: &nexusoperations.Config{
 					Enabled:             dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.requestTimeout),
+					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					CallbackURLTemplate: dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
 				},
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
@@ -484,7 +484,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 				Config: &nexusoperations.Config{
 					Enabled:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.requestTimeout),
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 				},
 				NamespaceRegistry: namespaceRegistry,
 				EndpointChecker:   endpointChecker,
@@ -540,7 +540,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 		Config: &nexusoperations.Config{
 			Enabled:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour),
+			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 		},
 		NamespaceRegistry: namespaceRegistry,
 		EndpointChecker: func(ctx context.Context, namespaceName, endpointName string) error {
