@@ -234,6 +234,17 @@ func (r *serviceResolver) MemberCount() int {
 	return len(hosts)
 }
 
+func (r *serviceResolver) AvailableMemberCount() int {
+	_, hosts := r.ring()
+	n := 0
+	for _, host := range hosts {
+		if !isDraining(host) {
+			n++
+		}
+	}
+	return n
+}
+
 func (r *serviceResolver) Members() []membership.HostInfo {
 	_, hosts := r.ring()
 	servers := make([]membership.HostInfo, 0, len(hosts))
@@ -247,12 +258,9 @@ func (r *serviceResolver) AvailableMembers() []membership.HostInfo {
 	_, hosts := r.ring()
 	var servers []membership.HostInfo
 	for _, host := range hosts {
-		if drainingStr, ok := host.Label(drainingKey); ok {
-			if draining, _ := strconv.ParseBool(drainingStr); draining {
-				continue
-			}
+		if !isDraining(host) {
+			servers = append(servers, host)
 		}
-		servers = append(servers, host)
 	}
 	return servers
 }
@@ -535,4 +543,13 @@ func parseIntLabel(member swim.Member, label string) (int64, error) {
 		return 0, errMissingLabel
 	}
 	return strconv.ParseInt(str, 10, 64)
+}
+
+func isDraining(host *hostInfo) bool {
+	if drainingStr, ok := host.Label(drainingKey); ok {
+		if draining, err := strconv.ParseBool(drainingStr); err == nil {
+			return draining
+		}
+	}
+	return false
 }
