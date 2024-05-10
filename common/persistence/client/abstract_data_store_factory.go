@@ -25,15 +25,10 @@
 package client
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
-	"go.temporal.io/server/common/persistence/faultinjection"
-	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -51,38 +46,3 @@ type (
 		) persistence.DataStoreFactory
 	}
 )
-
-func DataStoreFactoryProvider(
-	clusterName ClusterName,
-	r resolver.ServiceResolver,
-	config *config.Persistence,
-	abstractDataStoreFactory AbstractDataStoreFactory,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-) persistence.DataStoreFactory {
-
-	var dataStoreFactory persistence.DataStoreFactory
-	defaultCfg := config.DataStores[config.DefaultStore]
-	switch {
-	case defaultCfg.Cassandra != nil:
-		dataStoreFactory = cassandra.NewFactory(*defaultCfg.Cassandra, r, string(clusterName), logger, metricsHandler)
-	case defaultCfg.SQL != nil:
-		dataStoreFactory = sql.NewFactory(*defaultCfg.SQL, r, string(clusterName), logger)
-	case defaultCfg.CustomDataStoreConfig != nil:
-		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
-	default:
-		logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
-	}
-
-	if defaultCfg.FaultInjection != nil {
-		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, dataStoreFactory)
-	}
-
-	return dataStoreFactory
-}
-func DataStoreFactoryLifetimeHooks(
-	lc fx.Lifecycle,
-	factory DataStoreFactory,
-) {
-	lc.Append(fx.StopHook(factory.Close))
-}
