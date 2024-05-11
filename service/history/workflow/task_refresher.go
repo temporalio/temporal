@@ -495,6 +495,11 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	versionedTransition := transitionHistory[len(transitionHistory)-1]
 
 	return mutableState.HSM().Walk(func(node *hsm.Node) error {
+		if node.Parent == nil {
+			// root node is mutable state and doesn't implement TaskRegenerator interface
+			return nil
+		}
+
 		taskRegenerator, err := hsm.MachineData[hsm.TaskRegenerator](node)
 		if err != nil {
 			return err
