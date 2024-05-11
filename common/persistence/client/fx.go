@@ -35,9 +35,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/faultinjection"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resolver"
 )
 
 type (
@@ -54,7 +58,7 @@ type (
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory                   DataStoreFactory
+		DataStoreFactory                   persistence.DataStoreFactory
 		EventBlobCache                     persistence.XDCCache
 		Cfg                                *config.Persistence
 		PersistenceMaxQPS                  PersistenceMaxQps
@@ -74,6 +78,8 @@ type (
 )
 
 var Module = fx.Options(
+	fx.Provide(DataStoreFactoryProvider),
+	fx.Invoke(DataStoreFactoryLifetimeHooks),
 	fx.Provide(managerProvider(Factory.NewClusterMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewTaskManager)),
@@ -82,9 +88,8 @@ var Module = fx.Options(
 	fx.Provide(managerProvider(Factory.NewExecutionManager)),
 	fx.Provide(managerProvider(Factory.NewHistoryTaskQueueManager)),
 	fx.Provide(managerProvider(Factory.NewNexusEndpointManager)),
+
 	fx.Provide(ClusterNameProvider),
-	fx.Provide(DataStoreFactoryProvider),
-	fx.Invoke(DataStoreFactoryLifetimeHooks),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(EventBlobCacheProvider),
 )
@@ -159,6 +164,39 @@ func HealthSignalAggregatorProvider(
 	}
 
 	return persistence.NoopHealthSignalAggregator
+}
+
+func DataStoreFactoryProvider(
+	clusterName ClusterName,
+	r resolver.ServiceResolver,
+	cfg *config.Persistence,
+	abstractDataStoreFactory AbstractDataStoreFactory,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) persistence.DataStoreFactory {
+
+	var dataStoreFactory persistence.DataStoreFactory
+	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
+	switch {
+	case defaultStoreCfg.Cassandra != nil:
+		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler)
+	case defaultStoreCfg.SQL != nil:
+		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger)
+	case defaultStoreCfg.CustomDataStoreConfig != nil:
+		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultStoreCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
+	default:
+		logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
+	}
+
+	if defaultStoreCfg.FaultInjection != nil {
+		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultStoreCfg.FaultInjection, dataStoreFactory)
+	}
+
+	return dataStoreFactory
+}
+
+func DataStoreFactoryLifetimeHooks(lc fx.Lifecycle, f persistence.DataStoreFactory) {
+	lc.Append(fx.StopHook(f.Close))
 }
 
 func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, error)) func(Factory, fx.Lifecycle) (T, error) {

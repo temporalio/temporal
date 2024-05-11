@@ -79,10 +79,10 @@ type (
 		DBHost            string
 		DBPort            int `yaml:"-"`
 		ConnectAttributes map[string]string
-		StoreType         string                 `yaml:"-"`
-		SchemaDir         string                 `yaml:"-"`
-		FaultInjection    *config.FaultInjection `yaml:"faultinjection"`
-		Logger            log.Logger             `yaml:"-"`
+		StoreType         string `yaml:"-"`
+		SchemaDir         string `yaml:"-"`
+		FaultInjection    *config.FaultInjection
+		Logger            log.Logger `yaml:"-"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -91,7 +91,6 @@ type (
 		ShardMgr                  persistence.ShardManager
 		AbstractDataStoreFactory  client.AbstractDataStoreFactory
 		VisibilityStoreFactory    visibility.VisibilityStoreFactory
-		FaultInjection            *client.FaultInjectionDataStoreFactory
 		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
@@ -212,7 +211,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
-	dataStoreFactory, faultInjection := client.DataStoreFactoryProvider(
+	dataStoreFactory := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
 		&cfg,
@@ -244,7 +243,6 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.fatalOnError("NewNexusEndpointManager", err)
 
 	s.Factory = factory
-	s.FaultInjection = faultInjection
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0

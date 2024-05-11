@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
@@ -325,11 +324,10 @@ type Service struct {
 	server            *grpc.Server
 	httpAPIServer     *HTTPAPIServer
 
-	logger                         log.Logger
-	grpcListener                   net.Listener
-	metricsHandler                 metrics.Handler
-	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
-	membershipMonitor              membership.Monitor
+	logger            log.Logger
+	grpcListener      net.Listener
+	metricsHandler    metrics.Handler
+	membershipMonitor membership.Monitor
 }
 
 func NewService(
@@ -345,24 +343,22 @@ func NewService(
 	logger log.Logger,
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	membershipMonitor membership.Monitor,
 ) *Service {
 	return &Service{
-		config:                         serviceConfig,
-		server:                         server,
-		healthServer:                   healthServer,
-		httpAPIServer:                  httpAPIServer,
-		handler:                        handler,
-		adminHandler:                   adminHandler,
-		operatorHandler:                operatorHandler,
-		versionChecker:                 versionChecker,
-		visibilityManager:              visibilityMgr,
-		logger:                         logger,
-		grpcListener:                   grpcListener,
-		metricsHandler:                 metricsHandler,
-		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
-		membershipMonitor:              membershipMonitor,
+		config:            serviceConfig,
+		server:            server,
+		healthServer:      healthServer,
+		httpAPIServer:     httpAPIServer,
+		handler:           handler,
+		adminHandler:      adminHandler,
+		operatorHandler:   operatorHandler,
+		versionChecker:    versionChecker,
+		visibilityManager: visibilityMgr,
+		logger:            logger,
+		grpcListener:      grpcListener,
+		metricsHandler:    metricsHandler,
+		membershipMonitor: membershipMonitor,
 	}
 }
 
@@ -455,8 +451,4 @@ func (s *Service) Stop() {
 	}
 
 	s.logger.Info("frontend stopped")
-}
-
-func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
-	return s.faultInjectionDataStoreFactory
 }
