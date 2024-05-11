@@ -201,7 +201,7 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 		return &someError{}
 	}
 
-	start := SystemClock.Now()
+	start := time.Now()
 	err := ThrottleRetryContext(context.Background(), op, policy, retryEverything)
 	s.Equal(&someError{}, err)
 	s.GreaterOrEqual(
@@ -211,7 +211,7 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	)
 
 	// test if context timeout is respected
-	start = SystemClock.Now()
+	start = time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	err = ThrottleRetryContext(ctx, func(_ context.Context) error { return &serviceerror.ResourceExhausted{} }, policy, retryEverything)
 	s.Equal(&serviceerror.ResourceExhausted{}, err)

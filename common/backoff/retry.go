@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/clock"
 )
 
 const (
@@ -81,8 +82,9 @@ func ThrottleRetryContext(
 
 	deadline, hasDeadline := ctx.Deadline()
 
-	r := NewRetrier(policy, SystemClock)
-	t := NewRetrier(throttleRetryPolicy, SystemClock)
+	timeSrc := clock.NewRealTimeSource()
+	r := NewRetrier(policy, timeSrc)
+	t := NewRetrier(throttleRetryPolicy, timeSrc)
 	for ctx.Err() == nil {
 		if err = operation(ctx); err == nil {
 			return nil
@@ -100,7 +102,7 @@ func ThrottleRetryContext(
 			next = max(next, t.NextBackOff())
 		}
 
-		if hasDeadline && SystemClock.Now().Add(next).After(deadline) {
+		if hasDeadline && timeSrc.Now().Add(next).After(deadline) {
 			break
 		}
 
