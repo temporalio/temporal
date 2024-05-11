@@ -188,8 +188,6 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 	t.cluster2 = t.newHrsuTestCluster(ns, s.clusterNames[1], s.cluster2)
 	t.registerMultiRegionNamespace(ctx)
 
-	t.s.waitForClusterConnected()
-
 	return &t, ctx, cancel
 }
 
