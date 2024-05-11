@@ -96,7 +96,6 @@ func TestFaultInjection_Inject(t *testing.T) {
 			expectErr: true,
 		},
 	} {
-		tc := tc // Remove after upgrade to go 1.22+
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

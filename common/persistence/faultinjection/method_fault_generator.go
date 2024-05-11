@@ -73,14 +73,15 @@ func (p *methodFaultGenerator) generate() *fault {
 	}
 
 	p.rndMu.Lock()
-	defer p.rndMu.Unlock()
+	roll := p.rnd.Float64()
+	p.rndMu.Unlock()
 
-	if roll := p.rnd.Float64(); roll < p.rate {
+	if roll < p.rate {
 		// Yes, this method call should be failed.
 		// Let's find out with what fault.
-		for _, fm := range p.faultsMetadata {
-			if roll < fm.threshold {
-				return &fm.fault
+		for i := range p.faultsMetadata {
+			if roll < p.faultsMetadata[i].threshold {
+				return &p.faultsMetadata[i].fault
 			}
 		}
 	}

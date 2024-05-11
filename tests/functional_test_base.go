@@ -255,10 +255,11 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 			return nil, fmt.Errorf("failed to read test cluster fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err)
 		}
 
-		// This will merge fault injection config content into the test cluster config.
-		if err := yaml.Unmarshal(fiConfigContent, &options); err != nil {
+		var fiOptions TestClusterConfig
+		if err := yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
 			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
 		}
+		options.FaultInjection = fiOptions.FaultInjection
 	}
 
 	options.FrontendAddress = TestFlags.FrontendAddr
