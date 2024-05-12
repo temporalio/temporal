@@ -45,6 +45,40 @@ func TestGrouperNamespaceID_Predicate(t *testing.T) {
 	require.Equal(t, tasks.NewNamespacePredicate([]string{"n1", "n2"}), p)
 }
 
+func TestGrouperNamespaceIDAndDestination_Key(t *testing.T) {
+	g := GrouperNamespaceIDAndDestination{}
+	task := &tasks.StateMachineOutboundTask{
+		StateMachineTask: tasks.StateMachineTask{
+			WorkflowKey: definition.NewWorkflowKey("nid", "", ""),
+			Info: &persistence.StateMachineTaskInfo{
+				Type: 3,
+			},
+		},
+		Destination: "dest",
+	}
+	k := g.Key(task)
+	require.Equal(t, NamespaceIDAndDestination{"nid", "dest"}, k)
+}
+
+func TestGrouperNamespaceIDAndDestination_Predicate(t *testing.T) {
+	g := GrouperNamespaceIDAndDestination{}
+	p := g.Predicate([]any{
+		NamespaceIDAndDestination{"n1", "d1"},
+		NamespaceIDAndDestination{"n2", "d2"},
+	})
+	expected := predicates.Or(
+		predicates.And(
+			tasks.NewNamespacePredicate([]string{"n1"}),
+			tasks.NewDestinationPredicate([]string{"d1"}),
+		),
+		predicates.And(
+			tasks.NewNamespacePredicate([]string{"n2"}),
+			tasks.NewDestinationPredicate([]string{"d2"}),
+		),
+	)
+	require.Equal(t, expected, p)
+}
+
 func TestGrouperStateMachineNamespaceIDAndDestination_Key(t *testing.T) {
 	g := GrouperStateMachineNamespaceIDAndDestination{}
 	task := &tasks.StateMachineOutboundTask{
