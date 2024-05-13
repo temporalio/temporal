@@ -166,6 +166,7 @@ type Config struct {
 	OutboundQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
+	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -466,6 +467,7 @@ func NewConfig(
 		OutboundQueueMaxReaderCount:                         dynamicconfig.OutboundQueueMaxReaderCount.Get(dc),
 		OutboundQueueGroupLimiterBufferSize:                 dynamicconfig.OutboundQueueGroupLimiterBufferSize.Get(dc),
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),
+		OutboundQueueHostSchedulerMaxTaskRPS:                dynamicconfig.OutboundQueueHostSchedulerMaxTaskRPS.Get(dc),
 
 		ReplicatorProcessorMaxPollInterval:                  dynamicconfig.ReplicatorProcessorMaxPollInterval.Get(dc),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient.Get(dc),
