@@ -4344,7 +4344,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 
 	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString(tv.String("activity-result")), false, nil
+		return tv.Any().Payloads(), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -4516,17 +4516,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		}
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString(tv.String("activity-result")), false, nil
-	}
-
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
@@ -4693,17 +4687,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 		}
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString(tv.String("activity-result")), false, nil
-	}
-
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
@@ -4760,6 +4748,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	go func() {
 		_, _ = s.sendUpdate(tv, "2")
 	}()
+
+	// Make sure that updateID=2 reached server (and added to the 4th WFT) before WFT is polled.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
 	// Poll the 4th speculative WT.
 	wt4, err := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4898,17 +4889,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 		}
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString(tv.String("activity-result")), false, nil
-	}
-
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
@@ -5185,7 +5170,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: payloads.EncodeString("Done"),
+						Result: tv.Any().Payloads(),
 					},
 				},
 			}
