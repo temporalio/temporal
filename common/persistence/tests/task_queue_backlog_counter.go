@@ -26,6 +26,10 @@ package tests
 
 import (
 	"context"
+	"math/rand"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -33,9 +37,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"math/rand"
-	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
