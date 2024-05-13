@@ -1644,6 +1644,16 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		4,
 		`OutboundQueueMaxReaderCount is the max number of readers in one multi-cursor outbound queue`,
 	)
+	OutboundQueueGroupLimiterBufferSize = NewDestinationIntSetting(
+		"history.outboundQueue.groupLimiter.bufferSize",
+		100,
+		`OutboundQueueGroupLimiterBufferSize is the max buffer size of the group limiter`,
+	)
+	OutboundQueueGroupLimiterConcurrency = NewDestinationIntSetting(
+		"history.outboundQueue.groupLimiter.concurrency",
+		100,
+		`OutboundQueueGroupLimiterConcurrency is the concurrency of the group limiter`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",
