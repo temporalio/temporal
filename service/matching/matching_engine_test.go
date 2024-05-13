@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -166,6 +167,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
+	s.taskManager.dbError = false // set to true when you want db to throw errors randomly
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
@@ -2761,6 +2763,377 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 
 }
 
+// generateWorkflowExecution is a helper to make a sample workflowExecution and WorkflowType for the required tests
+func (s *matchingEngineSuite) generateWorkflowExecution() (*commonpb.WorkflowType, *commonpb.WorkflowExecution) {
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	workflowType := &commonpb.WorkflowType{
+		Name: "workflow",
+	}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	return workflowType, workflowExecution
+}
+
+func (s *matchingEngineSuite) mockHistoryWhilePolling(workflowType *commonpb.WorkflowType) {
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+			return &historyservice.RecordWorkflowTaskStartedResponse{
+				PreviousStartedEventId: 1,
+				StartedEventId:         1,
+				ScheduledEventId:       1,
+				WorkflowType:           workflowType,
+				Attempt:                1,
+				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				NextPageToken:          nil,
+			}, nil
+		}).AnyTimes()
+}
+
+func (s *matchingEngineSuite) createTQAndPTQForBacklogTests() (*taskqueuepb.TaskQueue, *PhysicalTaskQueueKey) {
+	tq := "approximateBacklogCounter"
+	ptq := newUnversionedRootQueueKey(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	s.taskManager.getQueueManager(ptq).rangeID = 1
+	s.matchingEngine.config.RangeSize = 10
+
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tq,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+
+	return taskQueue, ptq
+}
+
+func (s *matchingEngineSuite) addWorkflowTask(workflowExecution *commonpb.WorkflowExecution, taskQueue *taskqueuepb.TaskQueue) {
+	var doneAdding bool
+	for !doneAdding {
+		addRequest := matchingservice.AddWorkflowTaskRequest{
+			NamespaceId:            namespaceId,
+			Execution:              workflowExecution,
+			ScheduledEventId:       1,
+			TaskQueue:              taskQueue,
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+		}
+		_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+		if err != nil {
+			continue
+		}
+		s.NoError(err)
+		doneAdding = true
+	}
+}
+
+func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *taskqueuepb.TaskQueue) {
+	var donePolling bool
+	for !donePolling {
+		result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: namespaceId,
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: taskQueue,
+				Identity:  "nobody",
+			},
+		}, metrics.NoopMetricsHandler)
+		if len(result.TaskToken) == 0 || result.GetAttempt() == 0 {
+			continue
+		}
+		if err != nil {
+			// DB could have failed while fetching tasks; try again
+			continue
+		}
+		s.NoError(err)
+		donePolling = true
+	}
+}
+
+// addWorkflowTasks is a helper that adds taskCount number of tasks for each numWorker
+func (s *matchingEngineSuite) addWorkflowTasks(concurrently bool, numWorkers int, taskCount int,
+	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution, wg *sync.WaitGroup) {
+	if concurrently {
+		for p := 0; p < numWorkers; p++ {
+			go func() {
+				for i := 0; i < taskCount; i++ {
+					s.addWorkflowTask(workflowExecution, taskQueue)
+				}
+				wg.Done()
+			}()
+		}
+	} else {
+		// Add tasks sequentially
+		for p := 0; p < numWorkers; p++ {
+			for i := 0; i < taskCount; i++ {
+				s.addWorkflowTask(workflowExecution, taskQueue)
+			}
+		}
+	}
+}
+
+// pollWorkflowTasks polls tasks using numWorkers
+func (s *matchingEngineSuite) pollWorkflowTasks(concurrently bool, workflowType *commonpb.WorkflowType, numPollers int, taskCount int,
+	ptq *PhysicalTaskQueueKey, taskQueue *taskqueuepb.TaskQueue, wg *sync.WaitGroup) {
+	s.mockHistoryWhilePolling(workflowType)
+	if concurrently {
+		for p := 0; p < numPollers; p++ {
+			go func() {
+				for i := 0; i < taskCount; i++ {
+					s.createPollWorkflowTaskRequestAndPoll(taskQueue)
+				}
+				wg.Done()
+			}()
+		}
+	} else {
+		tasksPolled := 0
+		for i := 0; i < numPollers*taskCount; i++ {
+			s.createPollWorkflowTaskRequestAndPoll(taskQueue)
+			tasksPolled += 1
+
+			// PartitionManager could have been unloaded; fetch the latest copy
+			pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+			s.LessOrEqual(int64(taskCount-tasksPolled), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+		}
+	}
+}
+
+// getPhysicalTaskQueueManagerImpl extracts the physicalTaskQueueManagerImpl for the given PhysicalTaskQueueKey
+func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQueueKey) *physicalTaskQueueManagerImpl {
+	pgMgr, ok := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	return pgMgr
+}
+
+func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCount int, numWorkers int, numPollers int) {
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	workflowType, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+
+	s.addWorkflowTasks(false, numWorkers, taskCount, taskQueue, workflowExecution, nil)
+	s.EqualValues(taskCount*numWorkers, s.taskManager.getCreateTaskCount(ptq))
+	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
+
+	// Extracting the pgMgr for validating approximateBacklogCounter
+	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	s.EqualValues(int64(taskCount*numWorkers), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+
+	s.pollWorkflowTasks(false, workflowType, numPollers, taskCount, ptq, taskQueue, nil)
+
+	s.LessOrEqual(int64(0), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+}
+
+func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
+	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
+}
+
+func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
+}
+
+func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksNoDBErrors() {
+	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
+}
+
+func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
+}
+
+func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int) {
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
+
+	workflowType, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+	s.matchingEngine.config.RangeSize = int64(rangeSize)
+
+	s.addWorkflowTasks(false, numWorkers, taskCount, taskQueue, workflowExecution, nil)
+
+	// TaskID of the first task to be added
+	minTaskID, done := s.taskManager.minTaskID(ptq)
+	s.True(done)
+
+	partitionManager, err := s.matchingEngine.getTaskQueuePartitionManagerNoWait(ptq.Partition(), false)
+	s.NoError(err)
+	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+
+	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
+
+	// Checking the maxReadLevel with the value of task stored in db
+	maxTaskId, _ := s.taskManager.maxTaskID(ptq)
+	s.EqualValues(maxTaskId, pgMgr.backlogMgr.db.maxReadLevel.Load())
+
+	// validating the approximateBacklogCounter
+	s.EqualValues(taskCount*numWorkers, pgMgr.backlogMgr.db.getApproximateBacklogCount())
+
+	// Unloading the PQM
+	s.matchingEngine.unloadTaskQueuePartition(partitionManager)
+
+	// Simulating a TTL'ed task in Cassandra by removing it from the DB
+	// Remove the task from testTaskManager but not from db/AckManager
+
+	// Stopping the backlogManager so that we TTL and the taskReader does not catch this
+	request := &persistence.CompleteTasksLessThanRequest{
+		NamespaceID:        namespaceId,
+		TaskQueueName:      taskQueue.Name,
+		TaskType:           enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		ExclusiveMaxTaskID: minTaskID + 1,
+		Limit:              100,
+	}
+	_, err = s.taskManager.CompleteTasksLessThan(context.Background(), request)
+	s.NoError(err)
+	s.EqualValues((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
+
+	// adding pollers which shall also load the fresher version of tqm
+	s.pollWorkflowTasks(false, workflowType, 1, (taskCount*numWorkers)-1, ptq, taskQueue, nil)
+
+	// Updating pgMgr to have the latest pgMgr
+	pgMgr = s.getPhysicalTaskQueueManagerImpl(ptq)
+
+	// overwriting the maxReadLevel since it could have increased if the previous taskWriter was stopped (which would not result in resetting);
+	// This should never be called and is only being done here for test purposes
+	pgMgr.backlogMgr.db.SetMaxReadLevel(maxTaskId)
+
+	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
+	s.Eventually(func() bool {
+		return int64(0) == pgMgr.backlogMgr.db.getApproximateBacklogCount()
+	}, 3*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
+
+	s.EqualValues(int64(0), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+}
+
+// TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
+func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
+	s.resetBacklogCounter(2, 2, 2)
+}
+
+func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
+	s.taskManager.dbError = true
+	s.resetBacklogCounter(2, 2, 2)
+}
+
+func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
+	s.resetBacklogCounter(10, 20, 2)
+}
+
+func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
+	s.taskManager.dbError = true
+	s.resetBacklogCounter(10, 50, 5)
+}
+
+func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklogCounter() {
+	// This test should fail since we are not persisting the ack level with every write.
+	s.T().Skip("Skipping this until AckLevel is persisted with task creation")
+
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	// Increasing the UpdateAckInterval so that it does not get fired
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Minute)
+
+	_, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+	const taskCount = 20
+
+	s.addWorkflowTasks(false, 1, taskCount, taskQueue, workflowExecution, nil)
+	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
+
+	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), taskCount)
+
+	// Completing the workflow tasks by directly calling AckManager.CompleteTask(TaskID) - doing this for the purpose of
+	// this test case. We shall complete all tasks that were added except the first one so that the AckLevel does not
+	// increase and remains equal to config.RangeSize.
+	firstTaskID := s.matchingEngine.config.RangeSize + 1
+	for i := int64(0); i < taskCount-1; i++ {
+		taskID := i + firstTaskID
+		pgMgr.backlogMgr.taskAckManager.completeTask(taskID)
+	}
+
+	// Only one task remains and the AckLevel should also have gone up
+	s.EqualValues(int64(1), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+
+	// Adding a new task which should persist the backlog count and the ackLevel
+	s.addWorkflowTasks(false, 1, 1, taskQueue, workflowExecution, nil)
+
+	// unloading the TQM which also stops the backlogManager; set backlogManager.skipFinalUpdate to true to not persist
+	// the latest ackLevel
+	pgMgr.backlogMgr.skipFinalUpdate.Store(true)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), false)
+	s.NoError(err)
+	s.matchingEngine.unloadTaskQueuePartition(tqm)
+
+	// Loading the TQM for the same TQ partition
+	tqm_loaded, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), true)
+	s.NoError(err)
+	tqm_loaded_Impl, ok := tqm_loaded.(*taskQueuePartitionManagerImpl)
+	s.True(ok)
+
+	pgMgr, ok = tqm_loaded_Impl.defaultQueue.(*physicalTaskQueueManagerImpl)
+	s.True(ok)
+
+	s.EqualValues(int64(2), pgMgr.backlogMgr.db.getApproximateBacklogCount()) // since there are 2 tasks in the backlog
+	// AckLevel must move to the second last task (taskID 29 in this case) since ackLevel has been persisted with task creation
+	s.EqualValues(firstTaskID+taskCount-2, pgMgr.backlogMgr.taskAckManager.getAckLevel()) // this check will be modified since ackLevel will move inside of db
+
+}
+
+// Concurrent tests for testing approximateBacklogCounter
+
+func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(numWorkers int, tasksToAdd int, tasksToPoll int) {
+	workflowType, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
+
+	var wg sync.WaitGroup
+	wg.Add(2 * numWorkers)
+
+	s.addWorkflowTasks(true, numWorkers, tasksToAdd, taskQueue, workflowExecution, &wg)
+	s.pollWorkflowTasks(true, workflowType, numWorkers, tasksToPoll, ptq, taskQueue, &wg)
+
+	wg.Wait()
+	time.Sleep(1 * time.Second)
+
+	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+}
+
+func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
+	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
+}
+
+func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
+	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
+		"UpdateState an atomic operation.")
+	s.taskManager.dbError = true
+	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
+}
+
+func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
+	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
+}
+
+func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
+}
+
+func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
+	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
+}
+
+func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
+}
+
+func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksNoDBErrors() {
+	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
+}
+
+func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
+	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
+		"UpdateState an atomic operation.")
+	s.taskManager.dbError = true
+	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
+}
+
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -2835,8 +3208,9 @@ var _ persistence.TaskManager = (*testTaskManager)(nil) // Asserts that interfac
 
 type testTaskManager struct {
 	sync.Mutex
-	queues map[dbTaskQueueKey]*testPhysicalTaskQueueManager
-	logger log.Logger
+	queues  map[dbTaskQueueKey]*testPhysicalTaskQueueManager
+	logger  log.Logger
+	dbError bool
 }
 
 type dbTaskQueueKey struct {
@@ -2891,15 +3265,16 @@ func newTestTaskQueue(namespaceId string, name string, taskType enumspb.TaskQueu
 
 type testPhysicalTaskQueueManager struct {
 	sync.Mutex
-	queue            *PhysicalTaskQueueKey
-	rangeID          int64
-	ackLevel         int64
-	createTaskCount  int
-	getTasksCount    int
-	getUserDataCount int
-	updateCount      int
-	tasks            *treemap.Map
-	userData         *persistencespb.VersionedTaskQueueUserData
+	queue                   *PhysicalTaskQueueKey
+	rangeID                 int64
+	ackLevel                int64
+	ApproximateBacklogCount int64
+	createTaskCount         int
+	getTasksCount           int
+	getUserDataCount        int
+	updateCount             int
+	tasks                   *treemap.Map
+	userData                *persistencespb.VersionedTaskQueueUserData
 }
 
 func (m *testPhysicalTaskQueueManager) RangeID() int64 {
@@ -2957,6 +3332,7 @@ func (m *testTaskManager) UpdateTaskQueue(
 		}
 	}
 	tlm.ackLevel = tli.AckLevel
+	tlm.ApproximateBacklogCount = tli.ApproximateBacklogCount
 	tlm.rangeID = request.RangeID
 	return &persistence.UpdateTaskQueueResponse{}, nil
 }
@@ -2978,16 +3354,43 @@ func (m *testTaskManager) GetTaskQueue(
 	}
 	return &persistence.GetTaskQueueResponse{
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
-			NamespaceId:    request.NamespaceID,
-			Name:           request.TaskQueue,
-			TaskType:       request.TaskType,
-			Kind:           enumspb.TASK_QUEUE_KIND_NORMAL,
-			AckLevel:       tlm.ackLevel,
-			ExpiryTime:     nil,
-			LastUpdateTime: timestamp.TimeNowPtrUtc(),
+			NamespaceId:             request.NamespaceID,
+			Name:                    request.TaskQueue,
+			TaskType:                request.TaskType,
+			Kind:                    enumspb.TASK_QUEUE_KIND_NORMAL,
+			AckLevel:                tlm.ackLevel,
+			ExpiryTime:              nil,
+			LastUpdateTime:          timestamp.TimeNowPtrUtc(),
+			ApproximateBacklogCount: tlm.ApproximateBacklogCount,
 		},
 		RangeID: tlm.rangeID,
 	}, nil
+}
+
+// minTaskID is a helper to return the minimum value of the TaskID present in testTaskManager
+func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
+	tlm := m.getQueueManager(dbq)
+	tlm.Lock()
+	defer tlm.Unlock()
+	minKey, _ := tlm.tasks.Min()
+	key, ok := minKey.(int64)
+	if ok == false {
+		return -1, ok
+	}
+	return key, true
+}
+
+// minTaskID is a helper to return the maximum value of the TaskID present in testTaskManager
+func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
+	tlm := m.getQueueManager(dbq)
+	tlm.Lock()
+	defer tlm.Unlock()
+	maxKey, _ := tlm.tasks.Max()
+	key, ok := maxKey.(int64)
+	if ok == false {
+		return -1, ok
+	}
+	return key, true
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(
@@ -3029,6 +3432,22 @@ func (m *testTaskManager) DeleteTaskQueue(
 	return nil
 }
 
+// generateErrorRandomly states if a taskManager's operation should return an error or not
+func (m *testTaskManager) generateErrorRandomly() bool {
+	if m.dbError {
+		threshold := 10
+
+		// Seed the random number generator
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		// Generate a random number between 0 and 99
+		randomNumber := r.Intn(100)
+		if randomNumber < threshold {
+			return true
+		}
+	}
+	return false
+}
+
 // CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTasks(
 	_ context.Context,
@@ -3038,6 +3457,14 @@ func (m *testTaskManager) CreateTasks(
 	taskQueue := request.TaskQueueInfo.Data.Name
 	taskType := request.TaskQueueInfo.Data.TaskType
 	rangeID := request.TaskQueueInfo.RangeID
+
+	// randomly returning an error
+	if m.generateErrorRandomly() {
+		return nil, &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
+				taskQueue, taskType, rangeID, rangeID),
+		}
+	}
 
 	dbq, err := ParsePhysicalTaskQueueKey(taskQueue, namespaceId, taskType)
 	if err != nil {
@@ -3076,6 +3503,7 @@ func (m *testTaskManager) CreateTasks(
 			TaskId: task.GetTaskId(),
 		})
 		tlm.createTaskCount++
+		tlm.ApproximateBacklogCount++
 	}
 
 	return &persistence.CreateTasksResponse{}, nil
@@ -3086,10 +3514,14 @@ func (m *testTaskManager) GetTasks(
 	_ context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
-	fmt.Printf("shahab> gettasks called\n")
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
+	if m.generateErrorRandomly() {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed"))
+	}
+
 	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
+
 	if err != nil {
 		return nil, err
 	}

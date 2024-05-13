@@ -239,6 +239,47 @@ func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 
 }
 
+// TestAddTasksValidateBacklogCounter shall use the "backlogManager methods" to add a task to the backlog.
+func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	backlogMgr := newBacklogMgr(controller)
+
+	// only starting the taskWriter for now!
+	backlogMgr.taskWriter.Start()
+	task := &persistencespb.TaskInfo{
+		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+		CreateTime: timestamp.TimeNowPtrUtc(),
+	}
+	err := backlogMgr.SpoolTask(task)
+	require.NoError(t, err)
+	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(1))
+	backlogMgr.taskWriter.Stop()
+}
+
+func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	backlogMgr := newBacklogMgr(controller)
+
+	// only starting the taskWriter for now!
+	backlogMgr.taskWriter.Start()
+	taskCount := 10
+	for i := 0; i < taskCount; i++ {
+		// Creating new tasks and spooling them
+		task := &persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}
+		err := backlogMgr.SpoolTask(task)
+		require.NoError(t, err)
+	}
+	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(10))
+	backlogMgr.taskWriter.Stop()
+}
+
 func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
 	logger := log.NewMockLogger(controller)
 	tm := newTestTaskManager(logger)
@@ -258,6 +299,7 @@ func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
 	pqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
 	pqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	handler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
+	handler.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
 
 	return newBacklogManager(pqMgr, tlCfg, tm, logger, logger, matchingClient, handler, defaultContextInfoProvider)
