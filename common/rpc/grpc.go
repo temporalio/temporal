@@ -28,14 +28,18 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -181,20 +185,50 @@ func NewServiceErrorInterceptor(
 		}
 		return resp, serviceerror.ToStatus(err).Err()
 	}
-
 }
 
-func FrontendErrorInterceptor(
-	ctx context.Context,
-	req interface{},
-	_ *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	resp, err := handler(ctx, req)
+func NewFrontendErrorInterceptor(
+	logger log.Logger, hideErrorsAtFrontend bool,
+) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		_ *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
 
-	// mask some internal errors at frontend
-	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
-		err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+		resp, err := handler(ctx, req)
+		if err != nil && hideErrorsAtFrontend {
+			err = HideUnknownOrInternalErrors(logger, err)
+		}
+		return resp, serviceerror.ToStatus(err).Err()
 	}
-	return resp, serviceerror.ToStatus(err).Err()
+}
+
+func HideUnknownOrInternalErrors(
+	logger log.Logger,
+	err error,
+) error {
+	// convert some internal errors into specific errors
+	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
+		return serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+	}
+
+	status := serviceerror.ToStatus(err)
+	if status.Code() != codes.Unknown && status.Code() != codes.Internal {
+		return err
+	}
+
+	// convert internal and unknown errors into neutral error with hash code of the original error
+	errorHash := errorWithHash(err)
+	// log original error with hash
+	message := fmt.Sprintf("%s (%s)", err.Error(), errorHash)
+	logger.Error(message)
+
+	newError := fmt.Sprintf("Something went wrong, please retry. (reference %s)", errorHash)
+	return errors.New(newError)
+}
+
+func errorWithHash(err error) string {
+	return fmt.Sprintf("%v", farm.Fingerprint64([]byte(err.Error())))
 }
