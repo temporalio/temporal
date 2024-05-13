@@ -58,8 +58,8 @@ func testHideUnknownOrInternalErrors(t *testing.T, mockLogger *log.MockLogger, s
 	errorMessage := HideUnknownOrInternalErrors(mockLogger, err)
 	if expectRelpace {
 		baseMassage := "Something went wrong, please retry."
-		errorHash := errorWithHash(err)
-		expectedMessage := fmt.Sprintf("%s (reference %s)", baseMassage, errorHash)
+		errorHash := errorMessageHash(err)
+		expectedMessage := fmt.Sprintf("%s (%s)", baseMassage, errorHash)
 
 		assert.Equal(t, errorMessage.Error(), expectedMessage)
 	} else {
