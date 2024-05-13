@@ -156,13 +156,9 @@ func (r *TaskRefresherImpl) RefreshTasks(
 		return err
 	}
 
-	if err := r.refreshTasksForSubStateMachines(
+	return r.refreshTasksForSubStateMachines(
 		mutableState,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
@@ -495,13 +491,12 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	versionedTransition := transitionHistory[len(transitionHistory)-1]
 
 	return mutableState.HSM().Walk(func(node *hsm.Node) error {
-		if node.Parent == nil {
-			// root node is mutable state and doesn't implement TaskRegenerator interface
-			return nil
-		}
-
 		taskRegenerator, err := hsm.MachineData[hsm.TaskRegenerator](node)
 		if err != nil {
+			if err == hsm.ErrIncompatibleType && node.Parent == nil {
+				// root node is mutable state and doesn't implement TaskRegenerator interface
+				return nil
+			}
 			return err
 		}
 

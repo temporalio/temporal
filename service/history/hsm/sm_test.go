@@ -30,39 +30,14 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-type state string
-
-const (
-	state1 state = "state1"
-	state2 state = "state2"
-	state3 state = "state3"
-	state4 state = "state4"
-)
-
-type data struct {
-	state state
-}
-
 type event struct{ fail bool }
-
-func (d *data) State() state {
-	return d.state
-}
-
-func (d *data) SetState(s state) {
-	d.state = s
-}
-
-func (d *data) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
-	panic("not implemented")
-}
 
 var handlerErr = errors.New("test")
 
 var transition = hsm.NewTransition(
-	[]state{state1, state2},
-	state3,
-	func(d *data, e event) (hsm.TransitionOutput, error) {
+	[]hsm.TestState{hsm.TestState1, hsm.TestState2},
+	hsm.TestState3,
+	func(d *hsm.TestData, e event) (hsm.TransitionOutput, error) {
 		if e.fail {
 			return hsm.TransitionOutput{}, handlerErr
 		}
@@ -71,32 +46,32 @@ var transition = hsm.NewTransition(
 )
 
 func TestTransition_Possible(t *testing.T) {
-	d := &data{state: state4}
+	d := hsm.NewTestData(hsm.TestState4)
 	require.False(t, transition.Possible(d))
-	d = &data{state: state3}
+	d = hsm.NewTestData(hsm.TestState3)
 	require.False(t, transition.Possible(d))
-	d = &data{state: state1}
+	d = hsm.NewTestData(hsm.TestState1)
 	require.True(t, transition.Possible(d))
-	d = &data{state: state2}
+	d = hsm.NewTestData(hsm.TestState2)
 	require.True(t, transition.Possible(d))
 }
 
 func TestTransition_ValidTransition(t *testing.T) {
-	d := &data{state: state1}
+	d := hsm.NewTestData(hsm.TestState1)
 	_, err := transition.Apply(d, event{})
 	require.NoError(t, err)
-	require.Equal(t, state3, d.state)
+	require.Equal(t, hsm.TestState3, d.State())
 }
 
 func TestTransition_InvalidTransition(t *testing.T) {
-	d := &data{state: state4}
+	d := hsm.NewTestData(hsm.TestState4)
 	_, err := transition.Apply(d, event{})
 	require.ErrorIs(t, err, hsm.ErrInvalidTransition)
-	require.Equal(t, state4, d.state)
+	require.Equal(t, hsm.TestState4, d.State())
 }
 
 func TestTransition_HandlerError(t *testing.T) {
-	d := &data{state: state1}
+	d := hsm.NewTestData(hsm.TestState1)
 	_, err := transition.Apply(d, event{fail: true})
 	require.ErrorIs(t, err, handlerErr)
 }
