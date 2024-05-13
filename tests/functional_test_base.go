@@ -194,7 +194,7 @@ func ApplyTestClusterParams(options []Option) TestClusterParams {
 // If the Logger is not set, this method creates a new log.TestLogger which logs to stdout and stderr.
 func (s *FunctionalTestBase) setupLogger() {
 	if s.Logger == nil {
-		s.Logger = log.NewTestLogger()
+		s.Logger = log.NewNoopLogger()
 	}
 }
 
