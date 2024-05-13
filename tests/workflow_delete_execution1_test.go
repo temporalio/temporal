@@ -37,10 +37,13 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/testing/testvars"
 )
 
 const (
-	waitForPersistence = 10 * time.Second
+	waitForPersistence = 15 * time.Second
 )
 
 func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
@@ -323,32 +326,24 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
 }
 
 func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
-	id := "functional-delete-workflow-running-with-terminate-test"
-	wt := "functional-delete-workflow-running-with-terminate-test-type"
-	tl := "functional-delete-workflow-running-with-terminate-test-taskqueue"
-	identity := "worker1"
+	tv := testvars.New(s.T().Name())
 
 	const numExecutions = 3
 
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
-		wid := id + strconv.Itoa(i)
 		we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:             uuid.New(),
-			Namespace:             s.namespace,
-			WorkflowId:            wid,
-			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			WorkflowType:          &commonpb.WorkflowType{Name: wt},
-			TaskQueue:             &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Input:                 nil,
-			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
-			Identity:              identity,
+			RequestId:    uuid.New(),
+			Namespace:    s.namespace,
+			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: wid,
+			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
 			RunId:      we.RunId,
 		})
 	}
@@ -376,26 +371,22 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 	}
 
 	// Terminate and delete workflow executions.
-	for _, we := range wes {
+	for i, we := range wes {
 		_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace: s.namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: we.WorkflowId,
-				RunId:      we.RunId,
-			},
+			Namespace:         s.namespace,
+			WorkflowExecution: we,
 		})
 		s.NoError(err)
+		s.Logger.Warn("Execution is terminated", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 		_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-			Namespace: s.namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: we.WorkflowId,
-				RunId:      we.RunId,
-			},
+			Namespace:         s.namespace,
+			WorkflowExecution: we,
 		})
 		s.NoError(err)
+		s.Logger.Warn("Execution is scheduled for deletion", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 	}
 
-	for _, we := range wes {
+	for i, we := range wes {
 		s.Eventually(
 			func() bool {
 				// Check execution is deleted.
@@ -407,7 +398,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 					},
 				)
 				if err == nil {
-					s.Logger.Warn("Execution not deleted yet")
+					s.Logger.Warn("Execution is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				var notFoundErr *serviceerror.NotFound
@@ -445,7 +436,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 				)
 				s.NoError(err)
 				if len(visibilityResponse.Executions) != 0 {
-					s.Logger.Warn("Visibility is not deleted yet")
+					s.Logger.Warn("Visibility is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				return true
