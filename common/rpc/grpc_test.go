@@ -57,9 +57,8 @@ func testHideUnknownOrInternalErrors(t *testing.T, mockLogger *log.MockLogger, s
 	err := serviceerror.FromStatus(s)
 	errorMessage := HideUnknownOrInternalErrors(mockLogger, err)
 	if expectRelpace {
-		baseMassage := "Something went wrong, please retry."
 		errorHash := errorMessageHash(err)
-		expectedMessage := fmt.Sprintf("%s (%s)", baseMassage, errorHash)
+		expectedMessage := fmt.Sprintf("%s (%s)", errorFrontendUnknown.Error(), errorHash)
 
 		assert.Equal(t, errorMessage.Error(), expectedMessage)
 	} else {

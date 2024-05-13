@@ -205,7 +205,7 @@ func NewFrontendErrorInterceptor(
 	}
 }
 
-var commonFrontendError = errors.New("Something went wrong, please retry.")
+var errorFrontendUnknown = errors.New("something went wrong, please retry")
 
 func HideUnknownOrInternalErrors(
 	logger log.Logger,
@@ -227,7 +227,7 @@ func HideUnknownOrInternalErrors(
 	message := fmt.Sprintf("%s (%s)", err.Error(), errorHash)
 	logger.Error(message)
 
-	return fmt.Errorf("%w: %s", commonFrontendError, errorHash)
+	return fmt.Errorf("%w (%s)", errorFrontendUnknown, errorHash)
 }
 
 func errorMessageHash(err error) string {
