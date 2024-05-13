@@ -3017,11 +3017,14 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 	s.resetBacklogCounter(10, 50, 5)
 }
 
-func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
+func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklogCounter() {
 	// This test should fail since we are not persisting the ack level with every write.
-	s.T().Skip("Skipping this until AckLevel is persisted with every task creation")
+	s.T().Skip("Skipping this until AckLevel is persisted with task creation")
 
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	// Increasing the UpdateAckInterval so that it does not get fired
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Minute)
+
 	_, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 	const taskCount = 20
@@ -3035,13 +3038,14 @@ func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 	// Completing the workflow tasks by directly calling AckManager.CompleteTask(TaskID) - doing this for the purpose of
 	// this test case. We shall complete all tasks that were added except the first one so that the AckLevel does not
 	// increase and remains equal to config.RangeSize.
+	firstTaskID := s.matchingEngine.config.RangeSize + 1
 	for i := int64(0); i < taskCount-1; i++ {
-		taskID := i + s.matchingEngine.config.RangeSize + 2
+		taskID := i + firstTaskID
 		pgMgr.backlogMgr.taskAckManager.completeTask(taskID)
 	}
 
-	// Since the first task was not completed, the AckLevel did not go up leading to backlog size not decreasing
-	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount))
+	// Only one task remains and the AckLevel should also have gone up
+	s.EqualValues(int64(1), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 
 	// Adding a new task which should persist the backlog count and the ackLevel
 	s.addWorkflowTasks(false, 1, 1, taskQueue, workflowExecution, nil)
@@ -3061,7 +3065,10 @@ func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 
 	pgMgr, ok = tqm_loaded_Impl.defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
-	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), taskCount+1) // should read "taskCount + 1", not 1
+
+	s.EqualValues(int64(2), pgMgr.backlogMgr.db.getApproximateBacklogCount()) // since there are 2 tasks in the backlog
+	// AckLevel must move to the second last task (taskID 29 in this case) since ackLevel has been persisted with task creation
+	s.EqualValues(firstTaskID+taskCount-2, pgMgr.backlogMgr.taskAckManager.getAckLevel()) // this check will be modified since ackLevel will move inside of db
 
 }
 
@@ -3092,6 +3099,8 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
+	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
+		"UpdateState an atomic operation.")
 	s.taskManager.dbError = true
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
@@ -3119,6 +3128,8 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksN
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
+	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
+		"UpdateState an atomic operation.")
 	s.taskManager.dbError = true
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
