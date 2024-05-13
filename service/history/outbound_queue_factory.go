@@ -45,7 +45,7 @@ import (
 const outboundQueuePersistenceMaxRPSRatio = 0.3
 
 var (
-	groupLimiterErrors = metrics.NewCounterDef("group_limiter_errors")
+	readNamespaceErrors = metrics.NewCounterDef("read_namespace_errors")
 )
 
 type outboundQueueFactoryParams struct {
@@ -74,7 +74,7 @@ func (l groupLimiter) BufferSize() int {
 		// would make it unnecessarily complex. Also, in this case, if the namespace
 		// registry fails to get the name, then the task itself will fail when it is
 		// processed and tries to get the namespace name.
-		groupLimiterErrors.With(l.metricsHandler).
+		readNamespaceErrors.With(l.metricsHandler).
 			Record(1, metrics.ReasonTag(metrics.ReasonString(err.Error())))
 	}
 	return l.bufferSize(nsName.String(), l.key.Destination)
@@ -84,7 +84,7 @@ func (l groupLimiter) Concurrency() int {
 	nsName, err := l.namespaceRegistry.GetNamespaceName(namespace.ID(l.key.NamespaceID))
 	if err != nil {
 		// Ditto comment above.
-		groupLimiterErrors.With(l.metricsHandler).
+		readNamespaceErrors.With(l.metricsHandler).
 			Record(1, metrics.ReasonTag(metrics.ReasonString(err.Error())))
 	}
 	return l.concurrency(nsName.String(), l.key.Destination)
@@ -100,10 +100,23 @@ type outboundQueueFactory struct {
 }
 
 func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
+	metricsHandler := getOutbountQueueProcessorMetricsHandler(params.MetricsHandler)
+
 	rateLimiterPool := collection.NewOnceMap(
-		func(queues.StateMachineTaskTypeNamespaceIDAndDestination) quotas.RateLimiter {
-			// TODO: get this value from dynamic config.
-			return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100.0 })
+		func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) quotas.RateLimiter {
+			return quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+				nsName, err := params.NamespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
+				if err != nil {
+					// This is intentionally not failing the function in case of error. The task
+					// scheduler doesn't expect errors to happen, and modifying to handle errors
+					// would make it unnecessarily complex. Also, in this case, if the namespace
+					// registry fails to get the name, then the task itself will fail when it is
+					// processed and tries to get the namespace name.
+					readNamespaceErrors.With(metricsHandler).
+						Record(1, metrics.ReasonTag(metrics.ReasonString(err.Error())))
+				}
+				return params.Config.OutboundQueueHostSchedulerMaxTaskRPS(nsName.String(), key.Destination)
+			})
 		},
 	)
 	circuitBreakerPool := collection.NewOnceMap(
@@ -157,7 +170,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 						return ctasks.NewDynamicWorkerPoolScheduler(groupLimiter{
 							key:               key,
 							namespaceRegistry: params.NamespaceRegistry,
-							metricsHandler:    getOutbountQueueProcessorMetricsHandler(params.MetricsHandler),
+							metricsHandler:    metricsHandler,
 							bufferSize:        params.Config.OutboundQueueGroupLimiterBufferSize,
 							concurrency:       params.Config.OutboundQueueGroupLimiterConcurrency,
 						})

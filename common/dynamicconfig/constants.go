@@ -1654,6 +1654,11 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		100,
 		`OutboundQueueGroupLimiterConcurrency is the concurrency of the group limiter`,
 	)
+	OutboundQueueHostSchedulerMaxTaskRPS = NewDestinationFloatSetting(
+		"history.outboundQueue.hostScheduler.maxTaskRPS",
+		100.0,
+		`OutboundQueueHostSchedulerMaxTaskRPS is the host scheduler max task RPS`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",
