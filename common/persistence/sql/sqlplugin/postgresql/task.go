@@ -108,7 +108,7 @@ task_queue_id = :task_queue_id
 	removeBuildIdToTaskQueueMappingQry = `DELETE FROM build_id_to_task_queue WHERE namespace_id = $1 AND task_queue_name = $2 AND build_id IN (`
 	listTaskQueuesByBuildIdQry         = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
 	countTaskQueuesByBuildIdQry        = `SELECT COUNT(*) FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
-	countTasksByTaskQueueQry           = `SELECT COUNT(*) FROM tasks WHERE range_hash = ? AND task_queue_id = ?`
+	countTasksByTaskQueueQry           = `SELECT COUNT(*) FROM tasks WHERE range_hash = $1 AND task_queue_id = $2`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
