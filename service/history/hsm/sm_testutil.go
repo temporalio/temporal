@@ -67,6 +67,11 @@ var (
 	}
 )
 
+var (
+	errInvalidStateType = fmt.Errorf("invalid state type")
+	errInvalidTaskType  = fmt.Errorf("invalid task type")
+)
+
 func NewTestData(
 	state TestState,
 ) *TestData {
@@ -111,7 +116,7 @@ func (d TestDefinition) Deserialize(b []byte) (any, error) {
 func (d TestDefinition) Serialize(s any) ([]byte, error) {
 	t, ok := s.(*TestData)
 	if !ok {
-		return nil, fmt.Errorf("invalid type")
+		return nil, errInvalidStateType
 	}
 	return []byte(t.state), nil
 }
@@ -148,7 +153,7 @@ func (t *TestTask) Concurrent() bool {
 
 func (s TestTaskSerializer) Serialize(t Task) ([]byte, error) {
 	if t.Type() != TestTaskType {
-		return nil, fmt.Errorf("invalid task type")
+		return nil, errInvalidTaskType
 	}
 	return json.Marshal(t)
 }

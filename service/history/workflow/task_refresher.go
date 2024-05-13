@@ -28,6 +28,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -493,7 +494,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	return mutableState.HSM().Walk(func(node *hsm.Node) error {
 		taskRegenerator, err := hsm.MachineData[hsm.TaskRegenerator](node)
 		if err != nil {
-			if err == hsm.ErrIncompatibleType && node.Parent == nil {
+			if node.Parent == nil && errors.Is(err, hsm.ErrIncompatibleType) {
 				// root node is mutable state and doesn't implement TaskRegenerator interface
 				return nil
 			}

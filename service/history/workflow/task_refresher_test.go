@@ -97,9 +97,11 @@ func (s *taskRefresherSuite) SetupTest() {
 
 func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 
-	stateMachineDef := hsm.NewTestDefinition(1)
-	s.stateMachineRegistry.RegisterTaskSerializer(hsm.TestTaskTypeID, hsm.TestTaskSerializer{})
-	s.stateMachineRegistry.RegisterMachine(stateMachineDef)
+	stateMachineDef := hsm.NewTestDefinition(10)
+	err := s.stateMachineRegistry.RegisterTaskSerializer(hsm.TestTaskTypeID, hsm.TestTaskSerializer{})
+	s.NoError(err)
+	err = s.stateMachineRegistry.RegisterMachine(stateMachineDef)
+	s.NoError(err)
 
 	versionedTransition := &persistence.VersionedTransition{NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(), MaxTransitionCount: 3}
 	s.mutableState.GetExecutionInfo().TransitionHistory = []*persistence.VersionedTransition{
