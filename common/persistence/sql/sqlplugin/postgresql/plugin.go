@@ -72,13 +72,13 @@ func (d *plugin) CreateDB(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 	logger log.Logger,
-	metrics metrics.Handler,
+	metricsHandler metrics.Handler,
 ) (sqlplugin.DB, error) {
 	connect := func() (*sqlx.DB, error) {
 		return d.createDBConnection(cfg, r)
 	}
 	needsRefresh := d.d.IsConnNeedsRefreshError
-	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metrics)
+	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler)
 	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }
@@ -89,13 +89,13 @@ func (d *plugin) CreateAdminDB(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 	logger log.Logger,
-	metrics metrics.Handler,
+	metricsHandler metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
 	connect := func() (*sqlx.DB, error) {
 		return d.createDBConnection(cfg, r)
 	}
 	needsRefresh := d.d.IsConnNeedsRefreshError
-	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metrics)
+	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler)
 	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }
