@@ -29,9 +29,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/persistence"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/persistence"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
