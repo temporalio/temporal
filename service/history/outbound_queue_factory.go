@@ -25,9 +25,9 @@ package history
 import (
 	"fmt"
 
-	"github.com/sony/gobreaker"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -119,21 +119,34 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 			})
 		},
 	)
+
+	circuitBreakerSettings := params.Config.OutboundQueueCircuitBreakerSettings
 	circuitBreakerPool := collection.NewOnceMap(
-		func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) *gobreaker.TwoStepCircuitBreaker {
-			// TODO: get circuit breaker settings from dynamic config.
-			return gobreaker.NewTwoStepCircuitBreaker(
-				gobreaker.Settings{
-					Name: fmt.Sprintf(
-						"circuit_breaker:%d.%s.%s",
-						key.StateMachineTaskType,
-						key.NamespaceID,
-						key.Destination,
-					),
+		func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
+			return circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
+				Name: fmt.Sprintf(
+					"circuit_breaker:%d:%s:%s",
+					key.StateMachineTaskType,
+					key.NamespaceID,
+					key.Destination,
+				),
+				SettingsFn: func() map[string]any {
+					nsName, err := params.NamespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
+					if err != nil {
+						// This is intentionally not failing the function in case of error. The circuit
+						// breaker is agnostic to Task implementation, and thus the settings function is
+						// not expected to return an error. Also, in this case, if the namespace registry
+						// fails to get the name, then the task itself will fail when it is processed and
+						// tries to get the namespace name.
+						readNamespaceErrors.With(metricsHandler).
+							Record(1, metrics.ReasonTag(metrics.ReasonString(err.Error())))
+					}
+					return circuitBreakerSettings(nsName.String(), key.Destination)
 				},
-			)
+			})
 		},
 	)
+
 	grouper := queues.GrouperStateMachineNamespaceIDAndDestination{}
 	f := &outboundQueueFactory{
 		outboundQueueFactoryParams: params,
