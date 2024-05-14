@@ -38,9 +38,13 @@ A failed gRPC request can be retried server-side and client-side.
 Both use the aforementioned `backoff` package to configure and execute the retries.
 
 **Server-side**: All Temporal services wrap their API handlers with the gRPC interceptor
-`interceptor.RetryableInterceptor` to retry a failed gRPC request. Look for 
-`NewRetryableInterceptor` to see the configuration for each service.
+`interceptor.RetryableInterceptor` to retry a failed gRPC request with certain errors.
+Look for `NewRetryableInterceptor` to see the configuration for each service.
 
-**Client-side**: Similarly, each service client can retry a failed gRPC request. Look for
-`NewRetryableClient` to see the configuration for each service client.
+**Client-side**: Similarly, each service client can retry a failed gRPC request with certain errors.
+Look for `NewRetryableClient` to see the configuration for each service client.
 
+NOTE: Server-side retries can be more efficient since they avoid a round-trip,
+but note that retry behavior multiplies between server and client, and client-side is more flexible
+(e.g. can direct a request to a different server), so server-side should be used sparingly.
+Therefore, the server-side retries are configured to do no more than one extra attempt.
