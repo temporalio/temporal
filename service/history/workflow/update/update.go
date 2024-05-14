@@ -456,7 +456,7 @@ func (u *Update) outgoingMessageID() string {
 // and on commit the accepted future is completed and the Update transitions to
 // stateAccepted.
 func (u *Update) onAcceptanceMsg(
-	ctx context.Context,
+	_ context.Context,
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
 ) error {
@@ -474,6 +474,7 @@ func (u *Update) onAcceptanceMsg(
 	}
 	u.instrumentation.countAcceptanceMsg()
 
+	// TODO: fix comment below:
 	// The accepted request payload is not sent back by the worker to the server. Instead, the server stores it in the
 	// update registry and it is written to the event here. It could make sense to obtain it from the worker, in order
 	// to support scenarios in which the registry has been lost, but we still want to process an update acceptance
@@ -501,7 +502,7 @@ func (u *Update) onAcceptanceMsg(
 	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
 		u.id,
 		u.outgoingMessageID(),
-		acpt.AcceptedRequestSequencingEventId, // Only AcceptedRequestSequencingEventId from Acceptance message is used.
+		acpt.AcceptedRequestSequencingEventId,
 		acceptedRequest)
 	if err != nil {
 		return err
