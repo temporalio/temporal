@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"golang.org/x/exp/rand"
 	"testing"
 	"time"
 
@@ -42,6 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"math/rand"
 )
 
 // TODO Shivam: Make a test-suite, backlogManagerSuite, for this file
