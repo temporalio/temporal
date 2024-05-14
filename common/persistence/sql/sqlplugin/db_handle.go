@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	// TODO: this should be dynamic config. For now we reuse the same setting as our cassandra implementation
 	sessionRefreshMinInternal = 5 * time.Second
 )
 
@@ -62,7 +63,10 @@ func (h *DatabaseHandle) reconnect() {
 
 	metrics.PersistenceSessionRefreshAttempts.With(h.metrics).Record(1)
 
-	if time.Now().UTC().Sub(h.lastRefresh) < sessionRefreshMinInternal {
+	now := time.Now()
+	lastRefresh := h.lastRefresh
+	h.lastRefresh = now
+	if now.Sub(lastRefresh) < sessionRefreshMinInternal {
 		h.logger.Warn("sql handle: did not refresh database connection pool because the last refresh was too close",
 			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := h.metrics.WithTags(metrics.FailureTag("throttle"))
@@ -78,7 +82,6 @@ func (h *DatabaseHandle) reconnect() {
 		return
 	}
 
-	h.lastRefresh = time.Now().UTC()
 	prevConn := h.db.Swap(newConn)
 	if prevConn != nil {
 		go prevConn.Close()

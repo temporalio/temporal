@@ -54,14 +54,14 @@ func (p *plugin) CreateDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
-	_ log.Logger,
-	_ metrics.Handler,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) (sqlplugin.DB, error) {
-	conn, err := p.createDBConnection(dbKind, cfg, r)
-	if err != nil {
-		return nil, err
+	connect := func() (*sqlx.DB, error) {
+		return p.createDBConnection(dbKind, cfg, r)
 	}
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler)
+	db := newDB(dbKind, cfg.DatabaseName, handle, nil)
 	return db, nil
 }
 
@@ -70,14 +70,14 @@ func (p *plugin) CreateAdminDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
-	_ log.Logger,
-	_ metrics.Handler,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
-	conn, err := p.createDBConnection(dbKind, cfg, r)
-	if err != nil {
-		return nil, err
+	connect := func() (*sqlx.DB, error) {
+		return p.createDBConnection(dbKind, cfg, r)
 	}
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler)
+	db := newDB(dbKind, cfg.DatabaseName, handle, nil)
 	return db, nil
 }
 

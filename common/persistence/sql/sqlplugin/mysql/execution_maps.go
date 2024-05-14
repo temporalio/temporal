@@ -135,7 +135,7 @@ func (mdb *db) ReplaceIntoActivityInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.ActivityInfoMapsRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		setKeyInActivityInfoMapQry,
 		rows,
 	)
@@ -147,7 +147,7 @@ func (mdb *db) SelectAllFromActivityInfoMaps(
 	filter sqlplugin.ActivityInfoMapsAllFilter,
 ) ([]sqlplugin.ActivityInfoMapsRow, error) {
 	var rows []sqlplugin.ActivityInfoMapsRow
-	if err := mdb.conn.SelectContext(ctx,
+	if err := mdb.SelectContext(ctx,
 		&rows,
 		getActivityInfoMapQry,
 		filter.ShardID,
@@ -182,8 +182,8 @@ func (mdb *db) DeleteFromActivityInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return mdb.conn.ExecContext(ctx,
-		mdb.conn.Rebind(query),
+	return mdb.ExecContext(ctx,
+		mdb.Rebind(query),
 		args...,
 	)
 }
@@ -193,7 +193,7 @@ func (mdb *db) DeleteAllFromActivityInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.ActivityInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteActivityInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -221,7 +221,7 @@ func (mdb *db) ReplaceIntoTimerInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.TimerInfoMapsRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		setKeyInTimerInfoMapSQLQuery,
 		rows,
 	)
@@ -233,7 +233,7 @@ func (mdb *db) SelectAllFromTimerInfoMaps(
 	filter sqlplugin.TimerInfoMapsAllFilter,
 ) ([]sqlplugin.TimerInfoMapsRow, error) {
 	var rows []sqlplugin.TimerInfoMapsRow
-	if err := mdb.conn.SelectContext(ctx,
+	if err := mdb.SelectContext(ctx,
 		&rows,
 		getTimerInfoMapSQLQuery,
 		filter.ShardID,
@@ -268,8 +268,8 @@ func (mdb *db) DeleteFromTimerInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return mdb.conn.ExecContext(ctx,
-		mdb.conn.Rebind(query),
+	return mdb.ExecContext(ctx,
+		mdb.Rebind(query),
 		args...,
 	)
 }
@@ -279,7 +279,7 @@ func (mdb *db) DeleteAllFromTimerInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.TimerInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteTimerInfoMapSQLQuery,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -307,7 +307,7 @@ func (mdb *db) ReplaceIntoChildExecutionInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.ChildExecutionInfoMapsRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		setKeyInChildExecutionInfoMapQry,
 		rows,
 	)
@@ -319,7 +319,7 @@ func (mdb *db) SelectAllFromChildExecutionInfoMaps(
 	filter sqlplugin.ChildExecutionInfoMapsAllFilter,
 ) ([]sqlplugin.ChildExecutionInfoMapsRow, error) {
 	var rows []sqlplugin.ChildExecutionInfoMapsRow
-	if err := mdb.conn.SelectContext(ctx,
+	if err := mdb.SelectContext(ctx,
 		&rows,
 		getChildExecutionInfoMapQry,
 		filter.ShardID,
@@ -354,8 +354,8 @@ func (mdb *db) DeleteFromChildExecutionInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return mdb.conn.ExecContext(ctx,
-		mdb.conn.Rebind(query),
+	return mdb.ExecContext(ctx,
+		mdb.Rebind(query),
 		args...,
 	)
 }
@@ -365,7 +365,7 @@ func (mdb *db) DeleteAllFromChildExecutionInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.ChildExecutionInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteChildExecutionInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -393,7 +393,7 @@ func (mdb *db) ReplaceIntoRequestCancelInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.RequestCancelInfoMapsRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		setKeyInRequestCancelInfoMapQry,
 		rows,
 	)
@@ -405,7 +405,7 @@ func (mdb *db) SelectAllFromRequestCancelInfoMaps(
 	filter sqlplugin.RequestCancelInfoMapsAllFilter,
 ) ([]sqlplugin.RequestCancelInfoMapsRow, error) {
 	var rows []sqlplugin.RequestCancelInfoMapsRow
-	if err := mdb.conn.SelectContext(ctx,
+	if err := mdb.SelectContext(ctx,
 		&rows, getRequestCancelInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -439,8 +439,8 @@ func (mdb *db) DeleteFromRequestCancelInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return mdb.conn.ExecContext(ctx,
-		mdb.conn.Rebind(query),
+	return mdb.ExecContext(ctx,
+		mdb.Rebind(query),
 		args...,
 	)
 }
@@ -450,7 +450,7 @@ func (mdb *db) DeleteAllFromRequestCancelInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.RequestCancelInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteRequestCancelInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -478,7 +478,7 @@ func (mdb *db) ReplaceIntoSignalInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.SignalInfoMapsRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		setKeyInSignalInfoMapQry,
 		rows,
 	)
@@ -490,7 +490,7 @@ func (mdb *db) SelectAllFromSignalInfoMaps(
 	filter sqlplugin.SignalInfoMapsAllFilter,
 ) ([]sqlplugin.SignalInfoMapsRow, error) {
 	var rows []sqlplugin.SignalInfoMapsRow
-	if err := mdb.conn.SelectContext(ctx,
+	if err := mdb.SelectContext(ctx,
 		&rows,
 		getSignalInfoMapQry,
 		filter.ShardID,
@@ -525,8 +525,8 @@ func (mdb *db) DeleteFromSignalInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return mdb.conn.ExecContext(ctx,
-		mdb.conn.Rebind(query),
+	return mdb.ExecContext(ctx,
+		mdb.Rebind(query),
 		args...,
 	)
 }
@@ -536,7 +536,7 @@ func (mdb *db) DeleteAllFromSignalInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.SignalInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteSignalInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -579,7 +579,7 @@ func (mdb *db) ReplaceIntoSignalsRequestedSets(
 	ctx context.Context,
 	rows []sqlplugin.SignalsRequestedSetsRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		createSignalsRequestedSetQry,
 		rows,
 	)
@@ -592,7 +592,7 @@ func (mdb *db) SelectAllFromSignalsRequestedSets(
 	filter sqlplugin.SignalsRequestedSetsAllFilter,
 ) ([]sqlplugin.SignalsRequestedSetsRow, error) {
 	var rows []sqlplugin.SignalsRequestedSetsRow
-	if err := mdb.conn.SelectContext(ctx,
+	if err := mdb.SelectContext(ctx,
 		&rows,
 		getSignalsRequestedSetQry,
 		filter.ShardID,
@@ -627,8 +627,8 @@ func (mdb *db) DeleteFromSignalsRequestedSets(
 	if err != nil {
 		return nil, err
 	}
-	return mdb.conn.ExecContext(ctx,
-		mdb.conn.Rebind(query),
+	return mdb.ExecContext(ctx,
+		mdb.Rebind(query),
 		args...,
 	)
 }
@@ -638,7 +638,7 @@ func (mdb *db) DeleteAllFromSignalsRequestedSets(
 	ctx context.Context,
 	filter sqlplugin.SignalsRequestedSetsAllFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteAllSignalsRequestedSetQry,
 		filter.ShardID,
 		filter.NamespaceID,

@@ -31,7 +31,6 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
@@ -110,8 +109,6 @@ func (pdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 		pdb.handle.HandleError(err)
 		return nil, err
 	}
-	logr := log.NewTestLogger()
-	logr.Error("Began transaction")
 	return newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.handle, tx), nil
 }
 
@@ -160,7 +157,6 @@ func (pdb *db) Rollback() error {
 }
 
 // Helper methods to hide common error handling
-
 func (pdb *db) ExecContext(ctx context.Context, stmt string, args ...any) (sql.Result, error) {
 	res, err := pdb.conn().ExecContext(ctx, stmt, args...)
 	if err != nil {
@@ -218,5 +214,5 @@ func (pdb *db) QueryContext(ctx context.Context, query string, args ...any) (*sq
 }
 
 func (pdb *db) Rebind(query string) string {
-	return pdb.handle.DB().Rebind(query)
+	return pdb.conn().Rebind(query)
 }
