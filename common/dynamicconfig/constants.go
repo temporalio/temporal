@@ -2089,6 +2089,17 @@ that task will be sent to DLQ.`,
 		512,
 		`ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count`,
 	)
+	ReplicationLowPriorityProcessorSchedulerWorkerCount = NewGlobalIntSetting(
+		"history.ReplicationLowPriorityProcessorSchedulerWorkerCount",
+		128,
+		`ReplicationLowPriorityProcessorSchedulerWorkerCount is the low priority replication task executor worker count`,
+	)
+	ReplicationLowPriorityTaskParallelism = NewGlobalIntSetting(
+		"history.ReplicationLowPriorityTaskParallelism",
+		4,
+		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
+	)
+
 	EnableEagerNamespaceRefresher = NewGlobalBoolSetting(
 		"history.EnableEagerNamespaceRefresher",
 		false,
