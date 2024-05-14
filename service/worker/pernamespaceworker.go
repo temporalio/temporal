@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/server/common/clock"
 	"go.uber.org/fx"
 	"golang.org/x/exp/maps"
 
@@ -260,7 +261,7 @@ func (wm *perNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 	worker := &perNamespaceWorker{
 		wm:      wm,
 		logger:  log.With(wm.logger, tag.WorkflowNamespace(ns.Name().String())),
-		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), backoff.SystemClock),
+		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), clock.NewRealTimeSource()),
 		ns:      ns,
 	}
 
