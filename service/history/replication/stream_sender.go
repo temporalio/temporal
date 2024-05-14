@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/replication/flowcontrol"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -67,6 +68,7 @@ type (
 		clientShardKey ClusterShardKey
 		serverShardKey ClusterShardKey
 		shutdownChan   channel.ShutdownOnce
+		flowController flowcontrol.SenderFlowController
 	}
 )
 
@@ -244,6 +246,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 			},
 		}},
 	}
+	s.flowController.RefreshReceiverFlowControlInfo(attr)
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
 		readerID,
 		readerState,
@@ -357,6 +360,10 @@ Loop:
 		item, err := iter.Next()
 		if err != nil {
 			return err
+		}
+		err = s.flowController.Wait(enumsspb.TASK_PRIORITY_UNSPECIFIED)
+		if err != nil {
+			s.logger.Warn("StreamSender flow control wait failed", tag.Error(err))
 		}
 		task, err := s.taskConverter.Convert(item)
 		if err != nil {

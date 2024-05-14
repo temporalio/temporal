@@ -86,6 +86,7 @@ message SyncReplicationState {
 message ReplicationState {
     int64 inclusive_low_watermark = 1;
     google.protobuf.Timestamp inclusive_low_watermark_time = 2;
+    temporal.server.api.enums.v1.ReplicationFlowControlCommand flow_control_command = 3;
 }
 
 message ReplicationMessages {

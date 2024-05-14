@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/replication/flowcontrol"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	replicationpb "go.temporal.io/server/api/replication/v1"
@@ -73,6 +74,7 @@ type (
 		stream                  Stream
 		taskConverter           ExecutableTaskConverter
 		receiverMode            ReceiverMode
+		flowController          flowcontrol.ReceiverFlowController
 	}
 )
 
@@ -98,14 +100,19 @@ func NewStreamReceiver(
 		tag.SourceShardID(serverShardKey.ShardID),
 		tag.ShardID(clientShardKey.ShardID), // client is the local cluster (target cluster, passive cluster)
 	)
+	highPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
+	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
+	taskTrackerMap := make(map[enums.TaskPriority]ExecutableTaskTracker)
+	taskTrackerMap[enums.TASK_PRIORITY_HIGH] = highPriorityTaskTracker
+	taskTrackerMap[enums.TASK_PRIORITY_LOW] = lowPriorityTaskTracker
 	return &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
 		status:                  common.DaemonStatusInitialized,
 		clientShardKey:          clientShardKey,
 		serverShardKey:          serverShardKey,
-		highPriorityTaskTracker: NewExecutableTaskTracker(logger, processToolBox.MetricsHandler),
-		lowPriorityTaskTracker:  NewExecutableTaskTracker(logger, processToolBox.MetricsHandler),
+		highPriorityTaskTracker: highPriorityTaskTracker,
+		lowPriorityTaskTracker:  lowPriorityTaskTracker,
 		shutdownChan:            channel.NewShutdownOnce(),
 		logger:                  logger,
 		stream: newStream(
@@ -113,8 +120,9 @@ func NewStreamReceiver(
 			clientShardKey,
 			serverShardKey,
 		),
-		taskConverter: taskConverter,
-		receiverMode:  ReceiverModeUnset,
+		taskConverter:  taskConverter,
+		receiverMode:   ReceiverModeUnset,
+		flowController: flowcontrol.NewReceiverFlowControl(taskTrackerMap),
 	}
 }
 
@@ -250,10 +258,12 @@ func (r *StreamReceiverImpl) ackMessage(
 		highPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
+			FlowControlCommand:        r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_HIGH),
 		}
 		lowPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
+			FlowControlCommand:        r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_LOW),
 		}
 		if highPriorityWaterMarkInfo.Watermark <= lowPriorityWaterMarkInfo.Watermark {
 			inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
