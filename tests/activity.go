@@ -124,15 +124,14 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
 			_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				Namespace: s.namespace,
-				TaskToken: taskToken,
+				TaskToken: task.TaskToken,
 				Details:   payloads.EncodeString("details"),
 			})
 			s.NoError(err)
@@ -297,10 +296,9 @@ func (s *FunctionalSuite) TestActivityRetry() {
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 		var err error
 		if activityExecutedCount == 0 {
 			err = errors.New("bad-luck-please-retry")
@@ -464,10 +462,9 @@ func (s *FunctionalSuite) TestActivityRetry_Infinite() {
 
 	activityExecutedCount := 0
 	activityExecutedLimit := 4
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 
 		var err error
 		if activityExecutedCount < activityExecutedLimit {
@@ -569,10 +566,9 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 		// Timing out more than HB time.
 		time.Sleep(2 * time.Second)
 		activityExecutedCount++
@@ -681,16 +677,15 @@ func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 	}
 
 	activityCanceled := false
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
 			response, err := s.engine.RecordActivityTaskHeartbeat(NewContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
 					Namespace: s.namespace,
-					TaskToken: taskToken,
+					TaskToken: task.TaskToken,
 					Details:   payloads.EncodeString("details"),
 				})
 			if response != nil && response.CancelRequested {
@@ -825,8 +820,7 @@ func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 	}
 
 	// dummy activity handler
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Fail("activity should not run")
 		return nil, false, nil
 	}
@@ -1049,14 +1043,12 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 	activityStartedSignal := make(chan bool) // Used by activity channel to signal the start so that the test can verify empty identity.
 	heartbeatSignalChan := make(chan bool)   // Activity task sends heartbeat when signaled on this chan. It also signals back on the same chan after sending the heartbeat.
 	endActivityTask := make(chan bool)       // Activity task completes when signaled on this chan. This is to force the task to be in pending state.
-	atHandler := func(
-		execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType, activityID string, input *commonpb.Payloads, taskToken []byte,
-	) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		activityStartedSignal <- true // signal the start of activity task.
 		<-heartbeatSignalChan         // wait for signal before sending heartbeat.
 		_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: s.namespace,
-			TaskToken: taskToken,
+			TaskToken: task.TaskToken,
 			Details:   payloads.EncodeString("details"),
 			Identity:  workerIdentity, // explicitly set the worker identity in the heartbeat request
 		})
