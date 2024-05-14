@@ -36,12 +36,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sony/gobreaker"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -803,12 +803,12 @@ func EstimateTaskMetricTag(
 // of failure, and return the inner error.
 type CircuitBreakerExecutable struct {
 	Executable
-	cb *gobreaker.TwoStepCircuitBreaker
+	cb circuitbreaker.TwoStepCircuitBreaker
 }
 
 func NewCircuitBreakerExecutable(
 	e Executable,
-	cb *gobreaker.TwoStepCircuitBreaker,
+	cb circuitbreaker.TwoStepCircuitBreaker,
 ) *CircuitBreakerExecutable {
 	return &CircuitBreakerExecutable{
 		Executable: e,
