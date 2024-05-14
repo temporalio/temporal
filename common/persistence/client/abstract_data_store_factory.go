@@ -25,43 +25,24 @@
 package client
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resolver"
 )
 
 type (
-	errorGeneratorSuite struct {
-		suite.Suite
-		*require.Assertions
+
+	// AbstractDataStoreFactory creates a DataStoreFactory, can be used to implement custom datastore support outside
+	// of the Temporal core.
+	AbstractDataStoreFactory interface {
+		NewFactory(
+			cfg config.CustomDatastoreConfig,
+			r resolver.ServiceResolver,
+			clusterName string,
+			logger log.Logger,
+			metricsHandler metrics.Handler,
+		) persistence.DataStoreFactory
 	}
 )
-
-func TestErrorGeneratorSuite(t *testing.T) {
-	s := new(errorGeneratorSuite)
-	suite.Run(t, s)
-}
-
-func (s *errorGeneratorSuite) SetupSuite() {}
-
-func (s *errorGeneratorSuite) TearDownSuite() {}
-
-func (s *errorGeneratorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-
-}
-
-func (s *errorGeneratorSuite) TearDownTest() {}
-
-func (s *errorGeneratorSuite) TestZeroRateCanUpdateToNonZero() {
-	testObject := NewDefaultErrorGenerator(0.0, defaultErrors)
-	testObject.UpdateRate(1)
-	s.NotNil(testObject.Generate())
-}
-
-func (s *errorGeneratorSuite) TestAfterUpdateToZeroRateGenerateReturnsNoErrors() {
-	testObject := NewDefaultErrorGenerator(1.0, defaultErrors)
-	testObject.UpdateRate(0)
-	s.Nil(testObject.Generate())
-}

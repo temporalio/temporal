@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -144,7 +143,6 @@ func NewServiceProvider(
 	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 	membershipMonitor membership.Monitor,
 ) *Service {
 	return NewService(
@@ -160,7 +158,6 @@ func NewServiceProvider(
 		logger,
 		grpcListener,
 		metricsHandler,
-		faultInjectionDataStoreFactory,
 		membershipMonitor,
 	)
 }

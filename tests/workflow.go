@@ -1030,7 +1030,6 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 	}
 
 	s.Run("StartWorkflow + UpdateWorkflow", func() {
-
 		runUpdateWithStart := func(
 			tv *testvars.TestVars,
 			startReq *workflowservice.StartWorkflowExecutionRequest,
@@ -1060,6 +1059,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 				s.NotZero(startRes.RunId)
 
 				updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
+				s.NotNil(updateRes.Outcome)
 				s.NotZero(updateRes.Outcome.String())
 			}
 
@@ -1113,7 +1113,9 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			s.Run("workflow id reuse policy terminate-existing: terminate workflow first, then start and update", func() {
 				tv := testvars.New(s.T().Name())
 
-				runningWF, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
+				initReq := startWorkflowReq(tv)
+				initReq.TaskQueue.Name = initReq.TaskQueue.Name + "-init" // avoid race condition with poller
+				initWF, err := s.engine.StartWorkflowExecution(NewContext(), initReq)
 				s.NoError(err)
 
 				req := startWorkflowReq(tv)
@@ -1125,7 +1127,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 				descResp, err := s.engine.DescribeWorkflowExecution(NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.namespace,
-						Execution: &commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: runningWF.RunId},
+						Execution: &commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: initWF.RunId},
 					})
 
 				s.NoError(err)

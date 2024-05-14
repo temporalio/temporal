@@ -386,13 +386,13 @@ functional-test: clean-test-results
 
 functional-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-test: unit-test integration-test functional-test functional-with-fault-injection-test
+test: unit-test integration-test functional-test
 
 ##### Coverage & Reporting #####
 $(TEST_OUTPUT_ROOT):

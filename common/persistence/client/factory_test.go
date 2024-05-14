@@ -28,9 +28,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/mock"
 )
 
 func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
@@ -52,9 +55,10 @@ func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			dataStoreFactory := &testDataStoreFactory{
-				err: tc.err,
-			}
+			ctrl := gomock.NewController(t)
+			dataStoreFactory := mock.NewMockDataStoreFactory(ctrl)
+			dataStoreFactory.EXPECT().NewQueueV2().Return(nil, tc.err).AnyTimes()
+
 			factory := client.NewFactory(
 				dataStoreFactory,
 				&config.Persistence{

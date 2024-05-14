@@ -32,9 +32,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/server/service/history/api/respondworkflowtaskfailed"
-	"go.temporal.io/server/service/history/api/scheduleworkflowtask"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -77,6 +74,7 @@ import (
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
+	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"go.temporal.io/server/service/history/api/refreshworkflow"
 	"go.temporal.io/server/service/history/api/removesignalmutablestate"
 	replicationapi "go.temporal.io/server/service/history/api/replication"
@@ -87,12 +85,15 @@ import (
 	"go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
+	"go.temporal.io/server/service/history/api/respondworkflowtaskfailed"
+	"go.temporal.io/server/service/history/api/scheduleworkflowtask"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
+	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -516,7 +517,7 @@ func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 	ctx context.Context,
 	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 ) (retError error) {
-	return e.workflowTaskHandler.verifyFirstWorkflowTaskScheduled(ctx, request)
+	return verifyfirstworkflowtaskscheduled.Invoke(ctx, request, e.workflowConsistencyChecker)
 }
 
 // RecordWorkflowTaskStarted starts a workflow task
@@ -524,7 +525,15 @@ func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	return e.workflowTaskHandler.handleWorkflowTaskStarted(ctx, request)
+	return recordworkflowtaskstarted.Invoke(
+		ctx,
+		request,
+		e.shardContext,
+		e.config,
+		e.eventNotifier,
+		e.persistenceVisibilityMgr,
+		e.workflowConsistencyChecker,
+	)
 }
 
 // RespondWorkflowTaskCompleted completes a workflow task
@@ -672,7 +681,7 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
