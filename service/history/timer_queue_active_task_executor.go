@@ -300,12 +300,14 @@ Loop:
 			continue Loop
 		}
 
-		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
-		// If retryState is Timeout then it means that expirationTime is expired.
-		// ExpirationTime is expired when ScheduleToClose timeout is expired.
 		if retryState == enumspb.RETRY_STATE_TIMEOUT {
-			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			// If retryState is Timeout then it means that expirationTime is expired.
+			// ExpirationTime is expired when ScheduleToClose timeout is expired.
+			timeoutType := enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			failureMsg := fmt.Sprintf("activity %v timeout", timeoutType.String())
+			timeoutFailure = failure.NewTimeoutFailure(failureMsg, timeoutType)
 		}
+		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
