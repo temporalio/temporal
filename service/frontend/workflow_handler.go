@@ -2136,7 +2136,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		))
 	}
 
-	if earliestTime.AsTime().After(latestTime.AsTime()) {
+	if request.StartTimeFilter.EarliestTime.AsTime().After(request.StartTimeFilter.LatestTime.AsTime()) {
 		return nil, errEarliestTimeIsGreaterThanLatestTime
 	}
 
@@ -2242,7 +2242,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		))
 	}
 
-	if earliestTime.AsTime().After(latestTime.AsTime()) {
+	if request.StartTimeFilter.EarliestTime.AsTime().After(request.StartTimeFilter.LatestTime.AsTime()) {
 		return nil, errEarliestTimeIsGreaterThanLatestTime
 	}
 
