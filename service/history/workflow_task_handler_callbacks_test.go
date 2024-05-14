@@ -25,22 +25,15 @@
 package history
 
 import (
-	"context"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
-	"go.temporal.io/api/serviceerror"
 	"golang.org/x/exp/maps"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -155,130 +148,6 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 
 func (s *WorkflowTaskHandlerCallbackSuite) TearDownTest() {
 	s.controller.Finish()
-}
-
-func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowNotFound() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: tests.WorkflowID,
-			RunId:      tests.RunID,
-		},
-	}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
-
-	err := s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
-	s.IsType(&serviceerror.NotFound{}, err)
-}
-
-func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowCompleted() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: tests.WorkflowID,
-			RunId:      tests.RunID,
-		},
-	}
-
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowID,
-		RunId:      tests.RunID,
-	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-
-	_, err := ms.AddTimeoutWorkflowEvent(
-		ms.GetNextEventID(),
-		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.New(),
-	)
-	s.NoError(err)
-
-	wfMs := workflow.TestCloneToProto(ms)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-
-	err = s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
-	s.NoError(err)
-}
-
-func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowZombie() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: tests.WorkflowID,
-			RunId:      tests.RunID,
-		},
-	}
-
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowID,
-		RunId:      tests.RunID,
-	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-
-	// zombie state should be treated as open
-	s.NoError(ms.UpdateWorkflowStateStatus(
-		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-	))
-	wfMs := workflow.TestCloneToProto(ms)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-
-	err := s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
-	s.IsType(&serviceerror.WorkflowNotReady{}, err)
-}
-
-func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowRunning_TaskPending() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: tests.WorkflowID,
-			RunId:      tests.RunID,
-		},
-	}
-
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowID,
-		RunId:      tests.RunID,
-	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	addWorkflowTaskScheduledEvent(ms)
-
-	wfMs := workflow.TestCloneToProto(ms)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-
-	err := s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
-	s.NoError(err)
-}
-
-func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowRunning_TaskProcessed() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: tests.WorkflowID,
-			RunId:      tests.RunID,
-		},
-	}
-
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowID,
-		RunId:      tests.RunID,
-	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	wt := addWorkflowTaskScheduledEvent(ms)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
-	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
-	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
-
-	wfMs := workflow.TestCloneToProto(ms)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-
-	err := s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
-	s.NoError(err)
 }
 
 func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_NewWorkflowTask() {
