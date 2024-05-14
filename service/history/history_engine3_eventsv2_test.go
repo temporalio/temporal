@@ -179,7 +179,6 @@ func (s *engine3Suite) SetupTest() {
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
 	}
 	s.mockShard.SetEngineForTesting(h)
-	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	s.historyEngine = h
 }
