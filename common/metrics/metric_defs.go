@@ -41,7 +41,7 @@ const (
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
-	nexusServiceTagName         = "service"
+	nexusEndpointTagName        = "nexus_endpoint"
 	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
@@ -273,14 +273,14 @@ const (
 	PersistenceListNamespacesScope = "ListNamespaces"
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
-	// PersistenceGetNexusIncomingServiceScope tracks GetNexusIncomingService calls made by service to persistence layer
-	PersistenceGetNexusIncomingServiceScope = "GetNexusIncomingService"
-	// PersistenceListNexusIncomingServicesScope tracks ListNexusIncomingService calls made by service to persistence layer
-	PersistenceListNexusIncomingServicesScope = "ListNexusIncomingServices"
-	// PersistenceCreateOrUpdateNexusIncomingServiceScope tracks CreateOrUpdateNexusIncomingService calls made by service to persistence layer
-	PersistenceCreateOrUpdateNexusIncomingServiceScope = "CreateOrUpdateNexusIncomingService"
-	// PersistenceDeleteNexusIncomingServiceScope tracks DeleteNexusIncomingService calls made by service to persistence layer
-	PersistenceDeleteNexusIncomingServiceScope = "DeleteNexusIncomingService"
+	// PersistenceGetNexusEndpointScope tracks GetNexusEndpoint calls made by service to persistence layer
+	PersistenceGetNexusEndpointScope = "GetNexusEndpoint"
+	// PersistenceListNexusEndpointsScope tracks ListNexusEndpoint calls made by service to persistence layer
+	PersistenceListNexusEndpointsScope = "ListNexusEndpoints"
+	// PersistenceCreateOrUpdateNexusEndpointScope tracks CreateOrUpdateNexusEndpoint calls made by service to persistence layer
+	PersistenceCreateOrUpdateNexusEndpointScope = "CreateOrUpdateNexusEndpoint"
+	// PersistenceDeleteNexusEndpointScope tracks DeleteNexusEndpoint calls made by service to persistence layer
+	PersistenceDeleteNexusEndpointScope = "DeleteNexusEndpoint"
 
 	// VisibilityPersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to visibility persistence layer
 	VisibilityPersistenceRecordWorkflowExecutionStartedScope = "RecordWorkflowExecutionStarted"
@@ -930,6 +930,7 @@ var (
 	TotalRequestCancelExternalCount       = NewDimensionlessHistogramDef("total_request_cancel_external_count")
 	TotalSignalExternalCount              = NewDimensionlessHistogramDef("total_signal_external_count")
 	TotalSignalCount                      = NewDimensionlessHistogramDef("total_signal_count")
+	WorkflowBackoffCount                  = NewCounterDef("workflow_backoff_timer")
 	WorkflowRetryBackoffTimerCount        = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount         = NewCounterDef("workflow_cron_backoff_timer")
 	WorkflowDelayedStartBackoffTimerCount = NewCounterDef("workflow_delayed_start_backoff_timer")

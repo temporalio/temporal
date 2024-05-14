@@ -118,15 +118,15 @@ func Invoke(
 	}
 
 	mutableState := workflowLease.GetMutableState()
+	if !mutableState.IsWorkflowExecutionRunning() && mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
+		// Workflow was closed before WorkflowTaskStarted event. In this case query will fail.
+		return nil, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted
+	}
+
 	if !mutableState.HadOrHasWorkflowTask() {
 		// workflow has no workflow task ever scheduled, this usually is due to firstWorkflowTaskBackoff (cron / retry)
 		// in this case, don't buffer the query, because it is almost certain the query will time out.
 		return nil, consts.ErrWorkflowTaskNotScheduled
-	}
-
-	if !mutableState.IsWorkflowExecutionRunning() && mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
-		// Workflow was closed before WorkflowTaskStarted event. In this case query will fail.
-		return nil, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted
 	}
 
 	if mutableState.GetExecutionInfo().WorkflowTaskAttempt >= failQueryWorkflowTaskAttemptCount {

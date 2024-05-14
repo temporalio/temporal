@@ -353,7 +353,7 @@ func GetBoolPropertyFnFilteredByTaskType(value bool) BoolPropertyFnWithTaskTypeF
 	}
 }
 
-type DestinationBoolSetting setting[bool, func(namespaceID string, destination string)]
+type DestinationBoolSetting setting[bool, func(namespace string, destination string)]
 
 func NewDestinationBoolSetting(key Key, def bool, description string) DestinationBoolSetting {
 	s := DestinationBoolSetting{
@@ -383,21 +383,21 @@ func (s DestinationBoolSetting) WithDefault(v bool) DestinationBoolSetting {
 	return newS
 }
 
-type BoolPropertyFnWithDestinationFilter func(namespaceID string, destination string) bool
+type BoolPropertyFnWithDestinationFilter func(namespace string, destination string) bool
 
 func (s DestinationBoolSetting) Get(c *Collection) BoolPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) bool {
+	return func(namespace string, destination string) bool {
 		return matchAndConvert(
 			c,
-			(setting[bool, func(namespaceID string, destination string)])(s),
-			precedenceDestination(namespaceID, destination),
+			(setting[bool, func(namespace string, destination string)])(s),
+			precedenceDestination(namespace, destination),
 			convertBool,
 		)
 	}
 }
 
 func GetBoolPropertyFnFilteredByDestination(value bool) BoolPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) bool {
+	return func(namespace string, destination string) bool {
 		return value
 	}
 }
@@ -696,7 +696,7 @@ func GetIntPropertyFnFilteredByTaskType(value int) IntPropertyFnWithTaskTypeFilt
 	}
 }
 
-type DestinationIntSetting setting[int, func(namespaceID string, destination string)]
+type DestinationIntSetting setting[int, func(namespace string, destination string)]
 
 func NewDestinationIntSetting(key Key, def int, description string) DestinationIntSetting {
 	s := DestinationIntSetting{
@@ -726,21 +726,21 @@ func (s DestinationIntSetting) WithDefault(v int) DestinationIntSetting {
 	return newS
 }
 
-type IntPropertyFnWithDestinationFilter func(namespaceID string, destination string) int
+type IntPropertyFnWithDestinationFilter func(namespace string, destination string) int
 
 func (s DestinationIntSetting) Get(c *Collection) IntPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) int {
+	return func(namespace string, destination string) int {
 		return matchAndConvert(
 			c,
-			(setting[int, func(namespaceID string, destination string)])(s),
-			precedenceDestination(namespaceID, destination),
+			(setting[int, func(namespace string, destination string)])(s),
+			precedenceDestination(namespace, destination),
 			convertInt,
 		)
 	}
 }
 
 func GetIntPropertyFnFilteredByDestination(value int) IntPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) int {
+	return func(namespace string, destination string) int {
 		return value
 	}
 }
@@ -1039,7 +1039,7 @@ func GetFloatPropertyFnFilteredByTaskType(value float64) FloatPropertyFnWithTask
 	}
 }
 
-type DestinationFloatSetting setting[float64, func(namespaceID string, destination string)]
+type DestinationFloatSetting setting[float64, func(namespace string, destination string)]
 
 func NewDestinationFloatSetting(key Key, def float64, description string) DestinationFloatSetting {
 	s := DestinationFloatSetting{
@@ -1069,21 +1069,21 @@ func (s DestinationFloatSetting) WithDefault(v float64) DestinationFloatSetting 
 	return newS
 }
 
-type FloatPropertyFnWithDestinationFilter func(namespaceID string, destination string) float64
+type FloatPropertyFnWithDestinationFilter func(namespace string, destination string) float64
 
 func (s DestinationFloatSetting) Get(c *Collection) FloatPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) float64 {
+	return func(namespace string, destination string) float64 {
 		return matchAndConvert(
 			c,
-			(setting[float64, func(namespaceID string, destination string)])(s),
-			precedenceDestination(namespaceID, destination),
+			(setting[float64, func(namespace string, destination string)])(s),
+			precedenceDestination(namespace, destination),
 			convertFloat,
 		)
 	}
 }
 
 func GetFloatPropertyFnFilteredByDestination(value float64) FloatPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) float64 {
+	return func(namespace string, destination string) float64 {
 		return value
 	}
 }
@@ -1382,7 +1382,7 @@ func GetStringPropertyFnFilteredByTaskType(value string) StringPropertyFnWithTas
 	}
 }
 
-type DestinationStringSetting setting[string, func(namespaceID string, destination string)]
+type DestinationStringSetting setting[string, func(namespace string, destination string)]
 
 func NewDestinationStringSetting(key Key, def string, description string) DestinationStringSetting {
 	s := DestinationStringSetting{
@@ -1412,21 +1412,21 @@ func (s DestinationStringSetting) WithDefault(v string) DestinationStringSetting
 	return newS
 }
 
-type StringPropertyFnWithDestinationFilter func(namespaceID string, destination string) string
+type StringPropertyFnWithDestinationFilter func(namespace string, destination string) string
 
 func (s DestinationStringSetting) Get(c *Collection) StringPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) string {
+	return func(namespace string, destination string) string {
 		return matchAndConvert(
 			c,
-			(setting[string, func(namespaceID string, destination string)])(s),
-			precedenceDestination(namespaceID, destination),
+			(setting[string, func(namespace string, destination string)])(s),
+			precedenceDestination(namespace, destination),
 			convertString,
 		)
 	}
 }
 
 func GetStringPropertyFnFilteredByDestination(value string) StringPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) string {
+	return func(namespace string, destination string) string {
 		return value
 	}
 }
@@ -1725,7 +1725,7 @@ func GetDurationPropertyFnFilteredByTaskType(value time.Duration) DurationProper
 	}
 }
 
-type DestinationDurationSetting setting[time.Duration, func(namespaceID string, destination string)]
+type DestinationDurationSetting setting[time.Duration, func(namespace string, destination string)]
 
 func NewDestinationDurationSetting(key Key, def time.Duration, description string) DestinationDurationSetting {
 	s := DestinationDurationSetting{
@@ -1755,21 +1755,21 @@ func (s DestinationDurationSetting) WithDefault(v time.Duration) DestinationDura
 	return newS
 }
 
-type DurationPropertyFnWithDestinationFilter func(namespaceID string, destination string) time.Duration
+type DurationPropertyFnWithDestinationFilter func(namespace string, destination string) time.Duration
 
 func (s DestinationDurationSetting) Get(c *Collection) DurationPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) time.Duration {
+	return func(namespace string, destination string) time.Duration {
 		return matchAndConvert(
 			c,
-			(setting[time.Duration, func(namespaceID string, destination string)])(s),
-			precedenceDestination(namespaceID, destination),
+			(setting[time.Duration, func(namespace string, destination string)])(s),
+			precedenceDestination(namespace, destination),
 			convertDuration,
 		)
 	}
 }
 
 func GetDurationPropertyFnFilteredByDestination(value time.Duration) DurationPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) time.Duration {
+	return func(namespace string, destination string) time.Duration {
 		return value
 	}
 }
@@ -2068,7 +2068,7 @@ func GetMapPropertyFnFilteredByTaskType(value map[string]any) MapPropertyFnWithT
 	}
 }
 
-type DestinationMapSetting setting[map[string]any, func(namespaceID string, destination string)]
+type DestinationMapSetting setting[map[string]any, func(namespace string, destination string)]
 
 func NewDestinationMapSetting(key Key, def map[string]any, description string) DestinationMapSetting {
 	s := DestinationMapSetting{
@@ -2098,21 +2098,21 @@ func (s DestinationMapSetting) WithDefault(v map[string]any) DestinationMapSetti
 	return newS
 }
 
-type MapPropertyFnWithDestinationFilter func(namespaceID string, destination string) map[string]any
+type MapPropertyFnWithDestinationFilter func(namespace string, destination string) map[string]any
 
 func (s DestinationMapSetting) Get(c *Collection) MapPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) map[string]any {
+	return func(namespace string, destination string) map[string]any {
 		return matchAndConvert(
 			c,
-			(setting[map[string]any, func(namespaceID string, destination string)])(s),
-			precedenceDestination(namespaceID, destination),
+			(setting[map[string]any, func(namespace string, destination string)])(s),
+			precedenceDestination(namespace, destination),
 			convertMap,
 		)
 	}
 }
 
 func GetMapPropertyFnFilteredByDestination(value map[string]any) MapPropertyFnWithDestinationFilter {
-	return func(namespaceID string, destination string) map[string]any {
+	return func(namespace string, destination string) map[string]any {
 		return value
 	}
 }

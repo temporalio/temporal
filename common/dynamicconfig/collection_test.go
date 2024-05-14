@@ -324,22 +324,22 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
 		key: testGetIntPropertyFilteredByDestinationKey,
 		def: 10,
 	}
-	namespaceID := "testNamespaceID"
+	namespaceName := "testNamespace"
 	destination1 := "testDestination1"
 	destination2 := "testDestination2"
 	value := setting.Get(s.cln)
-	s.Equal(10, value(namespaceID, destination1))
+	s.Equal(10, value(namespaceName, destination1))
 	s.client[testGetIntPropertyFilteredByDestinationKey] = []ConstrainedValue{
 		{
 			Constraints: Constraints{
-				NamespaceID: namespaceID,
+				Namespace:   namespaceName,
 				Destination: destination1,
 			},
 			Value: 50,
 		},
 		{
 			Constraints: Constraints{
-				NamespaceID: namespaceID,
+				Namespace: namespaceName,
 			},
 			Value: 75,
 		},
@@ -356,11 +356,11 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
 			Value: 100,
 		},
 	}
-	s.Equal(50, value(namespaceID, destination1))
-	s.Equal(75, value(namespaceID, "testAnotherDestination"))
-	s.Equal(90, value("testAnotherNamespaceID", destination1))
-	s.Equal(100, value(namespaceID, destination2)) // priority: destination >>> namespace
-	s.Equal(10, value("testAnotherNamespaceID", "testAnotherDestination"))
+	s.Equal(50, value(namespaceName, destination1))
+	s.Equal(75, value(namespaceName, "testAnotherDestination"))
+	s.Equal(90, value("testAnotherNamespace", destination1))
+	s.Equal(100, value(namespaceName, destination2)) // priority: destination >>> namespace
+	s.Equal(10, value("testAnotherNamespace", "testAnotherDestination"))
 }
 
 func (s *collectionSuite) TestFindMatch() {

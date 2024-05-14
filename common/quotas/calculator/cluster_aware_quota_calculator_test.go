@@ -75,7 +75,6 @@ func TestClusterAwareQuotaCalculator_GetQuota(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range quotaCalculatorTestCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -105,7 +104,6 @@ func TestClusterAwareNamespaceSpecificQuotaCalculator_GetQuota(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range quotaCalculatorTestCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

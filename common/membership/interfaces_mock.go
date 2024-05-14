@@ -210,6 +210,20 @@ func (mr *MockServiceResolverMockRecorder) AddListener(name, notifyChannel inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddListener", reflect.TypeOf((*MockServiceResolver)(nil).AddListener), name, notifyChannel)
 }
 
+// AvailableMemberCount mocks base method.
+func (m *MockServiceResolver) AvailableMemberCount() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailableMemberCount")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// AvailableMemberCount indicates an expected call of AvailableMemberCount.
+func (mr *MockServiceResolverMockRecorder) AvailableMemberCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailableMemberCount", reflect.TypeOf((*MockServiceResolver)(nil).AvailableMemberCount))
+}
+
 // AvailableMembers mocks base method.
 func (m *MockServiceResolver) AvailableMembers() []HostInfo {
 	m.ctrl.T.Helper()

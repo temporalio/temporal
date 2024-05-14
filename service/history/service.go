@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -49,13 +48,12 @@ type (
 		visibilityManager manager.VisibilityManager
 		config            *configs.Config
 
-		server                         *grpc.Server
-		logger                         log.Logger
-		grpcListener                   net.Listener
-		membershipMonitor              membership.Monitor
-		faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
-		metricsHandler                 metrics.Handler
-		healthServer                   *health.Server
+		server            *grpc.Server
+		logger            log.Logger
+		grpcListener      net.Listener
+		membershipMonitor membership.Monitor
+		metricsHandler    metrics.Handler
+		healthServer      *health.Server
 	}
 )
 
@@ -68,20 +66,18 @@ func NewService(
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 ) *Service {
 	return &Service{
-		server:                         grpc.NewServer(grpcServerOptions...),
-		handler:                        handler,
-		visibilityManager:              visibilityMgr,
-		config:                         serviceConfig,
-		logger:                         logger,
-		grpcListener:                   grpcListener,
-		membershipMonitor:              membershipMonitor,
-		metricsHandler:                 metricsHandler,
-		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
-		healthServer:                   healthServer,
+		server:            grpc.NewServer(grpcServerOptions...),
+		handler:           handler,
+		visibilityManager: visibilityMgr,
+		config:            serviceConfig,
+		logger:            logger,
+		grpcListener:      grpcListener,
+		membershipMonitor: membershipMonitor,
+		metricsHandler:    metricsHandler,
+		healthServer:      healthServer,
 	}
 }
 
@@ -142,8 +138,4 @@ func (s *Service) Stop() {
 	s.visibilityManager.Close()
 
 	s.logger.Info("history stopped")
-}
-
-func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
-	return s.faultInjectionDataStoreFactory
 }
