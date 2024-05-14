@@ -175,7 +175,7 @@ func TestNode_AddChild(t *testing.T) {
 	_, err = root.AddChild(hsm.Key{Type: 100, ID: "dont-care"}, "data")
 	require.ErrorIs(t, err, hsm.ErrNotRegistered)
 	_, err = root.AddChild(hsm.Key{Type: def1.Type().ID, ID: "dont-care"}, "data")
-	require.ErrorContains(t, err, "invalid type")
+	require.ErrorContains(t, err, "invalid state type")
 	_, err = root.AddChild(hsm.Key{Type: def1.Type().ID, ID: "id"}, hsm.NewTestData(hsm.TestState1))
 	require.NoError(t, err)
 	_, err = root.AddChild(hsm.Key{Type: def1.Type().ID, ID: "id"}, hsm.NewTestData(hsm.TestState1))
