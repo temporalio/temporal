@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package rpc
+package interceptor
 
 import (
 	"fmt"
@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	common "go.temporal.io/server/common"
+	"go.temporal.io/server/common"
 
 	"go.temporal.io/server/common/serviceerror"
 
@@ -38,21 +38,21 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestHideUnknownOrInternalErrors(t *testing.T) {
+func TestMaskUnknownOrInternalErrors(t *testing.T) {
 
 	statusOk := status.New(codes.OK, "OK")
-	testHideUnknownOrInternalErrors(t, statusOk, false)
+	testMaskUnknownOrInternalErrors(t, statusOk, false)
 
 	statusUnknown := status.New(codes.Unknown, "Unknown")
-	testHideUnknownOrInternalErrors(t, statusUnknown, true)
+	testMaskUnknownOrInternalErrors(t, statusUnknown, true)
 
 	statusInternal := status.New(codes.Internal, "Internal")
-	testHideUnknownOrInternalErrors(t, statusInternal, true)
+	testMaskUnknownOrInternalErrors(t, statusInternal, true)
 }
 
-func testHideUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelpace bool) {
+func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelpace bool) {
 	err := serviceerror.FromStatus(st)
-	errorMessage := HideUnknownOrInternalErrors(err)
+	errorMessage := maskUnknownOrInternalErrors(err)
 	if expectRelpace {
 		errorHash := common.ErrorHash(err)
 		expectedMessage := fmt.Sprintf("rpc error: code = %s desc = %s (%s)", st.Message(), errorFrontendMasked, errorHash)

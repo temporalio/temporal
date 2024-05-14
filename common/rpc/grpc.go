@@ -28,21 +28,18 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	common "go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -185,41 +182,4 @@ func NewServiceErrorInterceptor(
 		}
 		return resp, serviceerror.ToStatus(err).Err()
 	}
-}
-
-func NewFrontendErrorInterceptor(hideErrorsAtFrontend bool) grpc.UnaryServerInterceptor {
-	return func(
-		ctx context.Context,
-		req interface{},
-		_ *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (interface{}, error) {
-
-		resp, err := handler(ctx, req)
-		if err != nil && hideErrorsAtFrontend {
-			err = HideUnknownOrInternalErrors(err)
-		}
-		return resp, err
-	}
-}
-
-var errorFrontendMasked = "something went wrong, please retry"
-
-func HideUnknownOrInternalErrors(
-	err error,
-) error {
-	// convert some internal errors into specific errors
-	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
-		return serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
-	}
-
-	st := serviceerror.ToStatus(err)
-	if st.Code() != codes.Unknown && st.Code() != codes.Internal {
-		return err
-	}
-
-	// convert internal and unknown errors into neutral error with hash code of the original error
-	errorHash := common.ErrorHash(err)
-	maskedErrorMessage := fmt.Sprintf("%s (%s)", errorFrontendMasked, errorHash)
-	return status.New(st.Code(), maskedErrorMessage).Err()
 }
