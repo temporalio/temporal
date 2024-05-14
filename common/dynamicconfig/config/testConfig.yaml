@@ -100,3 +100,21 @@ testGetIntPropertyFilteredByDestinationKey:
   - value: 50
     constraints:
       destination: test-destination-2
+testGetListPropertyKey:
+  - value:
+    - name: foo
+      value: 123
+    - name: bar
+      value: 321
+    constraints: {}
+  - value: 123
+    constraints:
+      namespace: random-namespace
+testGetListPropertyFilteredByNamespaceKey:
+  - value:
+    - name: foo
+      value: 123
+    - name: bar
+      value: 321
+    constraints:
+      namespace: test-namespace

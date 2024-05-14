@@ -76,6 +76,10 @@ var (
 			Name:   "Map",
 			GoType: "map[string]any",
 		},
+		{
+			Name:   "List",
+			GoType: "[]any",
+		},
 	}
 	precedences = []*settingPrecedence{
 		{

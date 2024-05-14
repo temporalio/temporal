@@ -267,3 +267,10 @@ func convertMap(val any) (map[string]any, error) {
 	}
 	return nil, errors.New("value type is not map")
 }
+
+func convertList(val any) ([]any, error) {
+	if listVal, ok := val.([]any); ok {
+		return listVal, nil
+	}
+	return nil, errors.New("value type is not list")
+}

@@ -46,6 +46,8 @@ const (
 	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
 	testGetStringPropertyKey                          = "testGetStringPropertyKey"
 	testGetMapPropertyKey                             = "testGetMapPropertyKey"
+	testGetListPropertyKey                            = "testGetListPropertyKey"
+	testGetListPropertyFilteredByNamespaceKey         = "testGetListPropertyFilteredByNamespaceKey"
 	testGetIntPropertyFilteredByNamespaceKey          = "testGetIntPropertyFilteredByNamespaceKey"
 	testGetDurationPropertyFilteredByNamespaceKey     = "testGetDurationPropertyFilteredByNamespaceKey"
 	testGetIntPropertyFilteredByTaskQueueInfoKey      = "testGetIntPropertyFilteredByTaskQueueInfoKey"
@@ -317,6 +319,29 @@ func (s *collectionSuite) TestGetMapProperty() {
 	s.client[testGetMapPropertyKey] = val
 	s.Equal(val, value())
 	s.Equal("321", value()["testKey"])
+}
+
+func (s *collectionSuite) TestGetListProperty() {
+	setting := GlobalListSetting{
+		key: testGetMapPropertyKey,
+		def: []any{
+			map[string]any{
+				"name":  "foo",
+				"value": 123,
+			},
+		},
+	}
+	value := setting.Get(s.cln)
+	s.Equal(setting.def, value())
+	val := []any{
+		map[string]any{
+			"name":  "foo",
+			"value": 321,
+		},
+	}
+	s.client[testGetMapPropertyKey] = val
+	s.Equal(val, value())
+	s.Equal(map[string]any{"name": "foo", "value": 321}, value()[0])
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {

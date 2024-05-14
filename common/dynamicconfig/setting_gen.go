@@ -45,6 +45,8 @@ const TypeDuration Type = 4 // go type: time.Duration
 
 const TypeMap Type = 5 // go type: map[string]any
 
+const TypeList Type = 6 // go type: []any
+
 const PrecedenceGlobal Precedence = 0
 
 const PrecedenceNamespace Precedence = 1
@@ -2113,6 +2115,349 @@ func (s DestinationMapSetting) Get(c *Collection) MapPropertyFnWithDestinationFi
 
 func GetMapPropertyFnFilteredByDestination(value map[string]any) MapPropertyFnWithDestinationFilter {
 	return func(namespace string, destination string) map[string]any {
+		return value
+	}
+}
+
+type GlobalListSetting setting[[]any, func()]
+
+func NewGlobalListSetting(key Key, def []any, description string) GlobalListSetting {
+	s := GlobalListSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewGlobalListSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[[]any], description string) GlobalListSetting {
+	s := GlobalListSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s GlobalListSetting) Key() Key               { return s.key }
+func (s GlobalListSetting) Type() Type             { return TypeList }
+func (s GlobalListSetting) Precedence() Precedence { return PrecedenceGlobal }
+
+func (s GlobalListSetting) WithDefault(v []any) GlobalListSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type ListPropertyFn func() []any
+
+func (s GlobalListSetting) Get(c *Collection) ListPropertyFn {
+	return func() []any {
+		return matchAndConvert(
+			c,
+			(setting[[]any, func()])(s),
+			precedenceGlobal(),
+			convertList,
+		)
+	}
+}
+
+func GetListPropertyFn(value []any) ListPropertyFn {
+	return func() []any {
+		return value
+	}
+}
+
+type NamespaceListSetting setting[[]any, func(namespace string)]
+
+func NewNamespaceListSetting(key Key, def []any, description string) NamespaceListSetting {
+	s := NamespaceListSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewNamespaceListSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[[]any], description string) NamespaceListSetting {
+	s := NamespaceListSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s NamespaceListSetting) Key() Key               { return s.key }
+func (s NamespaceListSetting) Type() Type             { return TypeList }
+func (s NamespaceListSetting) Precedence() Precedence { return PrecedenceNamespace }
+
+func (s NamespaceListSetting) WithDefault(v []any) NamespaceListSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type ListPropertyFnWithNamespaceFilter func(namespace string) []any
+
+func (s NamespaceListSetting) Get(c *Collection) ListPropertyFnWithNamespaceFilter {
+	return func(namespace string) []any {
+		return matchAndConvert(
+			c,
+			(setting[[]any, func(namespace string)])(s),
+			precedenceNamespace(namespace),
+			convertList,
+		)
+	}
+}
+
+func GetListPropertyFnFilteredByNamespace(value []any) ListPropertyFnWithNamespaceFilter {
+	return func(namespace string) []any {
+		return value
+	}
+}
+
+type NamespaceIDListSetting setting[[]any, func(namespaceID string)]
+
+func NewNamespaceIDListSetting(key Key, def []any, description string) NamespaceIDListSetting {
+	s := NamespaceIDListSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewNamespaceIDListSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[[]any], description string) NamespaceIDListSetting {
+	s := NamespaceIDListSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s NamespaceIDListSetting) Key() Key               { return s.key }
+func (s NamespaceIDListSetting) Type() Type             { return TypeList }
+func (s NamespaceIDListSetting) Precedence() Precedence { return PrecedenceNamespaceID }
+
+func (s NamespaceIDListSetting) WithDefault(v []any) NamespaceIDListSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type ListPropertyFnWithNamespaceIDFilter func(namespaceID string) []any
+
+func (s NamespaceIDListSetting) Get(c *Collection) ListPropertyFnWithNamespaceIDFilter {
+	return func(namespaceID string) []any {
+		return matchAndConvert(
+			c,
+			(setting[[]any, func(namespaceID string)])(s),
+			precedenceNamespaceID(namespaceID),
+			convertList,
+		)
+	}
+}
+
+func GetListPropertyFnFilteredByNamespaceID(value []any) ListPropertyFnWithNamespaceIDFilter {
+	return func(namespaceID string) []any {
+		return value
+	}
+}
+
+type TaskQueueListSetting setting[[]any, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
+
+func NewTaskQueueListSetting(key Key, def []any, description string) TaskQueueListSetting {
+	s := TaskQueueListSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewTaskQueueListSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[[]any], description string) TaskQueueListSetting {
+	s := TaskQueueListSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s TaskQueueListSetting) Key() Key               { return s.key }
+func (s TaskQueueListSetting) Type() Type             { return TypeList }
+func (s TaskQueueListSetting) Precedence() Precedence { return PrecedenceTaskQueue }
+
+func (s TaskQueueListSetting) WithDefault(v []any) TaskQueueListSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type ListPropertyFnWithTaskQueueFilter func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) []any
+
+func (s TaskQueueListSetting) Get(c *Collection) ListPropertyFnWithTaskQueueFilter {
+	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) []any {
+		return matchAndConvert(
+			c,
+			(setting[[]any, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)])(s),
+			precedenceTaskQueue(namespace, taskQueue, taskQueueType),
+			convertList,
+		)
+	}
+}
+
+func GetListPropertyFnFilteredByTaskQueue(value []any) ListPropertyFnWithTaskQueueFilter {
+	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) []any {
+		return value
+	}
+}
+
+type ShardIDListSetting setting[[]any, func(shardID int32)]
+
+func NewShardIDListSetting(key Key, def []any, description string) ShardIDListSetting {
+	s := ShardIDListSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewShardIDListSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[[]any], description string) ShardIDListSetting {
+	s := ShardIDListSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s ShardIDListSetting) Key() Key               { return s.key }
+func (s ShardIDListSetting) Type() Type             { return TypeList }
+func (s ShardIDListSetting) Precedence() Precedence { return PrecedenceShardID }
+
+func (s ShardIDListSetting) WithDefault(v []any) ShardIDListSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type ListPropertyFnWithShardIDFilter func(shardID int32) []any
+
+func (s ShardIDListSetting) Get(c *Collection) ListPropertyFnWithShardIDFilter {
+	return func(shardID int32) []any {
+		return matchAndConvert(
+			c,
+			(setting[[]any, func(shardID int32)])(s),
+			precedenceShardID(shardID),
+			convertList,
+		)
+	}
+}
+
+func GetListPropertyFnFilteredByShardID(value []any) ListPropertyFnWithShardIDFilter {
+	return func(shardID int32) []any {
+		return value
+	}
+}
+
+type TaskTypeListSetting setting[[]any, func(taskType enumsspb.TaskType)]
+
+func NewTaskTypeListSetting(key Key, def []any, description string) TaskTypeListSetting {
+	s := TaskTypeListSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewTaskTypeListSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[[]any], description string) TaskTypeListSetting {
+	s := TaskTypeListSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s TaskTypeListSetting) Key() Key               { return s.key }
+func (s TaskTypeListSetting) Type() Type             { return TypeList }
+func (s TaskTypeListSetting) Precedence() Precedence { return PrecedenceTaskType }
+
+func (s TaskTypeListSetting) WithDefault(v []any) TaskTypeListSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type ListPropertyFnWithTaskTypeFilter func(taskType enumsspb.TaskType) []any
+
+func (s TaskTypeListSetting) Get(c *Collection) ListPropertyFnWithTaskTypeFilter {
+	return func(taskType enumsspb.TaskType) []any {
+		return matchAndConvert(
+			c,
+			(setting[[]any, func(taskType enumsspb.TaskType)])(s),
+			precedenceTaskType(taskType),
+			convertList,
+		)
+	}
+}
+
+func GetListPropertyFnFilteredByTaskType(value []any) ListPropertyFnWithTaskTypeFilter {
+	return func(taskType enumsspb.TaskType) []any {
+		return value
+	}
+}
+
+type DestinationListSetting setting[[]any, func(namespace string, destination string)]
+
+func NewDestinationListSetting(key Key, def []any, description string) DestinationListSetting {
+	s := DestinationListSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewDestinationListSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[[]any], description string) DestinationListSetting {
+	s := DestinationListSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s DestinationListSetting) Key() Key               { return s.key }
+func (s DestinationListSetting) Type() Type             { return TypeList }
+func (s DestinationListSetting) Precedence() Precedence { return PrecedenceDestination }
+
+func (s DestinationListSetting) WithDefault(v []any) DestinationListSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type ListPropertyFnWithDestinationFilter func(namespace string, destination string) []any
+
+func (s DestinationListSetting) Get(c *Collection) ListPropertyFnWithDestinationFilter {
+	return func(namespace string, destination string) []any {
+		return matchAndConvert(
+			c,
+			(setting[[]any, func(namespace string, destination string)])(s),
+			precedenceDestination(namespace, destination),
+			convertList,
+		)
+	}
+}
+
+func GetListPropertyFnFilteredByDestination(value []any) ListPropertyFnWithDestinationFilter {
+	return func(namespace string, destination string) []any {
 		return value
 	}
 }

@@ -220,6 +220,57 @@ func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
 	s.Equal(defaultVal, v)
 }
 
+func (s *fileBasedClientSuite) TestGetListValue() {
+	var defaultVal []any
+	setting := GlobalListSetting{
+		key: testGetListPropertyKey,
+		def: defaultVal,
+	}
+	dc := setting.Get(s.collection)
+	expectedVal := []any{
+		map[string]any{
+			"name":  "foo",
+			"value": 123,
+		},
+		map[string]any{
+			"name":  "bar",
+			"value": 321,
+		},
+	}
+	s.Equal(expectedVal, dc())
+}
+
+func (s *fileBasedClientSuite) TestGetListValue_WrongType() {
+	var defaultVal []any
+	setting := NamespaceListSetting{
+		key: testGetListPropertyKey,
+		def: defaultVal,
+	}
+	dc := setting.Get(s.collection)
+	s.Equal(defaultVal, dc("random-namespace"))
+}
+
+func (s *fileBasedClientSuite) TestGetListValue_FilteredByNamespace() {
+	var defaultVal []any
+	setting := NamespaceListSetting{
+		key: testGetListPropertyFilteredByNamespaceKey,
+		def: defaultVal,
+	}
+	dc := setting.Get(s.collection)
+	expectedVal := []any{
+		map[string]any{
+			"name":  "foo",
+			"value": 123,
+		},
+		map[string]any{
+			"name":  "bar",
+			"value": 321,
+		},
+	}
+	s.Equal(expectedVal, dc("test-namespace"))
+	s.Equal(defaultVal, dc("random-namespace"))
+}
+
 func (s *fileBasedClientSuite) TestGetDurationValue() {
 	v := GlobalDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)()
 	s.Equal(time.Minute, v)
