@@ -413,13 +413,6 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-//func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
-//	return &taskqueuespb.PhysicalTaskQueueInfo{
-//		Pollers:     c.GetAllPollerInfo(),
-//		BacklogInfo: c.GetBacklogInfo(),
-//	}
-//}
-
 // countTasksFromTaskQueue counts the total number of tasks present in a task queue; returns 0 for
 // cassandra databases since the backlog counter is an over-estimate for the number of tasks present and returns
 // the number of tasks in the task queue for sql databases. This is required since SQL databases do not persist
