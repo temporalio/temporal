@@ -34,7 +34,7 @@ var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	`Enabled toggles accepting of API requests and workflow commands that create or modify Nexus operations.`,
 )
 
-var RequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
+var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"component.nexusoperations.request.timeout",
 	time.Second*10,
 	`RequestTimeout is the timeout for making a single nexus start or cancel request.`,
@@ -73,7 +73,7 @@ Must be set in order to use Nexus Operations.`,
 
 type Config struct {
 	Enabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	RequestTimeout          dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	RequestTimeout          dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MaxConcurrentOperations dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -82,8 +82,7 @@ type Config struct {
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled: Enabled.Get(dc),
-		// TODO(bergundy): This should be controllable per namespace + destination.
+		Enabled:                 Enabled.Get(dc),
 		RequestTimeout:          RequestTimeout.Get(dc),
 		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),

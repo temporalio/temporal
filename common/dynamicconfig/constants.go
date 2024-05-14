@@ -1644,6 +1644,21 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		4,
 		`OutboundQueueMaxReaderCount is the max number of readers in one multi-cursor outbound queue`,
 	)
+	OutboundQueueGroupLimiterBufferSize = NewDestinationIntSetting(
+		"history.outboundQueue.groupLimiter.bufferSize",
+		100,
+		`OutboundQueueGroupLimiterBufferSize is the max buffer size of the group limiter`,
+	)
+	OutboundQueueGroupLimiterConcurrency = NewDestinationIntSetting(
+		"history.outboundQueue.groupLimiter.concurrency",
+		100,
+		`OutboundQueueGroupLimiterConcurrency is the concurrency of the group limiter`,
+	)
+	OutboundQueueHostSchedulerMaxTaskRPS = NewDestinationFloatSetting(
+		"history.outboundQueue.hostScheduler.maxTaskRPS",
+		100.0,
+		`OutboundQueueHostSchedulerMaxTaskRPS is the host scheduler max task RPS`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",
@@ -2295,6 +2310,12 @@ If the service configures with archival feature enabled, update worker.historySc
 		"worker.schedulerNamespaceStartWorkflowRPS",
 		30.0,
 		`SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules`,
+	)
+	SchedulerLocalActivitySleepLimit = NewNamespaceDurationSetting(
+		"worker.schedulerLocalActivitySleepLimit",
+		1*time.Second,
+		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
+close to or more than the workflow task timeout)`,
 	)
 	WorkerDeleteNamespaceActivityLimitsConfig = NewGlobalMapSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

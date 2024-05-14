@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -73,8 +72,6 @@ type (
 		visibilityManager      manager.VisibilityManager
 
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-
-		persistenceBean persistenceClient.Bean
 
 		metricsHandler metrics.Handler
 
@@ -128,7 +125,6 @@ func NewService(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	namespaceRegistry namespace.Registry,
 	executionManager persistence.ExecutionManager,
-	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
 	hostInfoProvider membership.HostInfoProvider,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -157,7 +153,6 @@ func NewService(
 		clusterMetadataManager:    clusterMetadataManager,
 		namespaceRegistry:         namespaceRegistry,
 		executionManager:          executionManager,
-		persistenceBean:           persistenceBean,
 		workerServiceResolver:     workerServiceResolver,
 		membershipMonitor:         membershipMonitor,
 		hostInfo:                  hostInfoProvider.HostInfo(),
@@ -288,7 +283,6 @@ func (s *Service) Stop() {
 	s.workerManager.Stop()
 	s.namespaceRegistry.Stop()
 	s.clusterMetadata.Stop()
-	s.persistenceBean.Close()
 	s.visibilityManager.Close()
 
 	s.logger.Info(

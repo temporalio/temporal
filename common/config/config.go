@@ -270,15 +270,7 @@ type (
 	}
 
 	FaultInjection struct {
-		// Rate is the probability that we will return an error from any call to any datastore.
-		// The value should be between 0.0 and 1.0.
-		// The fault injector will inject different errors depending on the data store and method. See the
-		// implementation for details.
-		// This field is ignored if Targets is non-empty.
-		Rate float64 `yaml:"rate"`
-
 		// Targets is a mapping of data store name to a targeted fault injection config for that data store.
-		// If Targets is non-empty, then Rate is ignored.
 		// Here is an example config for targeted fault injection. This config will inject errors into the
 		// UpdateShard method of the ShardStore at a rate of 100%. No other methods will be affected.
 		/*
@@ -292,6 +284,7 @@ type (
 						ShardOwnershipLostError: 1.0 # all UpdateShard calls will fail with ShardOwnershipLostError
 		*/
 		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
+		// See config/development-cass-es-fi.yaml for a more detailed example.
 		Targets FaultInjectionTargets `yaml:"targets"`
 	}
 

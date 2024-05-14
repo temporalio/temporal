@@ -270,7 +270,6 @@ func (s *MatchingSuite) TestUpdate() {
 
 	matchingClient := s.testCluster.GetMatchingClient()
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := matchingClient.UpdateNexusEndpoint(NewContext(), tc.request)
 			tc.assertion(resp, err)
@@ -305,7 +304,6 @@ func (s *MatchingSuite) TestDelete() {
 
 	matchingClient := s.testCluster.GetMatchingClient()
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := matchingClient.DeleteNexusEndpoint(
 				NewContext(),
@@ -444,7 +442,6 @@ func (s *MatchingSuite) TestList() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			listReqDone := make(chan struct{})
 			go func() {
@@ -754,7 +751,6 @@ func (s *OperatorSuite) TestCreate() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := s.operatorClient.CreateNexusEndpoint(NewContext(), tc.request)
 			tc.assertion(resp, err)
@@ -843,7 +839,6 @@ func (s *OperatorSuite) TestUpdate() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := s.operatorClient.UpdateNexusEndpoint(NewContext(), tc.request)
 			tc.assertion(resp, err)
@@ -877,7 +872,6 @@ func (s *OperatorSuite) TestDelete() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := s.operatorClient.DeleteNexusEndpoint(
 				NewContext(),
@@ -985,7 +979,6 @@ func (s *OperatorSuite) TestList() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := s.operatorClient.ListNexusEndpoints(NewContext(), tc.request)
 			tc.assertion(resp, err)
@@ -1032,7 +1025,6 @@ func (s *OperatorSuite) TestGet() {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := s.operatorClient.GetNexusEndpoint(NewContext(), tc.request)
 			tc.assertion(resp, err)

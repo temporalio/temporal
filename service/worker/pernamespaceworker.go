@@ -25,6 +25,7 @@
 package worker
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/server/common/clock"
 	"go.uber.org/fx"
 	"golang.org/x/exp/maps"
 
@@ -259,7 +261,7 @@ func (wm *perNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 	worker := &perNamespaceWorker{
 		wm:      wm,
 		logger:  log.With(wm.logger, tag.WorkflowNamespace(ns.Name().String())),
-		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), backoff.SystemClock),
+		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), clock.NewRealTimeSource()),
 		ns:      ns,
 	}
 
@@ -503,13 +505,13 @@ func (w *perNamespaceWorker) startWorker(
 
 	// copy from dynamic config. apply explicit defaults for some instead of using the sdk
 	// defaults so that we can multiply below.
-	sdkoptions.MaxConcurrentActivityExecutionSize = util.Coalesce(dcOptions.MaxConcurrentActivityExecutionSize, 1000)
+	sdkoptions.MaxConcurrentActivityExecutionSize = cmp.Or(dcOptions.MaxConcurrentActivityExecutionSize, 1000)
 	sdkoptions.WorkerActivitiesPerSecond = dcOptions.WorkerActivitiesPerSecond
-	sdkoptions.MaxConcurrentLocalActivityExecutionSize = util.Coalesce(dcOptions.MaxConcurrentLocalActivityExecutionSize, 1000)
+	sdkoptions.MaxConcurrentLocalActivityExecutionSize = cmp.Or(dcOptions.MaxConcurrentLocalActivityExecutionSize, 1000)
 	sdkoptions.WorkerLocalActivitiesPerSecond = dcOptions.WorkerLocalActivitiesPerSecond
-	sdkoptions.MaxConcurrentActivityTaskPollers = max(util.Coalesce(dcOptions.MaxConcurrentActivityTaskPollers, 2), 2)
-	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = util.Coalesce(dcOptions.MaxConcurrentWorkflowTaskExecutionSize, 1000)
-	sdkoptions.MaxConcurrentWorkflowTaskPollers = max(util.Coalesce(dcOptions.MaxConcurrentWorkflowTaskPollers, 2), 2)
+	sdkoptions.MaxConcurrentActivityTaskPollers = max(cmp.Or(dcOptions.MaxConcurrentActivityTaskPollers, 2), 2)
+	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = cmp.Or(dcOptions.MaxConcurrentWorkflowTaskExecutionSize, 1000)
+	sdkoptions.MaxConcurrentWorkflowTaskPollers = max(cmp.Or(dcOptions.MaxConcurrentWorkflowTaskPollers, 2), 2)
 	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeoutDuration
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))

@@ -163,10 +163,9 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 	sendSignal := false
 	lastWorkflowTaskTime := time.Time{}
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		// Count signals
-		for _, event := range history.Events[previousStartedEventID:] {
+		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 				signalCount++
 			}
@@ -210,9 +209,9 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 
 		workflowComplete = true
 		time.Sleep(time.Second)
-		s.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", previousStartedEventID, startedEventID,
-			len(history.Events)))
-		lastWorkflowTaskEvent := history.Events[startedEventID-1]
+		s.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", task.PreviousStartedEventId, task.StartedEventId,
+			len(task.History.Events)))
+		lastWorkflowTaskEvent := task.History.Events[task.StartedEventId-1]
 		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, lastWorkflowTaskEvent.GetEventType())
 		lastWorkflowTaskTime = lastWorkflowTaskEvent.GetEventTime().AsTime()
 		return []*commandpb.Command{{
@@ -355,8 +354,7 @@ func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 	s.NoError(err0)
 	s.NotNil(we0)
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,

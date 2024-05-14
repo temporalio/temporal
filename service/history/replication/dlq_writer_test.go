@@ -93,7 +93,6 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 			expectErr: true,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
 			queueWriter := &queuestest.FakeQueueWriter{}

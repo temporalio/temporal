@@ -25,6 +25,7 @@
 package authorization
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -129,8 +129,8 @@ func NewInterceptor(
 		logger:              logger,
 		namespaceChecker:    namespaceChecker,
 		metricsHandler:      metricsHandler,
-		authHeaderName:      util.Coalesce(authHeaderName, defaultAuthHeaderName),
-		authExtraHeaderName: util.Coalesce(authExtraHeaderName, defaultAuthExtraHeaderName),
+		authHeaderName:      cmp.Or(authHeaderName, defaultAuthHeaderName),
+		authExtraHeaderName: cmp.Or(authExtraHeaderName, defaultAuthExtraHeaderName),
 		audienceGetter:      audienceGetter,
 	}
 }

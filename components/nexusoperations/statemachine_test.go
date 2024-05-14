@@ -64,7 +64,6 @@ func TestAddChild(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			root := newRoot(t, &nodeBackend{})
 			schedTime := timestamppb.Now()
@@ -150,7 +149,6 @@ func TestRegenerateTasks(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			node := newOperationNode(t, &nodeBackend{}, time.Now(), tc.timeout)
 
@@ -304,7 +302,6 @@ func TestCompleteFromAttempt(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			node := newOperationNode(t, &nodeBackend{}, time.Now(), time.Minute)
 			// Reset any outputs generated from nexusoperations.AddChild, we tested those already.
@@ -420,7 +417,6 @@ func TestCompleteExternally(t *testing.T) {
 	for _, setup := range setups {
 		setup := setup
 		for _, tc := range cases {
-			tc := tc
 			t.Run(setup.name+"-"+tc.name, func(t *testing.T) {
 				node := setup.fn(t)
 				node.ClearTransactionState()

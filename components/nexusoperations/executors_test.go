@@ -259,7 +259,6 @@ func TestProcessInvocationTask(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
@@ -286,7 +285,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 				Config: &nexusoperations.Config{
 					Enabled:             dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.requestTimeout),
+					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					CallbackURLTemplate: dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
 				},
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
@@ -444,7 +443,6 @@ func TestProcessCancelationTask(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
@@ -486,7 +484,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 				Config: &nexusoperations.Config{
 					Enabled:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.requestTimeout),
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 				},
 				NamespaceRegistry: namespaceRegistry,
 				EndpointChecker:   endpointChecker,
@@ -542,7 +540,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 		Config: &nexusoperations.Config{
 			Enabled:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour),
+			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 		},
 		NamespaceRegistry: namespaceRegistry,
 		EndpointChecker: func(ctx context.Context, namespaceName, endpointName string) error {
