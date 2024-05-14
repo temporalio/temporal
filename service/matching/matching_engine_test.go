@@ -3041,7 +3041,7 @@ func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklog
 	}
 
 	// Only one task remains and the AckLevel has also gone up
-	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), int64(1))
+	s.EqualValues(int64(1), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 
 	// Adding a new task which should persist the backlog count and the ackLevel
 	s.addWorkflowTasks(false, 1, 1, taskQueue, workflowExecution, nil)
@@ -3064,7 +3064,7 @@ func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklog
 
 	s.EqualValues(int64(2), pgMgr.backlogMgr.db.getApproximateBacklogCount()) // since 2 tasks in the backlog
 	// AckLevel must move to the second last task (taskID 29 here) since ackLevel is persisted with task creation now
-	s.EqualValues(int64(firstTaskID+taskCount-2), pgMgr.backlogMgr.db.getAckLevel())
+	s.EqualValues(firstTaskID+taskCount-2, pgMgr.backlogMgr.db.getAckLevel())
 
 }
 
