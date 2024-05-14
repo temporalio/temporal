@@ -39,7 +39,6 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -73,7 +72,6 @@ type (
 	workflowTaskHandlerCallbacks interface {
 		handleWorkflowTaskCompleted(context.Context,
 			*historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error)
-		verifyFirstWorkflowTaskScheduled(context.Context, *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error
 		// TODO also include the handle of workflow task timeout here
 	}
 
@@ -655,44 +653,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	return resp, nil
-}
-
-func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskScheduled(
-	ctx context.Context,
-	req *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
-) (retError error) {
-	namespaceID := namespace.ID(req.GetNamespaceId())
-	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
-		return err
-	}
-
-	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLease(
-		ctx,
-		req.Clock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.WorkflowExecution.WorkflowId,
-			req.WorkflowExecution.RunId,
-		),
-		workflow.LockPriorityLow,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
-
-	mutableState := workflowLease.GetMutableState()
-	if !mutableState.IsWorkflowExecutionRunning() &&
-		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return nil
-	}
-
-	if !mutableState.HadOrHasWorkflowTask() {
-		return consts.ErrWorkflowNotReady
-	}
-
-	return nil
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResponse(
