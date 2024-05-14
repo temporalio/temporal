@@ -36,12 +36,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 
+	"math/rand"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"math/rand"
 )
 
 // TODO Shivam: Make a test-suite, backlogManagerSuite, for this file
