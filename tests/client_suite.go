@@ -110,9 +110,10 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		nexusoperations.Enabled.Key():                                       true,
 		dynamicconfig.OutboundProcessorEnabled.Key():                        true,
 		dynamicconfig.EnableMutableStateTransitionHistory.Key():             true,
-		dynamicconfig.FrontendRefreshNexusIncomingServicesMinWait.Key():     1 * time.Millisecond,
+		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
+
 }
 
 func (s *ClientFunctionalSuite) TearDownSuite() {
@@ -123,6 +124,12 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
+	s.testCluster.host.dcClient.OverrideValue(
+		s.T(),
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.httpAPIAddress+"/api/v1/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,

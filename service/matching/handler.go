@@ -84,7 +84,7 @@ func NewHandler(
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
-	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
+	nexusEndpointManager persistence.NexusEndpointManager,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -105,7 +105,7 @@ func NewHandler(
 			clusterMetadata,
 			namespaceReplicationQueue,
 			visibilityManager,
-			nexusIncomingServiceManager,
+			nexusEndpointManager,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -466,24 +466,24 @@ func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchings
 	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
 }
 
-func (h *Handler) CreateNexusIncomingService(ctx context.Context, request *matchingservice.CreateNexusIncomingServiceRequest) (_ *matchingservice.CreateNexusIncomingServiceResponse, retError error) {
+func (h *Handler) CreateNexusEndpoint(ctx context.Context, request *matchingservice.CreateNexusEndpointRequest) (_ *matchingservice.CreateNexusEndpointResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.CreateNexusIncomingService(ctx, request)
+	return h.engine.CreateNexusEndpoint(ctx, request)
 }
 
-func (h *Handler) UpdateNexusIncomingService(ctx context.Context, request *matchingservice.UpdateNexusIncomingServiceRequest) (_ *matchingservice.UpdateNexusIncomingServiceResponse, retError error) {
+func (h *Handler) UpdateNexusEndpoint(ctx context.Context, request *matchingservice.UpdateNexusEndpointRequest) (_ *matchingservice.UpdateNexusEndpointResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.UpdateNexusIncomingService(ctx, request)
+	return h.engine.UpdateNexusEndpoint(ctx, request)
 }
 
-func (h *Handler) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (_ *matchingservice.DeleteNexusIncomingServiceResponse, retError error) {
+func (h *Handler) DeleteNexusEndpoint(ctx context.Context, request *matchingservice.DeleteNexusEndpointRequest) (_ *matchingservice.DeleteNexusEndpointResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.DeleteNexusIncomingService(ctx, request)
+	return h.engine.DeleteNexusEndpoint(ctx, request)
 }
 
-func (h *Handler) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (_ *matchingservice.ListNexusIncomingServicesResponse, retError error) {
+func (h *Handler) ListNexusEndpoints(ctx context.Context, request *matchingservice.ListNexusEndpointsRequest) (_ *matchingservice.ListNexusEndpointsResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.ListNexusIncomingServices(ctx, request)
+	return h.engine.ListNexusEndpoints(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

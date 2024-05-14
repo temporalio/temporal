@@ -40,6 +40,7 @@ import (
 	"go.uber.org/multierr"
 
 	"go.temporal.io/api/operatorservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -98,7 +99,7 @@ type (
 		ESConfig               *esclient.Config
 		WorkerConfig           *WorkerConfig
 		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         config.FaultInjection `yaml:"faultinjection"`
+		FaultInjection         config.FaultInjection `yaml:"faultInjection"`
 		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
 		GenerateMTLS           bool
 		EnableMetricsCapture   bool
@@ -177,11 +178,6 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 		// noop for now
 	default:
 		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
-	}
-
-	// If the fault injection rate command line flag is set, override the fault injection rate in the config.
-	if TestFlags.PersistenceFaultInjectionRate > 0 {
-		options.FaultInjection.Rate = TestFlags.PersistenceFaultInjectionRate
 	}
 
 	return persistencetests.NewTestBase(options)
@@ -463,24 +459,6 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 		visibilityStoreDirectory: visibilityStoreDirectory,
 		historyURI:               filestore.URIScheme + "://" + historyStoreDirectory,
 		visibilityURI:            filestore.URIScheme + "://" + visibilityStoreDirectory,
-	}
-}
-
-func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
-	if tc.testBase.FaultInjection != nil {
-		tc.testBase.FaultInjection.UpdateRate(rate)
-	}
-	if tc.host.matchingService.GetFaultInjection() != nil {
-		tc.host.matchingService.GetFaultInjection().UpdateRate(rate)
-	}
-	if tc.host.frontendService.GetFaultInjection() != nil {
-		tc.host.frontendService.GetFaultInjection().UpdateRate(rate)
-	}
-
-	for _, s := range tc.host.historyServices {
-		if s.GetFaultInjection() != nil {
-			s.GetFaultInjection().UpdateRate(rate)
-		}
 	}
 }
 

@@ -120,27 +120,27 @@ type (
 
 	// Implements matching.Engine
 	matchingEngineImpl struct {
-		status                int32
-		taskManager           persistence.TaskManager
-		historyClient         resource.HistoryClient
-		matchingRawClient     resource.MatchingRawClient
-		tokenSerializer       common.TaskTokenSerializer
-		historySerializer     serialization.Serializer
-		logger                log.Logger
-		throttledLogger       log.ThrottledLogger
-		namespaceRegistry     namespace.Registry
-		hostInfoProvider      membership.HostInfoProvider
-		serviceResolver       membership.ServiceResolver
-		membershipChangedCh   chan *membership.ChangedEvent
-		clusterMeta           cluster.Metadata
-		timeSource            clock.TimeSource
-		visibilityManager     manager.VisibilityManager
-		incomingServiceClient *nexusIncomingServiceClient
-		metricsHandler        metrics.Handler
-		partitionsLock        sync.RWMutex // locks mutation of partitions
-		partitions            map[tqid.PartitionKey]taskQueuePartitionManager
-		gaugeMetrics          gaugeMetrics // per-namespace task queue counters
-		config                *Config
+		status              int32
+		taskManager         persistence.TaskManager
+		historyClient       resource.HistoryClient
+		matchingRawClient   resource.MatchingRawClient
+		tokenSerializer     common.TaskTokenSerializer
+		historySerializer   serialization.Serializer
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		namespaceRegistry   namespace.Registry
+		hostInfoProvider    membership.HostInfoProvider
+		serviceResolver     membership.ServiceResolver
+		membershipChangedCh chan *membership.ChangedEvent
+		clusterMeta         cluster.Metadata
+		timeSource          clock.TimeSource
+		visibilityManager   manager.VisibilityManager
+		nexusEndpointClient *nexusEndpointClient
+		metricsHandler      metrics.Handler
+		partitionsLock      sync.RWMutex // locks mutation of partitions
+		partitions          map[tqid.PartitionKey]taskQueuePartitionManager
+		gaugeMetrics        gaugeMetrics // per-namespace task queue counters
+		config              *Config
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
 		// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
@@ -196,28 +196,28 @@ func NewEngine(
 	clusterMeta cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
-	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
+	nexusEndpointManager persistence.NexusEndpointManager,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
-		status:                common.DaemonStatusInitialized,
-		taskManager:           taskManager,
-		historyClient:         historyClient,
-		matchingRawClient:     matchingRawClient,
-		tokenSerializer:       common.NewProtoTaskTokenSerializer(),
-		historySerializer:     serialization.NewSerializer(),
-		logger:                log.With(logger, tag.ComponentMatchingEngine),
-		throttledLogger:       log.With(throttledLogger, tag.ComponentMatchingEngine),
-		namespaceRegistry:     namespaceRegistry,
-		hostInfoProvider:      hostInfoProvider,
-		serviceResolver:       resolver,
-		membershipChangedCh:   make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
-		clusterMeta:           clusterMeta,
-		timeSource:            clock.NewRealTimeSource(), // No need to mock this at the moment
-		visibilityManager:     visibilityManager,
-		incomingServiceClient: newIncomingServiceClient(nexusIncomingServiceManager),
-		metricsHandler:        scopedMetricsHandler,
-		partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		status:              common.DaemonStatusInitialized,
+		taskManager:         taskManager,
+		historyClient:       historyClient,
+		matchingRawClient:   matchingRawClient,
+		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
+		historySerializer:   serialization.NewSerializer(),
+		logger:              log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:     log.With(throttledLogger, tag.ComponentMatchingEngine),
+		namespaceRegistry:   namespaceRegistry,
+		hostInfoProvider:    hostInfoProvider,
+		serviceResolver:     resolver,
+		membershipChangedCh: make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
+		clusterMeta:         clusterMeta,
+		timeSource:          clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:   visibilityManager,
+		nexusEndpointClient: newEndpointClient(nexusEndpointManager),
+		metricsHandler:      scopedMetricsHandler,
+		partitions:          make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
@@ -1713,56 +1713,46 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 	return &matchingservice.RespondNexusTaskFailedResponse{}, nil
 }
 
-func (e *matchingEngineImpl) CreateNexusIncomingService(ctx context.Context, request *matchingservice.CreateNexusIncomingServiceRequest) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
-	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetSpec().GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	return e.incomingServiceClient.CreateNexusIncomingService(ctx, &internalCreateRequest{
-		spec:        request.GetSpec(),
-		namespaceID: namespaceID.String(),
-		clusterID:   e.clusterMeta.GetClusterID(),
-		timeSource:  e.timeSource,
+func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *matchingservice.CreateNexusEndpointRequest) (*matchingservice.CreateNexusEndpointResponse, error) {
+	return e.nexusEndpointClient.CreateNexusEndpoint(ctx, &internalCreateNexusEndpointRequest{
+		spec:       request.GetSpec(),
+		clusterID:  e.clusterMeta.GetClusterID(),
+		timeSource: e.timeSource,
 	})
 }
 
-func (e *matchingEngineImpl) UpdateNexusIncomingService(ctx context.Context, request *matchingservice.UpdateNexusIncomingServiceRequest) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
-	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetSpec().GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	return e.incomingServiceClient.UpdateNexusIncomingService(ctx, &internalUpdateRequest{
-		serviceID:   request.GetId(),
-		version:     request.GetVersion(),
-		spec:        request.GetSpec(),
-		namespaceID: namespaceID.String(),
-		clusterID:   e.clusterMeta.GetClusterID(),
-		timeSource:  e.timeSource,
+func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *matchingservice.UpdateNexusEndpointRequest) (*matchingservice.UpdateNexusEndpointResponse, error) {
+	return e.nexusEndpointClient.UpdateNexusEndpoint(ctx, &internalUpdateNexusEndpointRequest{
+		endpointID: request.GetId(),
+		version:    request.GetVersion(),
+		spec:       request.GetSpec(),
+		clusterID:  e.clusterMeta.GetClusterID(),
+		timeSource: e.timeSource,
 	})
 }
 
-func (e *matchingEngineImpl) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
-	return e.incomingServiceClient.DeleteNexusIncomingService(ctx, request)
+func (e *matchingEngineImpl) DeleteNexusEndpoint(ctx context.Context, request *matchingservice.DeleteNexusEndpointRequest) (*matchingservice.DeleteNexusEndpointResponse, error) {
+	return e.nexusEndpointClient.DeleteNexusEndpoint(ctx, request)
 }
 
-func (e *matchingEngineImpl) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, error) {
+func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *matchingservice.ListNexusEndpointsRequest) (*matchingservice.ListNexusEndpointsResponse, error) {
 	lastKnownVersion := request.LastKnownTableVersion
 
 	if request.Wait {
 		if request.NextPageToken != nil {
-			return nil, serviceerror.NewInvalidArgument("request Wait=true and NextPageToken!=nil on ListNexusIncomingServices request. waiting is only allowed on first page")
+			return nil, serviceerror.NewInvalidArgument("request Wait=true and NextPageToken!=nil on ListNexusEndpoints request. waiting is only allowed on first page")
 		}
 
 		// if waiting, send request with unknown table version so we get the newest view of the table
 		request.LastKnownTableVersion = 0
 
 		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, e.config.ListNexusIncomingServicesLongPollTimeout(), returnEmptyTaskTimeBudget)
+		ctx, cancel = newChildContext(ctx, e.config.ListNexusEndpointsLongPollTimeout(), returnEmptyTaskTimeBudget)
 		defer cancel()
 	}
 
 	for {
-		resp, tableVersionChanged, err := e.incomingServiceClient.ListNexusIncomingServices(ctx, request)
+		resp, tableVersionChanged, err := e.nexusEndpointClient.ListNexusEndpoints(ctx, request)
 		if err != nil {
 			return resp, err
 		}

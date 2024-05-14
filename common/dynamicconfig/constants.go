@@ -497,45 +497,30 @@ is currently processing a task.
 		`TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.`,
 	)
 
-	NexusIncomingServiceNameMaxLength = NewGlobalIntSetting(
-		"limit.incomingServiceNameMaxLength",
+	NexusEndpointNameMaxLength = NewGlobalIntSetting(
+		"limit.endpointNameMaxLength",
 		200,
-		`NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name.`,
+		`NexusEndpointNameMaxLength is the maximum length of a Nexus endpoint name.`,
 	)
-	NexusIncomingServiceMaxSize = NewGlobalIntSetting(
-		"limit.incomingServiceMaxSize",
+	NexusEndpointDescriptionMaxSize = NewGlobalIntSetting(
+		"limit.endpointDescriptionMaxSize",
 		4*1024,
-		`NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes.`,
+		`NexusEndpointDescriptionMaxSize is the maximum size of a Nexus endpoint description in bytes.`,
 	)
-	NexusIncomingServiceListDefaultPageSize = NewGlobalIntSetting(
-		"limit.incomingServiceListDefaultPageSize",
+	NexusEndpointExternalURLMaxLength = NewGlobalIntSetting(
+		"limit.endpointExternalURLMaxLength",
+		4*1024,
+		`NexusEndpointExternalURLMaxLength is the maximum length of a Nexus endpoint external target URL.`,
+	)
+	NexusEndpointListDefaultPageSize = NewGlobalIntSetting(
+		"limit.endpointListDefaultPageSize",
 		100,
-		`NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services.`,
+		`NexusEndpointListDefaultPageSize is the default page size for listing Nexus endpoints.`,
 	)
-	NexusIncomingServiceListMaxPageSize = NewGlobalIntSetting(
-		"limit.incomingServiceListMaxPageSize",
+	NexusEndpointListMaxPageSize = NewGlobalIntSetting(
+		"limit.endpointListMaxPageSize",
 		1000,
-		`NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.`,
-	)
-	NexusOutgoingServiceURLMaxLength = NewGlobalIntSetting(
-		"limit.outgoingServiceURLMaxLength",
-		1000,
-		`NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL and public callback URL.`,
-	)
-	NexusOutgoingServiceNameMaxLength = NewGlobalIntSetting(
-		"limit.outgoingServiceNameMaxLength",
-		200,
-		`NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.`,
-	)
-	NexusOutgoingServiceListDefaultPageSize = NewGlobalIntSetting(
-		"limit.outgoingServiceListDefaultPageSize",
-		100,
-		`NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services.`,
-	)
-	NexusOutgoingServiceListMaxPageSize = NewGlobalIntSetting(
-		"limit.outgoingServiceListMaxPageSize",
-		1000,
-		`NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services.`,
+		`NexusEndpointListMaxPageSize is the maximum page size for listing Nexus endpoints.`,
 	)
 
 	RemovableBuildIdDurationSinceDefault = NewGlobalDurationSetting(
@@ -825,15 +810,21 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		false,
 		`FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.`,
 	)
-	FrontendRefreshNexusIncomingServicesLongPollTimeout = NewGlobalDurationSetting(
-		"frontend.refreshNexusIncomingServicesLongPollTimeout",
-		5*time.Minute,
-		`FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.`,
+	EnableNexusEndpointRegistryBackgroundRefresh = NewGlobalBoolSetting(
+		"system.enableNexusEndpointRegistryBackgroundRefresh",
+		false,
+		`EnableNexusEndpointRegistryBackgroundRefresh toggles the background refresh job of the Nexus endpoint registry on
+frontend and history hosts.`,
 	)
-	FrontendRefreshNexusIncomingServicesMinWait = NewGlobalDurationSetting(
-		"frontend.refreshNexusIncomingServicesMinWait",
+	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
+		"system.refreshNexusEndpointsLongPollTimeout",
+		5*time.Minute,
+		`RefreshNexusEndpointsLongPollTimeout is the maximum duration of background long poll requests to update Nexus endpoints.`,
+	)
+	RefreshNexusEndpointsMinWait = NewGlobalDurationSetting(
+		"system.refreshNexusEndpointsMinWait",
 		1*time.Second,
-		`FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.`,
+		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
 	FrontendEnableCallbackAttachment = NewNamespaceBoolSetting(
 		"frontend.enableCallbackAttachment",
@@ -1125,10 +1116,10 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
-	MatchingListNexusIncomingServicesLongPollTimeout = NewGlobalDurationSetting(
-		"matching.listNexusIncomingServicesLongPollTimeout",
+	MatchingListNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
+		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
-		`MatchingListNexusIncomingServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls.`,
+		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
 	)
 	MatchingMembershipUnloadDelay = NewGlobalDurationSetting(
 		"matching.membershipUnloadDelay",
@@ -1142,7 +1133,6 @@ Set to zero to disable proactive unload.`,
 		`MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
 these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.`,
 	)
-
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
@@ -1653,6 +1643,21 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		"history.outboundQueueMaxReaderCount",
 		4,
 		`OutboundQueueMaxReaderCount is the max number of readers in one multi-cursor outbound queue`,
+	)
+	OutboundQueueGroupLimiterBufferSize = NewDestinationIntSetting(
+		"history.outboundQueue.groupLimiter.bufferSize",
+		100,
+		`OutboundQueueGroupLimiterBufferSize is the max buffer size of the group limiter`,
+	)
+	OutboundQueueGroupLimiterConcurrency = NewDestinationIntSetting(
+		"history.outboundQueue.groupLimiter.concurrency",
+		100,
+		`OutboundQueueGroupLimiterConcurrency is the concurrency of the group limiter`,
+	)
+	OutboundQueueHostSchedulerMaxTaskRPS = NewDestinationFloatSetting(
+		"history.outboundQueue.hostScheduler.maxTaskRPS",
+		100.0,
+		`OutboundQueueHostSchedulerMaxTaskRPS is the host scheduler max task RPS`,
 	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
@@ -2305,6 +2310,12 @@ If the service configures with archival feature enabled, update worker.historySc
 		"worker.schedulerNamespaceStartWorkflowRPS",
 		30.0,
 		`SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules`,
+	)
+	SchedulerLocalActivitySleepLimit = NewNamespaceDurationSetting(
+		"worker.schedulerLocalActivitySleepLimit",
+		1*time.Second,
+		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
+close to or more than the workflow task timeout)`,
 	)
 	WorkerDeleteNamespaceActivityLimitsConfig = NewGlobalMapSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
