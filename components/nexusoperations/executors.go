@@ -162,7 +162,10 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, e.Config.RequestTimeout(ns.Name().String()))
+	callCtx, cancel := context.WithTimeout(
+		ctx,
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+	)
 	defer cancel()
 
 	rawResult, callErr := client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
@@ -433,7 +436,10 @@ func (e activeExecutor) executeCancelationTask(ctx context.Context, env hsm.Envi
 		return fmt.Errorf("failed to get handle for operation: %w", err)
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, e.Config.RequestTimeout(ns.Name().String()))
+	callCtx, cancel := context.WithTimeout(
+		ctx,
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+	)
 	defer cancel()
 
 	callErr := handle.Cancel(callCtx, nexus.CancelOperationOptions{})

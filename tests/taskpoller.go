@@ -52,10 +52,9 @@ import (
 
 type (
 	workflowTaskHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error)
-	activityTaskHandler func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, takeToken []byte) (*commonpb.Payloads, bool, error)
-	queryHandler   func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error)
-	messageHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error)
+	activityTaskHandler func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error)
+	queryHandler        func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error)
+	messageHandler      func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error)
 
 	// TaskPoller is used in functional tests to poll workflow or activity task queues.
 	TaskPoller struct {
@@ -434,8 +433,7 @@ retry:
 		}
 		p.Logger.Debug("Received Activity task", tag.Value(response))
 
-		result, cancel, err2 := p.ActivityTaskHandler(response.WorkflowExecution, response.ActivityType, response.ActivityId,
-			response.Input, response.TaskToken)
+		result, cancel, err2 := p.ActivityTaskHandler(response)
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
 			_, err := p.Engine.RespondActivityTaskCanceled(NewContext(), &workflowservice.RespondActivityTaskCanceledRequest{
@@ -504,8 +502,7 @@ retry:
 		}
 		p.Logger.Debug("Received Activity task", tag.Value(response))
 
-		result, cancel, err2 := p.ActivityTaskHandler(response.WorkflowExecution, response.ActivityType, response.ActivityId,
-			response.Input, response.TaskToken)
+		result, cancel, err2 := p.ActivityTaskHandler(response)
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
 			_, err := p.Engine.RespondActivityTaskCanceledById(NewContext(), &workflowservice.RespondActivityTaskCanceledByIdRequest{
