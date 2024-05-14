@@ -62,6 +62,7 @@ type (
 
 		ctx    context.Context
 		cancel context.CancelFunc
+		isSQL  bool
 	}
 )
 
@@ -69,6 +70,7 @@ func NewTaskQueueBacklogCounterSuite(
 	t *testing.T,
 	taskManager p.TaskStore,
 	logger log.Logger,
+	isSQL bool,
 ) *TaskQueueBacklogCounterSuite {
 	return &TaskQueueBacklogCounterSuite{
 		Assertions: require.New(t),
@@ -76,6 +78,7 @@ func NewTaskQueueBacklogCounterSuite(
 		taskManager: p.NewTaskManager(
 			taskManager,
 			serialization.NewSerializer()),
+		isSQL: isSQL,
 	}
 }
 
@@ -160,19 +163,20 @@ func (s *TaskQueueBacklogCounterSuite) randomTask(
 }
 
 func (s *TaskQueueBacklogCounterSuite) ValidateBacklogCounterWithDB(
-	rangeID int64,
 	taskQueueInfo *persistencespb.TaskQueueInfo,
 	expectedBacklogCounter int64,
 ) {
-	resp, err := s.taskManager.GetTaskQueue(s.ctx, &p.GetTaskQueueRequest{
+	respTasks, err := s.taskManager.CountTasksFromTaskQueue(s.ctx, &p.CountTasksFromTaskQueueRequest{
 		NamespaceID: taskQueueInfo.NamespaceId,
 		TaskQueue:   taskQueueInfo.Name,
 		TaskType:    taskQueueInfo.TaskType,
 	})
 	s.NoError(err)
-
-	s.Equal(rangeID, resp.RangeID)
-	s.Equal(expectedBacklogCounter, resp.TaskQueueInfo.ApproximateBacklogCount)
+	if s.isSQL {
+		s.Equal(expectedBacklogCounter, int64(respTasks))
+	} else {
+		s.Equal(0, respTasks)
+	}
 }
 
 func (s *TaskQueueBacklogCounterSuite) CreateTasksValidateBacklogCounter(numCreateBatch int, createBatchSize int) {
@@ -202,8 +206,8 @@ func (s *TaskQueueBacklogCounterSuite) CreateTasksValidateBacklogCounter(numCrea
 		s.NoError(err)
 	}
 
-	// asserting with db that the backlog counter was one
-	s.ValidateBacklogCounterWithDB(rangeID, taskQueue, numTasks)
+	// asserting with db that the backlog counter was as expected
+	s.ValidateBacklogCounterWithDB(taskQueue, numTasks)
 }
 
 // Tests

@@ -144,7 +144,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueBacklogCounterSuite() {
 		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 
-	s := NewTaskQueueBacklogCounterSuite(p.T(), taskQueueStore, testData.Logger)
+	s := NewTaskQueueBacklogCounterSuite(p.T(), taskQueueStore, testData.Logger, true)
 	suite.Run(p.T(), s)
 }
 

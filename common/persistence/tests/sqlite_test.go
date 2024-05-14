@@ -401,7 +401,7 @@ func TestSQLiteTaskQueueBacklogCounterSuite(t *testing.T) {
 		factory.Close()
 	}()
 
-	s := NewTaskQueueBacklogCounterSuite(t, taskQueueStore, logger)
+	s := NewTaskQueueBacklogCounterSuite(t, taskQueueStore, logger, true)
 	suite.Run(t, s)
 }
 

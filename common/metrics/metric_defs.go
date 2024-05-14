@@ -255,6 +255,8 @@ const (
 	PersistenceGetTaskQueuesByBuildIdScope = "GetTaskQueuesByBuildId"
 	// PersistenceCountTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.CountTaskQueuesByBuildId API
 	PersistenceCountTaskQueuesByBuildIdScope = "CountTaskQueuesByBuildId"
+	// PersistenceCountTasksFromTaskQueueScope is the metric scope for persistence.TaskManager.CountTaskQueuesByBuildId API
+	PersistenceCountTasksFromTaskQueueScope = "CountTasksFromTaskQueueScope"
 	// PersistenceInitializeSystemNamespaceScope tracks InitializeSystemNamespaceScope calls made by service to persistence layer
 	PersistenceInitializeSystemNamespaceScope = "InitializeSystemNamespace"
 	// PersistenceCreateNamespaceScope tracks CreateNamespace calls made by service to persistence layer

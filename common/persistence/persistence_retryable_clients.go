@@ -812,6 +812,18 @@ func (p *taskRetryablePersistenceClient) CountTaskQueuesByBuildId(ctx context.Co
 	return response, err
 }
 
+func (p *taskRetryablePersistenceClient) CountTasksFromTaskQueue(ctx context.Context, request *CountTasksFromTaskQueueRequest) (int, error) {
+	var response int
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.CountTasksFromTaskQueue(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
 func (p *taskRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }

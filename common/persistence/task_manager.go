@@ -140,15 +140,15 @@ func (m *taskManagerImpl) GetTaskQueue(
 		return nil, err
 	}
 
-	numTasks, err := m.taskStore.CountTasksFromTaskQueue(ctx, &CountTasksFromTaskQueueRequest{
-		NamespaceID: request.NamespaceID,
-		TaskQueue:   request.TaskQueue,
-		TaskType:    request.TaskType,
-	})
-	if err != nil {
-		return nil, err
-	}
-	taskQueueInfo.ApproximateBacklogCount = max(taskQueueInfo.ApproximateBacklogCount, int64(numTasks))
+	//numTasks, err := m.taskStore.CountTasksFromTaskQueue(ctx, &CountTasksFromTaskQueueRequest{
+	//	NamespaceID: request.NamespaceID,
+	//	TaskQueue:   request.TaskQueue,
+	//	TaskType:    request.TaskType,
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
+	//taskQueueInfo.ApproximateBacklogCount = max(taskQueueInfo.ApproximateBacklogCount, int64(numTasks))
 
 	return &GetTaskQueueResponse{
 		TaskQueueInfo: taskQueueInfo,
@@ -314,4 +314,8 @@ func (m *taskManagerImpl) GetTaskQueuesByBuildId(ctx context.Context, request *G
 
 func (m *taskManagerImpl) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
 	return m.taskStore.CountTaskQueuesByBuildId(ctx, request)
+}
+
+func (m *taskManagerImpl) CountTasksFromTaskQueue(ctx context.Context, request *CountTasksFromTaskQueueRequest) (int, error) {
+	return m.taskStore.CountTasksFromTaskQueue(ctx, request)
 }

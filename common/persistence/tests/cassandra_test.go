@@ -246,7 +246,7 @@ func TestCassandraTaskQueueBacklogCounterSuite(t *testing.T) {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
 
-	s := NewTaskQueueBacklogCounterSuite(t, taskQueueStore, testData.Logger)
+	s := NewTaskQueueBacklogCounterSuite(t, taskQueueStore, testData.Logger, false)
 	suite.Run(t, s)
 }
 

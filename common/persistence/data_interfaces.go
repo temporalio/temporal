@@ -1165,6 +1165,7 @@ type (
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
+		CountTasksFromTaskQueue(ctx context.Context, request *CountTasksFromTaskQueueRequest) (int, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities

@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/persistence"
 	"sync/atomic"
 	"time"
 
@@ -40,7 +41,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -103,9 +103,7 @@ type (
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		// Describe returns information about the physical task queue
-		Describe() *taskqueuespb.PhysicalTaskQueueInfo
-		GetBacklogInfo() *taskqueuepb.BacklogInfo
+		GetBacklogInfo(ctx context.Context) (*taskqueuepb.BacklogInfo, error)
 		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
@@ -415,20 +413,41 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
-	return &taskqueuespb.PhysicalTaskQueueInfo{
-		Pollers:     c.GetAllPollerInfo(),
-		BacklogInfo: c.GetBacklogInfo(),
+//func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
+//	return &taskqueuespb.PhysicalTaskQueueInfo{
+//		Pollers:     c.GetAllPollerInfo(),
+//		BacklogInfo: c.GetBacklogInfo(),
+//	}
+//}
+
+// countTasksFromTaskQueue counts the total number of tasks present in a task queue; returns 0 for
+// cassandra databases since the backlog counter is an over-estimate for the number of tasks present and returns
+// the number of tasks in the task queue for sql databases. This is required since SQL databases do not persist
+// taskQueueInfo when tasks are created.
+func (c *physicalTaskQueueManagerImpl) countTasksFromTaskQueue(ctx context.Context) (int, error) {
+	tasksPresent, err := c.backlogMgr.db.store.CountTasksFromTaskQueue(ctx, &persistence.CountTasksFromTaskQueueRequest{
+		NamespaceID: c.queue.NamespaceId().String(),
+		TaskQueue:   c.queue.PersistenceName(),
+		TaskType:    c.queue.TaskType(),
+	})
+	if err != nil {
+		return 0, err
 	}
+	return tasksPresent, nil
 }
 
-func (c *physicalTaskQueueManagerImpl) GetBacklogInfo() *taskqueuepb.BacklogInfo {
+func (c *physicalTaskQueueManagerImpl) GetBacklogInfo(ctx context.Context) (*taskqueuepb.BacklogInfo, error) {
+	tasksCount, err := c.countTasksFromTaskQueue(ctx)
+	if err != nil {
+		return nil, err
+	}
+	backlogCounter := max(c.backlogMgr.db.getApproximateBacklogCount(), int64(tasksCount)) // in tandem with the backlog counter being an overestimate
 	return &taskqueuepb.BacklogInfo{
-		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
+		ApproximateBacklogCount: backlogCounter,
 		ApproximateBacklogAge:   nil,        // TODO: Shivam - add this feature
 		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
 		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature
-	}
+	}, nil
 }
 
 func (c *physicalTaskQueueManagerImpl) String() string {
