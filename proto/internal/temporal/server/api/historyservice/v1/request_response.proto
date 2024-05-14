@@ -364,7 +364,7 @@ message TerminateWorkflowExecutionResponse {
 message DeleteWorkflowExecutionRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
-    int64 workflow_version = 3;
+    reserved 3;
     bool closed_workflow_only = 4;
 }
 

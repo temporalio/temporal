@@ -56,7 +56,7 @@ import (
 type NexusHTTPHandler struct {
 	logger                               log.Logger
 	nexusHandler                         http.Handler
-	incomingServiceRegistry              *commonnexus.IncomingServiceRegistry
+	enpointRegistry                      *commonnexus.EndpointRegistry
 	preprocessErrorCounter               metrics.CounterFunc
 	auth                                 *authorization.Interceptor
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
@@ -73,7 +73,7 @@ func NewNexusHTTPHandler(
 	clusterMetadata cluster.Metadata,
 	clientCache *cluster.HttpClientCache,
 	namespaceRegistry namespace.Registry,
-	incomingServiceRegistry *commonnexus.IncomingServiceRegistry,
+	endpointRegistry *commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	redirectionInterceptor *RedirectionInterceptor,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
@@ -84,7 +84,7 @@ func NewNexusHTTPHandler(
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
 		logger:                               logger,
-		incomingServiceRegistry:              incomingServiceRegistry,
+		enpointRegistry:                      endpointRegistry,
 		auth:                                 authInterceptor,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
@@ -114,8 +114,8 @@ func NewNexusHTTPHandler(
 func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByService.Representation() + "/").
-		HandlerFunc(h.dispatchNexusTaskByService)
+	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
+		HandlerFunc(h.dispatchNexusTaskByEndpoint)
 }
 
 func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusCode int, failure *nexus.Failure) {
@@ -184,31 +184,31 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	h.serveResolvedURL(w, r, u)
 }
 
-// Handler for [nexushttp.RouteSet.DispatchNexusTaskByService].
-func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *http.Request) {
+// Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
+func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
 	if !h.enabled() {
 		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
 		return
 	}
 
-	service := prepareRequest(commonnexus.RouteDispatchNexusTaskByService, w, r)
+	endpointIDEscaped := prepareRequest(commonnexus.RouteDispatchNexusTaskByEndpoint, w, r)
 
-	serviceID, err := url.PathUnescape(service)
+	endpointID, err := url.PathUnescape(endpointIDEscaped)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
-	serviceInfo, err := h.incomingServiceRegistry.Get(r.Context(), serviceID)
+	endpointInfo, err := h.enpointRegistry.GetByID(r.Context(), endpointID)
 	if err != nil {
-		h.logger.Error("invalid Nexus incoming service ID", tag.Error(err))
+		h.logger.Error("invalid Nexus endpoint ID", tag.Error(err))
 		s, ok := status.FromError(err)
 		if !ok {
 			s = serviceerror.ToStatus(err)
 		}
 		switch s.Code() {
 		case codes.NotFound:
-			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus service not found"})
+			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoint not found"})
 		case codes.DeadlineExceeded:
 			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out"})
 		default:
@@ -217,7 +217,10 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		return
 	}
 
-	nc := h.nexusContextFromService(serviceInfo)
+	nc, ok := h.nexusContextFromEndpoint(endpointInfo)
+	if !ok {
+		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
+	}
 
 	r, err = h.parseTlsAndAuthInfo(r, &nc)
 	if err != nil {
@@ -226,7 +229,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		return
 	}
 
-	u, err := mux.CurrentRoute(r).URL("service", service)
+	u, err := mux.CurrentRoute(r).URL("endpoint", endpointIDEscaped)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
@@ -247,12 +250,21 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
 	}
 }
 
-func (h *NexusHTTPHandler) nexusContextFromService(service *nexuspb.IncomingService) nexusContext {
-	nc := h.baseNexusContext(configs.DispatchNexusTaskByServiceAPIName)
-	nc.namespaceName = service.Spec.Namespace
-	nc.taskQueue = service.Spec.TaskQueue
-	nc.serviceName = service.Spec.Name
-	return nc
+// nexusContextFromEndpoint returns the nexus context for the given request and a boolean indicating whether the
+// endpoint is valid for dispatching.
+// For security reasons, at the moment only worker target endpoints are considered valid, in the future external
+// endpoints may also be supported.
+func (h *NexusHTTPHandler) nexusContextFromEndpoint(endpoint *nexuspb.Endpoint) (nexusContext, bool) {
+	switch v := endpoint.Spec.GetTarget().GetVariant().(type) {
+	case *nexuspb.EndpointTarget_Worker_:
+		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName)
+		nc.namespaceName = v.Worker.GetNamespace()
+		nc.taskQueue = v.Worker.GetTaskQueue()
+		nc.endpointName = endpoint.Spec.Name
+		return nc, true
+	default:
+		return nexusContext{}, false
+	}
 }
 
 func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *http.Request) T {
@@ -292,7 +304,7 @@ func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext
 }
 
 func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL) {
-	// This whole mess is required to support escaped path vars for service.
+	// This whole mess is required to support escaped path vars.
 	prefix, err := url.PathUnescape(u.Path)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))

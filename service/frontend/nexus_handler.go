@@ -35,6 +35,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -56,7 +57,7 @@ type nexusContext struct {
 	apiName                              string
 	namespaceName                        string
 	taskQueue                            string
-	serviceName                          string
+	endpointName                         string
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
@@ -215,7 +216,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 	)
 	oc.metricsHandler = h.metricsHandler.WithTags(
 		metrics.NamespaceTag(nc.namespaceName),
-		metrics.NexusServiceTag(nc.serviceName),
+		metrics.NexusEndpointTag(nc.endpointName),
 		metrics.NexusMethodTag(method),
 		// default to internal error unless overridden by handler
 		metrics.NexusOutcomeTag("internal_error"),
@@ -240,7 +241,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 }
 
 // StartOperation implements the nexus.Handler interface.
-func (h *nexusHandler) StartOperation(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (result nexus.HandlerStartOperationResult[any], retErr error) {
+func (h *nexusHandler) StartOperation(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (result nexus.HandlerStartOperationResult[any], retErr error) {
 	oc, err := h.getOperationContext(ctx, "StartOperation")
 	if err != nil {
 		return nil, err
@@ -248,12 +249,15 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 	defer oc.capturePanicAndRecordMetrics(&retErr)
 
 	startOperationRequest := nexuspb.StartOperationRequest{
-		Operation: operation,
-		Callback:  options.CallbackURL,
-		RequestId: options.RequestID,
+		Service:        service,
+		Operation:      operation,
+		Callback:       options.CallbackURL,
+		CallbackHeader: options.CallbackHeader,
+		RequestId:      options.RequestID,
 	}
 	request := oc.matchingRequest(&nexuspb.Request{
-		Header: options.Header,
+		ScheduledTime: timestamppb.New(oc.requestStartTime),
+		Header:        options.Header,
 		Variant: &nexuspb.Request_StartOperation{
 			StartOperation: &startOperationRequest,
 		},
@@ -347,7 +351,7 @@ func (h *nexusHandler) forwardStartOperation(
 	return nil, nil
 }
 
-func (h *nexusHandler) CancelOperation(ctx context.Context, operation string, id string, options nexus.CancelOperationOptions) (retErr error) {
+func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
 	oc, err := h.getOperationContext(ctx, "CancelOperation")
 	if err != nil {
 		return err
@@ -355,9 +359,11 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, operation string, id
 	defer oc.capturePanicAndRecordMetrics(&retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
-		Header: options.Header,
+		Header:        options.Header,
+		ScheduledTime: timestamppb.New(oc.requestStartTime),
 		Variant: &nexuspb.Request_CancelOperation{
 			CancelOperation: &nexuspb.CancelOperationRequest{
+				Service:     service,
 				Operation:   operation,
 				OperationId: id,
 			},
@@ -450,8 +456,8 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext) (*nexus
 	}
 
 	return nexus.NewClient(nexus.ClientOptions{
-		HTTPCaller:     httpClient.Do,
-		ServiceBaseURL: baseURL,
+		HTTPCaller: httpClient.Do,
+		BaseURL:    baseURL,
 	})
 }
 

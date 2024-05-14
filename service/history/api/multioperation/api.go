@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
@@ -173,7 +172,9 @@ func updateWorkflow(
 		ctx,
 		currentWorkflowLease,
 		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			return updater.ApplyRequest(ctx, lease)
+			ms := lease.GetMutableState()
+			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			return updater.ApplyRequest(ctx, updateReg, ms)
 		},
 		nil,
 	)
@@ -210,22 +211,41 @@ func startAndUpdateWorkflow(
 	starter *startworkflow.Starter,
 	updater *updateworkflow.Updater,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	var workflowKey definition.WorkflowKey
-	var workflowCtx workflow.Context
-	var namespaceID namespace.ID
 	var updateErr error
 
-	// hook to apply workflow update before the workflow is being persisted
-	hook := func(lease api.WorkflowLease) error {
-		workflowCtx = lease.GetContext()
-		workflowKey = workflowCtx.GetWorkflowKey()
-		namespaceID = lease.GetMutableState().GetNamespaceEntry().ID()
-		_, updateErr = updater.ApplyRequest(ctx, lease) // ignoring UpdateWorkflowAction return since Start will create WFT
+	// hook is invoked before workflow is persisted
+	applyUpdateFunc := func(lease api.WorkflowLease) error {
+		// workflowCtx is the response from the cache write: either it's the context from the currently held lease
+		// OR the already-existing, previously cached context (this happens when the workflow is being terminated;
+		// it re-uses the same context).
+		var workflowCtx workflow.Context
+
+		// It is crucial to put the Update registry (inside the workflow context) into the cache, as it needs to
+		// exist on the Matching call back to History when delivering a workflow task to a worker.
+		//
+		// The cache write needs to happen *before* the persistence write because a failed cache write means an
+		// early error response that aborts the entire MultiOperation request. And it allows for a simple retry, too -
+		// whereas if the cache write happened and failed *after* a successful persistence write,
+		// it would leave behind a started workflow that will never receive the update.
+		ms := lease.GetMutableState()
+		workflowKey := lease.GetContext().GetWorkflowKey()
+		workflowCtx, updateErr = workflowConsistencyChecker.GetWorkflowCache().Put(
+			shardContext,
+			ms.GetNamespaceEntry().ID(),
+			&commonpb.WorkflowExecution{WorkflowId: workflowKey.WorkflowID, RunId: workflowKey.RunID},
+			lease.GetContext(),
+			shardContext.GetMetricsHandler(),
+		)
+		if updateErr == nil {
+			// UpdateWorkflowAction return value is ignored since Start will always create WFT
+			updateReg := workflowCtx.UpdateRegistry(ctx, ms)
+			_, updateErr = updater.ApplyRequest(ctx, updateReg, ms)
+		}
 		return updateErr
 	}
 
-	// start workflow and apply update via `hook`
-	startResp, err := starter.Invoke(ctx, hook)
+	// start workflow, using the hook to apply the update operation
+	startResp, err := starter.Invoke(ctx, applyUpdateFunc)
 	startOpResp := &historyservice.ExecuteMultiOperationResponse_Response{
 		Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
 			StartWorkflow: startResp,
@@ -248,23 +268,10 @@ func startAndUpdateWorkflow(
 		return nil, serviceerror.NewUnavailable("Workflow could not be started as it is already running")
 	}
 
-	// without this, there's no Update registry on the call from Matching back to History
-	// TODO: eventually, we'll want to put the MS into the cache as well
-	workflowCache := workflowConsistencyChecker.GetWorkflowCache()
-	if _, err = workflowCache.Put(
-		shardContext,
-		namespaceID,
-		&commonpb.WorkflowExecution{WorkflowId: workflowKey.WorkflowID, RunId: workflowKey.RunID},
-		workflowCtx,
-		shardContext.GetMetricsHandler(),
-	); err != nil {
-		return nil, err
-	}
-
 	// wait for the update to complete
 	updateResp, err := updater.OnSuccess(ctx)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Errorf("failed to complete Workflow Update: %w", err).Error())
+		return nil, newMultiOpError(nil, err) // `nil` for start since it succeeded
 	}
 
 	return &historyservice.ExecuteMultiOperationResponse{

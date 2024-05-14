@@ -76,11 +76,11 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 
 func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.EnableReplicationStream:             true,
-		dynamicconfig.EnableEagerNamespaceRefresher:       true,
-		dynamicconfig.EnableReplicationTaskBatching:       true,
-		dynamicconfig.EnableReplicateLocalGeneratedEvents: true,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.EnableReplicationStream.Key():             true,
+		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
+		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
+		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
 	}
 	s.logger = log.NewNoopLogger()
 	s.serializer = serialization.NewSerializer()
@@ -372,8 +372,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	wtHandler := func(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType,
-		_, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{

@@ -28,14 +28,12 @@ package namespace
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"golang.org/x/exp/maps"
 
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -149,7 +147,6 @@ type (
 		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
 		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
 		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
-		NexusOutgoingService(namespaceID ID, serviceName string) (*nexuspb.OutgoingServiceSpec, error)
 		Start()
 		Stop()
 	}
@@ -395,20 +392,6 @@ func (r *registry) GetCustomSearchAttributesMapper(name Name) (CustomSearchAttri
 		return CustomSearchAttributesMapper{}, err
 	}
 	return ns.CustomSearchAttributesMapper(), nil
-}
-
-func (r *registry) NexusOutgoingService(namespaceID ID, serviceName string) (*nexuspb.OutgoingServiceSpec, error) {
-	ns, err := r.getOrReadthroughNamespaceByID(namespaceID)
-	if err != nil {
-		return nil, err
-	}
-	spec, ok := ns.NexusOutgoingService(serviceName)
-	if !ok {
-		// TODO(bergundy): This should readthrough to persistence (with throttling) to try and refresh the namespace to
-		// allow for propagation delay.
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("service %q not found in namespace %q", serviceName, ns.Name()))
-	}
-	return spec, nil
 }
 
 func (r *registry) refreshLoop(ctx context.Context) error {

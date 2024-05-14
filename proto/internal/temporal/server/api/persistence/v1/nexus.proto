@@ -27,33 +27,23 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/nexus/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 
-message NexusIncomingService {
-    // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ service.
-    // Updated whenever the service is directly updated due to a user action but not when applying replication events.
+message NexusEndpoint {
+    // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ endpoint.
+    // Updated whenever the endpoint is directly updated due to a user action but not when applying replication events.
     // The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
     // timestamps.
     temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
-    // Service specification. This is a mirror of the public API and is intended to be mutable.
-    temporal.api.nexus.v1.IncomingServiceSpec spec = 2;
-    // The date and time when the service was created.
+    // Endpoint specification. This is a mirror of the public API and is intended to be mutable.
+    temporal.api.nexus.v1.EndpointSpec spec = 2;
+    // The date and time when the endpoint was created.
     // (-- api-linter: core::0142::time-field-names=disabled
     //     aip.dev/not-precedent: Not following linter rules. --)
     google.protobuf.Timestamp created_time = 3;
 }
 
-// Container for a version, a UUID, and a NexusIncomingService.
-message NexusIncomingServiceEntry {
+// Container for a version, a UUID, and a NexusEndpoint.
+message NexusEndpointEntry {
     int64 version = 1;
     string id = 2;
-    NexusIncomingService service = 3;
-}
-
-// Nexus outgoing service info, scoped to a namespace.
-message NexusOutgoingService {
-    // Current record version of this service. Incremented with each update.
-    int64 version = 1;
-    // Service name. Must be unique for this namespace and match [go.temporal.io/server/common/nexus.ServiceNameRegex].
-    string name = 2;
-    // Service specification. This is a mirror of the public API and is intended to be mutable.
-    temporal.api.nexus.v1.OutgoingServiceSpec spec = 3;
+    NexusEndpoint endpoint = 3;
 }

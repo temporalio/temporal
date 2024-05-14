@@ -27,6 +27,7 @@ package deleteexecutions
 import (
 	"context"
 	stderrors "errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -132,39 +133,38 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 }
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) {
-	t.Skip("Skipping this test because it is flaky")
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
 	var la *LocalActivities
 
-	pageNumber := 0
+	pageNumber := atomic.Int32{}
 	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
 		require.Equal(t, 3, params.PageSize)
-		if pageNumber == 0 {
+		if pageNumber.Load() == 0 {
 			require.Nil(t, params.NextPageToken)
 		} else {
 			require.Equal(t, []byte{3, 22, 83}, params.NextPageToken)
 		}
-		pageNumber++
-		if pageNumber == 100 { // Emulate 100 pages of executions.
+		pageNumber.Add(1)
+		if pageNumber.Load() == 100 { // Emulate 100 pages of executions.
 			return nil, nil
 		}
 		return []byte{3, 22, 83}, nil
 	}).Times(100)
 
-	nilTokenOnce := false
+	nilTokenOnce := atomic.Bool{}
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
 		require.Equal(t, 100, params.RPS)
 		require.Equal(t, 3, params.ListPageSize)
 		if params.NextPageToken == nil {
-			nilTokenOnce = true
-		} else if nilTokenOnce {
+			nilTokenOnce.Store(true)
+		} else if nilTokenOnce.Load() {
 			require.Equal(t, []byte{3, 22, 83}, params.NextPageToken)
 		}
 

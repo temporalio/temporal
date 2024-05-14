@@ -73,9 +73,9 @@ var (
 	errExceedsMaxRedirectRules            = func(cnt, max int) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of redirect rules permitted in namespace (%v/%v)", cnt, max))
 	}
-	errIsCyclic            = serviceerror.NewFailedPrecondition("update would break acyclic requirement")
-	errExceedsMaxRuleChain = func(cnt, max int) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of chained redirect rules permitted in namespace (%v/%v)", cnt, max))
+	errIsCyclic                   = serviceerror.NewFailedPrecondition("update would break acyclic requirement")
+	errExceedsMaxUpstreamBuildIDs = func(cnt, max int) error {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of upstream build ids permitted in namespace (%v/%v)", cnt, max))
 	}
 	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument("the unversioned build id cannot be the target of a redirect rule")
 )
@@ -176,7 +176,7 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule,
 	maxRedirectRules,
-	maxRedirectRuleChain int) (*persistencespb.VersioningData, error) {
+	maxUpstreamBuildIds int) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
@@ -204,13 +204,13 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	})
-	return data, checkRedirectConditions(data, maxRedirectRules, maxRedirectRuleChain)
+	return data, checkRedirectConditions(data, maxRedirectRules, maxUpstreamBuildIds)
 }
 
 func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule,
-	maxRedirectRuleChain int,
+	maxUpstreamBuildIDs int,
 ) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
@@ -234,7 +234,7 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 				CreateTimestamp: timestamp,
 				DeleteTimestamp: nil,
 			})
-			return data, checkRedirectConditions(data, 0, maxRedirectRuleChain)
+			return data, checkRedirectConditions(data, 0, maxUpstreamBuildIDs)
 		}
 	}
 	return nil, errSourceNotFound(source)
@@ -366,10 +366,11 @@ func checkAssignmentConditions(g *persistencespb.VersioningData, maxARs int, req
 
 // checkRedirectConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
 // It returns an error if the new set of redirect rules don't meet the following requirements:
-// - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
-// - The DAG of redirect rules must not contain a cycle
-// - The DAG of redirect rules must not contain a chain of connected rules longer than dynamicconfig.VersionRedirectRuleChainLimitPerQueue
-func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs, maxChain int) error {
+//   - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
+//   - The DAG of redirect rules must not contain a cycle
+//   - The DAG of redirect rules must not contain a chain of connected rules longer than dynamicconfig.VersionRedirectRuleMaxUpstreamBuildIDsPerQueue
+//     (Here, a "chain" counts the # of vertices, not the # of edges. So 3 ---> 4 ---> 5 has a chain length of 3)
+func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs, maxUpstreamBuildIds int) error {
 	activeRules := getActiveRedirectRules(g.GetRedirectRules())
 	if maxRRs > 0 && len(activeRules) > maxRRs {
 		return errExceedsMaxRedirectRules(len(activeRules), maxRRs)
@@ -379,8 +380,8 @@ func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs, maxChain 
 	}
 	for _, r := range activeRules {
 		upstream := getUpstreamBuildIds(r.GetRule().GetTargetBuildId(), activeRules)
-		if len(upstream)+1 > maxChain {
-			return errExceedsMaxRuleChain(len(upstream)+1, maxChain)
+		if len(upstream) > maxUpstreamBuildIds {
+			return errExceedsMaxUpstreamBuildIDs(len(upstream), maxUpstreamBuildIds)
 		}
 	}
 	return nil

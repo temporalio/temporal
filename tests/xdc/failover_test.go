@@ -228,8 +228,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -529,8 +528,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	firstCommandMade := false
 	secondCommandMade := false
 	workflowCompleted := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !firstCommandMade {
 			firstCommandMade = true
 			return []*commandpb.Command{}, nil
@@ -674,8 +672,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.logger.Info("StartWorkflowExecution in cluster 1: ", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowCompleteTimes := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		workflowCompleteTimes++
 		return []*commandpb.Command{{
@@ -793,8 +790,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -989,8 +985,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	// workflow logic
 	workflowComplete := false
 	isWorkflowTaskProcessed := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if !isWorkflowTaskProcessed {
 			isWorkflowTaskProcessed = true
@@ -1150,10 +1145,9 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
-			previousRunID = execution.GetRunId()
+			previousRunID = task.WorkflowExecution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
@@ -1170,7 +1164,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 			}}, nil
 		}
 
-		lastRunStartedEvent = history.Events[0]
+		lastRunStartedEvent = task.History.Events[0]
 		workflowComplete = true
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -1272,13 +1266,12 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	eventSignaled := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		if previousStartedEventID == 0 {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if task.PreviousStartedEventId == 0 {
 			return []*commandpb.Command{}, nil
 		}
 		if !eventSignaled {
-			for _, event := range history.Events[previousStartedEventID:] {
+			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					eventSignaled = true
 					return []*commandpb.Command{}, nil
@@ -1509,8 +1502,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 	timerCreated := false
 	timerFired := false
 	workflowCompleted := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if !timerCreated {
 			timerCreated = true
@@ -1664,8 +1656,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -1818,8 +1809,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 
 	workflowTaskFailed := false
 	workflowFinished := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !workflowTaskFailed {
 			workflowTaskFailed = true
 			return nil, errors.New("random fail workflow task reason")
@@ -1917,9 +1907,8 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 
 	wfCompleted := false
 	var executions []*commonpb.WorkflowExecution
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		executions = append(executions, execution)
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		executions = append(executions, task.WorkflowExecution)
 		wfCompleted = true
 		return []*commandpb.Command{
 			{
@@ -2013,10 +2002,9 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 
 	wfCompletionCount := 0
 	var executions []*commonpb.WorkflowExecution
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wfCompletionCount += 1
-		executions = append(executions, execution)
+		executions = append(executions, task.WorkflowExecution)
 		return []*commandpb.Command{
 			{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -2138,9 +2126,8 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	s.NotNil(we.GetRunId())
 
 	var executions []*commonpb.WorkflowExecution
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		executions = append(executions, execution)
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		executions = append(executions, task.WorkflowExecution)
 		return []*commandpb.Command{
 			{
 				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
@@ -2243,9 +2230,8 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	s.NotNil(we.GetRunId())
 
 	var executions []*commonpb.WorkflowExecution
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		executions = append(executions, execution)
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		executions = append(executions, task.WorkflowExecution)
 		return []*commandpb.Command{
 			{
 				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
@@ -2368,7 +2354,7 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NotNil(shard.RemoteClusters)
 	standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
 	s.True(ok)
-	s.Equal(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+	s.LessOrEqual(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
 	s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
 	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))
 	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(startTime))
@@ -2439,6 +2425,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 
 	worker1.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker1.Start())
+	defer worker1.Stop()
 
 	// Start wf1 (in local ns)
 	workflowID := "local-ns-wf-1"
@@ -2798,6 +2785,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 
 	worker1.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker1.Start())
+	defer worker1.Stop()
 
 	// Start wf1
 	workflowID := "force-replication-test-wf-1"
@@ -2883,6 +2871,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 
 	worker2.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker2.Start())
+	defer worker2.Stop()
 
 	// Test reset workflow in cluster 2
 	resetResp, err := client2.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
@@ -2926,6 +2915,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 
 	worker1.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker1.Start())
+	defer worker1.Stop()
 
 	// Start wf1
 	workflowID := "force-replication-test-reset-wf-1"

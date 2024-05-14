@@ -102,7 +102,6 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 			expectFlush:       true,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, tc.Run)
 	}
 }
@@ -445,7 +444,6 @@ func TestGetNexusCompletion(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			nsEntry := tests.LocalNamespaceEntry
 			ms, events := createMutableState(t, nsEntry, tests.NewDynamicConfig())

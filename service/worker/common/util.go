@@ -34,10 +34,9 @@ import (
 // by key in the dynamic collection. Any errors are ignored and 0 values will be returned instead.
 func NewActivityWorkerConcurrencyConfig(
 	dc *dynamicconfig.Collection,
-	key dynamicconfig.Key,
-	defaults map[string]any,
+	setting dynamicconfig.GlobalMapSetting,
 ) ActivityWorkerLimitsConfig {
-	dcOptions := dc.GetMapProperty(key, defaults)()
+	dcOptions := setting.Get(dc)()
 	var config ActivityWorkerLimitsConfig
 	b, err := json.Marshal(dcOptions)
 	if err != nil {
