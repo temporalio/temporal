@@ -1,4 +1,28 @@
-package flowcontrol
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package replication
 
 import (
 	"context"
@@ -12,6 +36,7 @@ const DefaultSenderRps = 1000
 
 type (
 	SenderFlowController interface {
+		// Wait will block go routine until the sender is allowed to send a task
 		Wait(priority enums.TaskPriority) error
 		RefreshReceiverFlowControlInfo(syncState *replicationpb.SyncReplicationState)
 	}
@@ -21,7 +46,7 @@ type (
 	}
 )
 
-func NewSenderFlowController(priorities []enums.TaskPriority) *senderFlowControllerImpl {
+func NewSenderFlowController(priorities ...enums.TaskPriority) *senderFlowControllerImpl {
 	rateLimiters := make(map[enums.TaskPriority]*quotas.RateLimiterImpl)
 	for _, priority := range priorities {
 		rateLimiters[priority] = quotas.NewRateLimiter(DefaultSenderRps, 0)

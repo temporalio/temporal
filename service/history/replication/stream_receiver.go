@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/replication/flowcontrol"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	replicationpb "go.temporal.io/server/api/replication/v1"
@@ -74,7 +73,7 @@ type (
 		stream                  Stream
 		taskConverter           ExecutableTaskConverter
 		receiverMode            ReceiverMode
-		flowController          flowcontrol.ReceiverFlowController
+		flowController          ReceiverFlowController
 	}
 )
 
@@ -122,7 +121,7 @@ func NewStreamReceiver(
 		),
 		taskConverter:  taskConverter,
 		receiverMode:   ReceiverModeUnset,
-		flowController: flowcontrol.NewReceiverFlowControl(taskTrackerMap),
+		flowController: NewReceiverFlowControl(taskTrackerMap),
 	}
 }
 

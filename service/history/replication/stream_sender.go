@@ -33,8 +33,6 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/service/history/replication/flowcontrol"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -68,7 +66,7 @@ type (
 		clientShardKey ClusterShardKey
 		serverShardKey ClusterShardKey
 		shutdownChan   channel.ShutdownOnce
-		flowController flowcontrol.SenderFlowController
+		flowController SenderFlowController
 	}
 )
 
@@ -98,6 +96,7 @@ func NewStreamSender(
 		clientShardKey: clientShardKey,
 		serverShardKey: serverShardKey,
 		shutdownChan:   channel.NewShutdownOnce(),
+		flowController: NewSenderFlowController(enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW),
 	}
 }
 
