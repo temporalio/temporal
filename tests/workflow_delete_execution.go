@@ -43,9 +43,12 @@ import (
 const (
 	// Internal task processing for DeleteExecutionTask checks if there is no pending CloseExecutionTask
 	// comparing ack levels of the last processed task and DeleteExecutionTask TaskID.
-	// Queue states/ack levels are updated with delay ("history.transferProcessorUpdateAckInterval", default 30s),
-	// therefore processing of DeleteExecutionTask can take up to 30 seconds.
-	waitForTaskProcessing = 30 * time.Second
+	// Queue states/ack levels are updated with delay from "history.transferProcessorUpdateAckInterval"
+	// which default 30s, but it is overridden in tests to 1s (see overrideHistoryDynamicConfig in onebox.go).
+	// With few executions closed and deleted in parallel, it is hard to predict time needed for every DeleteExecutionTask
+	// to process. Set it to 20s here, as minimum sufficient interval. Increase it, if tests in this file are failing with
+	// "Condition never satisfied" error.
+	waitForTaskProcessing = 20 * time.Second
 )
 
 func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
