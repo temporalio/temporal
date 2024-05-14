@@ -85,9 +85,11 @@ func TestCommandProtocolMessage(t *testing.T) {
 		metricsHandler := metrics.NoopMetricsHandler
 		out.conf = map[dynamicconfig.Key]any{}
 		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
-		out.ms.EXPECT().VisitUpdates(gomock.Any()).Times(1)
-		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(1)
-		out.updates = update.NewRegistry(func() update.Store { return out.ms })
+		out.ms.EXPECT().VisitUpdates(gomock.Any())
+		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion())
+
+		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer
 		config := configs.NewConfig(
 			dynamicconfig.NewCollection(
@@ -126,6 +128,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			shardCtx,
 			nil, // searchattribute.MapperProvider
 			false,
+			nil, // TODO: test usage of commandHandlerRegistry?
 		)
 	}
 
@@ -309,7 +312,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.NoError(t, err)
 		err = upd.Admit(context.Background(), req, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
 		require.NoError(t, err)
-		_ = upd.Send(context.Background(), true, &protocolpb.Message_EventId{EventId: 2208}, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
+		_ = upd.Send(context.Background(), true, &protocolpb.Message_EventId{EventId: 2208})
 
 		_, err = tc.handler.handleCommand(context.Background(), command, msgs)
 		require.NoError(t, err,

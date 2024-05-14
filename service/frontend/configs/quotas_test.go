@@ -174,8 +174,10 @@ func (s *quotasSuite) TestAllAPIs() {
 	})
 	_, ok := apisWithPriority[DispatchNexusTaskByNamespaceAndTaskQueueAPIName]
 	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByNamespaceAndTaskQueueAPIName)
-	_, ok = apisWithPriority[DispatchNexusTaskByServiceAPIName]
-	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByServiceAPIName)
+	_, ok = apisWithPriority[DispatchNexusTaskByEndpointAPIName]
+	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByEndpointAPIName)
+	_, ok = apisWithPriority[CompleteNexusOperation]
+	s.Truef(ok, "missing priority for API: %q", CompleteNexusOperation)
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {

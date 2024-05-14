@@ -349,4 +349,9 @@ service HistoryService {
 
     rpc ListTasks (ListTasksRequest) returns (ListTasksResponse) {     
     }
+
+    // Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
+    // canceled.
+    rpc CompleteNexusOperation (CompleteNexusOperationRequest) returns (CompleteNexusOperationResponse) {
+    }
 }

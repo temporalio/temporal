@@ -31,7 +31,6 @@ import "google/protobuf/timestamp.proto";
 import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 
@@ -58,6 +57,7 @@ message ReplicationTask {
     // The task_type + data provide more flexibility in future use cases.
     temporal.api.common.v1.DataBlob data = 12;
     google.protobuf.Timestamp visibility_time = 9;
+    temporal.server.api.enums.v1.TaskPriority priority = 13;
 }
 
 message ReplicationToken {
@@ -76,8 +76,16 @@ message SyncShardStatus {
 }
 
 message SyncReplicationState {
+    // deprecated in favor of using ReplicationState object
     int64 inclusive_low_watermark = 1;
+    // deprecated in favor of using ReplicationState object
     google.protobuf.Timestamp  inclusive_low_watermark_time = 2;
+    ReplicationState high_priority_state = 3;
+    ReplicationState low_priority_state = 4;
+}
+message ReplicationState {
+    int64 inclusive_low_watermark = 1;
+    google.protobuf.Timestamp inclusive_low_watermark_time = 2;
 }
 
 message ReplicationMessages {
@@ -94,6 +102,7 @@ message WorkflowReplicationMessages {
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
     int64 exclusive_high_watermark = 2;
     google.protobuf.Timestamp  exclusive_high_watermark_time = 3;
+    temporal.server.api.enums.v1.TaskPriority priority = 4;
 }
 
 message ReplicationTaskInfo {
@@ -106,6 +115,7 @@ message ReplicationTaskInfo {
     int64 first_event_id = 7;
     int64 next_event_id = 8;
     int64 scheduled_event_id = 9;
+    temporal.server.api.enums.v1.TaskPriority priority = 10;
 }
 
 message NamespaceTaskAttributes {
@@ -117,7 +127,6 @@ message NamespaceTaskAttributes {
     int64 config_version = 6;
     int64 failover_version = 7;
     repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
-    repeated temporal.server.api.persistence.v1.NexusOutgoingService nexus_outgoing_services = 9;
 }
 
 message SyncShardStatusTaskAttributes {

@@ -251,7 +251,7 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 	rpcCfgB := &config.RPC{GRPCPort: 0, MembershipPort: 7601, BindOnIP: localhostIPv4}
 
 	dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
-		dynamicconfig.EnableRingpopTLS: true,
+		dynamicconfig.EnableRingpopTLS.Key(): true,
 	}), s.logger)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(mutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)

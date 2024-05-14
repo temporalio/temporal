@@ -162,14 +162,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			32,
 			&commandpb.ScheduleActivityTaskCommandAttributes{},
 		)
-		hb.AddActivityTaskStartedEvent(
-			42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		hb.workflowFinished = true
 		hb.FlushBufferToCurrentBatch()
 		if hb.memBufferBatch != nil || hb.dbBufferBatch != nil {
@@ -205,14 +198,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			t.Errorf("expected 1 event in memLatestBatch got %d", len(hb.memLatestBatch))
 		}
 		// add event to memBufferBatch
-		hb.AddActivityTaskStartedEvent(
-			42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		if len(hb.memBufferBatch) != 1 {
 			t.Errorf("expected 1 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
@@ -234,14 +220,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			32,
 			&commandpb.ScheduleActivityTaskCommandAttributes{},
 		)
-		hb.AddActivityTaskStartedEvent(
-			42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		hb.FlushBufferToCurrentBatch()
 		if len(hb.memLatestBatch) != 3 {
 			t.Fatalf("wrong length of memLatestBatch after Flush expected 3 got %d", len(hb.memLatestBatch))
@@ -289,14 +268,7 @@ func TestHistoryBuilder_Finish(t *testing.T) {
 			32,
 			&commandpb.ScheduleActivityTaskCommandAttributes{},
 		)
-		hb.AddActivityTaskStartedEvent(
-			42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		result, err := hb.Finish(false)
 		if err != nil {
 			t.Fatal(err)
@@ -339,13 +311,7 @@ func TestHistoryBuilder_GetAndRemoveTimerFireEvent(t *testing.T) {
 			32,
 			&commandpb.ScheduleActivityTaskCommandAttributes{},
 		)
-		hb.AddActivityTaskStartedEvent(42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		memBufferSize := len(hb.memBufferBatch)
 		dbBufferSize := len(hb.dbBufferBatch)
 
@@ -1257,15 +1223,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionStartedEvent(_ ...eventConfig) *
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowTaskStartedEvent(
-		64,
-		"request-1",
-		"identity-1",
-		s.today,
-		false,
-		100,
-		nil,
-	)
+	return s.HistoryBuilder.AddWorkflowTaskStartedEvent(64, "request-1", "identity-1", s.today, false, 100, nil, 0)
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskCompletedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1321,7 +1279,7 @@ func (s *sutTestingAdapter) AddWorkflowTaskScheduledEvent(_ ...eventConfig) *his
 
 func (s *sutTestingAdapter) AddActivityTaskStartedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {
 	config := getConfigOrDefault(optionalConfig)
-	return s.HistoryBuilder.AddActivityTaskStartedEvent(config.scheduledId, 1, "request-1", "identity-1", nil, nil)
+	return s.HistoryBuilder.AddActivityTaskStartedEvent(config.scheduledId, 1, "request-1", "identity-1", nil, nil, 0)
 }
 
 func (s *sutTestingAdapter) AddActivityTaskCompletedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {

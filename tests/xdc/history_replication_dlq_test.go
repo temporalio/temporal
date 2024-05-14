@@ -159,7 +159,6 @@ func TestHistoryReplicationDLQSuite(t *testing.T) {
 			enableReplicationStream: false,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s := &historyReplicationDLQSuite{
 				enableReplicationStream: tc.enableReplicationStream,
@@ -171,9 +170,9 @@ func TestHistoryReplicationDLQSuite(t *testing.T) {
 }
 
 func (s *historyReplicationDLQSuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.EnableReplicationStream:       s.enableReplicationStream,
-		dynamicconfig.EnableHistoryReplicationDLQV2: s.enableQueueV2,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.EnableReplicationStream.Key():       s.enableReplicationStream,
+		dynamicconfig.EnableHistoryReplicationDLQV2.Key(): s.enableQueueV2,
 	}
 
 	// We don't know how many messages these channels are actually going to produce, and we may not read them all, so we
@@ -237,7 +236,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	// replication, so we use a context with a timeout to ensure that the test doesn't hang forever when we try to
 	// receive from a channel.
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	// Register a namespace.

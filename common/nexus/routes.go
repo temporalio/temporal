@@ -34,11 +34,18 @@ var RouteDispatchNexusTaskByNamespaceAndTaskQueue = routing.NewBuilder[Namespace
 	StringVariable("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
 	Constant("task-queues").
 	StringVariable("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
-	Constant("nexus-operations").
+	Constant("nexus-services").
 	Build()
 
-var RouteDispatchNexusTaskByService = routing.NewBuilder[string]().
-	Constant("api", "v1", "nexus", "services").
-	StringVariable("service", func(service *string) *string { return service }).
-	Constant("operations").
+var RouteDispatchNexusTaskByEndpoint = routing.NewBuilder[string]().
+	Constant("api", "v1", "nexus", "endpoints").
+	StringVariable("endpoint", func(endpoint *string) *string { return endpoint }).
+	Constant("services").
+	Build()
+
+// RouteCompletionCallback is an HTTP route for completing a Nexus operation via callback.
+var RouteCompletionCallback = routing.NewBuilder[string]().
+	Constant("api", "v1", "namespaces").
+	StringVariable("namespace", func(namespace *string) *string { return namespace }).
+	Constant("nexus", "callback").
 	Build()

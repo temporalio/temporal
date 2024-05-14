@@ -299,7 +299,9 @@ func (b *EventStore) bufferEvent(
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
+		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:
 		// do not buffer event if event is directly generated from a corresponding command
 		return false
 
@@ -417,7 +419,14 @@ func (b *EventStore) reorderBuffer(
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
-			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
+			// TODO: This implementation detail is hurting extensibility of workflows and the ability to add external
+			// components.
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
 			reorderBuffer = append(reorderBuffer, event)
 		default:
 			reorderEvents = append(reorderEvents, event)

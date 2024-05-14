@@ -31,7 +31,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 )
@@ -48,34 +48,34 @@ type (
 		// Close the factory
 		Close()
 		// NewTaskManager returns a new task manager
-		NewTaskManager() (p.TaskManager, error)
+		NewTaskManager() (persistence.TaskManager, error)
 		// NewShardManager returns a new shard manager
-		NewShardManager() (p.ShardManager, error)
+		NewShardManager() (persistence.ShardManager, error)
 		// NewMetadataManager returns a new metadata manager
-		NewMetadataManager() (p.MetadataManager, error)
+		NewMetadataManager() (persistence.MetadataManager, error)
 		// NewExecutionManager returns a new execution manager
-		NewExecutionManager() (p.ExecutionManager, error)
+		NewExecutionManager() (persistence.ExecutionManager, error)
 		// NewNamespaceReplicationQueue returns a new queue for namespace replication
-		NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error)
+		NewNamespaceReplicationQueue() (persistence.NamespaceReplicationQueue, error)
 		// NewClusterMetadataManager returns a new manager for cluster specific metadata
-		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
+		NewClusterMetadataManager() (persistence.ClusterMetadataManager, error)
 		// NewHistoryTaskQueueManager returns a new manager for history task queues
-		NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, error)
-		// NewNexusIncomingServiceManager returns a new manager for nexus services
-		NewNexusIncomingServiceManager() (p.NexusIncomingServiceManager, error)
+		NewHistoryTaskQueueManager() (persistence.HistoryTaskQueueManager, error)
+		// NewNexusEndpointManager returns a new manager for nexus endpoints
+		NewNexusEndpointManager() (persistence.NexusEndpointManager, error)
 	}
 
 	factoryImpl struct {
-		dataStoreFactory     DataStoreFactory
+		dataStoreFactory     persistence.DataStoreFactory
 		config               *config.Persistence
 		serializer           serialization.Serializer
-		eventBlobCache       p.XDCCache
+		eventBlobCache       persistence.XDCCache
 		metricsHandler       metrics.Handler
 		logger               log.Logger
 		clusterName          string
 		systemRateLimiter    quotas.RequestRateLimiter
 		namespaceRateLimiter quotas.RequestRateLimiter
-		healthSignals        p.HealthSignalAggregator
+		healthSignals        persistence.HealthSignalAggregator
 	}
 )
 
@@ -87,16 +87,16 @@ type (
 // The objects returned by this factory enforce ratelimit and maxconns according to
 // given configuration. In addition, all objects will emit metrics automatically
 func NewFactory(
-	dataStoreFactory DataStoreFactory,
+	dataStoreFactory persistence.DataStoreFactory,
 	cfg *config.Persistence,
 	systemRateLimiter quotas.RequestRateLimiter,
 	namespaceRateLimiter quotas.RequestRateLimiter,
 	serializer serialization.Serializer,
-	eventBlobCache p.XDCCache,
+	eventBlobCache persistence.XDCCache,
 	clusterName string,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	healthSignals p.HealthSignalAggregator,
+	healthSignals persistence.HealthSignalAggregator,
 ) Factory {
 	factory := &factoryImpl{
 		dataStoreFactory:     dataStoreFactory,
@@ -115,133 +115,133 @@ func NewFactory(
 }
 
 // NewTaskManager returns a new task manager
-func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
+func (f *factoryImpl) NewTaskManager() (persistence.TaskManager, error) {
 	taskStore, err := f.dataStoreFactory.NewTaskStore()
 	if err != nil {
 		return nil, err
 	}
 
-	result := p.NewTaskManager(taskStore, f.serializer)
+	result := persistence.NewTaskManager(taskStore, f.serializer)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
-		result = p.NewTaskPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+		result = persistence.NewTaskPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = persistence.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewTaskPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = persistence.NewTaskPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
 // NewShardManager returns a new shard manager
-func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
+func (f *factoryImpl) NewShardManager() (persistence.ShardManager, error) {
 	shardStore, err := f.dataStoreFactory.NewShardStore()
 	if err != nil {
 		return nil, err
 	}
 
-	result := p.NewShardManager(shardStore, f.serializer)
+	result := persistence.NewShardManager(shardStore, f.serializer)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
-		result = p.NewShardPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+		result = persistence.NewShardPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewShardPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = persistence.NewShardPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewShardPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = persistence.NewShardPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
 // NewMetadataManager returns a new metadata manager
-func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
+func (f *factoryImpl) NewMetadataManager() (persistence.MetadataManager, error) {
 	store, err := f.dataStoreFactory.NewMetadataStore()
 	if err != nil {
 		return nil, err
 	}
 
-	result := p.NewMetadataManagerImpl(store, f.serializer, f.logger, f.clusterName)
+	result := persistence.NewMetadataManagerImpl(store, f.serializer, f.logger, f.clusterName)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
-		result = p.NewMetadataPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+		result = persistence.NewMetadataPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = persistence.NewMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = persistence.NewMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
 // NewClusterMetadataManager returns a new cluster metadata manager
-func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, error) {
+func (f *factoryImpl) NewClusterMetadataManager() (persistence.ClusterMetadataManager, error) {
 	store, err := f.dataStoreFactory.NewClusterMetadataStore()
 	if err != nil {
 		return nil, err
 	}
 
-	result := p.NewClusterMetadataManagerImpl(store, f.serializer, f.clusterName, f.logger)
+	result := persistence.NewClusterMetadataManagerImpl(store, f.serializer, f.clusterName, f.logger)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
-		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+		result = persistence.NewClusterMetadataPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = persistence.NewClusterMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewClusterMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = persistence.NewClusterMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
 // NewExecutionManager returns a new execution manager
-func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
+func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error) {
 	store, err := f.dataStoreFactory.NewExecutionStore()
 	if err != nil {
 		return nil, err
 	}
 
-	result := p.NewExecutionManager(store, f.serializer, f.eventBlobCache, f.logger, f.config.TransactionSizeLimit)
+	result := persistence.NewExecutionManager(store, f.serializer, f.eventBlobCache, f.logger, f.config.TransactionSizeLimit)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
-		result = p.NewExecutionPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+		result = persistence.NewExecutionPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = persistence.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewExecutionPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = persistence.NewExecutionPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
-func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error) {
-	result, err := f.dataStoreFactory.NewQueue(p.NamespaceReplicationQueueType)
+func (f *factoryImpl) NewNamespaceReplicationQueue() (persistence.NamespaceReplicationQueue, error) {
+	result, err := f.dataStoreFactory.NewQueue(persistence.NamespaceReplicationQueueType)
 	if err != nil {
 		return nil, err
 	}
 
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
-		result = p.NewQueuePersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+		result = persistence.NewQueuePersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = persistence.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewQueuePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
-	return p.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsHandler, f.logger)
+	result = persistence.NewQueuePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	return persistence.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsHandler, f.logger)
 }
 
-func (f *factoryImpl) NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, error) {
+func (f *factoryImpl) NewHistoryTaskQueueManager() (persistence.HistoryTaskQueueManager, error) {
 	q, err := f.dataStoreFactory.NewQueueV2()
 	if err != nil {
 		return nil, err
 	}
-	return p.NewHistoryTaskQueueManager(q, serialization.NewSerializer()), nil
+	return persistence.NewHistoryTaskQueueManager(q, serialization.NewSerializer()), nil
 }
 
-func (f *factoryImpl) NewNexusIncomingServiceManager() (p.NexusIncomingServiceManager, error) {
-	store, err := f.dataStoreFactory.NewNexusIncomingServiceStore()
+func (f *factoryImpl) NewNexusEndpointManager() (persistence.NexusEndpointManager, error) {
+	store, err := f.dataStoreFactory.NewNexusEndpointStore()
 	if err != nil {
 		return nil, err
 	}
 
-	result := p.NewNexusIncomingServiceManager(store, f.serializer, f.logger)
+	result := persistence.NewNexusEndpointManager(store, f.serializer, f.logger)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
-		result = p.NewNexusIncomingServicePersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+		result = persistence.NewNexusEndpointPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewNexusIncomingServicePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = persistence.NewNexusEndpointPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewNexusIncomingServicePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = persistence.NewNexusEndpointPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
@@ -271,7 +271,7 @@ func (f *factoryImpl) initDependencies() {
 		f.metricsHandler = metrics.NoopMetricsHandler
 	}
 	if f.healthSignals == nil {
-		f.healthSignals = p.NoopHealthSignalAggregator
+		f.healthSignals = persistence.NoopHealthSignalAggregator
 	}
 	f.healthSignals.Start()
 }

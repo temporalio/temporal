@@ -36,14 +36,16 @@ import (
 	"time"
 
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.temporal.io/server/common/membership/static"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/membership/static"
+
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -191,7 +193,7 @@ type (
 func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	testDCClient := newTestDCClient(dynamicconfig.NewNoopClient())
 	for k, v := range params.DynamicConfigOverrides {
-		testDCClient.OverrideValue(t, k, v)
+		testDCClient.OverrideValueByKey(t, k, v)
 	}
 	impl := &temporalImpl{
 		logger:                           params.Logger,
@@ -960,6 +962,6 @@ func sdkClientFactoryProvider(
 		tlsConfig,
 		metricsHandler,
 		logger,
-		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
+		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
 }

@@ -58,6 +58,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -118,27 +119,27 @@ type (
 
 	// Implements matching.Engine
 	matchingEngineImpl struct {
-		status                int32
-		taskManager           persistence.TaskManager
-		historyClient         resource.HistoryClient
-		matchingRawClient     resource.MatchingRawClient
-		tokenSerializer       common.TaskTokenSerializer
-		historySerializer     serialization.Serializer
-		logger                log.Logger
-		throttledLogger       log.ThrottledLogger
-		namespaceRegistry     namespace.Registry
-		hostInfoProvider      membership.HostInfoProvider
-		serviceResolver       membership.ServiceResolver
-		membershipChangedCh   chan *membership.ChangedEvent
-		clusterMeta           cluster.Metadata
-		timeSource            clock.TimeSource
-		visibilityManager     manager.VisibilityManager
-		incomingServiceClient *nexusIncomingServiceClient
-		metricsHandler        metrics.Handler
-		partitionsLock        sync.RWMutex // locks mutation of partitions
-		partitions            map[tqid.PartitionKey]taskQueuePartitionManager
-		gaugeMetrics          gaugeMetrics // per-namespace task queue counters
-		config                *Config
+		status              int32
+		taskManager         persistence.TaskManager
+		historyClient       resource.HistoryClient
+		matchingRawClient   resource.MatchingRawClient
+		tokenSerializer     common.TaskTokenSerializer
+		historySerializer   serialization.Serializer
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		namespaceRegistry   namespace.Registry
+		hostInfoProvider    membership.HostInfoProvider
+		serviceResolver     membership.ServiceResolver
+		membershipChangedCh chan *membership.ChangedEvent
+		clusterMeta         cluster.Metadata
+		timeSource          clock.TimeSource
+		visibilityManager   manager.VisibilityManager
+		nexusEndpointClient *nexusEndpointClient
+		metricsHandler      metrics.Handler
+		partitionsLock      sync.RWMutex // locks mutation of partitions
+		partitions          map[tqid.PartitionKey]taskQueuePartitionManager
+		gaugeMetrics        gaugeMetrics // per-namespace task queue counters
+		config              *Config
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
 		// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
@@ -160,6 +161,8 @@ type (
 		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
 		// Serializes access to the per namespace lock map
 		namespaceUpdateLockMapLock sync.Mutex
+		// Stores results of reachability queries to visibility
+		reachabilityCache reachabilityCache
 	}
 )
 
@@ -192,27 +195,28 @@ func NewEngine(
 	clusterMeta cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
-	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
+	nexusEndpointManager persistence.NexusEndpointManager,
 ) Engine {
-	return &matchingEngineImpl{
-		status:                common.DaemonStatusInitialized,
-		taskManager:           taskManager,
-		historyClient:         historyClient,
-		matchingRawClient:     matchingRawClient,
-		tokenSerializer:       common.NewProtoTaskTokenSerializer(),
-		historySerializer:     serialization.NewSerializer(),
-		logger:                log.With(logger, tag.ComponentMatchingEngine),
-		throttledLogger:       log.With(throttledLogger, tag.ComponentMatchingEngine),
-		namespaceRegistry:     namespaceRegistry,
-		hostInfoProvider:      hostInfoProvider,
-		serviceResolver:       resolver,
-		membershipChangedCh:   make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
-		clusterMeta:           clusterMeta,
-		timeSource:            clock.NewRealTimeSource(), // No need to mock this at the moment
-		visibilityManager:     visibilityManager,
-		incomingServiceClient: newIncomingServiceClient(nexusIncomingServiceManager),
-		metricsHandler:        metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
-		partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
+	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
+	e := &matchingEngineImpl{
+		status:              common.DaemonStatusInitialized,
+		taskManager:         taskManager,
+		historyClient:       historyClient,
+		matchingRawClient:   matchingRawClient,
+		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
+		historySerializer:   serialization.NewSerializer(),
+		logger:              log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:     log.With(throttledLogger, tag.ComponentMatchingEngine),
+		namespaceRegistry:   namespaceRegistry,
+		hostInfoProvider:    hostInfoProvider,
+		serviceResolver:     resolver,
+		membershipChangedCh: make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
+		clusterMeta:         clusterMeta,
+		timeSource:          clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:   visibilityManager,
+		nexusEndpointClient: newEndpointClient(nexusEndpointManager),
+		metricsHandler:      scopedMetricsHandler,
+		partitions:          make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
@@ -226,6 +230,12 @@ func NewEngine(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
 	}
+	e.reachabilityCache = newReachabilityCache(
+		metrics.NoopMetricsHandler,
+		visibilityManager,
+		e.config.ReachabilityCacheOpenWFsTTL(),
+		e.config.ReachabilityCacheClosedWFsTTL())
+	return e
 }
 
 func (e *matchingEngineImpl) Start() {
@@ -560,7 +570,12 @@ pollLoop:
 			// we return full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
-			hist, nextPageToken, err := e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
+			var hist *history.History
+			var nextPageToken []byte
+			if dynamicconfig.AccessHistory(e.config.FrontendAccessHistoryFraction, e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingPollWorkflowTaskQueueTag))) {
+				hist, nextPageToken, err = e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
+			}
+
 			if err != nil {
 				// will notify query client that the query task failed
 				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
@@ -932,13 +947,18 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			reachability, err := getBuildIdTaskReachability(ctx,
-				userData.GetVersioningData(),
-				e.visibilityManager,
-				request.GetNamespaceId(),
-				req.GetNamespace(),
-				req.GetTaskQueue().GetName(),
+				newReachabilityCalculator(
+					userData.GetVersioningData(),
+					e.reachabilityCache,
+					request.GetNamespaceId(),
+					req.GetNamespace(),
+					req.GetTaskQueue().GetName(),
+					e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+				),
+				e.metricsHandler,
+				e.logger,
 				bid,
-				e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()))
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1073,6 +1093,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	updateOptions := UserDataUpdateOptions{}
 	cT := req.GetConflictToken()
 	var getResp *matchingservice.GetWorkerVersioningRulesResponse
+	var maxUpstreamBuildIDs int
 
 	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
@@ -1118,14 +1139,14 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetAddCompatibleRedirectRule(),
 				e.config.RedirectRuleLimitPerQueue(ns.Name().String()),
-				e.config.RedirectRuleChainLimitPerQueue(ns.Name().String()),
+				e.config.RedirectRuleMaxUpstreamBuildIDsPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
 			versioningData, err = ReplaceCompatibleRedirectRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetReplaceCompatibleRedirectRule(),
-				e.config.RedirectRuleChainLimitPerQueue(ns.Name().String()),
+				e.config.RedirectRuleMaxUpstreamBuildIDsPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
 			versioningData, err = DeleteCompatibleRedirectRule(
@@ -1152,6 +1173,14 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		if err != nil {
 			return nil, false, err
 		}
+		// Get max upstream build IDs (min is 0, because we count number of upstream nodes)
+		activeRedirectRules := getActiveRedirectRules(versioningData.GetRedirectRules())
+		for _, rule := range activeRedirectRules {
+			upstream := getUpstreamBuildIds(rule.GetRule().GetTargetBuildId(), activeRedirectRules)
+			if len(upstream)+1 > maxUpstreamBuildIDs {
+				maxUpstreamBuildIDs = len(upstream) + 1
+			}
+		}
 
 		// Clean up tombstones after all fallible tasks are complete, once we know we are committing and replicating the changes.
 		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally.
@@ -1168,9 +1197,18 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
+	// log resulting rule counts
+	assignmentRules := getResp.GetResponse().GetAssignmentRules()
+	redirectRules := getResp.GetResponse().GetCompatibleRedirectRules()
+
+	e.logger.Info("UpdateWorkerVersioningRules completed",
+		tag.WorkerVersioningRedirectRuleCount(len(redirectRules)),
+		tag.WorkerVersioningAssignmentRuleCount(len(assignmentRules)),
+		tag.WorkerVersioningMaxUpstreamBuildIDs(maxUpstreamBuildIDs))
+
 	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
-		AssignmentRules:         getResp.GetResponse().GetAssignmentRules(),
-		CompatibleRedirectRules: getResp.GetResponse().GetCompatibleRedirectRules(),
+		AssignmentRules:         assignmentRules,
+		CompatibleRedirectRules: redirectRules,
 		ConflictToken:           getResp.GetResponse().GetConflictToken(),
 	}}, nil
 }
@@ -1670,56 +1708,46 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 	return &matchingservice.RespondNexusTaskFailedResponse{}, nil
 }
 
-func (e *matchingEngineImpl) CreateNexusIncomingService(ctx context.Context, request *matchingservice.CreateNexusIncomingServiceRequest) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
-	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetSpec().GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	return e.incomingServiceClient.CreateNexusIncomingService(ctx, &internalCreateRequest{
-		spec:        request.GetSpec(),
-		namespaceID: namespaceID.String(),
-		clusterID:   e.clusterMeta.GetClusterID(),
-		timeSource:  e.timeSource,
+func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *matchingservice.CreateNexusEndpointRequest) (*matchingservice.CreateNexusEndpointResponse, error) {
+	return e.nexusEndpointClient.CreateNexusEndpoint(ctx, &internalCreateNexusEndpointRequest{
+		spec:       request.GetSpec(),
+		clusterID:  e.clusterMeta.GetClusterID(),
+		timeSource: e.timeSource,
 	})
 }
 
-func (e *matchingEngineImpl) UpdateNexusIncomingService(ctx context.Context, request *matchingservice.UpdateNexusIncomingServiceRequest) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
-	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetSpec().GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	return e.incomingServiceClient.UpdateNexusIncomingService(ctx, &internalUpdateRequest{
-		serviceID:   request.GetId(),
-		version:     request.GetVersion(),
-		spec:        request.GetSpec(),
-		namespaceID: namespaceID.String(),
-		clusterID:   e.clusterMeta.GetClusterID(),
-		timeSource:  e.timeSource,
+func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *matchingservice.UpdateNexusEndpointRequest) (*matchingservice.UpdateNexusEndpointResponse, error) {
+	return e.nexusEndpointClient.UpdateNexusEndpoint(ctx, &internalUpdateNexusEndpointRequest{
+		endpointID: request.GetId(),
+		version:    request.GetVersion(),
+		spec:       request.GetSpec(),
+		clusterID:  e.clusterMeta.GetClusterID(),
+		timeSource: e.timeSource,
 	})
 }
 
-func (e *matchingEngineImpl) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
-	return e.incomingServiceClient.DeleteNexusIncomingService(ctx, request)
+func (e *matchingEngineImpl) DeleteNexusEndpoint(ctx context.Context, request *matchingservice.DeleteNexusEndpointRequest) (*matchingservice.DeleteNexusEndpointResponse, error) {
+	return e.nexusEndpointClient.DeleteNexusEndpoint(ctx, request)
 }
 
-func (e *matchingEngineImpl) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, error) {
+func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *matchingservice.ListNexusEndpointsRequest) (*matchingservice.ListNexusEndpointsResponse, error) {
 	lastKnownVersion := request.LastKnownTableVersion
 
 	if request.Wait {
 		if request.NextPageToken != nil {
-			return nil, serviceerror.NewInvalidArgument("request Wait=true and NextPageToken!=nil on ListNexusIncomingServices request. waiting is only allowed on first page")
+			return nil, serviceerror.NewInvalidArgument("request Wait=true and NextPageToken!=nil on ListNexusEndpoints request. waiting is only allowed on first page")
 		}
 
 		// if waiting, send request with unknown table version so we get the newest view of the table
 		request.LastKnownTableVersion = 0
 
 		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, e.config.ListNexusIncomingServicesLongPollTimeout(), returnEmptyTaskTimeBudget)
+		ctx, cancel = newChildContext(ctx, e.config.ListNexusEndpointsLongPollTimeout(), returnEmptyTaskTimeBudget)
 		defer cancel()
 	}
 
 	for {
-		resp, tableVersionChanged, err := e.incomingServiceClient.ListNexusIncomingServices(ctx, request)
+		resp, tableVersionChanged, err := e.nexusEndpointClient.ListNexusEndpoints(ctx, request)
 		if err != nil {
 			return resp, err
 		}
@@ -1818,7 +1846,9 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(partition tqid.Partit
 	foundTQM, ok := e.partitions[key]
 	if !ok || (unloadPM != nil && foundTQM != unloadPM) {
 		e.partitionsLock.Unlock()
-		unloadPM.Stop()
+		if unloadPM != nil {
+			unloadPM.Stop()
+		}
 		return false
 	}
 	delete(e.partitions, key)

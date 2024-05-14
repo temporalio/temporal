@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -328,7 +327,6 @@ func (s *executableTaskSuite) TestResend_NotFound() {
 			WorkflowId: resendErr.WorkflowId,
 			RunId:      resendErr.RunId,
 		},
-		WorkflowVersion:    common.EmptyVersion,
 		ClosedWorkflowOnly: false,
 	}).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 
@@ -468,10 +466,10 @@ func (s *executableTaskSuite) TestResend_SecondResendError_SameWorkflowRun() {
 		NamespaceId:       resendErr.NamespaceId,
 		WorkflowId:        resendErr.WorkflowId,
 		RunId:             resendErr.RunId,
-		StartEventId:      rand.Int63(),
-		StartEventVersion: rand.Int63(),
-		EndEventId:        rand.Int63(),
-		EndEventVersion:   rand.Int63(),
+		StartEventId:      resendErr.StartEventId,
+		StartEventVersion: resendErr.StartEventVersion,
+		EndEventId:        resendErr.EndEventId,
+		EndEventVersion:   resendErr.EndEventVersion,
 	}
 
 	s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(

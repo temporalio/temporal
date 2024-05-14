@@ -83,7 +83,7 @@ var (
 		"client.frontend.PollActivityTaskQueue":          true,
 		"client.frontend.PollWorkflowTaskQueue":          true,
 		"client.matching.GetTaskQueueUserData":           true,
-		"client.matching.ListNexusIncomingServices":      true,
+		"client.matching.ListNexusEndpoints":             true,
 	}
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
@@ -187,6 +187,7 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	shardIdField := findNestedField(t, "ShardId", "request", 1)
 	workflowIdField := findNestedField(t, "WorkflowId", "request", 4)
 	taskTokenField := findNestedField(t, "TaskToken", "request", 2)
+	namespaceIdField := findNestedField(t, "NamespaceId", "request", 2)
 	taskInfosField := findNestedField(t, "TaskInfos", "request", 1)
 
 	found := len(shardIdField) + len(workflowIdField) + len(taskTokenField) + len(taskInfosField)
@@ -201,7 +202,15 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	case len(shardIdField) == 1:
 		return fmt.Sprintf("shardID := %s", shardIdField[0].path)
 	case len(workflowIdField) == 1:
-		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", workflowIdField[0].path)
+		if len(namespaceIdField) == 1 {
+			return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", namespaceIdField[0].path, workflowIdField[0].path)
+		} else if len(namespaceIdField) == 0 {
+			panic(fmt.Sprintf("expected at least one namespace ID field in request with nesting of 2 in %s", t))
+		} else {
+			// There's more than one, assume there's a top level one (e.g.
+			// historyservice.GetWorkflowExecutionRawHistoryRequest)
+			return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", workflowIdField[0].path)
+		}
 	case len(taskTokenField) == 1:
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
@@ -257,10 +266,10 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_NEXUS"}
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
-	case "CreateNexusIncomingServiceRequest",
-		"UpdateNexusIncomingServiceRequest",
-		"ListNexusIncomingServicesRequest",
-		"DeleteNexusIncomingServiceRequest":
+	case "CreateNexusEndpointRequest",
+		"UpdateNexusEndpointRequest",
+		"ListNexusEndpointsRequest",
+		"DeleteNexusEndpointRequest":
 		// Always route these requests to the same matching node for all namespaces.
 		tq = fieldWithPath{path: "\"not-applicable\""}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}

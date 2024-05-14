@@ -298,6 +298,9 @@ func (fc *fileBasedClient) appendConstrainedValue(logLine *strings.Builder, valu
 		if value.Constraints.TaskType != enumsspb.TASK_TYPE_UNSPECIFIED {
 			logLine.WriteString(fmt.Sprintf("{HistoryTaskType:%s}", value.Constraints.TaskType))
 		}
+		if value.Constraints.Destination != "" {
+			logLine.WriteString(fmt.Sprintf("{Destination:%s}", value.Constraints.Destination))
+		}
 		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
 	}
 }
@@ -402,6 +405,12 @@ func convertYamlConstraints(m map[string]any) (Constraints, error) {
 				cs.ShardID = int32(v)
 			} else {
 				return cs, fmt.Errorf("shardID constraint must be integer")
+			}
+		case "destination":
+			if v, ok := v.(string); ok {
+				cs.Destination = v
+			} else {
+				return cs, fmt.Errorf("destination constraint must be string")
 			}
 		default:
 			return cs, fmt.Errorf("unknown constraint type %q", k)

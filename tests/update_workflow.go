@@ -37,13 +37,17 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -136,7 +140,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
 			}
 
 			wtHandlerCalls := 0
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				wtHandlerCalls++
 				switch wtHandlerCalls {
 				case 1:
@@ -150,7 +154,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
@@ -158,7 +162,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
   8 WorkflowExecutionUpdateAccepted
   9 WorkflowExecutionUpdateCompleted
  10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted`, history)
+ 11 WorkflowTaskStarted`, task.History)
 					return []*commandpb.Command{{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -284,7 +288,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplet
 			}
 
 			wtHandlerCalls := 0
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				wtHandlerCalls++
 				switch wtHandlerCalls {
 				case 1:
@@ -307,7 +311,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplet
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled // Normal WT because there is ActivityTaskScheduled(5) event after WorkflowTaskCompleted(4).
   7 WorkflowTaskStarted
-`, history)
+`, task.History)
 					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
@@ -315,7 +319,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplet
   9 WorkflowExecutionUpdateAccepted
  10 WorkflowExecutionUpdateCompleted
  11 WorkflowTaskScheduled
- 12 WorkflowTaskStarted`, history)
+ 12 WorkflowTaskStarted`, task.History)
 					return []*commandpb.Command{{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -435,7 +439,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
 			}
 
 			wtHandlerCalls := 0
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				wtHandlerCalls++
 				switch wtHandlerCalls {
 				case 1:
@@ -443,7 +447,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // First normal WT. No speculative WT was created.
-`, history)
+`, task.History)
 					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 2:
 					s.EqualHistory(`
@@ -451,7 +455,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
   5 WorkflowExecutionUpdateAccepted
   6 WorkflowExecutionUpdateCompleted
   7 WorkflowTaskScheduled
-  8 WorkflowTaskStarted`, history)
+  8 WorkflowTaskStarted`, task.History)
 					return []*commandpb.Command{{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -561,7 +565,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 			}
 
 			wtHandlerCalls := 0
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				wtHandlerCalls++
 				switch wtHandlerCalls {
 				case 1:
@@ -575,7 +579,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
   4 WorkflowTaskCompleted
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled // This WT was already created by signal and no speculative WT was created.
-  7 WorkflowTaskStarted`, history)
+  7 WorkflowTaskStarted`, task.History)
 					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
@@ -583,7 +587,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
   9 WorkflowExecutionUpdateAccepted
  10 WorkflowExecutionUpdateCompleted
  11 WorkflowTaskScheduled
- 12 WorkflowTaskStarted`, history)
+ 12 WorkflowTaskStarted`, task.History)
 					return []*commandpb.Command{{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -694,7 +698,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTa
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -710,7 +714,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTa
 			s.EqualHistory(`
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT2 which was created while completing WT1.
-  6 WorkflowTaskStarted`, history)
+  6 WorkflowTaskStarted`, task.History)
 			// Message handler rejects update.
 			return nil, nil
 		case 3:
@@ -721,7 +725,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTa
   4 WorkflowTaskCompleted // Speculative WT2 disappeared and new normal WT was created.
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  7 WorkflowTaskStarted`, task.History)
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -811,7 +815,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Re
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -836,14 +840,14 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Re
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled // Normal WT2 which was created while completing WT1.
-  7 WorkflowTaskStarted`, history)
+  7 WorkflowTaskStarted`, task.History)
 			// Message handler rejects update.
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted // New normal WT is created.
   9 WorkflowTaskScheduled
- 10 WorkflowTaskStarted`, history)
+ 10 WorkflowTaskStarted`, task.History)
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -1204,11 +1208,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 
 			tv = s.startWorkflow(tv)
 
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				if tc.CommandFn == nil {
 					return nil, nil
 				}
-				return tc.CommandFn(tv, history), nil
+				return tc.CommandFn(tv, task.History), nil
 			}
 
 			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
@@ -1297,7 +1301,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 			}
 
 			wtHandlerCalls := 0
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				wtHandlerCalls++
 				switch wtHandlerCalls {
 				case 1:
@@ -1308,7 +1312,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 					s.EqualHistory(`
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
-  6 WorkflowTaskStarted`, history)
+  6 WorkflowTaskStarted`, task.History)
 					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
@@ -1316,7 +1320,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
   8 WorkflowExecutionUpdateAccepted
   9 WorkflowExecutionUpdateCompleted
  10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted`, history)
+ 11 WorkflowTaskStarted`, task.History)
 					return []*commandpb.Command{{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -1419,7 +1423,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -1434,7 +1438,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
@@ -1442,7 +1446,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
   8 WorkflowExecutionUpdateAccepted
   9 WorkflowExecutionUpdateCompleted
  10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted`, history)
+ 11 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -1493,9 +1497,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky, WithRetries(1))
 	s.NoError(err)
 
-	s.Logger.Info("Sleep 10 seconds to make sure stickyPollerUnavailableWindow time has passed.")
-	time.Sleep(10 * time.Second)
-	s.Logger.Info("Sleep 10 seconds is done.")
+	s.Logger.Info("Sleep 10+ seconds to make sure stickyPollerUnavailableWindow time has passed.")
+	time.Sleep(10*time.Second + 100*time.Millisecond)
+	s.Logger.Info("Sleep 10+ seconds is done.")
 
 	// Now send an update. It should try sticky task queue first, but got "StickyWorkerUnavailable" error
 	// and resend it to normal.
@@ -1547,20 +1551,20 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Re
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, history)
+  3 WorkflowTaskStarted`, task.History)
 			return nil, nil
 		case 2:
 			s.EqualHistory(`
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted`, history)
+  6 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -1645,7 +1649,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject()
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -1659,7 +1663,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject()
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
@@ -1669,7 +1673,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject()
   4 WorkflowTaskCompleted
   5 WorkflowExecutionSignaled // Speculative WT was dropped and history starts from 5 again.
   6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  7 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -1761,7 +1765,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -1783,13 +1787,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled // Normal WT because there is ActivityTaskScheduled(5) event.
   7 WorkflowTaskStarted
-`, history)
+`, task.History)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
   9 WorkflowTaskScheduled
- 10 WorkflowTaskStarted`, history)
+ 10 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -1883,14 +1887,14 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, history)
+  3 WorkflowTaskStarted`, task.History)
 			return s.UpdateAcceptCommands(tv, "1"), nil
 		case 2:
 			s.EqualHistory(`
@@ -1900,28 +1904,28 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
   4 WorkflowTaskCompleted
   5 WorkflowExecutionUpdateAccepted // 1st update is accepted.
   6 WorkflowTaskScheduled // New normal WT is created because of the 2nd update.
-  7 WorkflowTaskStarted`, history)
+  7 WorkflowTaskStarted`, task.History)
 			return s.UpdateAcceptCommands(tv, "2"), nil
 		case 3:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
   9 WorkflowExecutionUpdateAccepted // 2nd update is accepted.
  10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted`, history)
+ 11 WorkflowTaskStarted`, task.History)
 			return s.UpdateCompleteCommands(tv, "2"), nil
 		case 4:
 			s.EqualHistory(`
  12 WorkflowTaskCompleted
  13 WorkflowExecutionUpdateCompleted // 2nd update is completed.
  14 WorkflowTaskScheduled
- 15 WorkflowTaskStarted`, history)
+ 15 WorkflowTaskStarted`, task.History)
 			return s.UpdateCompleteCommands(tv, "1"), nil
 		case 5:
 			s.EqualHistory(`
  16 WorkflowTaskCompleted
  17 WorkflowExecutionUpdateCompleted // 1st update is completed.
  18 WorkflowTaskScheduled
- 19 WorkflowTaskStarted`, history)
+ 19 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -2055,14 +2059,14 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, history)
+  3 WorkflowTaskStarted`, task.History)
 			return s.UpdateAcceptCommands(tv, "1"), nil
 		case 2:
 			s.EqualHistory(`
@@ -2073,21 +2077,21 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
   5 WorkflowExecutionUpdateAccepted // 1st update is accepted.
   6 WorkflowTaskScheduled // Normal WT because of WorkflowExecutionUpdateAccepted(5) event.
   7 WorkflowTaskStarted
-`, history)
+`, task.History)
 			// Message handler rejects 2nd update.
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
   9 WorkflowTaskScheduled
- 10 WorkflowTaskStarted`, history)
+ 10 WorkflowTaskStarted`, task.History)
 			return s.UpdateCompleteCommands(tv, "1"), nil
 		case 4:
 			s.EqualHistory(`
  11 WorkflowTaskCompleted
  12 WorkflowExecutionUpdateCompleted // 1st update is completed.
  13 WorkflowTaskScheduled
- 14 WorkflowTaskStarted`, history)
+ 14 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -2207,7 +2211,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -2221,7 +2225,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			return s.UpdateAcceptCommands(tv, "1"), nil
 		case 3:
 			s.Fail("should not be called because messageHandler returns error")
@@ -2239,7 +2243,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
   6 WorkflowTaskStarted
   7 WorkflowTaskFailed
   8 WorkflowTaskScheduled
-  9 WorkflowTaskStarted`, history)
+  9 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -2341,6 +2345,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	s.Contains(err.Error(), "not found")
 	// New normal (but transient) WT will be created but not returned.
 
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
 	_, err = poller.PollAndProcessWorkflowTask()
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
@@ -2383,7 +2389,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTa
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -2397,7 +2403,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTa
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT. Events 5 and 6 are written into the history when signal is received.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			// Send signal which will be buffered. This will persist MS and speculative WT must be converted to normal.
 			err := s.sendSignal(s.namespace, tv.WorkflowExecution(), tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
 			s.NoError(err)
@@ -2407,7 +2413,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTa
   7 WorkflowTaskCompleted
   8 WorkflowExecutionSignaled // It was buffered and got to the history after WT is completed.
   9 WorkflowTaskScheduled
- 10 WorkflowTaskStarted`, history)
+ 10 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -2500,7 +2506,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflow
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -2514,13 +2520,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflow
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // It was initially speculative WT but was already converted to normal when signal was received.
   6 WorkflowExecutionSignaled
-  7 WorkflowTaskStarted`, history)
+  7 WorkflowTaskStarted`, task.History)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
   9 WorkflowTaskScheduled
- 10 WorkflowTaskStarted`, history)
+ 10 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -2633,7 +2639,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
 	tv = tv.WithRunID(startResp.GetRunId())
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -2647,7 +2653,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			// Emulate slow worker: sleep little more than WT timeout.
 			time.Sleep(request.WorkflowTaskTimeout.AsDuration() + 100*time.Millisecond)
 			// This doesn't matter because WT times out before update is applied.
@@ -2663,7 +2669,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
   6 WorkflowTaskStarted
   7 WorkflowTaskTimedOut
   8 WorkflowTaskScheduled {"Attempt":2 } // Transient WT.
-  9 WorkflowTaskStarted`, history)
+  9 WorkflowTaskStarted`, task.History)
 			commands := append(s.UpdateAcceptCompleteCommands(tv, "1"),
 				&commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -2761,7 +2767,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -2777,13 +2783,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskTimedOut
   7 WorkflowTaskScheduled {"Attempt":1} // Normal WT.
-  8 WorkflowTaskStarted`, history)
+  8 WorkflowTaskStarted`, task.History)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
   9 WorkflowTaskCompleted
  10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted`, history)
+ 11 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -2834,8 +2840,12 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 
-	// Wait for sticky timeout to fire.
+	// To make sure that update got to the server before test start to wait for StickyScheduleToStartTimeout.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
+	s.Logger.Info("Wait for sticky timeout to fire. Sleep poller.StickyScheduleToStartTimeout+ seconds.", tag.NewDurationTag("StickyScheduleToStartTimeout", poller.StickyScheduleToStartTimeout))
 	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
+	s.Logger.Info("Sleep is done.")
 
 	// Try to process update in workflow, poll from normal task queue.
 	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
@@ -2853,7 +2863,6 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	s.Equal(3, msgHandlerCalls)
 
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
-
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -2876,7 +2885,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -2892,13 +2901,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
   6 WorkflowTaskTimedOut
   7 WorkflowTaskScheduled {"Attempt":1} // Normal WT is scheduled.
   8 WorkflowTaskStarted
-`, history)
+`, task.History)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
   9 WorkflowTaskCompleted
  10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted`, history)
+ 11 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -2948,17 +2957,20 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	s.NoError(err)
 
 	// Now send an update. It will create a speculative WT on normal task queue,
-	// which will time out in 10 seconds and create new normal WT.
+	// which will time out in 5 seconds and create new normal WT.
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 
+	// To make sure that update got to the server before test start to wait for SpeculativeWorkflowTaskScheduleToStartTimeout.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
 	// TODO: it would be nice to shutdown matching before sending an update to emulate case which is actually being tested here.
-	//  But test infrastructure doesn't support it. 10 seconds sleep will cause same observable effect.
-	s.Logger.Info("Sleep 10 seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
-	time.Sleep(10 * time.Second)
-	s.Logger.Info("Sleep 10 seconds is done.")
+	//  But test infrastructure doesn't support it. 5 seconds sleep will cause same observable effect.
+	s.Logger.Info("Sleep 5+ seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
+	time.Sleep(5*time.Second + 100*time.Millisecond)
+	s.Logger.Info("Sleep 5+ seconds is done.")
 
 	// Process update in workflow.
 	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
@@ -3002,7 +3014,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -3023,7 +3035,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
-  6 WorkflowTaskStarted`, history)
+  6 WorkflowTaskStarted`, task.History)
 			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		default:
 			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
@@ -3078,7 +3090,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
 			},
 		})
 		assert.Error(s.T(), err1)
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		var notFound *serviceerror.NotFound
+		assert.ErrorAs(s.T(), err1, &notFound)
+		assert.Equal(s.T(), "workflow execution already completed", err1.Error())
 		assert.Nil(s.T(), updateResponse)
 		updateResultCh <- struct{}{}
 	}
@@ -3120,7 +3134,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -3176,7 +3190,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 			},
 		})
 		assert.Error(s.T(), err1)
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		var notFound *serviceerror.NotFound
+		assert.ErrorAs(s.T(), err1, &notFound)
+		assert.Equal(s.T(), "workflow execution already completed", err1.Error())
 		assert.Nil(s.T(), updateResponse)
 		updateResultCh <- struct{}{}
 	}
@@ -3215,7 +3231,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
+func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 	type testCase struct {
 		Name          string
 		Description   string
@@ -3226,17 +3242,17 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 	}
 	testCases := []testCase{
 		{
-			Name:          "requested",
-			Description:   "update in stateRequested must be rejected by server with server generated rejection failure",
-			UpdateErr:     "",
-			UpdateFailure: "Workflow Update is rejected because Workflow Execution is completed.",
+			Name:          "admitted",
+			Description:   "update in stateAdmitted must get an error",
+			UpdateErr:     "workflow execution already completed",
+			UpdateFailure: "",
 			Commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },
 			Messages:      func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
 		},
 		{
 			Name:          "accepted",
-			Description:   "update in stateAccepted must get an error because there is no way for workflow to complete it and already accepted update can't be rejected",
-			UpdateErr:     "context deadline exceeded",
+			Description:   "update in stateAccepted must get an error",
+			UpdateErr:     "workflow execution already completed",
 			UpdateFailure: "",
 			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
@@ -3272,7 +3288,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 			tv = s.startWorkflow(tv)
 
 			wtHandlerCalls := 0
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				wtHandlerCalls++
 				switch wtHandlerCalls {
 				case 1:
@@ -3378,7 +3394,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -3392,7 +3408,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Events (5 and 6) are for speculative WT, but they won't disappear after reject because speculative WT is converted to normal during heartbeat.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			// Heartbeat from speculative WT (no messages, no commands).
 			return nil, nil
 		case 3:
@@ -3400,14 +3416,14 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
   7 WorkflowTaskCompleted
   8 WorkflowTaskScheduled // New WT (after heartbeat) is normal and won't disappear from the history after reject.
   9 WorkflowTaskStarted
-`, history)
+`, task.History)
 			// Reject update.
 			return nil, nil
 		case 4:
 			s.EqualHistory(`
  10 WorkflowTaskCompleted
  11 WorkflowTaskScheduled
- 12 WorkflowTaskStarted`, history)
+ 12 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -3508,7 +3524,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTask
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -3522,7 +3538,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTask
   4 WorkflowTaskCompleted
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  7 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -3636,7 +3652,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLo
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -3650,7 +3666,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLo
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT. Events 5 and 6 will be lost.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 
 			// Close shard. NotFound error will be returned to RespondWorkflowTaskCompleted.
 			s.closeShard(tv.WorkflowID())
@@ -3664,7 +3680,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLo
   4 WorkflowTaskCompleted
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  7 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -3774,7 +3790,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -3782,7 +3798,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-`, history)
+`, task.History)
 			// Close shard. InvalidArgument error will be returned to RespondWorkflowTaskCompleted.
 			s.closeShard(tv.WorkflowID())
 			return nil, nil
@@ -3794,7 +3810,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
   4 WorkflowTaskFailed
   5 WorkflowTaskScheduled // New WT is scheduled after previous WT has failed. It doesn't have new events and messages.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -3862,7 +3878,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
-	s.ErrorContains(err, fmt.Sprintf("update %q not found", tv.UpdateID("1")))
+	s.ErrorContains(err, fmt.Sprintf("update %s not found", tv.UpdateID("1")))
 
 	<-updateResultCh
 
@@ -3893,7 +3909,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -3907,7 +3923,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
@@ -3915,7 +3931,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
   8 WorkflowExecutionUpdateAccepted
   9 WorkflowExecutionUpdateCompleted
  10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted`, history)
+ 11 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -4019,7 +4035,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Dedu
 	updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -4039,7 +4055,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Dedu
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
@@ -4047,7 +4063,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Dedu
   8 WorkflowExecutionUpdateAccepted
   9 WorkflowExecutionUpdateCompleted
  10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted`, history)
+ 11 WorkflowTaskStarted`, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -4157,7 +4173,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
 			tv = s.startWorkflow(tv)
 
 			wtHandlerCalls := 0
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				wtHandlerCalls++
 				switch wtHandlerCalls {
 				case 1:
@@ -4171,7 +4187,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					return []*commandpb.Command{{
@@ -4304,7 +4320,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -4326,9 +4342,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		}
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString(tv.String("activity-result")), false, nil
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		return tv.Any().Payloads(), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -4478,7 +4493,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -4500,17 +4515,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		}
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString(tv.String("activity-result")), false, nil
-	}
-
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
@@ -4644,7 +4653,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
-		Mutable state cleared, speculative WT is disappeared from server but update registry stays as is.
+		Mutable state cleared, speculative WT and update registry are disappeared from server.
 		Another update come in, and second speculative WT is dispatched to worker with same WT scheduled/started Id but different update Id.
 		The first speculative WT responds back, server rejected it (different start time).
 		The second speculative WT responds back, server accepted it.
@@ -4655,7 +4664,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 
 	testCtx := NewContext()
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -4677,17 +4686,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 		}
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString(tv.String("activity-result")), false, nil
-	}
-
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
@@ -4730,17 +4733,23 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	  9 WorkflowTaskScheduled
 	 10 WorkflowTaskStarted`, wt3.History)
 
-	// DescribeMutableState will clear MS, cause the speculative WT to disappear but the registry for update "1" will stay.
+	// DescribeMutableState will clear MS, cause the speculative WT and update registry to disappear.
 	_, err = s.adminClient.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace,
 		Execution: tv.WorkflowExecution(),
 	})
 	s.NoError(err)
 
-	// Send 2nd update (with DIFFERENT updateId). This will create a 4th WT as speculative.
+	// Make sure UpdateWorkflowExecution call for the update "1" is retried and new (4th) WFT is created as speculative.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
+	// Send 2nd update (with DIFFERENT updateId). It re-use already create 4th WFT.
 	go func() {
 		_, _ = s.sendUpdate(tv, "2")
 	}()
+
+	// Make sure that updateID=2 reached server (and added to the 4th WFT) before WFT is polled.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
 	// Poll the 4th speculative WT.
 	wt4, err := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4857,7 +4866,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 
 	testCtx := NewContext()
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -4879,17 +4888,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 		}
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString(tv.String("activity-result")), false, nil
-	}
-
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
@@ -5028,7 +5031,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 	update2ResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 
 	wtHandlerCalls := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
@@ -5042,7 +5045,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
-`, history)
+`, task.History)
 			go func() {
 				update2ResultCh <- s.sendUpdateNoError(tv, "2")
 			}()
@@ -5053,7 +5056,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 			s.EqualHistory(`
   4 WorkflowTaskCompleted // Speculative WT was dropped and history starts from 4 again.
   5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted`, history)
+  6 WorkflowTaskStarted`, task.History)
 			commands := append(s.UpdateAcceptCompleteCommands(tv, "2"),
 				&commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -5145,4 +5148,261 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
   8 WorkflowExecutionUpdateAccepted
   9 WorkflowExecutionUpdateCompleted
  10 WorkflowExecutionCompleted`, events)
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
+	}
+	tv := testvars.New(s.T().Name())
+	tv = s.startWorkflow(tv)
+
+	messageId := "my-message-id"
+
+	poller := &TaskPoller{
+		Engine:    s.engine,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			completeWorkflowCommand := &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: tv.Any().Payloads(),
+					},
+				},
+			}
+			return append(s.UpdateAcceptCommands(tv, messageId), completeWorkflowCommand), nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			return s.UpdateAcceptMessages(tv, task.Messages[0], messageId), nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	updateResponse := make(chan error)
+	pollResponse := make(chan error)
+	go func() {
+		_, err := s.sendUpdateWaitPolicyAccepted(tv, tv.UpdateID())
+		updateResponse <- err
+	}()
+	go func() {
+		// Blocks until the update request causes a WFT to be dispatched; then sends the update complete message
+		// required for the update request to return.
+		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+		pollResponse <- err
+	}()
+	s.NoError(<-updateResponse)
+	s.NoError(<-pollResponse)
+
+	s.HistoryRequire.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 WorkflowExecutionUpdateAccepted
+	6 WorkflowExecutionCompleted
+	`, s.getHistory(s.namespace, tv.WorkflowExecution()))
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
+	tv := testvars.New(s.T().Name())
+
+	tv = s.startWorkflow(tv)
+
+	wtHandlerCalls := 0
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with empty command list.
+			return nil, nil
+		case 2:
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+`, task.History)
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			updRequestMsg := task.Messages[0]
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
+
+			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
+			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
+			s.EqualValues(5, updRequestMsg.GetEventId())
+
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Drain first WT.
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	s.NoError(err)
+
+	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		updateResultCh <- s.sendUpdateNoError(tv, "1")
+	}()
+
+	// Wait for update go through and speculative WFT to be created.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
+	type QueryResult struct {
+		Resp *workflowservice.QueryWorkflowResponse
+		Err  error
+	}
+	queryFn := func(resCh chan<- QueryResult) {
+		// There is no query handler, and query timeout is ok for this test.
+		// But first query must not time out before 2nd query reached server,
+		// because 2 queries overflow the query buffer (default size 1),
+		// which leads to clearing of WF context.
+		shortCtx, cancel := context.WithTimeout(NewContext(), 100*time.Millisecond)
+		defer cancel()
+		queryResp, err := s.engine.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
+			Namespace: s.namespace,
+			Execution: tv.WorkflowExecution(),
+			Query: &querypb.WorkflowQuery{
+				QueryType: tv.Any().String(),
+			},
+		})
+		resCh <- QueryResult{Resp: queryResp, Err: err}
+	}
+
+	query1ResultCh := make(chan QueryResult)
+	query2ResultCh := make(chan QueryResult)
+	go queryFn(query1ResultCh)
+	go queryFn(query2ResultCh)
+	query1Res := <-query1ResultCh
+	query2Res := <-query2ResultCh
+	s.Error(query1Res.Err)
+	s.Error(query2Res.Err)
+	s.Nil(query1Res.Resp)
+	s.Nil(query2Res.Resp)
+
+	var queryBufferFullErr *serviceerror.ResourceExhausted
+	if common.IsContextDeadlineExceededErr(query1Res.Err) {
+		s.True(common.IsContextDeadlineExceededErr(query1Res.Err), "one of query errors must be CDE")
+		s.ErrorAs(query2Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
+		s.Contains(query2Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
+	} else {
+		s.ErrorAs(query1Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
+		s.Contains(query1Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
+		s.True(common.IsContextDeadlineExceededErr(query2Res.Err), "one of query errors must be CDE")
+	}
+
+	// "query buffer is full" error clears WF context. If update registry is not cleared together with context (old behaviour),
+	// then update stays there but speculative WFT which supposed to deliver it, is cleared.
+	// Subsequent retry attempts of "UpdateWorkflowExecution" API wouldn't help, because update is deduped by registry,
+	// and new WFT is not created. Update is not delivered to the worker until new WFT is created.
+	// If registry is cleared together with WF context (current behaviour), retries of "UpdateWorkflowExecution"
+	// will create new update and WFT.
+
+	// Wait to make sure that UpdateWorkflowExecution call is retried, update and speculative WFT are recreated.
+	time.Sleep(500 * time.Millisecond)
+
+	// Process update in workflow.
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
+	s.NoError(err)
+	updateResp := res.NewTask
+	updateResult := <-updateResultCh
+	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
+	s.EqualValues(0, updateResp.ResetHistoryEventId)
+
+	s.Equal(2, wtHandlerCalls)
+	s.Equal(2, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled // Was speculative WT...
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.  
+  8 WorkflowExecutionUpdateAccepted
+  9 WorkflowExecutionUpdateCompleted
+`, events)
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_AdmittedUpdatesAreSentToWorkerInOrderOfAdmission() {
+	// If our implementation is not in fact ordering updates correctly, then it may be ordering them
+	// non-deterministically. This number should be high enough that the false-negative rate of the test is low, but
+	// must not exceed our limit on number of in-flight updates. If we were picking a random ordering then the
+	// false-negative rate would be 1/(nUpdates!).
+	nUpdates := 20
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowExecutionMaxInFlightUpdates, nUpdates)
+
+	tv := testvars.New(s.T().Name())
+	tv = s.startWorkflow(tv)
+	for i := 0; i < nUpdates; i++ {
+		updateId := fmt.Sprint(i)
+		go func() { _, _ = s.sendUpdate(tv, updateId) }()
+		s.Eventually(func() bool {
+			resp, err := s.pollUpdate(tv, updateId, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED})
+			if err == nil {
+				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
+				return true
+			}
+			var notFoundErr *serviceerror.NotFound
+			s.ErrorAs(err, &notFoundErr) // poll beat send in race
+			return false
+		}, time.Second, 10*time.Millisecond, fmt.Sprintf("update %s did not reach Admitted stage", updateId))
+	}
+
+	nCalls := 0
+	poller := &TaskPoller{
+		Engine:    s.engine,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return []*commandpb.Command{}, nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			s.Len(task.Messages, nUpdates)
+			for i, m := range task.Messages {
+				s.Equal(tv.UpdateID(fmt.Sprint(i)), m.ProtocolInstanceId)
+			}
+			nCalls++
+			return []*protocolpb.Message{}, nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+	_, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
+	s.NoError(err)
+	s.Equal(1, nCalls)
 }

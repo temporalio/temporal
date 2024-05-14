@@ -62,7 +62,9 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
+	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 )
 
 var Module = fx.Options(
@@ -75,6 +77,7 @@ var Module = fx.Options(
 	archival.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
+	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
@@ -92,6 +95,8 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
+	nexusoperations.Module,
+	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )
 
 func ServiceProvider(
@@ -103,7 +108,6 @@ func ServiceProvider(
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 ) *Service {
 	return NewService(
@@ -115,7 +119,6 @@ func ServiceProvider(
 		grpcListener,
 		membershipMonitor,
 		metricsHandler,
-		faultInjectionDataStoreFactory,
 		healthServer,
 	)
 }
@@ -257,7 +260,6 @@ func PersistenceRateLimitingParamsProvider(
 			return int(namespaceCalculator.GetQuota(namespace))
 		},
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(serviceConfig.PersistencePerShardNamespaceMaxQPS),
-		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(serviceConfig.EnablePersistencePriorityRateLimiting),
 		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(serviceConfig.OperatorRPSRatio),
 		PersistenceBurstRatio:              persistenceClient.PersistenceBurstRatio(serviceConfig.PersistenceQPSBurstRatio),
 		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(serviceConfig.PersistenceDynamicRateLimitingParams),

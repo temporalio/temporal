@@ -121,6 +121,12 @@ func (s *staticResolver) MemberCount() int {
 	return len(s.hostInfos)
 }
 
+func (s *staticResolver) AvailableMemberCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.hostInfos)
+}
+
 func (s *staticResolver) Members() []membership.HostInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
