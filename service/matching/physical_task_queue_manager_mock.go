@@ -36,7 +36,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/taskqueue/v1"
 	v10 "go.temporal.io/server/api/matchingservice/v1"
-	v11 "go.temporal.io/server/api/taskqueue/v1"
 )
 
 // MockphysicalTaskQueueManager is a mock of physicalTaskQueueManager interface.
@@ -75,20 +74,6 @@ func (m *MockphysicalTaskQueueManager) AddTask(ctx context.Context, params addTa
 func (mr *MockphysicalTaskQueueManagerMockRecorder) AddTask(ctx, params interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddTask), ctx, params)
-}
-
-// Describe mocks base method.
-func (m *MockphysicalTaskQueueManager) Describe() *v11.PhysicalTaskQueueInfo {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Describe")
-	ret0, _ := ret[0].(*v11.PhysicalTaskQueueInfo)
-	return ret0
-}
-
-// Describe indicates an expected call of Describe.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) Describe() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Describe", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Describe))
 }
 
 // DispatchNexusTask mocks base method.
@@ -150,17 +135,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetAllPollerInfo() *gomock.C
 }
 
 // GetBacklogInfo mocks base method.
-func (m *MockphysicalTaskQueueManager) GetBacklogInfo() *v1.BacklogInfo {
+func (m *MockphysicalTaskQueueManager) GetBacklogInfo(ctx context.Context) (*v1.BacklogInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBacklogInfo")
+	ret := m.ctrl.Call(m, "GetBacklogInfo", ctx)
 	ret0, _ := ret[0].(*v1.BacklogInfo)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetBacklogInfo indicates an expected call of GetBacklogInfo.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) GetBacklogInfo() *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) GetBacklogInfo(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBacklogInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetBacklogInfo))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBacklogInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetBacklogInfo), ctx)
 }
 
 // HasPollerAfter mocks base method.
