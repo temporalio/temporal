@@ -82,7 +82,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
 	}
-	s.logger = log.NewTestLogger()
+	s.logger = log.NewNoopLogger()
 	s.serializer = serialization.NewSerializer()
 	s.setupSuite(
 		[]string{
