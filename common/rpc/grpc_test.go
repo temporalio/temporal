@@ -28,10 +28,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
-	"go.temporal.io/server/common/log"
+	common "go.temporal.io/server/common"
+
 	"go.temporal.io/server/common/serviceerror"
 
 	"google.golang.org/grpc/codes"
@@ -39,33 +39,30 @@ import (
 )
 
 func TestHideUnknownOrInternalErrors(t *testing.T) {
-	mockLogger := log.NewMockLogger(gomock.NewController(t))
 
 	statusOk := status.New(codes.OK, "OK")
-	testHideUnknownOrInternalErrors(t, mockLogger, statusOk, false)
+	testHideUnknownOrInternalErrors(t, statusOk, false)
 
 	statusUnknown := status.New(codes.Unknown, "Unknown")
-	mockLogger.EXPECT().Error(gomock.Any())
-	testHideUnknownOrInternalErrors(t, mockLogger, statusUnknown, true)
+	testHideUnknownOrInternalErrors(t, statusUnknown, true)
 
 	statusInternal := status.New(codes.Internal, "Internal")
-	mockLogger.EXPECT().Error(gomock.Any())
-	testHideUnknownOrInternalErrors(t, mockLogger, statusInternal, true)
+	testHideUnknownOrInternalErrors(t, statusInternal, true)
 }
 
-func testHideUnknownOrInternalErrors(t *testing.T, mockLogger *log.MockLogger, s *status.Status, expectRelpace bool) {
-	err := serviceerror.FromStatus(s)
-	errorMessage := HideUnknownOrInternalErrors(mockLogger, err)
+func testHideUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelpace bool) {
+	err := serviceerror.FromStatus(st)
+	errorMessage := HideUnknownOrInternalErrors(err)
 	if expectRelpace {
-		errorHash := errorMessageHash(err)
-		expectedMessage := fmt.Sprintf("%s (%s)", errorFrontendUnknown.Error(), errorHash)
+		errorHash := common.ErrorHash(err)
+		expectedMessage := fmt.Sprintf("rpc error: code = %s desc = %s (%s)", st.Message(), errorFrontendMasked, errorHash)
 
-		assert.Equal(t, errorMessage.Error(), expectedMessage)
+		assert.Equal(t, expectedMessage, errorMessage.Error())
 	} else {
 		if err == nil {
 			assert.Equal(t, errorMessage, nil)
 		} else {
-			assert.Equal(t, errorMessage.Error(), s.Message())
+			assert.Equal(t, errorMessage.Error(), st.Message())
 		}
 	}
 }
