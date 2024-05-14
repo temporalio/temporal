@@ -320,15 +320,13 @@ func (r *StreamReceiverImpl) processMessages(
 			return streamResp.Err
 		}
 		if err := r.validateAndSetReceiverMode(streamResp.Resp.GetMessages().Priority); err != nil {
-			r.logger.Error("ReplicationTask wrong receiver mode", tag.Error(err))
-			break // sender mode changed, exit loop and let stream reconnect to retry
+			// sender mode changed, exit loop and let stream reconnect to retry
+			return NewStreamError("ReplicationTask wrong receiver mode", err)
 		}
 
 		if err = ValidateTasksHaveSamePriority(streamResp.Resp.GetMessages().Priority, streamResp.Resp.GetMessages().ReplicationTasks...); err != nil {
 			// This should not happen because source side is sending task 1 by 1. Validate here just in case.
-			r.logger.Error("ReplicationTask priority check failed", tag.Error(err))
-			// Todo: Change to write Tasks to DLQ. As resend task will not help here
-			break // exit loop and let stream reconnect to retry task
+			return NewStreamError("ReplicationTask priority check failed", err)
 		}
 		convertedTasks := r.taskConverter.Convert(
 			clusterName,
@@ -340,9 +338,8 @@ func (r *StreamReceiverImpl) processMessages(
 		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
 		taskTracker, taskScheduler, err := r.getTrackerAndSchedulerByPriority(streamResp.Resp.GetMessages().Priority)
 		if err != nil {
-			r.logger.Error("Failed to get task tracker and scheduler", tag.Error(err))
 			// Todo: Change to write Tasks to DLQ. As resend task will not help here
-			break // exit loop and let stream reconnect to retry task
+			return NewStreamError("ReplicationTask wrong priority", err)
 		}
 		for _, task := range taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: exclusiveHighWatermark,
