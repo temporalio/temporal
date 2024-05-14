@@ -34,7 +34,6 @@ import (
 	"github.com/uber-go/tally/v4"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -47,7 +46,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/shard"
 
 	"github.com/stretchr/testify/suite"
@@ -370,15 +368,6 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Succes
 				{ClusterName: "not_current_cluster_1"},
 			},
 		},
-		OutgoingServices: []*persistencespb.NexusOutgoingService{
-			{
-				Version: 1,
-				Name:    "test",
-				Spec: &nexuspb.OutgoingServiceSpec{
-					Url: "https://localhost",
-				},
-			},
-		},
 		IsGlobalNamespace: true,
 	}
 	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
@@ -391,9 +380,6 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Succes
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
 	s.Equal(namespaceId, ns.ID())
-	svc, ok := ns.NexusOutgoingService("test")
-	s.True(ok)
-	protorequire.ProtoEqual(s.T(), nsResponse.OutgoingServices[0].Spec, svc)
 }
 
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_NamespaceNotBelongsToCurrentCluster() {

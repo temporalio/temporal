@@ -34,7 +34,6 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -71,8 +70,7 @@ func (s *FunctionalSuite) TestUserTimers_Sequential() {
 	workflowComplete := false
 	timerCount := int32(4)
 	timerCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if timerCounter < timerCount {
 			timerCounter++
 			buf := new(bytes.Buffer)
@@ -152,12 +150,7 @@ func (s *FunctionalSuite) TestUserTimers_CapDuration() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	timerID := "200-year-timer"
-	wtHandler := func(
-		_ *commonpb.WorkflowExecution,
-		_ *commonpb.WorkflowType,
-		_, _ int64,
-		_ *historypb.History,
-	) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 			Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{

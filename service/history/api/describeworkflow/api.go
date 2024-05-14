@@ -163,7 +163,7 @@ func Invoke(
 		p := &workflowpb.PendingActivityInfo{
 			ActivityId: ai.ActivityId,
 		}
-		if ai.GetUseWorkflowBuildId() != nil {
+		if ai.GetUseWorkflowBuildIdInfo() != nil {
 			p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
 		} else if ai.GetLastIndependentlyAssignedBuildId() != "" {
 			p.AssignedBuildId = &workflowpb.PendingActivityInfo_LastIndependentlyAssignedBuildId{
@@ -331,6 +331,7 @@ func Invoke(
 			}
 		}
 		result.PendingNexusOperations = append(result.PendingNexusOperations, &workflowpb.PendingNexusOperationInfo{
+			Endpoint:                op.Endpoint,
 			Service:                 op.Service,
 			Operation:               op.Operation,
 			OperationId:             op.OperationId,

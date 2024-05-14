@@ -33,7 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -691,12 +690,9 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask() error {
-	currentVersion := r.mutableState.GetCurrentVersion()
-
 	r.mutableState.AddTasks(&tasks.UpsertExecutionVisibilityTask{
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey: r.mutableState.GetWorkflowKey(),
-		Version:     currentVersion, // task processing does not check this version
 	})
 	return nil
 }
@@ -766,6 +762,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey: workflowKey,
 			Version:     lastItem.GetVersion(),
+			Priority:    enumsspb.TASK_PRIORITY_LOW,
 		}}, 1, nil
 	}
 

@@ -32,16 +32,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/clock"
 )
 
 type (
 	RetryPolicySuite struct {
 		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		suite.Suite
-	}
-
-	TestClock struct {
-		currentTime time.Time
 	}
 )
 
@@ -163,8 +160,8 @@ func (s *RetryPolicySuite) TestExpirationInterval() {
 	policy := createPolicy(2 * time.Second).
 		WithExpirationInterval(5 * time.Minute)
 
-	r, clock := createRetrier(policy)
-	clock.moveClock(6 * time.Minute)
+	r, ts := createRetrier(policy)
+	ts.Advance(6 * time.Minute)
 	next := r.NextBackOff()
 
 	s.Equal(done, next)
@@ -174,13 +171,13 @@ func (s *RetryPolicySuite) TestExpirationOverflow() {
 	policy := createPolicy(2 * time.Second).
 		WithExpirationInterval(5 * time.Second)
 
-	r, clock := createRetrier(policy)
+	r, ts := createRetrier(policy)
 	next := r.NextBackOff()
 	min, max := getNextBackoffRange(2 * time.Second)
 	s.True(next >= min, "NextBackoff too low")
 	s.True(next < max, "NextBackoff too high")
 
-	clock.moveClock(2 * time.Second)
+	ts.Advance(2 * time.Second)
 
 	next = r.NextBackOff()
 	min, max = getNextBackoffRange(3 * time.Second)
@@ -193,7 +190,7 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 		WithExpirationInterval(time.Minute).
 		WithMaximumInterval(10 * time.Second)
 
-	r, clock := createRetrier(policy)
+	r, ts := createRetrier(policy)
 	expectedResult := []time.Duration{
 		50 * time.Millisecond,
 		100 * time.Millisecond,
@@ -219,7 +216,7 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 			min, max := getNextBackoffRange(expected)
 			s.True(next >= min, "NextBackoff too low: actual: %v, min: %v", next, min)
 			s.True(next < max, "NextBackoff too high: actual: %v, max: %v", next, max)
-			clock.moveClock(expected)
+			ts.Advance(expected)
 		}
 	}
 }
@@ -229,31 +226,23 @@ func (s *RetryPolicySuite) TestNoMaxAttempts() {
 		WithExpirationInterval(time.Minute).
 		WithMaximumInterval(10 * time.Second)
 
-	r, clock := createRetrier(policy)
+	r, ts := createRetrier(policy)
 	for i := 0; i < 100; i++ {
 		next := r.NextBackOff()
 		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
-		clock.moveClock(next)
+		ts.Advance(next)
 	}
 }
 
 func (s *RetryPolicySuite) TestUnbounded() {
 	policy := createPolicy(50 * time.Millisecond)
 
-	r, clock := createRetrier(policy)
+	r, ts := createRetrier(policy)
 	for i := 0; i < 100; i++ {
 		next := r.NextBackOff()
 		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
-		clock.moveClock(next)
+		ts.Advance(next)
 	}
-}
-
-func (c *TestClock) Now() time.Time {
-	return c.currentTime
-}
-
-func (c *TestClock) moveClock(duration time.Duration) {
-	c.currentTime = c.currentTime.Add(duration)
 }
 
 func createPolicy(initialInterval time.Duration) *ExponentialRetryPolicy {
@@ -266,9 +255,10 @@ func createPolicy(initialInterval time.Duration) *ExponentialRetryPolicy {
 	return policy
 }
 
-func createRetrier(policy RetryPolicy) (Retrier, *TestClock) {
-	clock := &TestClock{currentTime: time.Time{}}
-	return NewRetrier(policy, clock), clock
+func createRetrier(policy RetryPolicy) (Retrier, *clock.EventTimeSource) {
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Time{})
+	return NewRetrier(policy, ts), ts
 }
 
 func getNextBackoffRange(duration time.Duration) (time.Duration, time.Duration) {

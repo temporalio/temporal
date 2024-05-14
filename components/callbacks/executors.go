@@ -32,6 +32,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 )
@@ -49,7 +50,8 @@ type CanGetNexusCompletion interface {
 type HTTPCaller func(*http.Request) (*http.Response, error)
 
 type ActiveExecutorOptions struct {
-	CallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
+	NamespaceRegistry namespace.Registry
+	CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
 }
 
 func RegisterExecutor(
@@ -79,15 +81,23 @@ func (e activeExecutor) executeInvocationTask(
 	ref hsm.Ref,
 	task InvocationTask,
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, e.config.InvocationTaskTimeout())
-	defer cancel()
+	ns, err := e.options.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
+	if err != nil {
+		return fmt.Errorf("failed to get namespace by ID: %w", err)
+	}
 
 	url, completion, err := e.loadUrlAndCallback(ctx, env, ref)
 	if err != nil {
 		return err
 	}
 
-	request, err := nexus.NewCompletionHTTPRequest(ctx, url, completion)
+	callCtx, cancel := context.WithTimeout(
+		ctx,
+		e.config.RequestTimeout(ns.Name().String(), task.Destination),
+	)
+	defer cancel()
+
+	request, err := nexus.NewCompletionHTTPRequest(callCtx, url, completion)
 	if err != nil {
 		return queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),

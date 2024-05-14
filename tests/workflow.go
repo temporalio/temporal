@@ -137,7 +137,6 @@ func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 	}
 
 	for i, tc := range testCases {
-		tc := tc
 		s.Run(tc.name, func() {
 			id := fmt.Sprintf("functional-start-workflow-terminate-test-%v", i)
 
@@ -211,8 +210,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {
 	s.NoError(startErr)
 
 	delayEndTime := time.Now()
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		delayEndTime = time.Now()
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -274,8 +272,7 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -420,8 +417,7 @@ func (s *FunctionalSuite) TestSequentialWorkflow() {
 	workflowComplete := false
 	activityCount := int32(10)
 	activityCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -518,8 +514,7 @@ func (s *FunctionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	commandCount := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if commandCount < 2 {
 			commandCount++
@@ -592,8 +587,7 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	activityCount := int32(4)
 	activityCounter := int32(0)
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -712,9 +706,8 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 
 	attemptCount := 1
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		executions = append(executions, execution)
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		executions = append(executions, task.WorkflowExecution)
 		attemptCount++
 		if attemptCount > maximumAttempts {
 			return []*commandpb.Command{
@@ -844,9 +837,8 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) workflowTaskHandler {
 		attemptCount := 1
 
-		wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-			previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-			*executions = append(*executions, execution)
+		wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			*executions = append(*executions, task.WorkflowExecution)
 			attemptCount++
 			if attemptCount > attempts {
 				return []*commandpb.Command{
@@ -986,7 +978,10 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 }
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
-	run := func(tv *testvars.TestVars, request *workflowservice.ExecuteMultiOperationRequest) {
+	runMultiOp := func(
+		tv *testvars.TestVars,
+		request *workflowservice.ExecuteMultiOperationRequest,
+	) (resp *workflowservice.ExecuteMultiOperationResponse, retErr error) {
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
@@ -995,132 +990,167 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			Namespace: s.namespace,
 			TaskQueue: tv.TaskQueue(),
 			Identity:  tv.WorkerIdentity(),
-			WorkflowTaskHandler: func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+			WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 				return nil, nil
 			},
 			MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-				updRequestMsg := task.Messages[0]
-				return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+				if len(task.Messages) > 0 {
+					updRequestMsg := task.Messages[0]
+					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+				}
+				return nil, nil
 			},
 			Logger: s.Logger,
 			T:      s.T(),
 		}
 
-		respChan := make(chan *workflowservice.ExecuteMultiOperationResponse)
+		// issue multi operation request
+		done := make(chan struct{})
 		go func() {
-			resp, err := s.engine.ExecuteMultiOperation(NewContext(), request)
-			s.NoError(err)
-			respChan <- resp
+			resp, retErr = s.engine.ExecuteMultiOperation(NewContext(), request)
+			done <- struct{}{}
 		}()
 
 		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 		s.NoError(err)
 
+		// wait for request to complete
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		select {
 		case <-ctx.Done():
 			s.Fail("timed out waiting for result of ExecuteMultiOperation")
-		case resp := <-respChan:
-			s.Len(resp.Responses, 2)
-
-			startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
-			s.NotZero(startRes.RunId)
-
-			updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
-			s.NotZero(updateRes.Outcome.String())
-
-			// make sure there's no lock contention
-			s.Empty(capture.Snapshot()[metrics.TaskWorkflowBusyCounter.Name()])
+		case <-done:
 		}
+
+		// make sure there's no lock contention
+		s.Empty(capture.Snapshot()[metrics.TaskWorkflowBusyCounter.Name()])
+
+		return
 	}
 
 	s.Run("StartWorkflow + UpdateWorkflow", func() {
-		s.Run("workflow is not running", func() {
-			tv := testvars.New(s.T().Name())
-
-			run(tv,
+		runUpdateWithStart := func(
+			tv *testvars.TestVars,
+			startReq *workflowservice.StartWorkflowExecutionRequest,
+			updateReq *workflowservice.UpdateWorkflowExecutionRequest,
+		) (*workflowservice.ExecuteMultiOperationResponse, error) {
+			resp, err := runMultiOp(tv,
 				&workflowservice.ExecuteMultiOperationRequest{
 					Namespace: s.namespace,
 					Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 						{
 							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-								StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
-									Namespace:    s.namespace,
-									RequestId:    uuid.New(),
-									WorkflowId:   tv.WorkflowID(),
-									WorkflowType: tv.WorkflowType(),
-									TaskQueue:    tv.TaskQueue(),
-									Identity:     tv.WorkerIdentity(),
-								},
+								StartWorkflow: startReq,
 							},
 						},
 						{
 							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-								UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
-									Namespace: s.namespace,
-									Request: &updatepb.Request{
-										Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-										Input: &updatepb.Input{
-											Name: tv.Any().String(),
-											Args: tv.Any().Payloads(),
-										},
-									},
-									WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
-									WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-								},
+								UpdateWorkflow: updateReq,
 							},
 						},
 					},
 				})
-		})
 
-		s.Run("workflow is running", func() {
-			tv := testvars.New(s.T().Name())
+			if err == nil {
+				s.Len(resp.Responses, 2)
 
-			// start Workflow first
-			startWorkflowReq := &workflowservice.StartWorkflowExecutionRequest{
+				startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
+				s.NotZero(startRes.RunId)
+
+				updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
+				s.NotNil(updateRes.Outcome)
+				s.NotZero(updateRes.Outcome.String())
+			}
+
+			return resp, err
+		}
+
+		startWorkflowReq := func(tv *testvars.TestVars) *workflowservice.StartWorkflowExecutionRequest {
+			return &workflowservice.StartWorkflowExecutionRequest{
 				Namespace:    s.namespace,
-				RequestId:    uuid.New(),
 				WorkflowId:   tv.WorkflowID(),
 				WorkflowType: tv.WorkflowType(),
 				TaskQueue:    tv.TaskQueue(),
 				Identity:     tv.WorkerIdentity(),
 			}
-			_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq)
-			s.NoError(err)
+		}
 
-			run(tv,
-				&workflowservice.ExecuteMultiOperationRequest{
-					Namespace: s.namespace,
-					Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
-						{
-							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-								StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
-									Namespace:    s.namespace,
-									RequestId:    uuid.New(),
-									WorkflowId:   tv.WorkflowID(),
-									WorkflowType: tv.WorkflowType(),
-									TaskQueue:    tv.TaskQueue(),
-									Identity:     tv.WorkerIdentity(),
-								},
-							},
-						},
-						{
-							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-								UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
-									Namespace: s.namespace,
-									Request: &updatepb.Request{
-										Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
-										Input: &updatepb.Input{Name: "UPDATE"},
-									},
-									WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
-									WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-								},
-							},
-						},
-					},
-				})
+		updateWorkflowReq := func(tv *testvars.TestVars) *workflowservice.UpdateWorkflowExecutionRequest {
+			return &workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				Request: &updatepb.Request{
+					Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+					Input: &updatepb.Input{Name: tv.Any().String(), Args: tv.Any().Payloads()},
+				},
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+				WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+			}
+		}
+
+		s.Run("workflow is not running", func() {
+			tv := testvars.New(s.T().Name())
+
+			_, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
+			s.NoError(err)
+		})
+
+		s.Run("workflow is running", func() {
+
+			s.Run("workflow id reuse policy use-existing: only send update", func() {
+				tv := testvars.New(s.T().Name())
+
+				_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
+				s.NoError(err)
+
+				req := startWorkflowReq(tv)
+				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+
+				s.NoError(err)
+			})
+
+			s.Run("workflow id reuse policy terminate-existing: terminate workflow first, then start and update", func() {
+				tv := testvars.New(s.T().Name())
+
+				initReq := startWorkflowReq(tv)
+				initReq.TaskQueue.Name = initReq.TaskQueue.Name + "-init" // avoid race condition with poller
+				initWF, err := s.engine.StartWorkflowExecution(NewContext(), initReq)
+				s.NoError(err)
+
+				req := startWorkflowReq(tv)
+				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+
+				s.NoError(err)
+
+				descResp, err := s.engine.DescribeWorkflowExecution(NewContext(),
+					&workflowservice.DescribeWorkflowExecutionRequest{
+						Namespace: s.namespace,
+						Execution: &commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: initWF.RunId},
+					})
+
+				s.NoError(err)
+				s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+			})
+
+			s.Run("workflow id reuse policy fail: abort multi operation", func() {
+				tv := testvars.New(s.T().Name())
+
+				_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
+				s.NoError(err)
+
+				req := startWorkflowReq(tv)
+				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+
+				s.NotNil(err)
+				s.Equal(err.Error(), "MultiOperation could not be executed.")
+				errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
+				s.Len(errs, 2)
+				s.Contains(errs[0].Error(), "Workflow execution is already running")
+				s.Equal("Operation was aborted.", errs[1].Error())
+			})
 		})
 	})
 }

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 func GetAndUpdateWorkflowWithNew(
@@ -113,5 +114,13 @@ func UpdateWorkflowWithNew(
 		updateErr = workflowLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
 	}
 
-	return updateErr
+	if updateErr != nil {
+		return updateErr
+	}
+
+	if postActions.AbortUpdates {
+		workflowLease.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	}
+
+	return nil
 }

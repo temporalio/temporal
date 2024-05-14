@@ -28,13 +28,15 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
+	"text/template"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
@@ -43,8 +45,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -52,7 +52,11 @@ var retryable4xxErrorTypes = []int{
 	http.StatusTooManyRequests,
 }
 
-type ClientProvider func(queues.NamespaceIDAndDestination, *nexuspb.OutgoingServiceSpec) (*nexus.Client, error)
+type ClientProvider func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error)
+
+// EndpointChecker checks if an endpoint exists, should return serviceerror.NotFound if the endpoint does not exist or
+// any other error to indicate lookup has failed.
+type EndpointChecker func(ctx context.Context, namespaceName, endpointName string) error
 
 type ActiveExecutorOptions struct {
 	fx.In
@@ -61,6 +65,7 @@ type ActiveExecutorOptions struct {
 	NamespaceRegistry      namespace.Registry
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
+	EndpointChecker        EndpointChecker
 }
 
 func RegisterExecutor(
@@ -74,7 +79,13 @@ func RegisterExecutor(
 	if err := hsm.RegisterExecutor(registry, TaskTypeBackoff.ID, exec.executeBackoffTask); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutor(registry, TaskTypeTimeout.ID, exec.executeTimeoutTask)
+	if err := hsm.RegisterExecutor(registry, TaskTypeTimeout.ID, exec.executeTimeoutTask); err != nil {
+		return err
+	}
+	if err := hsm.RegisterExecutor(registry, TaskTypeCancelation.ID, exec.executeCancelationTask); err != nil {
+		return err
+	}
+	return hsm.RegisterExecutor(registry, TaskTypeCancelationBackoff.ID, exec.executeCancelationBackoffTask)
 }
 
 type activeExecutor struct {
@@ -86,18 +97,17 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, e.Config.InvocationTaskTimeout(ns.Name().String()))
-	defer cancel()
-
-	service, err := e.NamespaceRegistry.NexusOutgoingService(namespace.ID(ref.WorkflowKey.NamespaceID), task.Destination)
-	if err != nil {
-		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			// The mapping doesn't exist. Assume the registry's NexusOutgoingService will readthrough to verify this
-			// isn't due to propagation delay and this error indicates that the service mapping was removed and the task
-			// should immediately fail.
-			return queues.NewUnprocessableTaskError(fmt.Sprintf("cannot find service in namespace outgoing task mapping: %s", task.Destination))
+	if err := e.EndpointChecker(ctx, ns.Name().String(), task.Destination); err != nil {
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			// The endpoint is not registered, immediately fail the invocation.
+			return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
+				Message: "endpoint not registered",
+				Response: &http.Response{
+					StatusCode: http.StatusNotFound,
+				},
+			})
 		}
-		return fmt.Errorf("failed to get nexus outgoing service: %w", err)
+		return err
 	}
 
 	args, err := e.loadOperationArgs(ctx, env, ref)
@@ -106,8 +116,32 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 	}
 
 	header := nexus.Header(args.header)
-	callbackURL := service.PublicCallbackUrl
-	client, err := e.ClientProvider(queues.NamespaceIDAndDestination{NamespaceID: ref.WorkflowKey.GetNamespaceID(), Destination: task.Destination}, service)
+	if e.Config.CallbackURLTemplate() == "unset" {
+		return serviceerror.NewInternal(fmt.Sprintf("dynamic config %q is unset", CallbackURLTemplate.Key().String()))
+	}
+	// TODO(bergundy): Consider caching this template.
+	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(e.Config.CallbackURLTemplate())
+	if err != nil {
+		return fmt.Errorf("failed to parse callback URL template: %w", err)
+	}
+	builder := &strings.Builder{}
+	err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
+		NamespaceName: ns.Name().String(),
+		NamespaceID:   ns.ID().String(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to format callback URL: %w", err)
+	}
+	callbackURL := builder.String()
+
+	client, err := e.ClientProvider(
+		ctx,
+		queues.NamespaceIDAndDestination{
+			NamespaceID: ref.WorkflowKey.GetNamespaceID(),
+			Destination: task.Destination,
+		},
+		args.service,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to get a client: %w", err)
 	}
@@ -127,7 +161,14 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
-	rawResult, callErr := client.StartOperation(ctx, args.operationName, args.payload, nexus.StartOperationOptions{
+
+	callCtx, cancel := context.WithTimeout(
+		ctx,
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+	)
+	defer cancel()
+
+	rawResult, callErr := client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
 		Header:      header,
 		CallbackURL: callbackURL,
 		RequestID:   args.requestID,
@@ -164,15 +205,16 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 	return nil
 }
 
-type operationArgs struct {
-	operationName            string
+type startArgs struct {
+	service                  string
+	operation                string
 	requestID                string
 	header                   map[string]string
 	payload                  *commonpb.Payload
 	namespaceFailoverVersion int64
 }
 
-func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args operationArgs, err error) {
+func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := checkParentIsRunning(node); err != nil {
@@ -182,7 +224,9 @@ func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environme
 		if err != nil {
 			return err
 		}
-		args.operationName = operation.Operation
+
+		args.service = operation.Service
+		args.operation = operation.Operation
 		args.requestID = operation.RequestId
 		eventToken = operation.ScheduledEventToken
 		event, err := node.LoadHistoryEvent(ctx, eventToken)
@@ -242,6 +286,7 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 	}
 	var unexpectedResponseError *nexus.UnexpectedResponseError
 	var opFailedError *nexus.UnsuccessfulOperationError
+
 	if errors.As(callErr, &opFailedError) {
 		attemptTime := env.Now()
 		return handleUnsuccessfulOperationError(node, operation, opFailedError, &attemptTime)
@@ -353,14 +398,138 @@ func (e activeExecutor) executeTimeoutTask(ctx context.Context, env hsm.Environm
 	})
 }
 
+func (e activeExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {
+	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
+	if err != nil {
+		return fmt.Errorf("failed to get namespace by ID: %w", err)
+	}
+	if err := e.EndpointChecker(ctx, ns.Name().String(), task.Destination); err != nil {
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			// The endpoint is not registered, immediately fail the invocation.
+			return e.saveCancelationResult(ctx, env, ref, &nexus.UnexpectedResponseError{
+				Message: "endpoint not registered",
+				Response: &http.Response{
+					StatusCode: http.StatusNotFound,
+				},
+			})
+		}
+		return err
+	}
+
+	args, err := e.loadArgsForCancelation(ctx, env, ref)
+	if err != nil {
+		return fmt.Errorf("failed to load args: %w", err)
+	}
+	client, err := e.ClientProvider(
+		ctx,
+		queues.NamespaceIDAndDestination{
+			NamespaceID: ref.WorkflowKey.NamespaceID,
+			Destination: task.Destination,
+		},
+		args.service,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get client: %w", err)
+	}
+	handle, err := client.NewHandle(args.operation, args.operationID)
+	if err != nil {
+		return fmt.Errorf("failed to get handle for operation: %w", err)
+	}
+
+	callCtx, cancel := context.WithTimeout(
+		ctx,
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+	)
+	defer cancel()
+
+	callErr := handle.Cancel(callCtx, nexus.CancelOperationOptions{})
+	return e.saveCancelationResult(ctx, env, ref, callErr)
+}
+
+type cancelArgs struct {
+	service, operation, operationID string
+}
+
+// loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
+// given reference is pointing to.
+func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args cancelArgs, err error) {
+	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
+		if err := checkParentIsRunning(n.Parent); err != nil {
+			return err
+		}
+		op, err := hsm.MachineData[Operation](n.Parent)
+		if err != nil {
+			return err
+		}
+		if !TransitionCanceled.Possible(op) {
+			// Operation is already in a terminal state.
+			return fmt.Errorf("%w: operation already in terminal state", consts.ErrStaleReference)
+		}
+		args.service = op.Service
+		args.operation = op.Operation
+		args.operationID = op.OperationId
+		return nil
+	})
+	return
+}
+
+func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
+	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
+		if err := checkParentIsRunning(n.Parent); err != nil {
+			return err
+		}
+		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
+			if callErr != nil {
+				var unexpectedResponseErr *nexus.UnexpectedResponseError
+				if errors.As(callErr, &unexpectedResponseErr) {
+					response := unexpectedResponseErr.Response
+					if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
+						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
+							Time: env.Now(),
+							Err:  callErr,
+							Node: n,
+						})
+					}
+				}
+				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
+					Time: env.Now(),
+					Err:  callErr,
+					Node: n,
+				})
+			}
+			// Cancelation request transmitted successfully.
+			// The operation is not yet canceled and may ignore our request, the outcome will be known via the
+			// completion callback.
+			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
+				Time: env.Now(),
+				Node: n,
+			})
+		})
+	})
+}
+
+func (e activeExecutor) executeCancelationBackoffTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationBackoffTask) error {
+	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		if err := checkParentIsRunning(node.Parent); err != nil {
+			return err
+		}
+		return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {
+			return TransitionCancelationRescheduled.Apply(c, EventCancelationRescheduled{
+				Node: node,
+			})
+		})
+	})
+}
+
 func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
 	return &failurepb.Failure{
 		Message: "nexus operation completed unsuccessfully",
 		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 			NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
-				OperationId:      operation.OperationId,
-				Operation:        operation.Operation,
+				Endpoint:         operation.Endpoint,
 				Service:          operation.Service,
+				Operation:        operation.Operation,
+				OperationId:      operation.OperationId,
 				ScheduledEventId: scheduledEventID,
 			},
 		},

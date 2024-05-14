@@ -43,20 +43,11 @@ type (
 		TimeoutType         enumspb.TimeoutType
 		EventID             int64
 		Attempt             int32
-		Version             int64
 	}
 )
 
 func (a *ActivityTimeoutTask) GetKey() Key {
 	return NewKey(a.VisibilityTimestamp, a.TaskID)
-}
-
-func (a *ActivityTimeoutTask) GetVersion() int64 {
-	return a.Version
-}
-
-func (a *ActivityTimeoutTask) SetVersion(version int64) {
-	a.Version = version
 }
 
 func (a *ActivityTimeoutTask) GetTaskID() int64 {

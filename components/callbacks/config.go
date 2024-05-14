@@ -28,15 +28,18 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-// InvocationTaskTimeout is the timeout for executing a single callback invocation task.
-const InvocationTaskTimeout = dynamicconfig.Key("component.callbacks.invocation.taskTimeout")
+var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
+	"component.callbacks.request.timeout",
+	time.Second*10,
+	`RequestTimeout is the timeout for executing a single callback request.`,
+)
 
 type Config struct {
-	InvocationTaskTimeout dynamicconfig.DurationPropertyFn
+	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		InvocationTaskTimeout: dc.GetDurationProperty(InvocationTaskTimeout, time.Second*10),
+		RequestTimeout: RequestTimeout.Get(dc),
 	}
 }

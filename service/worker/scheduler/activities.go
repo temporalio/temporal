@@ -59,8 +59,9 @@ type (
 		namespaceID namespace.ID
 		// Rate limiter for start workflow requests. Note that the scope is all schedules in
 		// this namespace on this worker.
-		startWorkflowRateLimiter     quotas.RateLimiter
-		singleResultStorageSizePerNs dynamicconfig.IntPropertyFnWithNamespaceFilter
+		startWorkflowRateLimiter quotas.RateLimiter
+		maxBlobSize              dynamicconfig.IntPropertyFn
+		localActivitySleepLimit  dynamicconfig.DurationPropertyFn
 	}
 
 	errFollow string
@@ -118,7 +119,7 @@ func (a *activities) waitForRateLimiterPermission(req *schedspb.StartWorkflowReq
 		return translateError(errBlocked, "StartWorkflowExecution")
 	}
 	delay := reservation.Delay()
-	if delay > 1*time.Second {
+	if delay > a.localActivitySleepLimit() {
 		// for a long sleep, ask the workflow to do it in workflow logic
 		return temporal.NewNonRetryableApplicationError(
 			rateLimitedErrorType, rateLimitedErrorType, nil, rateLimitedDetails{Delay: delay})
@@ -178,7 +179,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 		req,
 		pollRes.WorkflowStatus,
 		a.Logger,
-		a.singleResultStorageSizePerNs(a.namespace.String())-recordOverheadSize,
+		a.maxBlobSize()-recordOverheadSize,
 	)
 	if pollRes.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return rb.Build(nil)
@@ -297,23 +298,23 @@ func translateError(err error, msgPrefix string) error {
 }
 
 type responseBuilder struct {
-	request                 *schedspb.WatchWorkflowRequest
-	workflowStatus          enumspb.WorkflowExecutionStatus
-	logger                  log.Logger
-	resultStorageNumberSize int
+	request        *schedspb.WatchWorkflowRequest
+	workflowStatus enumspb.WorkflowExecutionStatus
+	logger         log.Logger
+	maxBlobSize    int
 }
 
 func newResponseBuilder(
 	request *schedspb.WatchWorkflowRequest,
 	workflowStatus enumspb.WorkflowExecutionStatus,
 	logger log.Logger,
-	resultStorageSize int,
+	maxBlobSize int,
 ) responseBuilder {
 	return responseBuilder{
-		request:                 request,
-		workflowStatus:          workflowStatus,
-		logger:                  logger,
-		resultStorageNumberSize: resultStorageSize,
+		request:        request,
+		workflowStatus: workflowStatus,
+		logger:         logger,
+		maxBlobSize:    maxBlobSize,
 	}
 }
 
@@ -377,7 +378,7 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 }
 
 func (r responseBuilder) isTooBig(m proto.Message) bool {
-	return proto.Size(m) > r.resultStorageNumberSize
+	return proto.Size(m) > r.maxBlobSize
 }
 
 func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure) *schedspb.WatchWorkflowResponse {

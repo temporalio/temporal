@@ -34,7 +34,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -77,7 +76,6 @@ type (
 		notificationVersion         int64
 
 		customSearchAttributesMapper CustomSearchAttributesMapper
-		outgoingNexusServicesByName  map[string]*nexuspb.OutgoingServiceSpec
 	}
 
 	CustomSearchAttributesMapper struct {
@@ -96,10 +94,6 @@ func NewID() ID {
 }
 
 func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
-	outgoingNexusServicesByName := make(map[string]*nexuspb.OutgoingServiceSpec, len(record.Namespace.OutgoingServices))
-	for _, svc := range record.Namespace.OutgoingServices {
-		outgoingNexusServicesByName[svc.Name] = svc.Spec
-	}
 	return &Namespace{
 		info:                        record.Namespace.Info,
 		config:                      record.Namespace.Config,
@@ -113,16 +107,10 @@ func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
 			fieldToAlias: record.Namespace.Config.CustomSearchAttributeAliases,
 			aliasToField: util.InverseMap(record.Namespace.Config.CustomSearchAttributeAliases),
 		},
-		outgoingNexusServicesByName: outgoingNexusServicesByName,
 	}
 }
 
 func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Namespace {
-	outgoingNexusServicesByName := make(map[string]*nexuspb.OutgoingServiceSpec, len(response.OutgoingServices))
-	for _, svc := range response.OutgoingServices {
-		outgoingNexusServicesByName[svc.Name] = svc.Spec
-	}
-
 	info := &persistencespb.NamespaceInfo{
 		Id:          response.GetInfo().GetId(),
 		Name:        response.GetInfo().GetName(),
@@ -146,13 +134,12 @@ func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Na
 		FailoverHistory:   convertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
 	}
 	return &Namespace{
-		info:                        info,
-		config:                      config,
-		replicationConfig:           replicationConfig,
-		configVersion:               response.GetConfigVersion(),
-		failoverVersion:             response.GetFailoverVersion(),
-		isGlobalNamespace:           response.GetIsGlobalNamespace(),
-		outgoingNexusServicesByName: outgoingNexusServicesByName,
+		info:              info,
+		config:            config,
+		replicationConfig: replicationConfig,
+		configVersion:     response.GetConfigVersion(),
+		failoverVersion:   response.GetFailoverVersion(),
+		isGlobalNamespace: response.GetIsGlobalNamespace(),
 	}
 }
 
@@ -333,11 +320,6 @@ func (ns *Namespace) Retention() time.Duration {
 
 func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
 	return ns.customSearchAttributesMapper
-}
-
-func (ns *Namespace) NexusOutgoingService(name string) (spec *nexuspb.OutgoingServiceSpec, ok bool) {
-	spec, ok = ns.outgoingNexusServicesByName[name]
-	return
 }
 
 // Error returns the reason associated with this bad binary.

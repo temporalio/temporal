@@ -51,6 +51,8 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -541,7 +543,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 			hasError = true
 		} else {
 			// set to default in case the whole MultOp request
-			err = serviceerror.NewMultiOperationAborted("Operation was aborted.")
+			err = errMultiOpAborted
 
 			switch {
 			case lastWorkflowID == "":
@@ -2073,7 +2075,6 @@ func (wh *WorkflowHandler) DeleteWorkflowExecution(ctx context.Context, request 
 	_, err = wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
 		NamespaceId:        namespaceID.String(),
 		WorkflowExecution:  request.GetWorkflowExecution(),
-		WorkflowVersion:    common.EmptyVersion,
 		ClosedWorkflowOnly: false,
 	})
 	if err != nil {
@@ -2721,7 +2722,48 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	return matchingResponse.DescResponse, nil
+	resp := matchingResponse.DescResponse
+	// Manually parse unknown fields to handle proto incompatibility.
+	// TODO: remove this after 1.24.0-m3
+	if resp == nil {
+		resp = &workflowservice.DescribeTaskQueueResponse{}
+		unknown := []byte(matchingResponse.ProtoReflect().GetUnknown())
+		for len(unknown) > 0 {
+			num, typ, n := protowire.ConsumeTag(unknown)
+			if n < 0 {
+				break
+			}
+			unknown = unknown[n:]
+			if typ != protowire.BytesType {
+				break
+			}
+			msg, n := protowire.ConsumeBytes(unknown)
+			if n < 0 {
+				break
+			}
+			unknown = unknown[n:]
+			switch num {
+			case 1:
+				// msg is either a temporal.api.workflowservice.v1.DescribeTaskQueueResponse (new) or repeated temporal.api.taskqueue.v1.PollerInfo (old)
+				// try DescribeTaskQueueResponse first
+				var dtqr workflowservice.DescribeTaskQueueResponse
+				var pi taskqueuepb.PollerInfo
+				if err := proto.Unmarshal(msg, &dtqr); err == nil {
+					// merge this into the response, to avoid losing data in case this was a spurious success
+					proto.Merge(resp, &dtqr)
+				} else if err := proto.Unmarshal(msg, &pi); err == nil {
+					resp.Pollers = append(resp.Pollers, &pi)
+				}
+			case 2:
+				// msg should be a temporal.api.taskqueue.v1.TaskQueueStatus
+				var tqstatus taskqueuepb.TaskQueueStatus
+				if err := proto.Unmarshal(msg, &tqstatus); err == nil {
+					resp.TaskQueueStatus = &tqstatus
+				}
+			}
+		}
+	}
+	return resp, nil
 }
 
 // GetClusterInfo return information about Temporal deployment.
@@ -3512,6 +3554,13 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
+	}
+
+	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		metrics.WorkflowExecutionUpdateWaitStageAccepted.With(wh.metricsScope(ctx)).Record(1)
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		metrics.WorkflowExecutionUpdateWaitStageCompleted.With(wh.metricsScope(ctx)).Record(1)
 	}
 
 	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{

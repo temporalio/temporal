@@ -37,7 +37,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -369,7 +368,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 
-	event, err := mutableState.AddWorkflowExecutionStartedEvent(
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
@@ -404,7 +403,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionStarted(
 		gomock.Any(),
-		s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, visibilityTask, mutableState, backoff, taskQueueName),
+		s.createRecordWorkflowExecutionStartedRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
 	).Return(nil)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
@@ -445,8 +444,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
-		Version: s.version,
-		TaskID:  taskID,
+		TaskID: taskID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)
@@ -501,8 +499,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties()
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
-		Version: s.version,
-		TaskID:  taskID,
+		TaskID: taskID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(
@@ -624,10 +621,8 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
 	namespaceName namespace.Name,
-	startEvent *historypb.HistoryEvent,
 	task *tasks.StartExecutionVisibilityTask,
 	mutableState workflow.MutableState,
-	backoff time.Duration,
 	taskQueueName string,
 ) gomock.Matcher {
 	return protomock.Eq(&manager.RecordWorkflowExecutionStartedRequest{

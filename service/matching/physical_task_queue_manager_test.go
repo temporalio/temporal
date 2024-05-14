@@ -109,7 +109,7 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	poller, _ := runOneShotPoller(context.Background(), tqm)
 	defer poller.Cancel()
 
-	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
+	sync, err := tqm.TrySyncMatch(context.TODO(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{},
 		source:   enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
@@ -129,12 +129,11 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 
 	// TQM started succesfully with an ID block of size 1. Perform one send
 	// without a poller to consume the one task ID from the reserved block.
-	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
+	err := tqm.SpoolTask(addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
 		source: enumsspb.TASK_SOURCE_HISTORY})
-	require.False(t, sync)
 	require.NoError(t, err)
 
 	// TQM's ID block should be empty so the next AddTask will trigger an
@@ -142,14 +141,13 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// another service instance has become the owner of the partition
 	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
 
-	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
+	err = tqm.SpoolTask(addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
 		source: enumsspb.TASK_SOURCE_HISTORY,
 	})
 	require.NoError(t, err)
-	require.False(t, sync)
 }
 
 // TODO: this test probably should go to backlog_manager_test
@@ -174,21 +172,20 @@ func TestReaderSignaling(t *testing.T) {
 
 	clearNotifications()
 
-	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
+	err := tqm.SpoolTask(addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
 		source: enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
-	require.False(t, sync)
 	require.Len(t, readerNotifications, 1,
-		"Sync match failure with successful db write should signal taskReader")
+		"Spool task should signal taskReader")
 
 	clearNotifications()
 	poller, _ := runOneShotPoller(context.Background(), tqm)
 	defer poller.Cancel()
 
-	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
+	sync, err := tqm.TrySyncMatch(context.TODO(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
@@ -342,7 +339,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	defer controller.Finish()
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 
@@ -411,14 +408,8 @@ func TestAddTaskStandby(t *testing.T) {
 		source: enumsspb.TASK_SOURCE_HISTORY,
 	}
 
-	syncMatch, err := tlm.AddTask(context.Background(), addTaskParam)
+	err := tlm.SpoolTask(addTaskParam)
 	require.Equal(t, errShutdown, err) // task writer was stopped above
-	require.False(t, syncMatch)
-
-	addTaskParam.forwardedFrom = "from child partition"
-	syncMatch, err = tlm.AddTask(context.Background(), addTaskParam)
-	require.Equal(t, errRemoteSyncMatchFailed, err) // should not persist the task
-	require.False(t, syncMatch)
 }
 
 func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
@@ -427,7 +418,7 @@ func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Second)
+	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 
@@ -447,7 +438,7 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	cfg.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 

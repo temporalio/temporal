@@ -68,6 +68,10 @@ type (
 		Constraints Constraints
 		Value       any
 	}
+	TypedConstrainedValue[T any] struct {
+		Constraints Constraints
+		Value       T
+	}
 
 	// Constraints describe under what conditions a ConstrainedValue should be used.
 	// There are few standard "constraint precedence orders" that the server uses:
@@ -98,6 +102,7 @@ type (
 		TaskQueueType enumspb.TaskQueueType
 		ShardID       int32
 		TaskType      enumsspb.TaskType
+		Destination   string
 	}
 )
 

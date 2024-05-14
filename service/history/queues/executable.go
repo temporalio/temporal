@@ -485,7 +485,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			e.attempt++
 			if e.attempt > taskCriticalLogMetricAttempts {
 				metrics.TaskAttempt.With(e.taggedMetricsHandler).Record(int64(e.attempt))
-				e.logger.Error("Critical error processing task, retrying.", tag.Attempt(int32(e.attempt)), tag.Error(err), tag.OperationCritical)
+				e.logger.Error("Critical error processing task, retrying.",
+					tag.Attempt(int32(e.attempt)),
+					tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
+					tag.Error(err),
+					tag.OperationCritical)
 			}
 		}
 	}()
@@ -493,11 +497,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if len(e.dlqErrorPattern()) > 0 {
 		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
 		if mErr != nil {
-			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern))
+			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
 		} else if match {
 			e.logger.Error(
 				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
-					dynamicconfig.HistoryTaskDLQErrorPattern),
+					dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
 				tag.Error(err),
 				tag.ErrorType(err))
 			e.terminalFailureCause = err
@@ -541,7 +545,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
-			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
+			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
 		metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)

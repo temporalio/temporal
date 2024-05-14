@@ -34,27 +34,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
-	commonspb "go.temporal.io/server/api/common/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/common/channel"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/utf8validator"
-	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/worker/dlq"
-
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -62,15 +47,24 @@ import (
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/channel"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
@@ -86,11 +80,15 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/utf8validator"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
+	"go.temporal.io/server/service/worker/dlq"
 )
 
 const (
@@ -1762,7 +1760,6 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		FailoverVersion:   resp.Namespace.GetFailoverVersion(),
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
-		OutgoingServices:  resp.Namespace.GetOutgoingServices(),
 	}
 	return nsResponse, nil
 }
