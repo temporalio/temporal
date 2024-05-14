@@ -41,7 +41,11 @@ import (
 )
 
 const (
-	waitForPersistence = 15 * time.Second
+	// Internal task processing for DeleteExecutionTask checks if there is no pending CloseExecutionTask
+	// comparing ack levels of the last processed task and DeleteExecutionTask TaskID.
+	// Queue states/ack levels are updated with delay ("history.transferProcessorUpdateAckInterval", default 30s),
+	// therefore processing of DeleteExecutionTask can take up to 30 seconds.
+	waitForTaskProcessing = 30 * time.Second
 )
 
 func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
@@ -147,7 +151,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 				s.Nil(describeResponse)
 				return true
 			},
-			waitForPersistence,
+			waitForTaskProcessing,
 			100*time.Millisecond,
 		)
 
@@ -262,7 +266,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 				s.Nil(describeResponse)
 				return true
 			},
-			waitForPersistence,
+			waitForTaskProcessing,
 			100*time.Millisecond,
 		)
 
@@ -303,7 +307,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 	}
 }
 
-func (s *FunctionalSuite) TestDeleteWorkflowExecution_TerminatedWorkflow() {
+func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
 	tv := testvars.New(s.T().Name())
 
 	const numExecutions = 3
@@ -348,7 +352,14 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_TerminatedWorkflow() {
 		)
 	}
 
-	// Terminate and delete workflow executions.
+	// Internal task processing for DeleteExecutionTask checks if there is no pending CloseExecutionTask
+	// to make sure that the workflow is closed successfully before deleting it. Otherwise, the mutable state
+	// might be deleted before the close task is executed, and so the close task will be dropped.
+	// See comment about ensureNoPendingCloseTask in transferQueueTaskExecutorBase.deleteExecution() for more details.
+
+	// This is why this test _terminates_ and _immediately deletes_ workflow execution to simulate race between
+	// two types of tasks and make sure that they are executed in correct order.
+
 	for i, we := range wes {
 		_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         s.namespace,
@@ -384,7 +395,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_TerminatedWorkflow() {
 				s.Nil(describeResponse)
 				return true
 			},
-			waitForPersistence,
+			waitForTaskProcessing,
 			1*time.Second,
 		)
 
