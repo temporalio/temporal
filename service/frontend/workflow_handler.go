@@ -2105,8 +2105,8 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	earliestTime := request.StartTimeFilter.EarliestTime
-	latestTime := request.StartTimeFilter.LatestTime
+	earliestTime := request.StartTimeFilter.GetEarliestTime()
+	latestTime := request.StartTimeFilter.GetLatestTime()
 	query := []string{}
 
 	query = append(query, fmt.Sprintf(
@@ -2206,8 +2206,8 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	earliestTime := request.StartTimeFilter.EarliestTime
-	latestTime := request.StartTimeFilter.LatestTime
+	earliestTime := request.StartTimeFilter.GetEarliestTime()
+	latestTime := request.StartTimeFilter.GetLatestTime()
 	query := []string{}
 
 	query = append(query, fmt.Sprintf(
