@@ -8,4 +8,4 @@ providers:
   disableDeletion: false
   editable: true
   options:
-    path: /etc/grafana/provisioning/temporalio-dashboards
+    path: /etc/grafana/provisioning/dashboards

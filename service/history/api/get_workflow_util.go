@@ -29,10 +29,12 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/telemetry"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -53,6 +55,9 @@ func GetOrPollMutableState(
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 ) (*historyservice.GetMutableStateResponse, error) {
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIDKey(request.Execution.WorkflowId),
+	)
 
 	logger := shardContext.GetLogger()
 	namespaceID := namespace.ID(request.GetNamespaceId())

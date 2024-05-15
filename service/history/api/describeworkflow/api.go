@@ -27,11 +27,13 @@ package describeworkflow
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -72,6 +74,10 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIDKey(req.Request.Execution.WorkflowId),
+	)
+
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {

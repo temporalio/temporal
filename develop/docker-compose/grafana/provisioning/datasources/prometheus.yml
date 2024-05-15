@@ -10,3 +10,8 @@ datasources:
   url: http://prometheus:9090
   access: proxy
   isDefault: false
+- name: Tempo-Darwin
+  type: tempo
+  access: proxy
+  url: http://tempo:3200
+  isDefault: false

@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -47,6 +48,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -352,6 +354,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIDKey(request.WorkflowId),
+	)
 
 	var err error
 	if request, err = wh.prepareStartWorkflowRequest(request); err != nil {
@@ -665,6 +671,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, err
 	}
 
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIDKey(request.Execution.WorkflowId),
+	)
+
 	if request.GetMaximumPageSize() <= 0 {
 		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
 	}
@@ -763,6 +773,13 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errRequestNotSet
 	}
 
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.WorkflowTaskQueueKey(request.TaskQueue.Name),
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
+
 	wh.logger.Debug("Received PollWorkflowTaskQueue")
 	if err := common.ValidateLongPollContextTimeout(
 		ctx,
@@ -842,6 +859,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	span.SetAttributes(
+		telemetry.WorkflowIDKey(matchingResp.WorkflowExecution.WorkflowId),
+	)
+
 	if matchingResp.History == nil {
 		// Got an old matching response, need to lookup history
 		// Eventually empty history will only happen for sticky query tasks
@@ -894,6 +915,12 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
@@ -948,6 +975,12 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
 
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
@@ -1018,6 +1051,12 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errRequestNotSet
 	}
 
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
+
 	wh.logger.Debug("Received PollActivityTaskQueue")
 	if err := common.ValidateLongPollContextTimeout(
 		ctx,
@@ -1083,6 +1122,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	span.SetAttributes(
+		telemetry.WorkflowIDKey(matchingResponse.WorkflowExecution.WorkflowId),
+	)
+
 	return &workflowservice.PollActivityTaskQueueResponse{
 		TaskToken:                   matchingResponse.TaskToken,
 		WorkflowExecution:           matchingResponse.WorkflowExecution,
@@ -1114,6 +1157,12 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
 
 	wh.logger.Debug("Received RecordActivityTaskHeartbeat")
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
@@ -1178,6 +1227,12 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
 
 	wh.logger.Debug("Received RecordActivityTaskHeartbeatById")
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -1277,6 +1332,13 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
+
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
@@ -1342,6 +1404,13 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+		telemetry.WorkflowIDKey(request.WorkflowId),
+	)
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -1445,6 +1514,12 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errRequestNotSet
 	}
 
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
+
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
@@ -1527,6 +1602,12 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -1638,6 +1719,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, errRequestNotSet
 	}
 
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
+
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
@@ -1703,6 +1790,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -1800,6 +1893,12 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, errRequestNotSet
 	}
 
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.ClientIdentityKey(request.Identity),
+		telemetry.WorkerKey(),
+	)
+
 	if err := validateExecution(request.WorkflowExecution); err != nil {
 		return nil, err
 	}
@@ -1832,6 +1931,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	if err := validateExecution(request.WorkflowExecution); err != nil {
 		return nil, err
 	}
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIDKey(request.WorkflowExecution.WorkflowId),
+	)
 
 	if request.GetSignalName() == "" {
 		return nil, errSignalNameNotSet
@@ -3580,6 +3683,10 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 ) (_ *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIDKey(request.WorkflowExecution.WorkflowId),
+	)
+
 	if err := wh.prepareUpdateWorkflowRequest(request); err != nil {
 		return nil, err
 	}
@@ -3668,6 +3775,10 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 	if request.GetUpdateRef() == nil {
 		return nil, errUpdateRefNotSet
 	}
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIDKey(request.UpdateRef.WorkflowExecution.WorkflowId),
+	)
 
 	if request.GetWaitPolicy() == nil {
 		request.WaitPolicy = &updatepb.WaitPolicy{}
