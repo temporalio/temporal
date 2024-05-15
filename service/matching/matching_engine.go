@@ -37,6 +37,8 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -434,6 +436,12 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return "", false, err
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		telemetry.WorkflowIDKey(addRequest.Execution.WorkflowId),
+		telemetry.WorkflowTaskQueueKey(addRequest.TaskQueue.Name),
+	)
 
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.

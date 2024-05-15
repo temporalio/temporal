@@ -25,10 +25,15 @@
 package telemetry
 
 import (
+	"context"
+
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -48,12 +53,46 @@ func NewServerTraceInterceptor(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
 ) ServerTraceInterceptor {
-	return ServerTraceInterceptor(
-		otelgrpc.UnaryServerInterceptor(
-			otelgrpc.WithPropagators(tmp),
-			otelgrpc.WithTracerProvider(tp),
-		),
+	otelInterceptor := otelgrpc.UnaryServerInterceptor(
+		otelgrpc.WithPropagators(tmp),
+		otelgrpc.WithTracerProvider(tp),
 	)
+
+	// TODO: guard with debug check
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		return otelInterceptor(ctx, req, info, debugHandler(handler))
+	}
+}
+
+func debugHandler(origHandler grpc.UnaryHandler) grpc.UnaryHandler {
+	return func(ctx context.Context, req any) (resp any, err error) {
+		resp, err = origHandler(ctx, req)
+		span := trace.SpanFromContext(ctx)
+
+		if span.IsRecording() {
+			marshaller := protojson.MarshalOptions{}
+
+			if reqMsg, ok := req.(proto.Message); ok {
+				payload, _ := marshaller.Marshal(reqMsg)
+				msgType := string(proto.MessageName(reqMsg).Name())
+				span.SetAttributes(attribute.Key("rpc.request.payload").String(string(payload)))
+				span.SetAttributes(attribute.Key("rpc.request.type").String(msgType))
+			}
+
+			if respMsg, ok := resp.(proto.Message); ok {
+				payload, _ := marshaller.Marshal(respMsg)
+				msgType := string(proto.MessageName(respMsg).Name())
+				span.SetAttributes(attribute.Key("rpc.response.payload").String(string(payload)))
+				span.SetAttributes(attribute.Key("rpc.response.type").String(msgType))
+			}
+		}
+		return
+	}
 }
 
 // NewClientTraceInterceptor creates a new gRPC client interceptor that tracks
@@ -63,10 +102,22 @@ func NewClientTraceInterceptor(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
 ) ClientTraceInterceptor {
-	return ClientTraceInterceptor(
+	otelInterceptor := ClientTraceInterceptor(
 		otelgrpc.UnaryClientInterceptor(
 			otelgrpc.WithPropagators(tmp),
 			otelgrpc.WithTracerProvider(tp),
 		),
 	)
+
+	// TODO: guard with debug check
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply any,
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		return otelInterceptor(ctx, method, req, reply, cc, invoker, opts...)
+	}
 }
