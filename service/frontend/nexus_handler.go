@@ -175,7 +175,7 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 	redirectHeader := header.Get(dcRedirectionContextHeaderName)
 	redirectAllowed, err := strconv.ParseBool(redirectHeader)
 	if err != nil {
-		return true
+		redirectAllowed = true
 	}
 	return redirectAllowed &&
 		c.redirectionInterceptor.redirectionAllowed(ctx) &&
