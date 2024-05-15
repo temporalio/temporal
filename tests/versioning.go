@@ -105,8 +105,10 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// tasks from new ones. If polls from different build ids never go to the same matcher
 		// anymore then we don't need it.
 		dynamicconfig.MatchingLongPollExpirationInterval: longPollTime,
-		// Reduce user data long poll time for faster propagation of the versioning data
-		dynamicconfig.MatchingGetUserDataLongPollTimeout: time.Second,
+		// Reduce user data long poll time for faster propagation of the versioning data. This is needed because of the
+		// exponential minWaitTime logic in userDataManagerImpl that gets triggered because rules change very fast in
+		// some tests.
+		dynamicconfig.MatchingGetUserDataLongPollTimeout: 2 * time.Second,
 
 		// this is overridden for tests using testWithMatchingBehavior
 		dynamicconfig.MatchingNumTaskqueueReadPartitions:  4,
@@ -2093,7 +2095,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1.0")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
@@ -2114,62 +2116,65 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	lastRedirectTarget.Store(versions[0] + " redirect cleaned")
 	var workers []worker.Worker
 
-	act := func(version string, runId int) (string, error) {
-		fmt.Printf("shahab> Starting activity %d on %s\n", runId, version)
+	act := func(version string, runId int32) (string, error) {
+		runs := activityCounter.Add(1)
+		s.T().Logf("Starting activity %d on %s at %d\n", runId, version, runs)
 		if lastRedirectTarget.CompareAndSwap(version, version+" observed") && version != versions[0] {
 			// The last redirect rule is applied and observed by an activity, now delete it to make sure wf keeps using
 			// the right build ID after applying the redirect rule, even when the rule is not present anymore.
 			index, err := strconv.Atoi(version[len(version)-1:]) // get the last char of version is the index in the versions array
 			s.NoError(err)
-			fmt.Printf("shahab> Removing redirect from %s to %s \n", versions[index-1], version)
+			s.T().Logf("Removing redirect from %s to %s \n", versions[index-1], version)
 			s.removeRedirectRule(ctx, tq, versions[index-1])
 			lastRedirectTarget.CompareAndSwap(version+" observed", version+" redirect cleaned")
 		}
-		// Add random sleep to simulate network delay
-		//nolint:forbidigo
-		time.Sleep(time.Duration(int64(rand.Intn(50)) * int64(time.Millisecond)))
 		if rand.Float64() < activityErrorRate {
 			return "", errors.New("intentionally failing activity")
 		}
-		runs := activityCounter.Add(1)
-		if triggerRedirectAtActivityRun.CompareAndSwap(runs, runs+activityRuns) {
+		if triggerRedirectAtActivityRun.Load() == runId {
 			// When enough activities are run using the current version, add redirect rule to the next version.
-			v := runs / activityRuns
+			v := runId / activityRuns
 			if int(v+1) < len(versions) {
-				fmt.Printf("shahab> Begenning to add redirect from %s to %s at %d\n", versions[v], versions[v+1], runs)
 				// wait for last redirect rule to be cleaned up
 				for !lastRedirectTarget.CompareAndSwap(versions[v]+" redirect cleaned", versions[v+1]) {
 				}
-				fmt.Printf("shahab> Adding redirect from %s to %s at %d\n", versions[v], versions[v+1], runs)
+				s.T().Logf("Adding redirect from %s to %s at %d\n", versions[v], versions[v+1], runs)
 				s.addRedirectRule(ctx, tq, versions[v], versions[v+1])
 				// Intentionally do not wait for propagation of the rules to partitions. Waiting will linger this
 				// activity and allows all the other concurrent activities to finish, leaving only the WFT task to
 				// see the redirect rule for the first time.
+				triggerRedirectAtActivityRun.CompareAndSwap(runId, runId+activityRuns)
 			}
 		}
 
-		fmt.Printf("shahab> Completing activity %d on %s at %d\n", runId, version, runs)
+		// Add random sleep to simulate network delay
+		//nolint:forbidigo
+		time.Sleep(time.Duration(int64(rand.Intn(50)) * int64(time.Millisecond)))
+		s.T().Logf("Completing activity %d on %s at %d\n", runId, version, runs)
 		return version, nil
 	}
 
 	wf := func(wfCtx workflow.Context, wfVersion string) (string, error) {
 		var res []string
-		for i := 0; i <= 9; i++ {
+		// because of rule propagation delay we run for more than 10 cycles to make sure all versions are seen
+		for i := 0; i <= 12; i++ {
 			var futures []workflow.Future
 			for j := 0; j < int(activityRuns); j++ {
 				f := workflow.ExecuteActivity(workflow.WithActivityOptions(
 					wfCtx, workflow.ActivityOptions{
-						ScheduleToCloseTimeout: time.Minute,
-						DisableEagerExecution:  true,
-						VersioningIntent:       temporal.VersioningIntentCompatible,
-						StartToCloseTimeout:    200 * time.Millisecond,
+						DisableEagerExecution: true,
+						VersioningIntent:      temporal.VersioningIntentCompatible,
+						StartToCloseTimeout:   200 * time.Millisecond,
+						RetryPolicy: &temporal.RetryPolicy{
+							InitialInterval:    10 * time.Millisecond,
+							BackoffCoefficient: 1,
+						},
 					}), "act", i*int(activityRuns)+j)
 				futures = append(futures, f)
 			}
 
-			for j, f := range futures {
+			for _, f := range futures {
 				var activityVersion string
-				fmt.Printf("shahab> Blocked by activity %d on %s\n", i*int(activityRuns)+j, wfVersion)
 				err := f.Get(wfCtx, &activityVersion)
 				s.NoError(err)
 				res = append(res, activityVersion)
@@ -2191,7 +2196,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 			BuildID:                          v,
 			UseBuildIDForVersioning:          true,
 			MaxConcurrentWorkflowTaskPollers: numPollers,
-			MaxConcurrentActivityTaskPollers: 1,
+			MaxConcurrentActivityTaskPollers: 2,
 			// Limit the number of concurrent activities so not all scheduled activities are immediately started.
 			MaxConcurrentActivityExecutionSize: 2,
 		})
@@ -2201,7 +2206,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 			},
 			workflow.RegisterOptions{Name: "wf"})
 		w.RegisterActivityWithOptions(
-			func(runId int) (string, error) {
+			func(runId int32) (string, error) {
 				return act(v, runId)
 			},
 			activity.RegisterOptions{Name: "act"})
@@ -2226,22 +2231,23 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	redirectAppliedToActivityTask := false
 	activityRetried := false
 	sawUnorderedEvents := false
-	var buildId string
+	var maxBuildId string
 	var maxStartedTimestamp time.Time
 	for wh.HasNext() {
 		he, err := wh.Next()
 		s.Nil(err)
 		var taskStartedStamp *commonpb.WorkerVersionStamp
 		var taskRedirectCounter int64
+		var buildId string
 		if activityStarted := he.GetActivityTaskStartedEventAttributes(); activityStarted != nil {
 			taskStartedStamp = activityStarted.GetWorkerVersion()
-			if buildId != taskStartedStamp.GetBuildId() {
+			buildId = taskStartedStamp.GetBuildId()
+			if buildId > maxBuildId {
 				redirectAppliedToActivityTask = true
 			}
 			if activityStarted.Attempt > 1 {
 				activityRetried = true
 			}
-			buildId = taskStartedStamp.GetBuildId()
 			s.True(taskStartedStamp.GetUseVersioning())
 			taskRedirectCounter = activityStarted.GetBuildIdRedirectCounter()
 			activityPerVersion[buildId]--
@@ -2256,6 +2262,9 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 		} else {
 			maxStartedTimestamp = he.EventTime.AsTime()
 		}
+		if buildId > maxBuildId {
+			maxBuildId = buildId
+		}
 		if taskStartedStamp != nil {
 			// the last char of version is the index in the versions array which is the expected redirect counter for
 			// a task started event
@@ -2268,9 +2277,9 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 		s.Equal(0, c, "activity count mismatch for build ID "+v)
 	}
 	// Following validations are more to make sure the test stays correct, rather than testing server's functionality
-	s.True(redirectAppliedToActivityTask, "no redirect rule applied to an activity task, is this test broken?")
 	s.True(activityRetried, "no activity retried")
 	s.True(sawUnorderedEvents)
+	s.True(redirectAppliedToActivityTask, "no redirect rule applied to an activity task, is this test broken?")
 
 	for _, w := range workers {
 		w.Stop()
