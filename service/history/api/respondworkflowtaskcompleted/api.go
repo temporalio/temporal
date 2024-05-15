@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package respondworkflowtaskcompleted
 
 import (
 	"context"
@@ -68,15 +68,7 @@ import (
 )
 
 type (
-	// workflow task business logic handler
-	workflowTaskHandlerCallbacks interface {
-		handleWorkflowTaskCompleted(context.Context,
-			*historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error)
-		// TODO also include the handle of workflow task timeout here
-	}
-
-	workflowTaskHandlerCallbacksImpl struct {
-		currentClusterName             string
+	WorkflowTaskCompletedHandler struct {
 		config                         *configs.Config
 		shardContext                   shard.Context
 		workflowConsistencyChecker     api.WorkflowConsistencyChecker
@@ -95,32 +87,40 @@ type (
 	}
 )
 
-func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowTaskHandlerCallbacksImpl {
-	return &workflowTaskHandlerCallbacksImpl{
-		currentClusterName:         historyEngine.currentClusterName,
-		config:                     historyEngine.config,
-		shardContext:               historyEngine.shardContext,
-		workflowConsistencyChecker: historyEngine.workflowConsistencyChecker,
-		timeSource:                 historyEngine.shardContext.GetTimeSource(),
-		namespaceRegistry:          historyEngine.shardContext.GetNamespaceRegistry(),
-		eventNotifier:              historyEngine.eventNotifier,
-		tokenSerializer:            historyEngine.tokenSerializer,
-		metricsHandler:             historyEngine.metricsHandler,
-		logger:                     historyEngine.logger,
-		throttledLogger:            historyEngine.throttledLogger,
+func NewWorkflowTaskCompletedHandler(
+	shardContext shard.Context,
+	tokenSerializer common.TaskTokenSerializer,
+	eventNotifier events.Notifier,
+	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	searchAttributesValidator *searchattribute.Validator,
+	visibilityManager manager.VisibilityManager,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+) *WorkflowTaskCompletedHandler {
+	return &WorkflowTaskCompletedHandler{
+		config:                     shardContext.GetConfig(),
+		shardContext:               shardContext,
+		workflowConsistencyChecker: workflowConsistencyChecker,
+		timeSource:                 shardContext.GetTimeSource(),
+		namespaceRegistry:          shardContext.GetNamespaceRegistry(),
+		eventNotifier:              eventNotifier,
+		tokenSerializer:            tokenSerializer,
+		metricsHandler:             shardContext.GetMetricsHandler(),
+		logger:                     shardContext.GetLogger(),
+		throttledLogger:            shardContext.GetThrottledLogger(),
 		commandAttrValidator: newCommandAttrValidator(
-			historyEngine.shardContext.GetNamespaceRegistry(),
-			historyEngine.config,
-			historyEngine.searchAttributesValidator,
+			shardContext.GetNamespaceRegistry(),
+			shardContext.GetConfig(),
+			searchAttributesValidator,
 		),
-		searchAttributesMapperProvider: historyEngine.shardContext.GetSearchAttributesMapperProvider(),
-		searchAttributesValidator:      historyEngine.searchAttributesValidator,
-		persistenceVisibilityMgr:       historyEngine.persistenceVisibilityMgr,
-		commandHandlerRegistry:         historyEngine.commandHandlerRegistry,
+		searchAttributesMapperProvider: shardContext.GetSearchAttributesMapperProvider(),
+		searchAttributesValidator:      searchAttributesValidator,
+		persistenceVisibilityMgr:       visibilityManager,
+		commandHandlerRegistry:         commandHandlerRegistry,
 	}
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
+//nolint:revive // cyclomatic complexity
+func (handler *WorkflowTaskCompletedHandler) Invoke(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
@@ -323,7 +323,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.throttledLogger,
 		)
 
-		workflowTaskHandler := newWorkflowTaskHandler(
+		workflowTaskHandler := newWorkflowTaskCompletedHandler(
 			request.GetIdentity(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
@@ -666,7 +666,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	return resp, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResponse(
+func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
@@ -774,7 +774,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResp
 	return resp, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) withNewWorkflowTask(
+func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 	ctx context.Context,
 	namespaceName namespace.Name,
 	request *historyservice.RespondWorkflowTaskCompletedRequest,
@@ -815,7 +815,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) withNewWorkflowTask(
 	)
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace) {
+func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
+	ms workflow.MutableState,
+	queryResults map[string]*querypb.WorkflowQueryResult,
+	createNewWorkflowTask bool,
+	namespaceEntry *namespace.Namespace,
+) {
 	queryRegistry := ms.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
 		return

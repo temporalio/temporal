@@ -246,7 +246,6 @@ func (s *engineSuite) SetupTest() {
 		versionChecker:             headers.NewDefaultVersionChecker(),
 	}
 	s.mockShard.SetEngineForTesting(h)
-	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	h.eventNotifier.Start()
 

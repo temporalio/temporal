@@ -336,7 +336,8 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
-	task := newInternalNexusTask(taskId, request)
+	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
+	task := newInternalNexusTask(taskId, deadline, request)
 	return c.matcher.OfferNexusTask(ctx, task)
 }
 

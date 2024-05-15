@@ -35,6 +35,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -1696,10 +1697,14 @@ pollLoop:
 			TaskId:      task.nexus.taskID,
 		}
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
+
+		nexusReq := task.nexus.request.GetRequest()
+		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
+
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken: serializedToken,
-				Request:   task.nexus.request.GetRequest(),
+				Request:   nexusReq,
 			},
 		}, nil
 	}
