@@ -2116,24 +2116,31 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	))
 
-	if earliestTime == nil || earliestTime.AsTime().IsZero() {
-		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
-	} else {
+	if earliestTime != nil && !earliestTime.AsTime().IsZero() &&
+		latestTime != nil && !latestTime.AsTime().IsZero() {
+		query = append(query, fmt.Sprintf(
+			"%s BETWEEN '%s' AND '%s'",
+			searchattribute.StartTime,
+			earliestTime.AsTime().Format(time.RFC3339Nano),
+			latestTime.AsTime().Format(time.RFC3339Nano),
+		))
+	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s >= '%s'",
 			searchattribute.StartTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 		))
-	}
-
-	if latestTime == nil || latestTime.AsTime().IsZero() {
 		request.StartTimeFilter.LatestTime = timestamppb.New(maxTime)
-	} else {
+	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s <= '%s'",
 			searchattribute.StartTime,
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
+		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
+	} else {
+		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
+		request.StartTimeFilter.LatestTime = timestamppb.New(maxTime)
 	}
 
 	if request.StartTimeFilter.EarliestTime.AsTime().After(request.StartTimeFilter.LatestTime.AsTime()) {
@@ -2222,24 +2229,31 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	))
 
-	if earliestTime == nil || earliestTime.AsTime().IsZero() {
-		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
-	} else {
+	if earliestTime != nil && !earliestTime.AsTime().IsZero() &&
+		latestTime != nil && !latestTime.AsTime().IsZero() {
+		query = append(query, fmt.Sprintf(
+			"%s BETWEEN '%s' AND '%s'",
+			searchattribute.CloseTime,
+			earliestTime.AsTime().Format(time.RFC3339Nano),
+			latestTime.AsTime().Format(time.RFC3339Nano),
+		))
+	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s >= '%s'",
 			searchattribute.CloseTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 		))
-	}
-
-	if latestTime == nil || latestTime.AsTime().IsZero() {
 		request.StartTimeFilter.LatestTime = timestamppb.New(maxTime)
-	} else {
+	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s <= '%s'",
 			searchattribute.CloseTime,
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
+		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
+	} else {
+		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
+		request.StartTimeFilter.LatestTime = timestamppb.New(maxTime)
 	}
 
 	if request.StartTimeFilter.EarliestTime.AsTime().After(request.StartTimeFilter.LatestTime.AsTime()) {
