@@ -37,47 +37,36 @@ type tlsConfigProvider interface {
 	GetRemoteClusterClientConfig(hostname string) (*tls.Config, error)
 }
 
-type HttpClient struct {
+type FrontendHTTPClient struct {
 	http.Client
 	Address string
 }
 
-type HttpClientCache struct {
+type FrontendHTTPClientCache struct {
 	metadata    Metadata
 	tlsProvider tlsConfigProvider
-	clients     collection.SyncMap[string, *HttpClient]
+	clients     *collection.FallibleOnceMap[string, *FrontendHTTPClient]
 }
 
-func NewHttpClientCache(
+func NewFrontendHTTPClientCache(
 	metadata Metadata,
 	tlsProvider tlsConfigProvider,
-) *HttpClientCache {
-	cache := &HttpClientCache{
+) *FrontendHTTPClientCache {
+	cache := &FrontendHTTPClientCache{
 		metadata:    metadata,
 		tlsProvider: tlsProvider,
-		clients:     collection.NewSyncMap[string, *HttpClient](),
 	}
+	cache.clients = collection.NewFallibleOnceMap(cache.newClientForCluster)
 	metadata.RegisterMetadataChangeCallback(cache, cache.evictionCallback)
 	return cache
 }
 
 // Get returns a cached HttpClient if available, or constructs a new one for the given cluster name.
-func (c *HttpClientCache) Get(targetClusterName string) (*HttpClient, error) {
-	client, ok := c.clients.Get(targetClusterName)
-	if ok {
-		return client, nil
-	}
-
-	client, err := c.newClientForCluster(targetClusterName)
-	if err != nil {
-		return nil, err
-	}
-
-	c.clients.Set(targetClusterName, client)
-	return client, nil
+func (c *FrontendHTTPClientCache) Get(targetClusterName string) (*FrontendHTTPClient, error) {
+	return c.clients.Get(targetClusterName)
 }
 
-func (c *HttpClientCache) newClientForCluster(targetClusterName string) (*HttpClient, error) {
+func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) (*FrontendHTTPClient, error) {
 	targetInfo, ok := c.metadata.GetAllClusterInfo()[targetClusterName]
 	if !ok {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find cluster metadata for cluster %s", targetClusterName))
@@ -98,7 +87,7 @@ func (c *HttpClientCache) newClientForCluster(targetClusterName string) (*HttpCl
 		client.Transport = &http.Transport{TLSClientConfig: tlsClientConfig}
 	}
 
-	return &HttpClient{
+	return &FrontendHTTPClient{
 		Address: targetInfo.HTTPAddress,
 		Client:  client,
 	}, nil
@@ -107,7 +96,7 @@ func (c *HttpClientCache) newClientForCluster(targetClusterName string) (*HttpCl
 // evictionCallback is invoked by cluster.Metadata when cluster information changes.
 // It invalidates clients which are either no longer present or have had their HTTP address changed.
 // It is assumed that TLS information has not changed for clusters that are unmodified.
-func (c *HttpClientCache) evictionCallback(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation) {
+func (c *FrontendHTTPClientCache) evictionCallback(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation) {
 	for oldClusterName, oldClusterInfo := range oldClusterMetadata {
 		if oldClusterName == c.metadata.GetCurrentClusterName() || oldClusterInfo == nil {
 			continue

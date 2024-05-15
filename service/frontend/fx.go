@@ -711,7 +711,7 @@ func RegisterNexusHTTPHandler(
 	matchingClient resource.MatchingClient,
 	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
-	clientCache *cluster.HttpClientCache,
+	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry *nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,

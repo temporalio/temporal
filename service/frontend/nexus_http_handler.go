@@ -71,7 +71,7 @@ func NewNexusHTTPHandler(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
-	clientCache *cluster.HttpClientCache,
+	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry *commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
