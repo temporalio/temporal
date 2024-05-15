@@ -85,6 +85,7 @@ import (
 	"go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
+	"go.temporal.io/server/service/history/api/respondworkflowtaskcompleted"
 	"go.temporal.io/server/service/history/api/respondworkflowtaskfailed"
 	"go.temporal.io/server/service/history/api/scheduleworkflowtask"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
@@ -108,17 +109,12 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-const (
-	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
-)
-
 type (
 	historyEngineImpl struct {
 		status                     int32
 		currentClusterName         string
 		shardContext               shard.Context
 		timeSource                 clock.TimeSource
-		workflowTaskHandler        workflowTaskHandlerCallbacks
 		clusterMetadata            cluster.Metadata
 		executionManager           persistence.ExecutionManager
 		queueProcessors            map[tasks.Category]queues.Queue
@@ -287,7 +283,6 @@ func NewEngineWithShardContext(
 		config.SuppressErrorSetSystemSearchAttribute,
 	)
 
-	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(
 		shard,
 		workflowDeleteManager,
@@ -541,7 +536,16 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
-	return e.workflowTaskHandler.handleWorkflowTaskCompleted(ctx, req)
+	h := respondworkflowtaskcompleted.NewWorkflowTaskCompletedHandler(
+		e.shardContext,
+		e.tokenSerializer,
+		e.eventNotifier,
+		e.commandHandlerRegistry,
+		e.searchAttributesValidator,
+		e.persistenceVisibilityMgr,
+		e.workflowConsistencyChecker,
+	)
+	return h.Invoke(ctx, req)
 }
 
 // RespondWorkflowTaskFailed fails a workflow task
