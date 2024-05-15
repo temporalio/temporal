@@ -64,6 +64,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 	type testcase struct {
 		outcome   string
 		endpoint  *nexuspb.Endpoint
+		timeout   time.Duration
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
 		assertion func(*testing.T, *nexus.ClientStartOperationResult[string], error)
 	}
@@ -156,21 +157,26 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
-		// TODO: This can't be tested without the test taking over a minute since this is the default matching
-		// client timeout and there's currently no way for the client to specify the request timeout.
-		// Tested manually for now.
-		// {
-		// 	outcome: "handler_timeout",
-		// 	handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
-		// 		time.Sleep(time.Minute)
-		// 		return nil, nil
-		// 	},
-		// 	assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
-		// 		var unexpectedError *nexus.UnexpectedResponseError
-		// 		s.ErrorAs(err, &unexpectedError)
-		//              ...
-		// 	},
-		// },
+		{
+			outcome:  "handler_timeout",
+			endpoint: s.createNexusEndpoint(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
+			timeout:  1 * time.Second,
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
+				s.True(set)
+				timeout, err := time.ParseDuration(timeoutStr)
+				s.NoError(err)
+				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
+				return nil, nil
+			},
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
+				var unexpectedError *nexus.UnexpectedResponseError
+				require.ErrorAs(t, err, &unexpectedError)
+				// TODO: nexus should export this
+				require.Equal(t, 521, unexpectedError.Response.StatusCode)
+				require.Equal(t, "downstream timeout", unexpectedError.Failure.Message)
+			},
+		},
 	}
 
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
@@ -184,6 +190,13 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 
 		go s.nexusTaskPoller(ctx, tc.endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
 
+		eventuallyTick := 500 * time.Millisecond
+		header := nexus.Header{"key": "value"}
+		if tc.timeout > 0 {
+			eventuallyTick = tc.timeout + (100 * time.Millisecond)
+			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
+		}
+
 		var result *nexus.ClientStartOperationResult[string]
 
 		// Wait until the endpoint is loaded into the registry.
@@ -191,11 +204,11 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			result, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
 				CallbackURL: "http://localhost/callback",
 				RequestID:   "request-id",
-				Header:      nexus.Header{"key": "value"},
+				Header:      header,
 			})
 			var unexpectedResponseErr *nexus.UnexpectedResponseError
 			return err == nil || !(errors.As(err, &unexpectedResponseErr) && unexpectedResponseErr.Response.StatusCode == http.StatusNotFound)
-		}, 10*time.Second, 1*time.Second)
+		}, 10*time.Second, eventuallyTick)
 
 		tc.assertion(t, result, err)
 
@@ -481,6 +494,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 	type testcase struct {
 		outcome   string
 		endpoint  *nexuspb.Endpoint
+		timeout   time.Duration
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
 		assertion func(*testing.T, error)
 	}
@@ -523,23 +537,26 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
-		// TODO: This can't be tested without the test taking over a minute since this is the default matching
-		// client timeout and there's currently no way for the client to specify the request timeout.
-		// Tested manually for now.
-		// {
-		// 	outcome: "handler_timeout",
-		// 	handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
-		// 		time.Sleep(time.Minute)
-		// 		return nil, nil
-		// 	},
-		// 	assertion: func(err error) {
-		// 		var unexpectedError *nexus.UnexpectedResponseError
-		// 		s.ErrorAs(err, &unexpectedError)
-		// 		// TODO: nexus should export this
-		// 		s.Equal(521, unexpectedError.Response.StatusCode)
-		// 		s.Equal("downstream timeout", unexpectedError.Failure.Message)
-		// 	},
-		// },
+		{
+			outcome:  "handler_timeout",
+			endpoint: s.createNexusEndpoint(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
+			timeout:  1 * time.Second,
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
+				s.True(set)
+				timeout, err := time.ParseDuration(timeoutStr)
+				s.NoError(err)
+				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
+				return nil, nil
+			},
+			assertion: func(t *testing.T, err error) {
+				var unexpectedError *nexus.UnexpectedResponseError
+				require.ErrorAs(t, err, &unexpectedError)
+				// TODO: nexus should export this
+				require.Equal(t, 521, unexpectedError.Response.StatusCode)
+				require.Equal(t, "downstream timeout", unexpectedError.Failure.Message)
+			},
+		},
 	}
 
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
@@ -556,12 +573,19 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		handle, err := client.NewHandle("operation", "id")
 		require.NoError(t, err)
 
+		eventuallyTick := 500 * time.Millisecond
+		header := nexus.Header{"key": "value"}
+		if tc.timeout > 0 {
+			eventuallyTick = tc.timeout + (100 * time.Millisecond)
+			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
+		}
+
 		// Wait until the endpoint is loaded into the registry.
 		s.Eventually(func() bool {
-			err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: nexus.Header{"key": "value"}})
+			err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: header})
 			var unexpectedResponseErr *nexus.UnexpectedResponseError
 			return err == nil || !(errors.As(err, &unexpectedResponseErr) && unexpectedResponseErr.Response.StatusCode == http.StatusNotFound)
-		}, 10*time.Second, 1*time.Second)
+		}, 10*time.Second, eventuallyTick)
 
 		tc.assertion(t, err)
 
