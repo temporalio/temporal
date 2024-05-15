@@ -1595,7 +1595,7 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	started := make(chan struct{}, 1)

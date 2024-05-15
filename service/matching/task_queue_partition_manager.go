@@ -564,6 +564,9 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		return nil, serviceerror.NewInternal("versioned queues can't be used in sticky partitions")
 	}
+	if versionSet == "" && buildId == "" {
+		return nil, serviceerror.NewInternal("build ID or version set should be given for a versioned queue")
+	}
 	tqm, err := pm.getVersionedQueueNoWait(versionSet, buildId, create)
 	if err != nil || tqm == nil {
 		return nil, err
@@ -665,7 +668,11 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if forwardInfo != nil {
 		// Forwarded from child partition - only do sync match.
 		// No need to calculate build ID, just dispatch based on source partition's instructions.
-		syncMatchQueue, err = pm.getVersionedQueue(ctx, forwardInfo.DispatchVersionSet, forwardInfo.DispatchBuildId, true)
+		if forwardInfo.DispatchVersionSet == "" && forwardInfo.DispatchBuildId == "" {
+			syncMatchQueue = pm.defaultQueue
+		} else {
+			syncMatchQueue, err = pm.getVersionedQueue(ctx, forwardInfo.DispatchVersionSet, forwardInfo.DispatchBuildId, true)
+		}
 		return nil, syncMatchQueue, nil, err
 	}
 
