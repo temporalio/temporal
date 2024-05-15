@@ -67,7 +67,6 @@ type (
 		Stop()
 		WaitUntilInitialized(context.Context) error
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
-		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		String() string
 	}
@@ -194,10 +193,6 @@ func (c *backlogManagerImpl) processSpooledTask(
 	task *internalTask,
 ) error {
 	return c.pqMgr.ProcessSpooledTask(ctx, task)
-}
-
-func (c *backlogManagerImpl) BacklogCountHint() int64 {
-	return c.taskAckManager.getBacklogCountHint()
 }
 
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
