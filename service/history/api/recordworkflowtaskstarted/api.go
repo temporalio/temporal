@@ -150,6 +150,7 @@ func Invoke(
 				req.PollRequest.TaskQueue,
 				req.PollRequest.Identity,
 				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
+				req.GetBuildIdRedirectInfo(),
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
