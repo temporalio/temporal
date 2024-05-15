@@ -176,7 +176,6 @@ func NewRegistry(
 
 	r.store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
-			// TODO: fix comment below
 			// An update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
 			// from mutable state, we do not have access to update request payloads. In this situation it is correct

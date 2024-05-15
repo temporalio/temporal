@@ -87,9 +87,15 @@ type (
 	// (OnMessage calls) must be done while holding the workflow lock.
 	Update struct {
 		// accessed only while holding workflow lock
-		id              string
-		state           state
-		request         *anypb.Any // of type *updatepb.Request, nil when not in stateAdmitted or stateSent.
+		id    string
+		state state
+		// request is nil when:
+		//   - update was restored in stateAccepted with newAccepted form UpdateInfo.AcceptanceInfo
+		//       We don't load request from event because it is not needed anymore (and can be big).
+		//   - update was restored in stateAdmitted with newAdmitted from UpdateInfo.AdmissionInfo
+		//       We don't load request form event because if there is durable UpdateAdmitted event with request,
+		//       then we don't write this request 2nd time to UpdateAccepted event.
+		request         *anypb.Any // of type *updatepb.Request
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
@@ -153,6 +159,7 @@ func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateAccepted,
+		request:         nil,
 		acceptedEventID: acceptedEventID,
 		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
@@ -474,14 +481,6 @@ func (u *Update) onAcceptanceMsg(
 	}
 	u.instrumentation.countAcceptanceMsg()
 
-	// TODO: fix comment below:
-	// The accepted request payload is not sent back by the worker to the server. Instead, the server stores it in the
-	// update registry and it is written to the event here. It could make sense to obtain it from the worker, in order
-	// to support scenarios in which the registry has been lost, but we still want to process an update acceptance
-	// message. (If we were to do that, SDKs would have to guarantee that the payload has not been altered by the
-	// validator, since we may use it to create reapplied updates on a new history branch, which will be submitted to
-	// the validator again).
-	//
 	// If the in-registry update lacks a request payload, this implies that there is an UpdateAdmitted event in
 	// history. In this case we write the UpdateAccepted event without a request payload, since the UpdateAdmitted
 	// event has it.
