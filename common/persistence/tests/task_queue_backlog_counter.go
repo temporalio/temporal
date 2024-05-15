@@ -166,7 +166,7 @@ func (s *TaskQueueBacklogCounterSuite) ValidateBacklogCounterWithDB(
 	taskQueueInfo *persistencespb.TaskQueueInfo,
 	expectedBacklogCounter int64,
 ) {
-	respTasks, err := s.taskManager.CountTasksFromTaskQueue(s.ctx, &p.CountTasksExactRequest{
+	respTasks, err := s.taskManager.CountTasksExact(s.ctx, &p.CountTasksExactRequest{
 		NamespaceID: taskQueueInfo.NamespaceId,
 		TaskQueue:   taskQueueInfo.Name,
 		TaskType:    taskQueueInfo.TaskType,
