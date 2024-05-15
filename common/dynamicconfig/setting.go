@@ -41,13 +41,11 @@ type (
 	// T is the data type of the setting. P is a go type representing the precedence, which is
 	// just used to make the types more unique.
 	setting[T any, P any] struct {
-		// string value of key. case-insensitive.
-		key Key
-		// default value. cdef is used in preference to def if non-nil.
-		def  T
-		cdef []TypedConstrainedValue[T]
-		// documentation
-		description string
+		key         Key // string value of key. case-insensitive.
+		def         T   // default value. cdef is used in preference to def if non-nil.
+		cdef        []TypedConstrainedValue[T]
+		convert     func(any) (T, error) // converter function
+		description string               // documentation
 	}
 
 	// GenericSetting is an interface that all instances of Setting implement (by generated
