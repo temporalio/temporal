@@ -335,7 +335,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
-		err := ch(handler.mutableState, validator, handler.workflowTaskCompletedID, command)
+		err := ch(ctx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
 		var failWFTErr workflow.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
 			if failWFTErr.FailWorkflow {
@@ -366,11 +366,11 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 
 	switch protocolType {
 	case update.ProtocolV1:
-		upd, ok := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
-		if !ok {
+		upd := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
+		if upd == nil {
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
+				serviceerror.NewNotFound(fmt.Sprintf("update %s not found", message.ProtocolInstanceId)))
 		}
 
 		if err := upd.OnProtocolMessage(
@@ -383,7 +383,7 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 	default:
 		return handler.failWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %q", protocolType)))
+			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %s", protocolType)))
 	}
 
 	return nil
@@ -416,7 +416,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
 	}
 	return handler.failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-		serviceerror.NewInvalidArgument(fmt.Sprintf("ProtocolMessageCommand referenced absent message ID %q", attr.MessageId)),
+		serviceerror.NewInvalidArgument(fmt.Sprintf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId)),
 	)
 }
 

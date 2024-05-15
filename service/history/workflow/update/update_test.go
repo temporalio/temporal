@@ -37,9 +37,10 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	"go.temporal.io/server/service/history/consts"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payloads"
@@ -139,7 +140,7 @@ func TestUnsupportedMessageType(t *testing.T) {
 	require.ErrorAs(t, err, &invalidArg)
 }
 
-func TestRequestSendAcceptComplete(t *testing.T) {
+func TestAdmitSendAcceptComplete(t *testing.T) {
 	// this is the most common happy path - an update is created, requested,
 	// accepted, and finally completed
 	t.Parallel()
@@ -189,14 +190,14 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 		upd = update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 	)
 
-	t.Run("request", func(t *testing.T) {
+	t.Run("admit", func(t *testing.T) {
 		err := upd.OnProtocolMessage(ctx, &acpt, store)
 		require.ErrorAs(t, err, &invalidArg,
-			"expected InvalidArgument from %T while in Admitted state", &acpt)
+			"expected InvalidArgument from %T while in Created state", &acpt)
 
 		err = upd.OnProtocolMessage(ctx, &resp, store)
 		require.ErrorAsf(t, err, &invalidArg,
-			"expected InvalidArgument from %T while in Admitted state", &resp)
+			"expected InvalidArgument from %T while in Created state", &resp)
 
 		err = upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
@@ -204,10 +205,10 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 
 		err = upd.OnProtocolMessage(ctx, &acpt, store)
 		require.ErrorAsf(t, err, &invalidArg,
-			"expected InvalidArgument from %T while in ProvisionallyRequested state", &resp)
+			"expected InvalidArgument from %T while in ProvisionallyAdmitted state", &resp)
 
 		effects.Apply(ctx)
-		t.Log("update state should now be Requested")
+		t.Log("update state should now be Admitted")
 	})
 
 	msg := upd.Send(ctx, false, sequencingID)
@@ -267,7 +268,7 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 	protorequire.ProtoEqual(t, mustUnmarshalBody[*updatepb.Response](t, &resp), completedEventData)
 }
 
-func TestRequestSendReject(t *testing.T) {
+func TestAdmitSendReject(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx       = context.Background()
@@ -283,12 +284,12 @@ func TestRequestSendReject(t *testing.T) {
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
 
-	t.Run("request", func(t *testing.T) {
+	t.Run("admit", func(t *testing.T) {
 		err := upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
 		require.False(t, completed)
 		effects.Apply(ctx)
-		t.Log("update state should now be Requested")
+		t.Log("update state should now be Admitted")
 	})
 
 	msg := upd.Send(ctx, false, sequencingID)
@@ -334,6 +335,72 @@ func TestRequestSendReject(t *testing.T) {
 
 		require.True(t, completed)
 	})
+}
+
+func TestAdmitAcceptOrReject(t *testing.T) {
+	// See comment in onAcceptanceMsg about stateAdmitted.
+	// This test is to ensure that transition from stateAdmitted to stateAccepted or stateCompleted (rejected) is valid.
+
+	t.Parallel()
+	var (
+		ctx     = context.Background()
+		effects = effect.Immediate(ctx)
+		meta    = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
+		req     = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
+		store   = mockEventStore{
+			Controller: effects,
+			AddWorkflowExecutionUpdateAcceptedEventFunc: func(
+				updateID string,
+				acceptedRequestMessageId string,
+				acceptedRequestSequencingEventId int64,
+				acceptedRequest *updatepb.Request,
+			) (*historypb.HistoryEvent, error) {
+				return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
+			},
+		}
+	)
+
+	t.Run("accept admitted update", func(t *testing.T) {
+		upd := update.New(meta.UpdateId)
+		err := upd.Admit(ctx, &req, store)
+		require.NoError(t, err)
+
+		// Note: no upd.Send call.
+
+		acpt := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         "random",
+			AcceptedRequestSequencingEventId: 2208,
+		})}
+		err = upd.OnProtocolMessage(ctx, &acpt, store)
+		require.NoError(t, err)
+
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
+		require.Nil(t, status.Outcome,
+			"update is accepted but not completed so outcome should be nil")
+	})
+
+	t.Run("reject admitted update", func(t *testing.T) {
+		upd := update.New(meta.UpdateId)
+		err := upd.Admit(ctx, &req, store)
+		require.NoError(t, err)
+
+		// Note: no upd.Send call.
+
+		rej := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
+			RejectedRequest: &req,
+			Failure:         &failurepb.Failure{Message: "An intentional failure"},
+		})}
+		err = upd.OnProtocolMessage(ctx, &rej, store)
+		require.NoError(t, err)
+
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.Equal(t, mustUnmarshalBody[*updatepb.Rejection](t, &rej).Failure, status.Outcome.GetFailure())
+	})
+
 }
 
 func TestWithProtocolMessage(t *testing.T) {
@@ -386,7 +453,7 @@ func TestSend(t *testing.T) {
 		require.Nil(t, msg)
 		require.False(t, upd.IsSent())
 	})
-	t.Run("requested", func(t *testing.T) {
+	t.Run("admitted", func(t *testing.T) {
 		require.NoError(t, upd.Admit(ctx, &req, store))
 		effects.Apply(ctx)
 		require.True(t, upd.NeedToSend(false))
@@ -409,7 +476,7 @@ func TestSend(t *testing.T) {
 		require.Equal(t, msg.GetEventId(), testSequencingEventID)
 		require.True(t, upd.IsSent())
 	})
-	t.Run("after requested", func(t *testing.T) {
+	t.Run("after accepted", func(t *testing.T) {
 		updAccepted1 := update.NewAccepted(updateID, testAcceptedEventID)
 		require.False(t, upd.NeedToSend(false))
 		msg := updAccepted1.Send(ctx, false, sequencingID)
@@ -486,7 +553,7 @@ func TestDuplicateRequestNoError(t *testing.T) {
 
 	err := upd.Admit(ctx, &updatepb.Request{}, eventStoreUnused)
 	require.NoError(t, err,
-		"a second request message should be ignored, not cause an error")
+		"a second request should be ignored, not cause an error")
 
 	msg := upd.Send(ctx, false, sequencingID)
 	require.Nil(t, msg)
@@ -504,7 +571,7 @@ func TestMessageValidation(t *testing.T) {
 		invalidArg   *serviceerror.InvalidArgument
 	)
 
-	t.Run("invalid request msg", func(t *testing.T) {
+	t.Run("invalid request", func(t *testing.T) {
 		upd := update.New("")
 		err := upd.Admit(ctx, &updatepb.Request{}, eventStoreUnused)
 		require.ErrorAs(t, err, &invalidArg)
@@ -593,9 +660,9 @@ func TestDoubleRollback(t *testing.T) {
 		_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
-	t.Run("back to requested state", func(t *testing.T) {
+	t.Run("back to sent state", func(t *testing.T) {
 		err := upd.OnProtocolMessage(ctx, &acpt, store)
-		require.NoError(t, err, "update should be back in Requested state")
+		require.NoError(t, err, "update should be back in Sent state")
 	})
 }
 
@@ -871,7 +938,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		require.True(t, common.IsContextDeadlineExceededErr(ctx.Err()))
 	}
 
-	applyRequest := func(ctx context.Context, req *updatepb.Request, upd *update.Update) {
+	admit := func(ctx context.Context, req *updatepb.Request, upd *update.Update) {
 		err := upd.Admit(ctx, req, store)
 		require.NoError(t, err)
 		effects.Apply(ctx)
@@ -892,7 +959,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		assertAdmitted(ctx, t, upd)
-		applyRequest(ctx, &req, upd)  // => Requested
+		admit(ctx, &req, upd)         // => Admitted
 		send(ctx, upd)                // => Sent
 		applyMessage(ctx, &acpt, upd) // => Accepted
 		assertAccepted(ctx, t, upd, true)
@@ -903,7 +970,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 	t.Run("test non-blocking calls (rejected)", func(t *testing.T) {
 		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-		applyRequest(ctx, &req, upd) // => Requested
+		admit(ctx, &req, upd)        // => Admitted
 		send(ctx, upd)               // => Sent
 		applyMessage(ctx, &rej, upd) // => Completed (failure)
 		assertFailure(ctx, t, upd, true)
@@ -912,8 +979,8 @@ func TestWaitLifecycleStage(t *testing.T) {
 	t.Run("test blocking calls (accepted)", func(t *testing.T) {
 		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-		applyRequest(ctx, &req, upd) // => Requested
-		send(ctx, upd)               // => Sent
+		admit(ctx, &req, upd) // => Admitted
+		send(ctx, upd)        // => Sent
 		done := make(chan any)
 		go func() {
 			assertAccepted(ctx, t, upd, false)
@@ -935,8 +1002,8 @@ func TestWaitLifecycleStage(t *testing.T) {
 	t.Run("test blocking calls (rejected)", func(t *testing.T) {
 		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-		applyRequest(ctx, &req, upd) // => Requested
-		send(ctx, upd)               // => Sent
+		admit(ctx, &req, upd) // => Admitted
+		send(ctx, upd)        // => Sent
 		done := make(chan any)
 		go func() {
 			assertFailure(ctx, t, upd, false)
@@ -961,7 +1028,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		defer cancel()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		assertAdmitted(ctx, t, upd)
-		applyRequest(ctx, &req, upd)  // => Requested
+		admit(ctx, &req, upd)         // => Admitted
 		send(ctx, upd)                // => Sent
 		applyMessage(ctx, &acpt, upd) // => Accepted
 		assertAccepted(ctx, t, upd, true)
@@ -985,7 +1052,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
 		require.Nil(t, status.Outcome)
 
-		applyRequest(ctx, &req, upd)  // => Requested
+		admit(ctx, &req, upd)         // => Admitted
 		send(ctx, upd)                // => Sent
 		applyMessage(ctx, &acpt, upd) // => Accepted
 

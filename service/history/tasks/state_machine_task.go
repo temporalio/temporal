@@ -40,14 +40,6 @@ type StateMachineTask struct {
 
 var _ HasStateMachineTaskType = &StateMachineTask{}
 
-func (t *StateMachineTask) GetVersion() int64 {
-	return t.Info.Ref.MutableStateNamespaceFailoverVersion
-}
-
-func (t *StateMachineTask) SetVersion(version int64) {
-	t.Info.Ref.MutableStateNamespaceFailoverVersion = version
-}
-
 func (t *StateMachineTask) GetTaskID() int64 {
 	return t.TaskID
 }

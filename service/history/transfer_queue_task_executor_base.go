@@ -262,8 +262,9 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	// ensureNoPendingCloseTask flag is set iff we're running in the active cluster, and we aren't processing the
 	// CloseExecutionTask from within this same goroutine.
 	if ensureNoPendingCloseTask {
-		// Unfortunately, queue states/ack levels are updated with delay (default 30s), therefore this could fail if the
-		// workflow was closed before the queue state/ack levels were updated, so we return a retryable error.
+		// Unfortunately, queue states/ack levels are updated with delay ("history.transferProcessorUpdateAckInterval", default 30s),
+		// therefore this could fail if the workflow was closed before the queue state/ack levels were updated,
+		// so we return a retryable error.
 		if t.isCloseExecutionTaskPending(mutableState, weCtx) {
 			return consts.ErrDependencyTaskNotCompleted
 		}
@@ -272,12 +273,17 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	// If task version is EmptyVersion it means "don't check task version".
 	// This can happen when task was created from explicit user API call.
 	// Or the namespace is a local namespace which will not have version conflict.
-	if task.GetVersion() != common.EmptyVersion {
+	taskVersion := common.EmptyVersion
+	if taskWithVersion, ok := task.(tasks.HasVersion); ok {
+		taskVersion = taskWithVersion.GetVersion()
+	}
+
+	if taskVersion != common.EmptyVersion {
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, taskVersion, task)
 		if err != nil {
 			return err
 		}

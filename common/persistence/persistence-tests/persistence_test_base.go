@@ -79,36 +79,35 @@ type (
 		DBHost            string
 		DBPort            int `yaml:"-"`
 		ConnectAttributes map[string]string
-		StoreType         string                 `yaml:"-"`
-		SchemaDir         string                 `yaml:"-"`
-		FaultInjection    *config.FaultInjection `yaml:"faultinjection"`
-		Logger            log.Logger             `yaml:"-"`
+		StoreType         string `yaml:"-"`
+		SchemaDir         string `yaml:"-"`
+		FaultInjection    *config.FaultInjection
+		Logger            log.Logger `yaml:"-"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr                    persistence.ShardManager
-		AbstractDataStoreFactory    client.AbstractDataStoreFactory
-		VisibilityStoreFactory      visibility.VisibilityStoreFactory
-		FaultInjection              *client.FaultInjectionDataStoreFactory
-		Factory                     client.Factory
-		ExecutionManager            persistence.ExecutionManager
-		TaskMgr                     persistence.TaskManager
-		ClusterMetadataManager      persistence.ClusterMetadataManager
-		MetadataManager             persistence.MetadataManager
-		NamespaceReplicationQueue   persistence.NamespaceReplicationQueue
-		NexusIncomingServiceManager persistence.NexusIncomingServiceManager
-		ShardInfo                   *persistencespb.ShardInfo
-		TaskIDGenerator             TransferTaskIDGenerator
-		ClusterMetadata             cluster.Metadata
-		SearchAttributesManager     searchattribute.Manager
-		PersistenceRateLimiter      quotas.RequestRateLimiter
-		PersistenceHealthSignals    persistence.HealthSignalAggregator
-		ReadLevel                   int64
-		ReplicationReadLevel        int64
-		DefaultTestCluster          PersistenceTestCluster
-		Logger                      log.Logger
+		ShardMgr                  persistence.ShardManager
+		AbstractDataStoreFactory  client.AbstractDataStoreFactory
+		VisibilityStoreFactory    visibility.VisibilityStoreFactory
+		Factory                   client.Factory
+		ExecutionManager          persistence.ExecutionManager
+		TaskMgr                   persistence.TaskManager
+		ClusterMetadataManager    persistence.ClusterMetadataManager
+		MetadataManager           persistence.MetadataManager
+		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
+		NexusEndpointManager      persistence.NexusEndpointManager
+		ShardInfo                 *persistencespb.ShardInfo
+		TaskIDGenerator           TransferTaskIDGenerator
+		ClusterMetadata           cluster.Metadata
+		SearchAttributesManager   searchattribute.Manager
+		PersistenceRateLimiter    quotas.RequestRateLimiter
+		PersistenceHealthSignals  persistence.HealthSignalAggregator
+		ReadLevel                 int64
+		ReplicationReadLevel      int64
+		DefaultTestCluster        PersistenceTestCluster
+		Logger                    log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -212,7 +211,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
-	dataStoreFactory, faultInjection := client.DataStoreFactoryProvider(
+	dataStoreFactory := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
 		&cfg,
@@ -240,11 +239,10 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ExecutionManager, err = factory.NewExecutionManager()
 	s.fatalOnError("NewExecutionManager", err)
 
-	s.NexusIncomingServiceManager, err = factory.NewNexusIncomingServiceManager()
-	s.fatalOnError("NewNexusIncomingServiceManager", err)
+	s.NexusEndpointManager, err = factory.NewNexusEndpointManager()
+	s.fatalOnError("NewNexusEndpointManager", err)
 
 	s.Factory = factory
-	s.FaultInjection = faultInjection
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
@@ -279,7 +277,7 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.ExecutionManager.Close()
 	s.ShardMgr.Close()
 	s.ExecutionManager.Close()
-	s.NexusIncomingServiceManager.Close()
+	s.NexusEndpointManager.Close()
 	s.NamespaceReplicationQueue.Stop()
 	s.Factory.Close()
 	s.DefaultTestCluster.TearDownTestDatabase()

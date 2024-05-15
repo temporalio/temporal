@@ -31,7 +31,6 @@ import "google/protobuf/timestamp.proto";
 import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 
@@ -103,6 +102,7 @@ message WorkflowReplicationMessages {
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
     int64 exclusive_high_watermark = 2;
     google.protobuf.Timestamp  exclusive_high_watermark_time = 3;
+    temporal.server.api.enums.v1.TaskPriority priority = 4;
 }
 
 message ReplicationTaskInfo {
@@ -127,7 +127,6 @@ message NamespaceTaskAttributes {
     int64 config_version = 6;
     int64 failover_version = 7;
     repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
-    repeated temporal.server.api.persistence.v1.NexusOutgoingService nexus_outgoing_services = 9;
 }
 
 message SyncShardStatusTaskAttributes {

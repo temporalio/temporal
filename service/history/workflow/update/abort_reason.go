@@ -35,7 +35,6 @@ type (
 const (
 	AbortReasonRegistryCleared AbortReason = iota + 1
 	AbortReasonWorkflowCompleted
-	AbortReasonWorkflowTerminated
 )
 
 // Error returns an error which will be set to update futures while aborting waiters.
@@ -44,8 +43,6 @@ func (r AbortReason) Error() error {
 	case AbortReasonRegistryCleared:
 		return registryClearedErr
 	case AbortReasonWorkflowCompleted:
-		return consts.ErrWorkflowCompleted
-	case AbortReasonWorkflowTerminated:
 		return consts.ErrWorkflowCompleted
 	default:
 		panic("unknown abort reason")

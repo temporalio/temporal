@@ -40,7 +40,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
-	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -166,8 +165,8 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
-	s.cluster1.TearDownCluster()
-	s.cluster2.TearDownCluster()
+	s.NoError(s.cluster1.TearDownCluster())
+	s.NoError(s.cluster2.TearDownCluster())
 }
 
 func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
@@ -288,9 +287,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	testListResult(engine2, saListRequest)
 
 	// upsert search attributes
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{

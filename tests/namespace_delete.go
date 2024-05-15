@@ -90,8 +90,8 @@ func (s *namespaceTestSuite) SetupSuite() {
 		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
 	}
 
-	s.clusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.DeleteNamespaceDeleteActivityRPS: 1000,
+	s.clusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.DeleteNamespaceDeleteActivityRPS.Key(): 1000,
 	}
 
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), s.clusterConfig, s.logger)

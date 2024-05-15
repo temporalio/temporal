@@ -329,7 +329,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	defer controller.Finish()
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 
@@ -403,7 +403,7 @@ func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Second)
+	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 
@@ -423,7 +423,7 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	cfg.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 

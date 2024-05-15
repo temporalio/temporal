@@ -56,8 +56,7 @@ type (
 
 		// Find finds an existing update in this Registry but does not create a
 		// new update if no update is found.
-		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
-		// TODO: isn't the return `bool` always true when the *Update != nil?
+		Find(ctx context.Context, protocolInstanceID string) *Update
 
 		// HasOutgoingMessages returns true if the registry has any Updates
 		// for which outgoing message can be generated.
@@ -209,7 +208,7 @@ func NewRegistry(
 }
 
 func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
-	if upd, found := r.Find(ctx, id); found {
+	if upd := r.Find(ctx, id); upd != nil {
 		return upd, true, nil
 	}
 	if err := r.checkLimits(ctx); err != nil {
@@ -327,6 +326,7 @@ func (r *registry) remover(id string) updateOpt {
 
 func (r *registry) checkLimits(_ context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
+		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -335,6 +335,7 @@ func (r *registry) checkLimits(_ context.Context) error {
 	}
 
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
+		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
@@ -343,9 +344,9 @@ func (r *registry) checkLimits(_ context.Context) error {
 	return nil
 }
 
-func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
+func (r *registry) Find(ctx context.Context, id string) *Update {
 	if upd, ok := r.updates[id]; ok {
-		return upd, true
+		return upd
 	}
 
 	// update not found in ephemeral state, but could have already completed so
@@ -355,7 +356,7 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 	// Swallow NotFound error because it means that update doesn't exist.
 	var notFound *serviceerror.NotFound
 	if errors.As(err, &notFound) {
-		return nil, false
+		return nil
 	}
 
 	// Other errors go to the future of completed update because it means, that update exists, was found,
@@ -368,7 +369,7 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 		id,
 		fut,
 		withInstrumentation(&r.instrumentation),
-	), true
+	)
 }
 
 // filter returns a slice of all updates in the registry for which the
@@ -388,6 +389,7 @@ func (r *registry) GetSize() int {
 	for key, update := range r.updates {
 		size += len(key) + update.GetSize()
 	}
+	r.instrumentation.updateRegistrySize(size)
 	return size
 }
 

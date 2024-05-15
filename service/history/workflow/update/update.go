@@ -40,6 +40,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
 )
@@ -218,6 +219,7 @@ func (u *Update) WaitLifecycleStage(
 
 		if ctx.Err() != nil {
 			// Handle root context deadline expiry as normal error which is returned to the caller.
+			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
 		}
 
@@ -253,12 +255,15 @@ func (u *Update) WaitLifecycleStage(
 
 		if ctx.Err() != nil {
 			// Handle root context deadline expiry as normal error which is returned to the caller.
+			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
 		}
+	}
 
-		if stCtx.Err() != nil {
-			return statusAdmitted(), nil
-		}
+	// If waitStage=COMPLETED or ACCEPTED and neither has been reached before the softTimeout has expired.
+	if stCtx.Err() != nil {
+		metrics.WorkflowExecutionUpdateServerTimeout.With(u.instrumentation.metrics).Record(1)
+		return statusAdmitted(), nil
 	}
 
 	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
@@ -269,6 +274,7 @@ func (u *Update) WaitLifecycleStage(
 // abort fails update futures with reason.Error() error (which will notify all waiters with error)
 // and set state to stateAborted. It is a terminal state. Update can't be changed after it is aborted.
 func (u *Update) abort(reason AbortReason) {
+	u.instrumentation.countAborted()
 
 	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
 	if u.state.Matches(preAcceptedStates) {
@@ -300,7 +306,6 @@ func (u *Update) Admit(
 	if err := validateRequestMsg(u.id, req); err != nil {
 		return err
 	}
-
 	if !eventStore.CanAddEvent() {
 		// There shouldn't be any waiters before update is admitted (this func returns).
 		// Call abort to seal the update.
@@ -308,7 +313,7 @@ func (u *Update) Admit(
 		return AbortReasonWorkflowCompleted.Error()
 	}
 
-	u.instrumentation.CountRequestMsg()
+	u.instrumentation.countRequestMsg()
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
 	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
 		return invalidArgf("unable to marshal request: %v", err)
@@ -353,11 +358,11 @@ func (u *Update) OnProtocolMessage(
 	eventStore EventStore,
 ) error {
 	if protocolMsg == nil {
-		return invalidArgf("Update %q received nil message", u.id)
+		return invalidArgf("Update %s received nil message", u.id)
 	}
 
 	if protocolMsg.Body == nil {
-		return invalidArgf("Update %q received message with nil body", u.id)
+		return invalidArgf("Update %s received message with nil body", u.id)
 	}
 
 	body, err := protocolMsg.Body.UnmarshalNew()
@@ -414,6 +419,11 @@ func (u *Update) Send(
 		return nil
 	}
 
+	u.instrumentation.countSent()
+	if u.state == stateSent {
+		u.instrumentation.countSentAgain()
+	}
+
 	if u.state == stateAdmitted {
 		u.setState(stateSent)
 	}
@@ -450,13 +460,19 @@ func (u *Update) onAcceptanceMsg(
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
 ) error {
-	if err := u.checkState(acpt, stateSent); err != nil {
+	// Normally update goes from stateAdmitted to stateSent and then to stateAccepted,
+	// therefore the only valid state here is stateSent.
+	// But if update registry is cleared after update was sent to the worker,
+	// it will be recreated by retries in stateAdmitted, and then worker can accept previous (cleared) update
+	// with the same UpdateId. Because it is, in fact, the same update, server should process this accept message w/o error.
+	// Therefore, stateAdmitted is also a valid state.
+	if err := u.checkStateSet(acpt, stateSet(stateSent|stateAdmitted)); err != nil {
 		return err
 	}
 	if err := validateAcceptanceMsg(acpt); err != nil {
 		return err
 	}
-	u.instrumentation.CountAcceptanceMsg()
+	u.instrumentation.countAcceptanceMsg()
 
 	// The accepted request payload is not sent back by the worker to the server. Instead, the server stores it in the
 	// update registry and it is written to the event here. It could make sense to obtain it from the worker, in order
@@ -520,13 +536,14 @@ func (u *Update) onRejectionMsg(
 	rej *updatepb.Rejection,
 	effects effect.Controller,
 ) error {
-	if err := u.checkState(rej, stateSent); err != nil {
+	// See comment in onAcceptanceMsg about stateAdmitted.
+	if err := u.checkStateSet(rej, stateSet(stateSent|stateAdmitted)); err != nil {
 		return err
 	}
 	if err := validateRejectionMsg(rej); err != nil {
 		return err
 	}
-	u.instrumentation.CountRejectionMsg()
+	u.instrumentation.countRejectionMsg()
 	return u.reject(ctx, rej.Failure, effects)
 }
 
@@ -579,7 +596,7 @@ func (u *Update) onResponseMsg(
 	if _, err := eventStore.AddWorkflowExecutionUpdateCompletedEvent(u.acceptedEventID, res); err != nil {
 		return err
 	}
-	u.instrumentation.CountResponseMsg()
+	u.instrumentation.countResponseMsg()
 	prevState := u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
@@ -611,16 +628,16 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 	if u.state.Matches(allowed) {
 		return nil
 	}
-	u.instrumentation.CountInvalidStateTransition()
+	u.instrumentation.invalidStateTransition(u.id, msg, u.state)
 	return invalidArgf("invalid state transition attempted for Update %s: "+
-		"received %T message while in state %q", u.id, msg, u.state)
+		"received %T message while in state %s", u.id, msg, u.state)
 }
 
 // setState assigns the current state to a new value returning the original value.
 func (u *Update) setState(newState state) state {
 	prevState := u.state
 	u.state = newState
-	u.instrumentation.StateChange(u.id, prevState, newState)
+	u.instrumentation.stateChange(u.id, prevState, newState)
 	return prevState
 }
 

@@ -34,12 +34,12 @@ import (
 
 // TestFlags contains the feature flags for functional tests
 var TestFlags struct {
-	FrontendAddr                  string
-	FrontendHTTPAddr              string
-	PersistenceType               string
-	PersistenceDriver             string
-	TestClusterConfigFile         string
-	PersistenceFaultInjectionRate float64
+	FrontendAddr             string
+	FrontendHTTPAddr         string
+	PersistenceType          string
+	PersistenceDriver        string
+	TestClusterConfigFile    string
+	FaultInjectionConfigFile string
 }
 
 func init() {
@@ -48,7 +48,7 @@ func init() {
 	flag.StringVar(&TestFlags.PersistenceType, "persistenceType", "sql", "type of persistence - [nosql or sql]")
 	flag.StringVar(&TestFlags.PersistenceDriver, "persistenceDriver", "sqlite", "driver of nosql / sql- [cassandra, mysql, postgresql, sqlite]")
 	flag.StringVar(&TestFlags.TestClusterConfigFile, "TestClusterConfigFile", "", "test cluster config file location")
-	flag.Float64Var(&TestFlags.PersistenceFaultInjectionRate, "PersistenceFaultInjectionRate", 0, "rate of persistence error injection. value: [0..1]. 0 = no injection")
+	flag.StringVar(&TestFlags.FaultInjectionConfigFile, "FaultInjectionConfigFile", "", "fault injection config file location")
 }
 
 func UsingSQLAdvancedVisibility() bool {

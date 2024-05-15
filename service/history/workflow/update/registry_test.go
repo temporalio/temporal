@@ -100,15 +100,15 @@ func TestFind(t *testing.T) {
 		}
 		reg = update.NewRegistry(store)
 	)
-	_, ok := reg.Find(ctx, updateID)
-	require.False(t, ok)
+	upd := reg.Find(ctx, updateID)
+	require.Nil(t, upd)
 
 	_, found, err := reg.FindOrCreate(ctx, updateID)
 	require.NoError(t, err)
 	require.False(t, found)
 
-	_, ok = reg.Find(ctx, updateID)
-	require.True(t, ok)
+	upd = reg.Find(ctx, updateID)
+	require.NotNil(t, upd)
 }
 
 func TestHasOutgoingMessages(t *testing.T) {
@@ -573,8 +573,8 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 		reg = update.NewRegistry(regStore)
 	)
 
-	upd, found := reg.Find(ctx, completedUpdateID)
-	require.True(t, found)
+	upd := reg.Find(ctx, completedUpdateID)
+	require.NotNil(t, upd)
 
 	_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 	require.ErrorIs(t, expectError, err)

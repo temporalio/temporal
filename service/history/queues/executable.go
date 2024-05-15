@@ -36,12 +36,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sony/gobreaker"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -497,11 +497,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if len(e.dlqErrorPattern()) > 0 {
 		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
 		if mErr != nil {
-			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern))
+			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
 		} else if match {
 			e.logger.Error(
 				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
-					dynamicconfig.HistoryTaskDLQErrorPattern),
+					dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
 				tag.Error(err),
 				tag.ErrorType(err))
 			e.terminalFailureCause = err
@@ -803,12 +803,12 @@ func EstimateTaskMetricTag(
 // of failure, and return the inner error.
 type CircuitBreakerExecutable struct {
 	Executable
-	cb *gobreaker.TwoStepCircuitBreaker
+	cb circuitbreaker.TwoStepCircuitBreaker
 }
 
 func NewCircuitBreakerExecutable(
 	e Executable,
-	cb *gobreaker.TwoStepCircuitBreaker,
+	cb circuitbreaker.TwoStepCircuitBreaker,
 ) *CircuitBreakerExecutable {
 	return &CircuitBreakerExecutable{
 		Executable: e,

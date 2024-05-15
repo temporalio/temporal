@@ -690,12 +690,9 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask() error {
-	currentVersion := r.mutableState.GetCurrentVersion()
-
 	r.mutableState.AddTasks(&tasks.UpsertExecutionVisibilityTask{
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey: r.mutableState.GetWorkflowKey(),
-		Version:     currentVersion, // task processing does not check this version
 	})
 	return nil
 }

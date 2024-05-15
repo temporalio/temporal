@@ -592,10 +592,10 @@ func (p *PostgreSQLSuite) TestPGQueueV2() {
 	RunQueueV2TestSuiteForSQL(p.T(), testData.Factory)
 }
 
-func (p *PostgreSQLSuite) TestPostgreSQLNexusIncomingServicePersistence() {
+func (p *PostgreSQLSuite) TestPostgreSQLNexusEndpointPersistence() {
 	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
 	p.T().Cleanup(tearDown)
-	RunNexusIncomingServiceTestSuiteForSQL(p.T(), testData.Factory)
+	RunNexusEndpointTestSuiteForSQL(p.T(), testData.Factory)
 }
 
 func TestPQ(t *testing.T) {

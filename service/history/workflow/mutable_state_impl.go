@@ -811,7 +811,9 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 // The provided setAttributes function should be used to set the attributes on the event.
 func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes func(*history.HistoryEvent)) *history.HistoryEvent {
 	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
-	ms.writeEventToCache(event)
+	if event.EventId != common.BufferedEventID {
+		ms.writeEventToCache(event)
+	}
 	ms.currentTransactionAddedStateMachineEventTypes = append(ms.currentTransactionAddedStateMachineEventTypes, t)
 	return event
 }
