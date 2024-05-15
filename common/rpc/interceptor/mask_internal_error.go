@@ -28,11 +28,12 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/server/common/namespace"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -54,14 +55,21 @@ func NewMaskInternalErrorsInterceptor(
 	}
 }
 
+var shardUnabailableErrorMessage = "shard unavailable, please backoff and retry"
+
 func (i *MaskInternalErrorsInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
-	info *grpc.UnaryServerInfo,
+	_ *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 
 	resp, err := handler(ctx, req)
+
+	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
+		return resp, serviceerror.NewUnavailable(shardUnabailableErrorMessage)
+	}
+
 	if err != nil && i.shouldMaskErrors(req) {
 		err = maskUnknownOrInternalErrors(err)
 	}

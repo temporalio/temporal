@@ -25,14 +25,21 @@
 package interceptor
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 
-	"go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -65,4 +72,53 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelp
 			assert.Equal(t, errorMessage.Error(), st.Message())
 		}
 	}
+}
+
+func TestMaskUnknownOrInternalErrorsInterceptor(t *testing.T) {
+
+	mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
+
+	client := make(dynamicconfig.StaticClient)
+	logger := log.NewNoopLogger()
+
+	cln := dynamicconfig.NewCollection(client, logger)
+
+	errorMask := NewMaskInternalErrorsInterceptor(cln, mockRegistry)
+
+	test_namespace := "test-namespace"
+	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: test_namespace}
+	mockRegistry.EXPECT().GetNamespace(namespace.Name(test_namespace)).Return(&namespace.Namespace{}, nil).AnyTimes()
+	assert.True(t, errorMask.shouldMaskErrors(req))
+
+	namespace_not_found := "namespace-not-found"
+	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: namespace_not_found}
+	mockRegistry.EXPECT().GetNamespace(namespace.Name(namespace_not_found)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
+	assert.False(t, errorMask.shouldMaskErrors(req))
+
+	empty_namespace := ""
+	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: empty_namespace}
+	mockRegistry.EXPECT().GetNamespace(namespace.Name(empty_namespace)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
+	assert.False(t, errorMask.shouldMaskErrors(req))
+
+	var ei interface{}
+	assert.False(t, errorMask.shouldMaskErrors(ei))
+}
+
+func TestMaskShardOwnershipLost(t *testing.T) {
+	mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
+
+	client := make(dynamicconfig.StaticClient)
+	logger := log.NewNoopLogger()
+
+	cln := dynamicconfig.NewCollection(client, logger)
+
+	errorMask := NewMaskInternalErrorsInterceptor(cln, mockRegistry)
+
+	var ei interface{}
+	_, err := errorMask.Intercept(context.Background(), ei, nil, func(ctx context.Context, req any) (any, error) {
+		return nil, serviceerrors.NewShardOwnershipLost("ownerHost", "currentHost")
+	})
+
+	assert.Equal(t, shardUnabailableErrorMessage, err.Error())
+
 }
