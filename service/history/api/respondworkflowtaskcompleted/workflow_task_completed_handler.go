@@ -374,7 +374,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 		if upd == nil {
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFound(fmt.Sprintf("update %s wasn't found on server. It is, most likely, a transient error which is fixed by retries", message.ProtocolInstanceId)))
+				serviceerror.NewNotFound(fmt.Sprintf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId)))
 		}
 
 		if err := upd.OnProtocolMessage(
