@@ -298,3 +298,29 @@ func (c *backlogManagerImpl) newIOContext() (context.Context, context.CancelFunc
 func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()
 }
+
+// countTasksFromTaskQueue counts the total number of tasks present in a task queue; returns 0 for
+// cassandra databases since the in-memory counter is a good estimate for the number of tasks present while it returns
+// the actual number of tasks in the task queue for sql databases. This is required since SQL databases do not persist
+// taskQueueInfo when tasks are created.
+func (c *backlogManagerImpl) countTasksFromTaskQueue(ctx context.Context) (int64, error) {
+	tasksPresent, err := c.db.store.CountTasksExact(ctx, &persistence.CountTasksExactRequest{
+		NamespaceID: c.db.queue.NamespaceId().String(),
+		TaskQueue:   c.db.queue.PersistenceName(),
+		TaskType:    c.db.queue.TaskType(),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int64(tasksPresent), nil
+}
+
+func (c *backlogManagerImpl) getApproximateBacklogCount(ctx context.Context) (int64, error) {
+	exactTasks, err := c.countTasksFromTaskQueue(ctx)
+	if err != nil {
+		return 0, err
+	}
+	// max is returned so that we never return a negative value for the counter and to also
+	// prevent under-counting for SQL databases
+	return max(exactTasks, c.db.getApproximateBacklogCount()), nil
+}

@@ -306,6 +306,6 @@ func (m *taskManagerImpl) CountTaskQueuesByBuildId(ctx context.Context, request 
 	return m.taskStore.CountTaskQueuesByBuildId(ctx, request)
 }
 
-func (m *taskManagerImpl) CountTasksFromTaskQueue(ctx context.Context, request *CountTasksFromTaskQueueRequest) (int, error) {
-	return m.taskStore.CountTasksFromTaskQueue(ctx, request)
+func (m *taskManagerImpl) CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error) {
+	return m.taskStore.CountTasksExact(ctx, request)
 }

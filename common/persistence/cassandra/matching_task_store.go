@@ -654,7 +654,7 @@ func (d *MatchingTaskStore) CountTaskQueuesByBuildId(ctx context.Context, reques
 	return count, err
 }
 
-func (d *MatchingTaskStore) CountTasksFromTaskQueue(ctx context.Context, request *p.CountTasksFromTaskQueueRequest) (int, error) {
+func (d *MatchingTaskStore) CountTasksExact(ctx context.Context, request *p.CountTasksExactRequest) (int, error) {
 	return 0, nil
 }
 

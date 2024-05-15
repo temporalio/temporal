@@ -696,14 +696,14 @@ func (p *taskPersistenceClient) CountTaskQueuesByBuildId(ctx context.Context, re
 	return p.persistence.CountTaskQueuesByBuildId(ctx, request)
 }
 
-func (p *taskPersistenceClient) CountTasksFromTaskQueue(ctx context.Context, request *CountTasksFromTaskQueueRequest) (_ int, retErr error) {
+func (p *taskPersistenceClient) CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (_ int, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
 	defer func() {
 		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
 		p.recordRequestMetrics(metrics.PersistenceCountTasksFromTaskQueueScope, caller, time.Since(startTime), retErr)
 	}()
-	return p.persistence.CountTasksFromTaskQueue(ctx, request)
+	return p.persistence.CountTasksExact(ctx, request)
 }
 
 func (p *taskPersistenceClient) Close() {

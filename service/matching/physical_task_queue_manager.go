@@ -32,8 +32,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/persistence"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -414,30 +412,13 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-// countTasksFromTaskQueue counts the total number of tasks present in a task queue; returns 0 for
-// cassandra databases since the backlog counter is an over-estimate for the number of tasks present and returns
-// the number of tasks in the task queue for sql databases. This is required since SQL databases do not persist
-// taskQueueInfo when tasks are created.
-func (c *physicalTaskQueueManagerImpl) countTasksFromTaskQueue(ctx context.Context) (int, error) {
-	tasksPresent, err := c.backlogMgr.db.store.CountTasksFromTaskQueue(ctx, &persistence.CountTasksFromTaskQueueRequest{
-		NamespaceID: c.queue.NamespaceId().String(),
-		TaskQueue:   c.queue.PersistenceName(),
-		TaskType:    c.queue.TaskType(),
-	})
-	if err != nil {
-		return 0, err
-	}
-	return tasksPresent, nil
-}
-
 func (c *physicalTaskQueueManagerImpl) GetBacklogInfo(ctx context.Context) (*taskqueuepb.BacklogInfo, error) {
-	tasksCount, err := c.countTasksFromTaskQueue(ctx)
+	approximateBacklogCount, err := c.backlogMgr.getApproximateBacklogCount(ctx)
 	if err != nil {
 		return nil, err
 	}
-	backlogCounter := max(c.backlogMgr.db.getApproximateBacklogCount(), int64(tasksCount)) // in tandem with the backlog counter being an overestimate
 	return &taskqueuepb.BacklogInfo{
-		ApproximateBacklogCount: backlogCounter,
+		ApproximateBacklogCount: approximateBacklogCount,
 		ApproximateBacklogAge:   nil,        // TODO: Shivam - add this feature
 		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
 		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature

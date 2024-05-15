@@ -1149,7 +1149,7 @@ func (t *FaultInjectionTaskStore) CountTaskQueuesByBuildId(ctx context.Context, 
 	return t.baseTaskStore.CountTaskQueuesByBuildId(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) CountTasksFromTaskQueue(ctx context.Context, request *persistence.CountTasksFromTaskQueueRequest) (int, error) {
+func (t *FaultInjectionTaskStore) CountTasksExact(ctx context.Context, request *persistence.CountTasksExactRequest) (int, error) {
 	return 0, nil
 }
 

@@ -581,7 +581,7 @@ func (m *sqlTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *
 	return m.Db.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
-func (m *sqlTaskManager) CountTasksFromTaskQueue(ctx context.Context, request *persistence.CountTasksFromTaskQueueRequest) (int, error) {
+func (m *sqlTaskManager) CountTasksExact(ctx context.Context, request *persistence.CountTasksExactRequest) (int, error) {
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return 0, serviceerror.NewUnavailable(err.Error())

@@ -597,11 +597,11 @@ func (p taskRateLimitedPersistenceClient) CountTaskQueuesByBuildId(ctx context.C
 	return p.persistence.CountTaskQueuesByBuildId(ctx, request)
 }
 
-func (p taskRateLimitedPersistenceClient) CountTasksFromTaskQueue(ctx context.Context, request *CountTasksFromTaskQueueRequest) (int, error) {
+func (p taskRateLimitedPersistenceClient) CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error) {
 	if err := allow(ctx, "CountTasksFromTaskQueue", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
 		return 0, err
 	}
-	return p.persistence.CountTasksFromTaskQueue(ctx, request)
+	return p.persistence.CountTasksExact(ctx, request)
 }
 
 func (p *taskRateLimitedPersistenceClient) Close() {

@@ -812,11 +812,11 @@ func (p *taskRetryablePersistenceClient) CountTaskQueuesByBuildId(ctx context.Co
 	return response, err
 }
 
-func (p *taskRetryablePersistenceClient) CountTasksFromTaskQueue(ctx context.Context, request *CountTasksFromTaskQueueRequest) (int, error) {
+func (p *taskRetryablePersistenceClient) CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error) {
 	var response int
 	op := func(ctx context.Context) error {
 		var err error
-		response, err = p.persistence.CountTasksFromTaskQueue(ctx, request)
+		response, err = p.persistence.CountTasksExact(ctx, request)
 		return err
 	}
 
