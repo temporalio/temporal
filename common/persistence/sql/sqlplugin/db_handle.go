@@ -25,6 +25,7 @@ package sqlplugin
 import (
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -34,6 +35,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	uberatomic "go.uber.org/atomic"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -126,7 +128,7 @@ func (h *DatabaseHandle) Conn() Conn {
 	return h.db.Load()
 }
 
-func (h *DatabaseHandle) HandleError(err error) {
+func (h *DatabaseHandle) ConvertError(err error) error {
 	if h.needsRefresh(err) ||
 		errors.Is(err, driver.ErrBadConn) ||
 		errors.Is(err, io.ErrUnexpectedEOF) ||
@@ -135,5 +137,7 @@ func (h *DatabaseHandle) HandleError(err error) {
 		errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, syscall.ECONNREFUSED) {
 		h.reconnect()
+		return serviceerror.NewUnavailable(fmt.Sprintf("database connection lost: %s", err.Error()))
 	}
+	return err
 }

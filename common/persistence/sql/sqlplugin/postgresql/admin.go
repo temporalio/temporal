@@ -74,10 +74,7 @@ const (
 // Exec executes a sql statement
 func (pdb *db) Exec(stmt string, args ...any) error {
 	_, err := pdb.DB().Exec(stmt, args...)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return err
+	return pdb.handle.ConvertError(err)
 }
 
 // CreateSchemaVersionTables sets up the schema version tables
@@ -92,10 +89,7 @@ func (pdb *db) CreateSchemaVersionTables() error {
 func (pdb *db) ReadSchemaVersion(database string) (string, error) {
 	var version string
 	err := pdb.DB().Get(&version, readSchemaVersionQuery, database)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return version, err
+	return version, pdb.handle.ConvertError(err)
 }
 
 // UpdateSchemaVersion updates the schema version for the keyspace
@@ -107,20 +101,14 @@ func (pdb *db) UpdateSchemaVersion(database string, newVersion string, minCompat
 func (pdb *db) WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error {
 	now := time.Now().UTC()
 	err := pdb.Exec(writeSchemaUpdateHistoryQuery, now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, desc)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return err
+	return pdb.handle.ConvertError(err)
 }
 
 // ListTables returns a list of tables in this database
 func (pdb *db) ListTables(database string) ([]string, error) {
 	var tables []string
 	err := pdb.Select(&tables, listTablesQuery)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return tables, err
+	return tables, pdb.handle.ConvertError(err)
 }
 
 // DropTable drops a given table from the database

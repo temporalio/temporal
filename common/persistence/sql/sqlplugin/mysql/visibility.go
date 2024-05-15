@@ -95,7 +95,7 @@ func (mdb *db) InsertIntoVisibility(
 ) (result sql.Result, retError error) {
 	finalRow := mdb.prepareRowForDB(row)
 	defer func() {
-		mdb.handle.HandleError(retError)
+		retError = mdb.handle.ConvertError(retError)
 	}()
 	tx, err := mdb.handle.DB().BeginTxx(ctx, nil)
 	if err != nil {
@@ -130,7 +130,7 @@ func (mdb *db) ReplaceIntoVisibility(
 	row *sqlplugin.VisibilityRow,
 ) (result sql.Result, retError error) {
 	defer func() {
-		mdb.handle.HandleError(retError)
+		retError = mdb.handle.ConvertError(retError)
 	}()
 	finalRow := mdb.prepareRowForDB(row)
 	tx, err := mdb.handle.DB().BeginTxx(ctx, nil)
@@ -166,7 +166,7 @@ func (mdb *db) DeleteFromVisibility(
 	filter sqlplugin.VisibilityDeleteFilter,
 ) (result sql.Result, retError error) {
 	defer func() {
-		mdb.handle.HandleError(retError)
+		retError = mdb.handle.ConvertError(retError)
 	}()
 	tx, err := mdb.handle.DB().BeginTxx(ctx, nil)
 	if err != nil {
@@ -260,7 +260,7 @@ func (mdb *db) CountGroupByFromVisibility(
 	filter sqlplugin.VisibilitySelectFilter,
 ) (_ []sqlplugin.VisibilityCountRow, retError error) {
 	defer func() {
-		mdb.handle.HandleError(retError)
+		retError = mdb.handle.ConvertError(retError)
 	}()
 	rows, err := mdb.handle.DB().QueryContext(ctx, filter.Query, filter.QueryArgs...)
 	if err != nil {

@@ -79,8 +79,7 @@ func (mdb *db) CreateSchemaVersionTables() error {
 func (mdb *db) ReadSchemaVersion(database string) (string, error) {
 	var version string
 	err := mdb.handle.DB().Get(&version, readSchemaVersionQuery, database)
-	mdb.handle.HandleError(err)
-	return version, err
+	return version, mdb.handle.ConvertError(err)
 }
 
 // UpdateSchemaVersion updates the schema version for the keyspace
@@ -97,16 +96,14 @@ func (mdb *db) WriteSchemaUpdateLog(oldVersion string, newVersion string, manife
 // Exec executes a sql statement
 func (mdb *db) Exec(stmt string, args ...interface{}) error {
 	_, err := mdb.handle.DB().Exec(stmt, args...)
-	mdb.handle.HandleError(err)
-	return err
+	return mdb.handle.ConvertError(err)
 }
 
 // ListTables returns a list of tables in this database
 func (mdb *db) ListTables(database string) ([]string, error) {
 	var tables []string
 	err := mdb.handle.DB().Select(&tables, fmt.Sprintf(listTablesQuery, database))
-	mdb.handle.HandleError(err)
-	return tables, err
+	return tables, mdb.handle.ConvertError(err)
 }
 
 // DropTable drops a given table from the database

@@ -98,16 +98,11 @@ func (pdb *db) conn() sqlplugin.Conn {
 	return pdb.handle.Conn()
 }
 
-func (pdb *db) handleError(err error) {
-	pdb.handle.HandleError(err)
-}
-
 // BeginTx starts a new transaction and returns a reference to the Tx object
 func (pdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	tx, err := pdb.handle.DB().BeginTxx(ctx, nil)
 	if err != nil {
-		pdb.handle.HandleError(err)
-		return nil, err
+		return nil, pdb.handle.ConvertError(err)
 	}
 	return newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.handle, tx), nil
 }
@@ -159,58 +154,37 @@ func (pdb *db) Rollback() error {
 // Helper methods to hide common error handling
 func (pdb *db) ExecContext(ctx context.Context, stmt string, args ...any) (sql.Result, error) {
 	res, err := pdb.conn().ExecContext(ctx, stmt, args...)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return res, err
+	return res, pdb.handle.ConvertError(err)
 }
 
 func (pdb *db) GetContext(ctx context.Context, dest any, query string, args ...any) error {
 	err := pdb.conn().GetContext(ctx, dest, query, args...)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return err
+	return pdb.handle.ConvertError(err)
 }
 
 func (pdb *db) Select(dest any, query string, args ...any) error {
 	err := pdb.DB().Select(dest, query, args...)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return err
+	return pdb.handle.ConvertError(err)
 }
 
 func (pdb *db) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
 	err := pdb.conn().SelectContext(ctx, dest, query, args...)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return err
+	return pdb.handle.ConvertError(err)
 }
 
 func (pdb *db) NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error) {
 	res, err := pdb.conn().NamedExecContext(ctx, query, arg)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return res, err
+	return res, pdb.handle.ConvertError(err)
 }
 
 func (pdb *db) PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error) {
 	stmt, err := pdb.conn().PrepareNamedContext(ctx, query)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return stmt, err
+	return stmt, pdb.handle.ConvertError(err)
 }
 
 func (pdb *db) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	rows, err := pdb.DB().QueryContext(ctx, query, args...)
-	if err != nil {
-		pdb.handleError(err)
-	}
-	return rows, err
+	return rows, pdb.handle.ConvertError(err)
 }
 
 func (pdb *db) Rebind(query string) string {

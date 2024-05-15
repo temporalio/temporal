@@ -114,8 +114,7 @@ func (mdb *db) conn() sqlplugin.Conn {
 func (mdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	xtx, err := mdb.handle.DB().BeginTxx(ctx, nil)
 	if err != nil {
-		mdb.handle.HandleError(err)
-		return nil, err
+		return nil, mdb.handle.ConvertError(err)
 	}
 	return newDB(mdb.dbKind, mdb.dbName, mdb.handle, xtx), nil
 }
@@ -171,42 +170,27 @@ func (mdb *db) VerifyVersion() error {
 // Helper methods to hide common error handling
 func (mdb *db) ExecContext(ctx context.Context, stmt string, args ...any) (sql.Result, error) {
 	res, err := mdb.conn().ExecContext(ctx, stmt, args...)
-	if err != nil {
-		mdb.handle.HandleError(err)
-	}
-	return res, err
+	return res, mdb.handle.ConvertError(err)
 }
 
 func (mdb *db) GetContext(ctx context.Context, dest any, query string, args ...any) error {
 	err := mdb.conn().GetContext(ctx, dest, query, args...)
-	if err != nil {
-		mdb.handle.HandleError(err)
-	}
-	return err
+	return mdb.handle.ConvertError(err)
 }
 
 func (mdb *db) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
 	err := mdb.conn().SelectContext(ctx, dest, query, args...)
-	if err != nil {
-		mdb.handle.HandleError(err)
-	}
-	return err
+	return mdb.handle.ConvertError(err)
 }
 
 func (mdb *db) NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error) {
 	res, err := mdb.conn().NamedExecContext(ctx, query, arg)
-	if err != nil {
-		mdb.handle.HandleError(err)
-	}
-	return res, err
+	return res, mdb.handle.ConvertError(err)
 }
 
 func (mdb *db) PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error) {
 	stmt, err := mdb.conn().PrepareNamedContext(ctx, query)
-	if err != nil {
-		mdb.handle.HandleError(err)
-	}
-	return stmt, err
+	return stmt, mdb.handle.ConvertError(err)
 }
 
 func (mdb *db) Rebind(query string) string {
