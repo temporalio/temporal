@@ -3661,7 +3661,7 @@ func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.C
 }
 
 // CountTasksFromTaskQueue implements persistence.TaskManager
-func (*testTaskManager) CountTasksFromTaskQueue(context.Context, *persistence.CountTasksFromTaskQueueRequest) (int, error) {
+func (*testTaskManager) CountTasksExact(context.Context, *persistence.CountTasksExactRequest) (int, error) {
 	// No need to implement this for unit tests
 	panic("unimplemented")
 }

@@ -701,7 +701,7 @@ func (p *taskPersistenceClient) CountTasksExact(ctx context.Context, request *Co
 	startTime := time.Now().UTC()
 	defer func() {
 		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceCountTasksFromTaskQueueScope, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceCountTasksExactScope, caller, time.Since(startTime), retErr)
 	}()
 	return p.persistence.CountTasksExact(ctx, request)
 }

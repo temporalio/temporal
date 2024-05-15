@@ -598,7 +598,7 @@ func (p taskRateLimitedPersistenceClient) CountTaskQueuesByBuildId(ctx context.C
 }
 
 func (p taskRateLimitedPersistenceClient) CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error) {
-	if err := allow(ctx, "CountTasksFromTaskQueue", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
+	if err := allow(ctx, "CountTasksExact", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
 		return 0, err
 	}
 	return p.persistence.CountTasksExact(ctx, request)
