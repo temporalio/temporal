@@ -305,7 +305,7 @@ Loop:
 		}
 
 		if err := taskGenerator.GenerateActivityTasks(
-			scheduleEvent,
+			scheduleEvent.GetEventId(),
 		); err != nil {
 			return err
 		}

@@ -2391,17 +2391,17 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 	return true
 }
 
-// validateBuildIdRedirectInfo validates build ID for the task being dispatched and, increments the MS redirect counter
-// if a valid redirect is being applied.
+// validateBuildIdRedirectInfo validates build ID for the task being dispatched and returned the redirect counter
+// that should be used in the task started event.
 // If the given versioning stamp and redirect info is not valid based on the WF's assigned build ID
 // InvalidDispatchBuildId error will be returned.
 func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
-	versioningStamp *commonpb.WorkerVersionStamp,
+	startedWorkerStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (int64, error) {
 	assignedBuildId := ms.GetAssignedBuildId()
 	redirectCounter := ms.GetExecutionInfo().GetBuildIdRedirectCounter()
-	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() == assignedBuildId {
+	if !startedWorkerStamp.GetUseVersioning() || startedWorkerStamp.GetBuildId() == assignedBuildId {
 		// dispatch build ID is the same as wf assigned build ID, hence noop.
 		return redirectCounter, nil
 	}
@@ -2474,7 +2474,7 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 			continue
 		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
-		err = ms.taskGenerator.GenerateActivityTasks(&historypb.HistoryEvent{EventId: ai.ScheduledEventId})
+		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
 		if err != nil {
 			return err
 		}
@@ -2711,7 +2711,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
 		if err := ms.taskGenerator.GenerateActivityTasks(
-			event,
+			event.GetEventId(),
 		); err != nil {
 			return nil, nil, err
 		}
