@@ -726,7 +726,13 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
-	query = `AliasForCustomKeywordField = 'pid'`
+	query = "`AliasForCustomKeywordField` = 'pid'"
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomKeywordField":{"query":"pid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	query = "`AliasWithHyphenFor-CustomKeywordField` = 'pid'"
 	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomKeywordField":{"query":"pid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
