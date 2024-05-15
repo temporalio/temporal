@@ -28,8 +28,9 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,6 +40,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -920,7 +922,7 @@ func failWorkflowTask(
 	wtFailedEvent, err := mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		wtFailedCause.failedCause,
-		failure.NewServerFailure(wtFailedCause.Message(), true),
+		failure.NewServerFailure(wtFailedCause.Message(), false),
 		request.GetIdentity(),
 		nil,
 		request.GetBinaryChecksum(),
