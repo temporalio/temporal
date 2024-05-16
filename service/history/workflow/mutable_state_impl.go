@@ -2406,12 +2406,11 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 		return redirectCounter, nil
 	}
 
-	if (assignedBuildId != "" || ms.HasCompletedAnyWorkflowTask()) &&
+	if ms.HasCompletedAnyWorkflowTask() &&
 		(redirectInfo == nil || redirectInfo.GetAssignedBuildId() != assignedBuildId) {
-		// Workflow is already assigned to a build ID (or completed tasks by unversioned workers) but no redirect
-		// or a redirect based on a wrong assigned build ID is reported. This must be a task
-		// backlogged on an old build ID. rejecting this task, there should be another task scheduled on
-		// the right build ID.
+		// Workflow hs already completed tasks but no redirect or a redirect based on a wrong assigned build ID is
+		// reported. This must be a task backlogged on an old build ID. rejecting this task, there should be another
+		// task scheduled on the right build ID.
 		return 0, serviceerrors.NewInvalidDispatchBuildId()
 	}
 
