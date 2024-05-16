@@ -1874,15 +1874,15 @@ When the this config is zero or lower we will only update shard info at most onc
 		enumspb.ENCODING_TYPE_PROTO3.String(),
 		`DefaultEventEncoding is the encoding type for history events`,
 	)
-	DefaultActivityRetryPolicy = NewNamespaceMapSetting(
+	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
-		retrypolicy.GetDefault(),
+		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 the user has not specified an explicit RetryPolicy`,
 	)
-	DefaultWorkflowRetryPolicy = NewNamespaceMapSetting(
+	DefaultWorkflowRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultWorkflowRetryPolicy",
-		retrypolicy.GetDefault(),
+		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
 	)

@@ -118,7 +118,7 @@ type (
 		config                          *Config
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                *namespaceHandler
-		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		getDefaultWorkflowRetrySettings func(string) retrypolicy.DefaultRetrySettings
 		visibilityMgr                   manager.VisibilityManager
 		logger                          log.Logger
 		throttledLogger                 log.Logger
@@ -4756,7 +4756,7 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 		return nil
 	}
 
-	defaultWorkflowRetrySettings := retrypolicy.FromConfigToDefault(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	defaultWorkflowRetrySettings := wh.getDefaultWorkflowRetrySettings(namespaceName.String())
 	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }

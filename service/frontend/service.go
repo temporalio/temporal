@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/retrypolicy"
 )
 
 // Config represents configuration for frontend service
@@ -116,7 +117,7 @@ type Config struct {
 
 	// DefaultWorkflowRetryPolicy represents default values for unset fields on a Workflow's
 	// specified RetryPolicy
-	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultWorkflowRetryPolicy func(string) retrypolicy.DefaultRetrySettings
 
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn

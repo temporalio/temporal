@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/retrypolicy"
 )
 
 // Config represents configuration for history service
@@ -228,11 +229,11 @@ type Config struct {
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
-	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultActivityRetryPolicy func(string) retrypolicy.DefaultRetrySettings
 
 	// DefaultWorkflowRetryPolicy specifies the out-of-box retry policy for
 	// any unset fields on a RetryPolicy configured on a Workflow
-	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultWorkflowRetryPolicy func(string) retrypolicy.DefaultRetrySettings
 
 	// Workflow task settings
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
