@@ -247,9 +247,6 @@ func (pdb *db) ReadLockExecutions(
 	filter sqlplugin.ExecutionsFilter,
 ) (int64, int64, error) {
 	var executionVersion sqlplugin.ExecutionVersion
-	if pdb.tx == nil {
-		panic("cannot acquire execution read lock without a transaction")
-	}
 	err := pdb.GetContext(ctx,
 		&executionVersion,
 		readLockExecutionQuery,
@@ -267,9 +264,6 @@ func (pdb *db) WriteLockExecutions(
 	filter sqlplugin.ExecutionsFilter,
 ) (int64, int64, error) {
 	var executionVersion sqlplugin.ExecutionVersion
-	if pdb.tx == nil {
-		panic("cannot acquire execution write lock without a transaction")
-	}
 	err := pdb.GetContext(ctx,
 		&executionVersion,
 		writeLockExecutionQuery,

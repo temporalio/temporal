@@ -186,9 +186,6 @@ func (pdb *db) LockNamespaceMetadata(
 	ctx context.Context,
 ) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	if pdb.tx == nil {
-		panic("cannot call LockNamespaceMetadata unless in a transaction")
-	}
 
 	err := pdb.GetContext(ctx,
 		&row.NotificationVersion,

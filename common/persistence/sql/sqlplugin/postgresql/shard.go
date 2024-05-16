@@ -97,9 +97,6 @@ func (pdb *db) ReadLockShards(
 	ctx context.Context,
 	filter sqlplugin.ShardsFilter,
 ) (int64, error) {
-	if pdb.tx == nil {
-		panic("cannot acquire shard read lock without a transaction")
-	}
 	var rangeID int64
 	err := pdb.GetContext(ctx,
 		&rangeID,
@@ -115,9 +112,6 @@ func (pdb *db) WriteLockShards(
 	filter sqlplugin.ShardsFilter,
 ) (int64, error) {
 	var rangeID int64
-	if pdb.tx == nil {
-		panic("cannot acquire shard write lock without a transaction")
-	}
 	err := pdb.GetContext(ctx,
 		&rangeID,
 		lockShardQry,
