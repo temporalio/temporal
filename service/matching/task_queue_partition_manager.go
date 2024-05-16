@@ -299,6 +299,12 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 				versionSetUsed = true
 				dbq, err = pm.getVersionedQueue(ctx, versionSet, "", true)
 			} else {
+				activeRules := getActiveRedirectRules(versioningData.RedirectRules)
+				terminalBuildId := findTerminalBuildId(buildId, activeRules)
+				if terminalBuildId != buildId {
+					return nil, false, serviceerror.NewNewerBuildExists(terminalBuildId)
+				}
+				pm.loadUpstreamBuildIds(buildId, activeRules)
 				dbq, err = pm.getVersionedQueue(ctx, "", buildId, true)
 			}
 		}
@@ -626,6 +632,22 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 	// TODO: once we know a demoted set id has no more tasks, we can remove it from versioning data
 	for _, demotedSetId := range demotedSetIds {
 		tqm, _ := pm.getVersionedQueueNoWait(demotedSetId, "", true)
+		if tqm != nil {
+			tqm.MarkAlive()
+		}
+	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) loadUpstreamBuildIds(
+	targetBuildId string,
+	activeRules []*persistencespb.RedirectRule,
+) {
+	// We need to load all physical queues for upstream build IDs because even though
+	// no new tasks will be sent to them, they might have old tasks in the db.
+	// Also mark them alive, so that their liveness will be roughly synchronized.
+	// TODO: make this more efficient so it does not MarkAlive on every poll
+	for _, buildId := range getUpstreamBuildIds(targetBuildId, activeRules) {
+		tqm, _ := pm.getVersionedQueueNoWait("", buildId, true)
 		if tqm != nil {
 			tqm.MarkAlive()
 		}

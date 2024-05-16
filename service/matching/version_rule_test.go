@@ -1185,6 +1185,37 @@ func TestIsCyclic(t *testing.T) {
 	}
 }
 
+func TestFindTerminalBuildId(t *testing.T) {
+	t.Parallel()
+	/*
+		e.g.
+		Redirect Rules:
+		10
+		^
+		|
+		1 <------ 2
+		^
+		|
+		5 <------ 3 <------ 4
+	*/
+	createTs := hlc.Zero(1)
+
+	redirectRules := []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+	}
+
+	assert.Equal(t, "10", findTerminalBuildId("1", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("2", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("3", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("4", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("5", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("10", redirectRules))
+}
+
 func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
 	t.Parallel()
 	/*

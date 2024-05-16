@@ -35,6 +35,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/taskqueue/v1"
@@ -114,6 +116,73 @@ func (s *PartitionManagerTestSuite) TestAddTaskNoRules_AssignedTask() {
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)
+}
+
+func (s *PartitionManagerTestSuite) TestPollWithRedirectRules() {
+	source := "bld1"
+	target := "bld2"
+	versioningData := &persistence.VersioningData{
+		RedirectRules: []*persistence.RedirectRule{
+			{
+				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
+					SourceBuildId: source,
+					TargetBuildId: target,
+				},
+			},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(source))
+
+	s.validatePollTask(target, true)
+
+	_, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
+		workerVersionCapabilities: &common.WorkerVersionCapabilities{
+			BuildId:       source,
+			UseVersioning: true,
+		},
+	})
+	s.Assert().Equal(serviceerror.NewNewerBuildExists(target), err)
+}
+
+func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
+	source := "bld1"
+	target := "bld2"
+	versioningData := &persistence.VersioningData{
+		RedirectRules: []*persistence.RedirectRule{
+			{
+				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
+					SourceBuildId: source,
+					TargetBuildId: target,
+				},
+			},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(source))
+
+	// task is backlogged in the source queue so it is loaded by now
+	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	s.Assert().NoError(err)
+	s.Assert().NotNil(sourceQ)
+
+	// unload sourceQ and verify that
+	s.partitionMgr.unloadPhysicalQueue(sourceQ)
+	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	s.Assert().NoError(err)
+	s.Assert().Nil(sourceQ)
+
+	// poll from target
+	s.validatePollTask(target, true)
+
+	// polling from target should've loaded the source as well
+	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	s.Assert().NoError(err)
+	s.Assert().NotNil(sourceQ)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_NoVersionDirective() {
