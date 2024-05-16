@@ -26,10 +26,11 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/api/serviceerror"
 	"math/rand"
 	"testing"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"github.com/google/uuid"
 	clockspb "go.temporal.io/server/api/clock/v1"

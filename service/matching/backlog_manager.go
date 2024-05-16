@@ -327,8 +327,7 @@ func (c *backlogManagerImpl) getApproximateBacklogCount(ctx context.Context) (in
 	if exactTasks > 0 {
 		// since this will be more accurate than approximateBacklogCounter
 		return exactTasks, nil
-	} else {
-		// to ensure our in-memory counter never goes below 0
-		return max(0, c.db.getApproximateBacklogCount()), nil
 	}
+	// to ensure our in-memory counter never goes below 0
+	return max(0, c.db.getApproximateBacklogCount()), nil
 }
