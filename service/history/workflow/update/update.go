@@ -90,9 +90,8 @@ type (
 		id    string
 		state state
 		// request is nil when:
-		//   - update was restored in stateAccepted with newAccepted form UpdateInfo.AcceptanceInfo
-		//       We don't load request from event because it is not needed anymore (and can be big).
-		//   - update was restored in stateAdmitted with newAdmitted from UpdateInfo.AdmissionInfo
+		//   - update is in stateAccepted,
+		//   - update was restored in stateAdmitted with newAdmitted from UpdateInfo.AdmissionInfo.
 		//       We don't load request form event because if there is durable UpdateAdmitted event with request,
 		//       then we don't write this request 2nd time to UpdateAccepted event.
 		request         *anypb.Any // of type *updatepb.Request

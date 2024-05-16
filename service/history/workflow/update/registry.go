@@ -60,7 +60,12 @@ type (
 		// new update if no update is found.
 		Find(ctx context.Context, protocolInstanceID string) *Update
 
-		TryResurrect(protocolMsg *protocolpb.Message) (*Update, error)
+		// TryResurrect tries to resurrect update from the protocol message which
+		// Body is Acceptance or Rejection message.
+		// It returns error if some unexpected error happened, but if there is no
+		// enough data in the message, it just returns nil Update.
+		// If update was successfully resurrected it is added to the registry in stateAdmitted.
+		TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error)
 
 		// HasOutgoingMessages returns true if the registry has any Updates
 		// for which outgoing message can be generated.
@@ -222,12 +227,18 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	return upd, false, nil
 }
 
-func (r *registry) TryResurrect(acptOrRejMsg *protocolpb.Message) (*Update, error) {
+func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error) {
 	if acptOrRejMsg == nil || acptOrRejMsg.Body == nil {
 		return nil, nil
 	}
 
-	// TODO: add one more resurrectionLimit and check it here?
+	// Check only total limit here. This might add more than maxInFlight updates to registry,
+	// but:
+	//   1. for a very short time,
+	//   2. it is better developer experience, to process lost update, if possible.
+	if err := r.checkTotalLimit(ctx); err != nil {
+		return nil, err
+	}
 
 	body, err := acptOrRejMsg.Body.UnmarshalNew()
 	if err != nil {
@@ -368,7 +379,7 @@ func (r *registry) remover(id string) updateOpt {
 	)
 }
 
-func (r *registry) checkLimits(_ context.Context) error {
+func (r *registry) checkLimits(ctx context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
 		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
@@ -378,13 +389,20 @@ func (r *registry) checkLimits(_ context.Context) error {
 		}
 	}
 
+	if err := r.checkTotalLimit(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *registry) checkTotalLimit(_ context.Context) error {
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
 	}
-
 	return nil
 }
 
