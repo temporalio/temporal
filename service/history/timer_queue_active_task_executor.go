@@ -303,8 +303,8 @@ Loop:
 		if retryState == enumspb.RETRY_STATE_TIMEOUT {
 			// If retryState is Timeout then it means that expirationTime is expired.
 			// ExpirationTime is expired when ScheduleToClose timeout is expired.
-			timeoutType := enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
-			failureMsg := fmt.Sprintf("activity %v timeout", timeoutType.String())
+			const timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			var failureMsg = fmt.Sprintf("activity %v timeout", timeoutType.String())
 			timeoutFailure = failure.NewTimeoutFailure(failureMsg, timeoutType)
 		}
 		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
