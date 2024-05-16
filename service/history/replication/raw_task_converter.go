@@ -61,7 +61,7 @@ type (
 	SourceTaskConverterProvider func(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
-		clientClusterName string, // Task converter is cluster aware.
+		clientClusterName string, // Some task converter may use the client cluster name.
 	) SourceTaskConverter
 )
 
