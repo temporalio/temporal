@@ -254,7 +254,7 @@ func GrpcServerOptionsProvider(
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		// Order or interceptors is important
-		// Frontend error interceptor should be the most outer interceptor since it handle the errors format
+		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorsInterceptor.Intercept,
 		rpc.NewServiceErrorInterceptor(logger),
