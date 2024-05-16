@@ -95,7 +95,7 @@ type (
 		PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+		PersistenceDynamicRateLimitingParams func() dynamicconfig.DynamicRateLimitingParams
 		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		EnableBatcher                        dynamicconfig.BoolPropertyFn

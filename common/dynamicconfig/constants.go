@@ -567,11 +567,11 @@ is currently processing a task.
 		0,
 		`FrontendPersistenceGlobalNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB`,
 	)
-	FrontendPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	FrontendPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"frontend.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`FrontendPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`FrontendPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params
+see DefaultDynamicRateLimitingParams for fields and defaults`,
 	)
 	FrontendVisibilityMaxPageSize = NewNamespaceIntSetting(
 		"frontend.visibilityMaxPageSize",
@@ -976,11 +976,11 @@ Default is 0, means, namespace will be deleted immediately.`,
 		0,
 		`MatchingPersistenceNamespaceMaxQPS is the max qps each namespace in matching cluster can query DB`,
 	)
-	MatchingPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	MatchingPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"matching.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`MatchingPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`MatchingPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params
+see DefaultDynamicRateLimitingParams for fields and defaults`,
 	)
 	MatchingMinTaskThrottlingBurstSize = NewTaskQueueIntSetting(
 		"matching.minTaskThrottlingBurstSize",
@@ -1202,11 +1202,11 @@ If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS`,
 		0,
 		`HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB`,
 	)
-	HistoryPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	HistoryPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"history.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`HistoryPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`HistoryPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params
+see DefaultDynamicRateLimitingParams for fields defaults`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
@@ -2141,11 +2141,11 @@ that task will be sent to DLQ.`,
 		0,
 		`WorkerPersistenceNamespaceMaxQPS is the max qps each namespace in worker cluster can query DB`,
 	)
-	WorkerPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	WorkerPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"worker.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`WorkerPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`WorkerPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params
+see DefaultDynamicRateLimitingParams for fields and defaults`,
 	)
 	WorkerIndexerConcurrency = NewGlobalIntSetting(
 		"worker.indexerConcurrency",
