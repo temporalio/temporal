@@ -73,7 +73,11 @@ const (
 
 // Exec executes a sql statement
 func (pdb *db) Exec(stmt string, args ...any) error {
-	_, err := pdb.DB().Exec(stmt, args...)
+	db, err := pdb.handle.DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(stmt, args...)
 	return pdb.handle.ConvertError(err)
 }
 
@@ -88,7 +92,11 @@ func (pdb *db) CreateSchemaVersionTables() error {
 // ReadSchemaVersion returns the current schema version for the keyspace
 func (pdb *db) ReadSchemaVersion(database string) (string, error) {
 	var version string
-	err := pdb.DB().Get(&version, readSchemaVersionQuery, database)
+	db, err := pdb.handle.DB()
+	if err != nil {
+		return "", err
+	}
+	err = db.Get(&version, readSchemaVersionQuery, database)
 	return version, pdb.handle.ConvertError(err)
 }
 

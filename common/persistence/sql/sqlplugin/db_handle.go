@@ -23,12 +23,13 @@
 package sqlplugin
 
 import (
+	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -46,8 +47,12 @@ const (
 	sessionRefreshMinInternal = 5 * time.Second
 )
 
+var (
+	DatabaseUnavailableError = serviceerror.NewUnavailable("no usable database connection found")
+)
+
 type DatabaseHandle struct {
-	running      atomic.Bool
+	running      bool
 	db           uberatomic.Pointer[sqlx.DB]
 	connect      func() (*sqlx.DB, error)
 	needsRefresh func(error) bool
@@ -59,6 +64,9 @@ type DatabaseHandle struct {
 	sync.Mutex
 }
 
+// An invalid connection returns `databaseUnavailable` for all operations
+type invalidConn struct{}
+
 func NewDatabaseHandle(
 	connect func() (*sqlx.DB, error),
 	needsRefresh func(error) bool,
@@ -66,24 +74,34 @@ func NewDatabaseHandle(
 	metricsHandler metrics.Handler,
 ) *DatabaseHandle {
 	handle := &DatabaseHandle{
+		running:      true,
 		connect:      connect,
 		needsRefresh: needsRefresh,
 		metrics:      metricsHandler,
 		logger:       logger,
 	}
-	handle.running.Store(true)
-	handle.reconnect()
+	handle.reconnect(true)
 	return handle
 }
 
 // Close and reopen the underlying database connection
-func (h *DatabaseHandle) reconnect() {
-	if !h.running.Load() {
+func (h *DatabaseHandle) reconnect(force bool) {
+	h.Lock()
+	defer h.Unlock()
+
+	// Don't reconnect if we've been closed
+	if !h.running {
 		return
 	}
 
-	h.Lock()
-	defer h.Unlock()
+	if !force && h.db.Load() != nil {
+		// Another goroutine already reconnected
+		return
+	} else if prevConn := h.db.Swap(nil); prevConn != nil {
+		// Store `nil` to prevent other goroutines from slamming the now-unusable database with
+		// transactions we know will fail
+		go prevConn.Close()
+	}
 
 	metrics.PersistenceSessionRefreshAttempts.With(h.metrics).Record(1)
 
@@ -106,26 +124,38 @@ func (h *DatabaseHandle) reconnect() {
 		return
 	}
 
-	prevConn := h.db.Swap(newConn)
-	if prevConn != nil {
-		go prevConn.Close()
-	}
+	h.db.Store(newConn)
 }
 
 func (h *DatabaseHandle) Close() {
-	// Already stopped
-	if !h.running.Swap(true) {
-		return
+	h.Lock()
+	defer h.Unlock()
+
+	if h.running {
+		h.running = false
+		db := h.db.Swap(nil)
+		if db != nil {
+			db.Close()
+		}
 	}
-	h.db.Load().Close()
 }
 
-func (h *DatabaseHandle) DB() *sqlx.DB {
-	return h.db.Load()
+func (h *DatabaseHandle) DB() (*sqlx.DB, error) {
+	db := h.db.Load()
+	if db == nil {
+		h.reconnect(false)
+		return nil, DatabaseUnavailableError
+	}
+	return db, nil
 }
 
 func (h *DatabaseHandle) Conn() Conn {
-	return h.db.Load()
+	db := h.db.Load()
+	if db == nil {
+		h.reconnect(false)
+		return invalidConn{}
+	}
+	return db
 }
 
 func (h *DatabaseHandle) ConvertError(err error) error {
@@ -136,8 +166,32 @@ func (h *DatabaseHandle) ConvertError(err error) error {
 		errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, syscall.ECONNREFUSED) {
-		h.reconnect()
+		h.reconnect(true)
 		return serviceerror.NewUnavailable(fmt.Sprintf("database connection lost: %s", err.Error()))
 	}
 	return err
+}
+
+func (invalidConn) Rebind(query string) string {
+	return query
+}
+
+func (invalidConn) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return nil, DatabaseUnavailableError
+}
+
+func (invalidConn) NamedExecContext(ctx context.Context, query string, arg interface{}) (sql.Result, error) {
+	return nil, DatabaseUnavailableError
+}
+
+func (invalidConn) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	return DatabaseUnavailableError
+}
+
+func (invalidConn) SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	return DatabaseUnavailableError
+}
+
+func (invalidConn) PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error) {
+	return nil, DatabaseUnavailableError
 }

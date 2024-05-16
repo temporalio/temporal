@@ -78,7 +78,11 @@ func (mdb *db) CreateSchemaVersionTables() error {
 // ReadSchemaVersion returns the current schema version for the keyspace
 func (mdb *db) ReadSchemaVersion(database string) (string, error) {
 	var version string
-	err := mdb.handle.DB().Get(&version, readSchemaVersionQuery, database)
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return "", err
+	}
+	err = db.Get(&version, readSchemaVersionQuery, database)
 	return version, mdb.handle.ConvertError(err)
 }
 
@@ -95,14 +99,22 @@ func (mdb *db) WriteSchemaUpdateLog(oldVersion string, newVersion string, manife
 
 // Exec executes a sql statement
 func (mdb *db) Exec(stmt string, args ...interface{}) error {
-	_, err := mdb.handle.DB().Exec(stmt, args...)
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(stmt, args...)
 	return mdb.handle.ConvertError(err)
 }
 
 // ListTables returns a list of tables in this database
 func (mdb *db) ListTables(database string) ([]string, error) {
 	var tables []string
-	err := mdb.handle.DB().Select(&tables, fmt.Sprintf(listTablesQuery, database))
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return nil, err
+	}
+	err = db.Select(&tables, fmt.Sprintf(listTablesQuery, database))
 	return tables, mdb.handle.ConvertError(err)
 }
 

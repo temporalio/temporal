@@ -112,7 +112,11 @@ func (mdb *db) conn() sqlplugin.Conn {
 
 // BeginTx starts a new transaction and returns a reference to the Tx object
 func (mdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
-	xtx, err := mdb.handle.DB().BeginTxx(ctx, nil)
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return nil, err
+	}
+	xtx, err := db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, mdb.handle.ConvertError(err)
 	}

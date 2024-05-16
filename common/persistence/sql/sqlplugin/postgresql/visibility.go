@@ -114,9 +114,13 @@ func (pdb *db) SelectFromVisibility(
 	}
 
 	// Rebind will replace default placeholder `?` with the right placeholder for PostgreSQL.
-	filter.Query = pdb.DB().Rebind(filter.Query)
+	db, err := pdb.handle.DB()
+	if err != nil {
+		return nil, err
+	}
+	filter.Query = db.Rebind(filter.Query)
 	var rows []sqlplugin.VisibilityRow
-	err := pdb.SelectContext(ctx, &rows, filter.Query, filter.QueryArgs...)
+	err = db.SelectContext(ctx, &rows, filter.Query, filter.QueryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +159,7 @@ func (pdb *db) CountFromVisibility(
 	filter sqlplugin.VisibilitySelectFilter,
 ) (int64, error) {
 	var count int64
-	filter.Query = pdb.DB().Rebind(filter.Query)
+	filter.Query = pdb.Rebind(filter.Query)
 	err := pdb.GetContext(ctx, &count, filter.Query, filter.QueryArgs...)
 	if err != nil {
 		return 0, err
@@ -167,7 +171,7 @@ func (pdb *db) CountGroupByFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilitySelectFilter,
 ) ([]sqlplugin.VisibilityCountRow, error) {
-	filter.Query = pdb.DB().Rebind(filter.Query)
+	filter.Query = pdb.Rebind(filter.Query)
 	rows, err := pdb.QueryContext(ctx, filter.Query, filter.QueryArgs...)
 	if err != nil {
 		return nil, err
