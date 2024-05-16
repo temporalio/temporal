@@ -37,10 +37,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/frontend"
 )
 
 type (
@@ -64,7 +62,7 @@ type (
 		namespaceID            namespace.ID
 		currentClusterName     string
 		alternativeClusterName string
-		mockConfig             *frontend.Config
+		forwardingEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 		policy *SelectedAPIsForwardingRedirectionPolicy
 	}
@@ -136,14 +134,11 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	s.namespaceID = "deadd0d0-c001-face-d00d-000000000000"
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
-
-	logger := log.NewTestLogger()
-
-	s.mockConfig = frontend.NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), logger), 0)
+	s.forwardingEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.policy = NewSelectedAPIsForwardingPolicy(
 		s.currentClusterName,
-		s.mockConfig,
+		s.forwardingEnabled,
 		s.mockNamespaceCache,
 	)
 }
@@ -414,5 +409,5 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithT
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
-	s.mockConfig.EnableNamespaceNotActiveAutoForwarding = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(forwardingEnabled)
+	s.forwardingEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(forwardingEnabled)
 }
