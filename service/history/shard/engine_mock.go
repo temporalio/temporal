@@ -44,6 +44,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
+	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -155,6 +156,21 @@ func (m *MockEngine) DescribeWorkflowExecution(ctx context.Context, request *his
 func (mr *MockEngineMockRecorder) DescribeWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).DescribeWorkflowExecution), ctx, request)
+}
+
+// ExecuteMultiOperation mocks base method.
+func (m *MockEngine) ExecuteMultiOperation(ctx context.Context, request *historyservice.ExecuteMultiOperationRequest) (*historyservice.ExecuteMultiOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteMultiOperation", ctx, request)
+	ret0, _ := ret[0].(*historyservice.ExecuteMultiOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExecuteMultiOperation indicates an expected call of ExecuteMultiOperation.
+func (mr *MockEngineMockRecorder) ExecuteMultiOperation(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteMultiOperation", reflect.TypeOf((*MockEngine)(nil).ExecuteMultiOperation), ctx, request)
 }
 
 // GenerateLastHistoryReplicationTasks mocks base method.
@@ -828,6 +844,20 @@ func (m *MockEngine) StartWorkflowExecution(ctx context.Context, request *histor
 func (mr *MockEngineMockRecorder) StartWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).StartWorkflowExecution), ctx, request)
+}
+
+// StateMachineEnvironment mocks base method.
+func (m *MockEngine) StateMachineEnvironment() hsm.Environment {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StateMachineEnvironment")
+	ret0, _ := ret[0].(hsm.Environment)
+	return ret0
+}
+
+// StateMachineEnvironment indicates an expected call of StateMachineEnvironment.
+func (mr *MockEngineMockRecorder) StateMachineEnvironment() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineEnvironment", reflect.TypeOf((*MockEngine)(nil).StateMachineEnvironment))
 }
 
 // Stop mocks base method.

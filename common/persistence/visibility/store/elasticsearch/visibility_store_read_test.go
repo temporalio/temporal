@@ -108,10 +108,18 @@ func createTestRequest() *manager.ListWorkflowExecutionsRequest {
 	}
 }
 
-func createTestRequestWithNSDivision() *manager.ListWorkflowExecutionsRequest {
-	req := createTestRequest()
-	req.NamespaceDivision = testNSDivision
-	return req
+func createTestRequestWithNSDivision() *manager.ListWorkflowExecutionsRequestV2 {
+	return &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    testPageSize,
+		Query: fmt.Sprintf("%s = '%s' AND %s = '%s'",
+			searchattribute.ExecutionStatus,
+			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			searchattribute.TemporalNamespaceDivision,
+			testNSDivision,
+		),
+	}
 }
 
 func TestESVisibilitySuite(t *testing.T) {
@@ -148,178 +156,6 @@ func (s *ESVisibilitySuite) SetupTest() {
 
 func (s *ESVisibilitySuite) TearDownTest() {
 	s.controller.Finish()
-}
-
-func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.Contains(fmt.Sprintf("%v", source), filterOpen)
-			return testSearchResult, nil
-		})
-	_, err := s.visibilityStore.ListOpenWorkflowExecutions(context.Background(), createTestRequest())
-	s.NoError(err)
-
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListOpenWorkflowExecutions(context.Background(), createTestRequest())
-	s.Error(err)
-	_, ok := err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ListOpenWorkflowExecutions failed")
-}
-
-func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsWithNamespaceDivision() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.Contains(fmt.Sprintf("%v", source), filterOpen)
-			s.Contains(fmt.Sprintf("%v", source), filterByNSDivision)
-			return testSearchResult, nil
-		})
-	_, err := s.visibilityStore.ListOpenWorkflowExecutions(context.Background(), createTestRequestWithNSDivision())
-	s.NoError(err)
-}
-
-func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.Regexp(filterCloseRE, fmt.Sprintf("%v", source))
-			return testSearchResult, nil
-		})
-	_, err := s.visibilityStore.ListClosedWorkflowExecutions(context.Background(), createTestRequest())
-	s.NoError(err)
-
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutions(context.Background(), createTestRequest())
-	s.Error(err)
-	_, ok := err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ListClosedWorkflowExecutions failed")
-}
-
-func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.Contains(fmt.Sprintf("%v", source), filterOpen)
-			s.Contains(fmt.Sprintf("%v", source), filterByType)
-			return testSearchResult, nil
-		})
-
-	testRequest := createTestRequest()
-	request := &manager.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: testRequest,
-		WorkflowTypeName:              testWorkflowType,
-	}
-	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByType(context.Background(), request)
-	s.NoError(err)
-
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByType(context.Background(), request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ListOpenWorkflowExecutionsByType failed")
-}
-
-func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.Regexp(filterCloseRE, fmt.Sprintf("%v", source))
-			s.Contains(fmt.Sprintf("%v", source), filterByType)
-			return testSearchResult, nil
-		})
-
-	testRequest := createTestRequest()
-	request := &manager.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: testRequest,
-		WorkflowTypeName:              testWorkflowType,
-	}
-	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByType(context.Background(), request)
-	s.NoError(err)
-
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByType(context.Background(), request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ListClosedWorkflowExecutionsByType failed")
-}
-
-func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.Contains(fmt.Sprintf("%v", source), filterOpen)
-			s.Contains(fmt.Sprintf("%v", source), filterByWID)
-			return testSearchResult, nil
-		})
-
-	testRequest := createTestRequest()
-	request := &manager.ListWorkflowExecutionsByWorkflowIDRequest{
-		ListWorkflowExecutionsRequest: testRequest,
-		WorkflowID:                    testWorkflowID,
-	}
-	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(context.Background(), request)
-	s.NoError(err)
-
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(context.Background(), request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ListOpenWorkflowExecutionsByWorkflowID failed")
-}
-
-func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.Regexp(filterCloseRE, fmt.Sprintf("%v", source))
-			s.Contains(fmt.Sprintf("%v", source), filterByWID)
-			return testSearchResult, nil
-		})
-
-	testRequest := createTestRequest()
-	request := &manager.ListWorkflowExecutionsByWorkflowIDRequest{
-		ListWorkflowExecutionsRequest: testRequest,
-		WorkflowID:                    testWorkflowID,
-	}
-	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(context.Background(), request)
-	s.NoError(err)
-
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(context.Background(), request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ListClosedWorkflowExecutionsByWorkflowID failed")
-}
-
-func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.Contains(fmt.Sprintf("%v", source), filterByExecutionStatus)
-			return testSearchResult, nil
-		})
-
-	testRequest := createTestRequest()
-	request := &manager.ListClosedWorkflowExecutionsByStatusRequest{
-		ListWorkflowExecutionsRequest: testRequest,
-		Status:                        testStatus,
-	}
-	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
-	s.NoError(err)
-
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ListClosedWorkflowExecutionsByStatus failed")
 }
 
 func (s *ESVisibilitySuite) TestBuildSearchParameters() {
@@ -726,7 +562,13 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
-	query = `AliasForCustomKeywordField = 'pid'`
+	query = "`AliasForCustomKeywordField` = 'pid'"
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomKeywordField":{"query":"pid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	query = "`AliasWithHyphenFor-CustomKeywordField` = 'pid'"
 	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomKeywordField":{"query":"pid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
@@ -1122,6 +964,23 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
 	s.Equal("ListWorkflowExecutions failed: elastic: Error 500 (Internal Server Error): error reason [type=]", unavailableErr.Message)
+}
+
+func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsWithNamespaceDivision() {
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
+			s.Equal(testIndex, p.Index)
+			s.Equal(
+				elastic.NewBoolQuery().Filter(
+					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+					elastic.NewBoolQuery().Filter(elastic.NewMatchQuery("ExecutionStatus", "Running"),
+						elastic.NewMatchQuery("TemporalNamespaceDivision", testNSDivision))),
+				p.Query,
+			)
+			return testSearchResult, nil
+		})
+	_, err := s.visibilityStore.ListWorkflowExecutions(context.Background(), createTestRequestWithNSDivision())
+	s.NoError(err)
 }
 
 func (s *ESVisibilitySuite) TestScanWorkflowExecutions_Scroll() {

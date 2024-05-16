@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math/rand"
@@ -36,12 +37,14 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/history/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -51,6 +54,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -73,7 +77,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -207,6 +211,9 @@ type (
 		logger           log.Logger
 		metricsHandler   metrics.Handler
 		stateMachineNode *hsm.Node
+
+		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
+		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
 	}
 )
 
@@ -492,7 +499,7 @@ func NewMutableStateInChain(
 
 func (ms *MutableStateImpl) mustInitHSM() {
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
-	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType)
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
 		panic(err)
 	}
@@ -798,6 +805,39 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return ms.namespaceEntry
 }
 
+// AddHistoryEvent adds any history event to this workflow execution.
+// The provided setAttributes function should be used to set the attributes on the event.
+func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes func(*history.HistoryEvent)) *history.HistoryEvent {
+	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
+	if event.EventId != common.BufferedEventID {
+		ms.writeEventToCache(event)
+	}
+	ms.currentTransactionAddedStateMachineEventTypes = append(ms.currentTransactionAddedStateMachineEventTypes, t)
+	return event
+}
+
+func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	ref := &tokenspb.HistoryEventRef{}
+	err := proto.Unmarshal(token, ref)
+	if err != nil {
+		return nil, err
+	}
+	branchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(ref.EventId)
+	if err != nil {
+		return nil, err
+	}
+	wfKey := ms.GetWorkflowKey()
+	eventKey := events.EventKey{
+		NamespaceID: namespace.ID(wfKey.NamespaceID),
+		WorkflowID:  wfKey.WorkflowID,
+		RunID:       wfKey.RunID,
+		EventID:     ref.EventId,
+		Version:     version,
+	}
+
+	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
+}
+
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 	if ms.IsStickyTaskQueueSet() {
 		return &taskqueuepb.TaskQueue{
@@ -827,20 +867,31 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 }
 
 // TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
-// Task queue kind (sticky or normal) and timeout are set based on comparison of normal task queue name
+// Task queue kind (sticky or normal) is set based on comparison of normal task queue name
 // in mutable state and provided name.
-func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
-	if ms.executionInfo.TaskQueue != name {
+// ScheduleToStartTimeout is set based on queue kind and workflow task type.
+func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
+	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
+	if isStickyTq {
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,
 			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 			NormalName: ms.executionInfo.TaskQueue,
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
-	return &taskqueuepb.TaskQueue{
+
+	// If tqName is normal task queue name.
+	normalTq := &taskqueuepb.TaskQueue{
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal task queue.
+	}
+	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Speculative WFT has ScheduleToStartTimeout even on normal task queue.
+		// See comment in GenerateScheduleSpeculativeWorkflowTaskTasks for details.
+		return normalTq, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
+	}
+	// No WFT ScheduleToStart timeout for normal WFT on normal task queue.
+	return normalTq, ms.executionInfo.WorkflowRunTimeout
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
@@ -854,9 +905,34 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
 }
 
+// VisitUpdates visits mutable state update entries, ordered by the ID of the history event pointed to by the mutable
+// state entry. Thus, for example, updates entries in Admitted state will be visited in the order that their Admitted
+// events were added to history.
 func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+	type updateEvent struct {
+		updId   string
+		updInfo *updatespb.UpdateInfo
+		eventId int64
+	}
+	var updateEvents []updateEvent
 	for updID, updInfo := range ms.executionInfo.GetUpdateInfos() {
-		visitor(updID, updInfo)
+		u := updateEvent{
+			updId:   updID,
+			updInfo: updInfo,
+		}
+		if adm := updInfo.GetAdmission(); adm != nil {
+			u.eventId = adm.GetHistoryPointer().EventId
+		} else if acc := updInfo.GetAcceptance(); acc != nil {
+			u.eventId = acc.EventId
+		} else if com := updInfo.GetCompletion(); com != nil {
+			u.eventId = com.EventId
+		}
+		updateEvents = append(updateEvents, u)
+	}
+	slices.SortFunc(updateEvents, func(u1, u2 updateEvent) int { return cmp.Compare(u1.eventId, u2.eventId) })
+
+	for _, u := range updateEvents {
+		visitor(u.updId, u.updInfo)
 	}
 }
 
@@ -1666,8 +1742,16 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 	return nil
 }
 
-func (ms *MutableStateImpl) GetWorkerVersionStamp() *commonpb.WorkerVersionStamp {
-	return ms.executionInfo.WorkerVersionStamp
+func (ms *MutableStateImpl) GetAssignedBuildId() string {
+	return ms.executionInfo.AssignedBuildId
+}
+
+func (ms *MutableStateImpl) GetInheritedBuildId() string {
+	return ms.executionInfo.InheritedBuildId
+}
+
+func (ms *MutableStateImpl) GetMostRecentWorkerVersionStamp() *commonpb.WorkerVersionStamp {
+	return ms.executionInfo.MostRecentWorkerVersionStamp
 }
 
 func (ms *MutableStateImpl) HasBufferedEvents() bool {
@@ -1832,12 +1916,18 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
 
-	// Copy version stamp to new workflow only if:
-	// - command says to use compatible version
-	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if command.UseCompatibleVersion {
-		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
+	var inheritedBuildId string
+	if command.InheritBuildId {
+		inheritedBuildId = previousExecutionInfo.AssignedBuildId
+		if inheritedBuildId == "" {
+			// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
+			// [cleanup-old-wv]
+			// Copy version stamp to new workflow only if:
+			// - command says to use compatible version
+			// - using versioning
+			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.MostRecentWorkerVersionStamp)
+		}
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -1851,6 +1941,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootExecutionInfo,
+		InheritedBuildId:         inheritedBuildId,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -2108,14 +2199,28 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if event.SearchAttributes != nil {
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
-	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+
+	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
+		ms.executionInfo.InheritedBuildId = inheritedBuildId
+		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
+			return err
+		}
+	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		if _, err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
+		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
 			return err
 		}
 	}
 
-	ms.executionInfo.WorkerVersionStamp = event.SourceVersionStamp
+	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
+		ms.executionInfo.InheritedBuildId = inheritedBuildId
+		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
+			return err
+		}
+	}
+
+	ms.executionInfo.MostRecentWorkerVersionStamp = event.SourceVersionStamp
 
 	ms.approximateSize += ms.executionInfo.Size()
 
@@ -2191,12 +2296,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	requestID string,
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
+	versioningStamp *commonpb.WorkerVersionStamp,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
@@ -2208,9 +2314,11 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 	timestamp time.Time,
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
+	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectCounter int64,
 ) (*WorkflowTaskInfo, error) {
 	return ms.workflowTaskManager.ApplyWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
-		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes)
+		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter)
 }
 
 // TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
@@ -2278,22 +2386,43 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 	return true
 }
 
-func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(
-	version *commonpb.WorkerVersionStamp,
-	eventID int64,
-	maxSearchAttributeValueSize int,
-) error {
-	var toAdd []string
-	if !version.GetUseVersioning() {
-		toAdd = append(toAdd, worker_versioning.UnversionedSearchAttribute)
-	}
-	if version.GetBuildId() != "" {
-		toAdd = append(toAdd, worker_versioning.VersionStampToBuildIdSearchAttribute(version))
-	}
-	if len(toAdd) == 0 {
+// ApplyBuildIdRedirect used for applying redirects from History events when rebuilding MS
+func (ms *MutableStateImpl) ApplyBuildIdRedirect(buildId string, redirectCounter int64) error {
+	if ms.GetExecutionInfo().GetBuildIdRedirectCounter() >= redirectCounter {
+		// Existing redirect counter is more than the given one, so ignore this redirect because
+		// this or a more recent one has already been applied. This can happen when replaying
+		// history because redirects can be applied at activity started time, but we don't record
+		// the actual order of activity started events in history (they're transient tasks).
 		return nil
 	}
-	if changed, err := ms.addBuildIdsWithNoVisibilityTask(toAdd, maxSearchAttributeValueSize); err != nil {
+	err := ms.UpdateBuildIdAssignment(buildId)
+	if err != nil {
+		return err
+	}
+	// if this redirect is applicable, we need to set workflow's redirect counter to the given value
+	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
+	return nil
+}
+
+// UpdateBuildIdAssignment based on initial assignment or a redirect
+func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
+	if ms.GetAssignedBuildId() == buildId {
+		return nil
+	}
+	if ms.GetAssignedBuildId() != "" {
+		// if build ID is being set for the first time, we don't increment redirect counter
+		ms.GetExecutionInfo().BuildIdRedirectCounter++
+	}
+	ms.executionInfo.AssignedBuildId = buildId
+	// because build id is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
+	ms.ClearStickyTaskQueue()
+	limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
+	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
+}
+
+func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
+	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
+	if err != nil {
 		return err
 	} else if !changed {
 		return nil
@@ -2321,26 +2450,35 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	return searchAttributeValues, nil
 }
 
-// Takes a list of loaded build IDs from a search attribute and adds new build IDs to it. Returns a potentially modified
-// list and a flag indicating whether it was modified.
-func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(existingValues []string, newValues []string) ([]string, bool) {
-	var added []string
-	for _, newValue := range newValues {
-		found := false
-		for _, existingValue := range existingValues {
-			if existingValue == newValue {
-				found = true
-				break
-			}
+// Takes a list of loaded build IDs from a search attribute and adds a new build ID to it. Also makes sure that the
+// resulting SA list begins with either "unversioned" or "assigned:<bld>" based on workflow's Build ID assignment status.
+// Returns a potentially modified list.
+// [cleanup-old-wv] old versioning does not add "assigned:<bld>" value to the SA.
+func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
+	existingValues []string,
+	stamp *commonpb.WorkerVersionStamp,
+) []string {
+	var newValues []string
+	if !stamp.GetUseVersioning() {
+		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
+	} else if ms.GetAssignedBuildId() != "" {
+		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
+	}
+
+	buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
+	found := slices.Contains(newValues, buildId)
+	for _, existingValue := range existingValues {
+		if existingValue == buildId {
+			found = true
 		}
-		if !found {
-			added = append(added, newValue)
+		if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
+			newValues = append(newValues, existingValue)
 		}
 	}
-	if len(added) == 0 {
-		return existingValues, false
+	if !found {
+		newValues = append(newValues, buildId)
 	}
-	return append(existingValues, added...), true
+	return newValues
 }
 
 func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeValueSize int) error {
@@ -2350,7 +2488,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 		ms.executionInfo.SearchAttributes = searchAttributes
 	}
 
-	hasUnversioned := buildIds[0] == worker_versioning.UnversionedSearchAttribute
+	hasUnversionedOrAssigned := worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(buildIds[0])
 	for {
 		saPayload, err := searchattribute.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 		if err != nil {
@@ -2362,7 +2500,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 		}
 		if len(buildIds) == 1 {
 			buildIds = make([]string, 0)
-		} else if hasUnversioned {
+		} else if hasUnversionedOrAssigned {
 			// Make sure to maintain the unversioned sentinel, it's required for the reachability API
 			buildIds = append(buildIds[:1], buildIds[2:]...)
 		} else {
@@ -2372,13 +2510,13 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdsWithNoVisibilityTask(buildIds []string, maxSearchAttributeValueSize int) (bool, error) {
+func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) (bool, error) {
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
 		return false, err
 	}
-	modifiedBuildIds, added := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, buildIds)
-	if !added {
+	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp)
+	if slices.Equal(existingBuildIds, modifiedBuildIds) {
 		return false, nil
 	}
 	return true, ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
@@ -2449,9 +2587,8 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 	cause enumspb.WorkflowTaskFailedCause,
 	failure *failurepb.Failure,
 	identity string,
-	binChecksum string,
-	baseRunID string,
-	newRunID string,
+	versioningStamp *commonpb.WorkerVersionStamp,
+	binChecksum, baseRunID, newRunID string,
 	forkEventVersion int64,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskFailed
@@ -2463,6 +2600,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 		cause,
 		failure,
 		identity,
+		versioningStamp,
 		binChecksum,
 		baseRunID,
 		newRunID,
@@ -2536,9 +2674,21 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		TaskQueue:               attributes.TaskQueue.GetName(),
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
-		UseCompatibleVersion:    attributes.UseCompatibleVersion,
 		ActivityType:            attributes.GetActivityType(),
 	}
+
+	if attributes.UseWorkflowBuildId {
+		if ms.GetAssignedBuildId() != "" {
+			// only set when using new versioning
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo_{
+				UseWorkflowBuildIdInfo: &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo{},
+			}
+		} else {
+			// only set when using old versioning
+			ai.UseCompatibleVersion = true
+		}
+	}
+
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()
 		ai.RetryBackoffCoefficient = attributes.RetryPolicy.GetBackoffCoefficient()
@@ -2564,13 +2714,30 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	return ai, nil
 }
 
-func (ms *MutableStateImpl) addTransientActivityStartedEvent(
+func (ms *MutableStateImpl) addStartedEventForTransientActivity(
 	scheduledEventID int64,
+	versioningStamp *commonpb.WorkerVersionStamp,
 ) error {
-
 	ai, ok := ms.GetActivityInfo(scheduledEventID)
 	if !ok || ai.StartedEventId != common.TransientEventID {
 		return nil
+	}
+
+	if versioningStamp == nil {
+		// We want to add version stamp to the started event being added now with delay. The task may be now completed,
+		// failed, cancelled, or timed out. For some cases such as timeout, cancellation, and failed by Resetter we do
+		// not receive a stamp because worker is not involved, therefore, we reconstruct the stamp base on pending
+		// activity data, if versioning is used.
+		// Find the build ID of the worker to whom the task was dispatched base on whether it was an independently-
+		// assigned activity or not.
+		startedBuildId := ai.GetLastIndependentlyAssignedBuildId()
+		if useWf := ai.GetUseWorkflowBuildIdInfo(); useWf != nil {
+			startedBuildId = useWf.GetLastUsedBuildId()
+		}
+		if startedBuildId != "" {
+			// If a build ID is found, i.e. versioning is used for the activity, set versioning stamp.
+			versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: startedBuildId}
+		}
 	}
 
 	// activity task was started (as transient event), we need to add it now.
@@ -2580,6 +2747,8 @@ func (ms *MutableStateImpl) addTransientActivityStartedEvent(
 		ai.RequestId,
 		ai.StartedIdentity,
 		ai.RetryLastFailure,
+		versioningStamp,
+		ai.GetUseWorkflowBuildIdInfo().GetLastRedirectCounter(),
 	)
 	if ai.StartedTime != nil {
 		// overwrite started event time to the one recorded in ActivityInfo
@@ -2593,11 +2762,33 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	scheduledEventID int64,
 	requestID string,
 	identity string,
+	versioningStamp *commonpb.WorkerVersionStamp,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
+	}
+
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
+		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
+		// does not pass build id for old versioning workers to Record*TaskStart.
+		// TODO: cleanup this comment [cleanup-old-wv]
+		if useWf := ai.GetUseWorkflowBuildIdInfo(); useWf != nil {
+			// when a dependent activity is redirected, we update workflow's assigned build ID as well
+			err := ms.UpdateBuildIdAssignment(buildId)
+			if err != nil {
+				return nil, err
+			}
+			useWf.LastRedirectCounter = ms.GetExecutionInfo().GetBuildIdRedirectCounter()
+		} else if !ai.UseCompatibleVersion {
+			// this activity is using new versioning and is independently assigned to a build ID.
+			// Storing that in activity info. (normaly, LastIndependentlyAssignedBuildId should be present already,
+			// but setting it here again, in case the persistence call after AddTask was failed)
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
+				LastIndependentlyAssignedBuildId: buildId,
+			}
+		}
 	}
 
 	if !ai.HasRetryPolicy {
@@ -2607,6 +2798,8 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 			requestID,
 			identity,
 			ai.RetryLastFailure,
+			versioningStamp,
+			ms.GetExecutionInfo().GetBuildIdRedirectCounter(),
 		)
 		if err := ms.ApplyActivityTaskStartedEvent(event); err != nil {
 			return nil, err
@@ -2631,7 +2824,6 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	event *historypb.HistoryEvent,
 ) error {
-
 	attributes := event.GetActivityTaskStartedEventAttributes()
 	scheduledEventID := attributes.GetScheduledEventId()
 	ai, ok := ms.GetActivityInfo(scheduledEventID)
@@ -2651,6 +2843,20 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	ai.StartedTime = event.GetEventTime()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
+
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(attributes.GetWorkerVersion()); buildId != "" {
+		if ai.GetUseWorkflowBuildIdInfo() != nil {
+			// when a dependent activity is redirected, we update workflow's assigned build ID as well
+			err := ms.ApplyBuildIdRedirect(buildId, attributes.GetBuildIdRedirectCounter())
+			if err != nil {
+				return err
+			}
+		} else {
+			// This activity is not attached to the wf build ID so we store its build ID in activity info.
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
+		}
+	}
+
 	return nil
 }
 
@@ -2675,7 +2881,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		return nil, ms.createInternalServerError(opTag)
 	}
 
-	if err := ms.addTransientActivityStartedEvent(scheduledEventID); err != nil {
+	if err := ms.addStartedEventForTransientActivity(scheduledEventID, request.WorkerVersion); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddActivityTaskCompletedEvent(
@@ -2707,6 +2913,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 	failure *failurepb.Failure,
 	retryState enumspb.RetryState,
 	identity string,
+	versioningStamp *commonpb.WorkerVersionStamp,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskFailed
@@ -2724,7 +2931,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		return nil, ms.createInternalServerError(opTag)
 	}
 
-	if err := ms.addTransientActivityStartedEvent(scheduledEventID); err != nil {
+	if err := ms.addStartedEventForTransientActivity(scheduledEventID, versioningStamp); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddActivityTaskFailedEvent(
@@ -2779,7 +2986,7 @@ func (ms *MutableStateImpl) AddActivityTaskTimedOutEvent(
 
 	timeoutFailure.Cause = ai.RetryLastFailure
 
-	if err := ms.addTransientActivityStartedEvent(scheduledEventID); err != nil {
+	if err := ms.addStartedEventForTransientActivity(scheduledEventID, nil); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddActivityTaskTimedOutEvent(
@@ -2914,7 +3121,7 @@ func (ms *MutableStateImpl) AddActivityTaskCanceledEvent(
 		return nil, ms.createInternalServerError(opTag)
 	}
 
-	if err := ms.addTransientActivityStartedEvent(scheduledEventID); err != nil {
+	if err := ms.addStartedEventForTransientActivity(scheduledEventID, nil); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddActivityTaskCanceledEvent(
@@ -3708,10 +3915,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
-	request := &updatespb.UpdateInfo_Request{
-		Request: &updatespb.RequestInfo{
-			Location: &updatespb.RequestInfo_HistoryPointer_{
-				HistoryPointer: &updatespb.RequestInfo_HistoryPointer{
+	admission := &updatespb.UpdateInfo_Admission{
+		Admission: &updatespb.AdmissionInfo{
+			Location: &updatespb.AdmissionInfo_HistoryPointer_{
+				HistoryPointer: &updatespb.AdmissionInfo_HistoryPointer{
 					EventId:      event.EventId,
 					EventBatchId: batchId,
 				},
@@ -3719,9 +3926,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		},
 	}
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in registry", updateID))
+		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
 	}
-	ui := updatespb.UpdateInfo{Value: request}
+	ui := updatespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -4913,8 +5120,24 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
 		return err
 	}
-	// Clear outputs for the next transaction.
-	ms.stateMachineNode.ClearTransactionState()
+
+	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
+		def, ok := ms.shard.StateMachineRegistry().EventDefinition(t)
+		if !ok {
+			return serviceerror.NewInternal(fmt.Sprintf("no event definition registered for %v", t))
+		}
+		if def.IsWorkflowTaskTrigger() {
+			if !ms.HasPendingWorkflowTask() {
+				if _, err := ms.AddWorkflowTaskScheduledEvent(
+					false,
+					enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+				); err != nil {
+					return err
+				}
+			}
+			break
+		}
+	}
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
@@ -4929,7 +5152,6 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 func (ms *MutableStateImpl) cleanupTransaction(
 	_ TransactionPolicy,
 ) error {
-
 	ms.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
 	ms.deleteActivityInfos = make(map[int64]struct{})
 	ms.syncActivityTasks = make(map[int64]struct{})
@@ -4963,6 +5185,11 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
+
+	// Clear outputs for the next transaction.
+	ms.stateMachineNode.ClearTransactionState()
+	// Clear out transient state machine state.
+	ms.currentTransactionAddedStateMachineEventTypes = nil
 
 	return nil
 }

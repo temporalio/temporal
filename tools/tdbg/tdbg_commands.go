@@ -43,7 +43,6 @@ func getCommands(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	prompterFactory PrompterFactory,
 	taskBlobEncoder TaskBlobEncoder,
-	writer io.Writer,
 ) []*cli.Command {
 	return []*cli.Command{
 		{
@@ -91,7 +90,7 @@ func getCommands(
 		{
 			Name:        "decode",
 			Usage:       "Decode payload",
-			Subcommands: newDecodeCommands(taskBlobEncoder, writer),
+			Subcommands: newDecodeCommands(taskBlobEncoder),
 		},
 	}
 }
@@ -691,7 +690,6 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 
 func newDecodeCommands(
 	taskBlobEncoder TaskBlobEncoder,
-	writer io.Writer,
 ) []*cli.Command {
 	return []*cli.Command{
 		{
@@ -778,7 +776,7 @@ func newDecodeCommands(
 					EncodingType: encodingType,
 					Data:         b,
 				}
-				if err := taskBlobEncoder.Encode(writer, taskCategoryID, &blob); err != nil {
+				if err := taskBlobEncoder.Encode(c.App.Writer, taskCategoryID, &blob); err != nil {
 					return fmt.Errorf("failed to decode task blob: %w", err)
 				}
 				return nil

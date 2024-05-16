@@ -113,8 +113,8 @@ type (
 		SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
 		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
 
-		NexusIncomingServiceToBlob(service *persistencespb.NexusIncomingService, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		NexusIncomingServiceFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusIncomingService, error)
+		NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -423,7 +423,15 @@ func (t *serializerImpl) WorkflowExecutionInfoToBlob(info *persistencespb.Workfl
 
 func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionInfo, error) {
 	result := &persistencespb.WorkflowExecutionInfo{}
-	return result, ProtoDecodeBlob(data, result)
+	err := ProtoDecodeBlob(data, result)
+	if err != nil {
+		return nil, err
+	}
+	// Proto serialization replaces empty maps with nils, ensure this map is never nil.
+	if result.SubStateMachinesByType == nil {
+		result.SubStateMachinesByType = make(map[int32]*persistencespb.StateMachineMap)
+	}
+	return result, nil
 }
 
 func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
@@ -543,12 +551,12 @@ func (t *serializerImpl) ReplicationTaskFromBlob(data *commonpb.DataBlob) (*repl
 	return result, ProtoDecodeBlob(data, result)
 }
 
-func (t *serializerImpl) NexusIncomingServiceToBlob(service *persistencespb.NexusIncomingService, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return ProtoEncodeBlob(service, encodingType)
+func (t *serializerImpl) NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(endpoint, encodingType)
 }
 
-func (t *serializerImpl) NexusIncomingServiceFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusIncomingService, error) {
-	result := &persistencespb.NexusIncomingService{}
+func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error) {
+	result := &persistencespb.NexusEndpoint{}
 	return result, ProtoDecodeBlob(data, result)
 }
 

@@ -37,7 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/update/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -389,12 +390,14 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		workflowTaskSchedule.RequestID,
 		workflowTaskSchedule.TaskQueue,
 		consts.IdentityHistoryService,
+		nil,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		baseRunID,
 		resetRunID,
@@ -435,6 +438,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		baseRunID,
 		resetRunID,
@@ -483,6 +487,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		failure.NewResetWorkflowFailure(terminateReason, activity1.LastHeartbeatDetails),
 		enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		activity1.StartedIdentity,
+		activity1.LastWorkerVersionStamp,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
@@ -537,6 +542,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",
@@ -597,10 +603,14 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
+	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(mutableState)
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
+		updateRegistry,
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
@@ -715,10 +725,14 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	_, _ = s.workflowResetter.workflowCache.(*wcache.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
+	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(mutableState)
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
+		updateRegistry,
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
@@ -780,7 +794,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 
-	nextRunID, err := s.workflowResetter.reapplyWorkflowEvents(
+	nextRunID, err := s.workflowResetter.reapplyEventsFromBranch(
 		context.Background(),
 		mutableState,
 		firstEventID,
@@ -828,7 +842,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
 			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
-				Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+				Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
 				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			},
 		},
@@ -838,7 +852,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
 			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
-				AcceptedRequest: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+				AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
 			},
 		},
 	}
@@ -880,7 +894,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		}
 	}
 
-	err := reapplyEvents(ms, events, nil)
+	_, err := reapplyEvents(ms, nil, events, nil, "")
 	s.NoError(err)
 }
 

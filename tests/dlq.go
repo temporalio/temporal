@@ -116,8 +116,8 @@ const (
 
 func (s *DLQSuite) SetupSuite() {
 	s.setAssertions()
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.HistoryTaskDLQEnabled: true,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
 	}
 	s.dlqTasks = make(chan tasks.Task)
 	s.failingWorkflowIDPrefix.Store("dlq-test-terminal-wfts-")
@@ -260,7 +260,6 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 			},
 		},
 	} {
-		tc := tc
 		s.Run(tc.name, func() {
 			tc.maxMessageCount = "999"
 			tc.lastMessageID = "999"

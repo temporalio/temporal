@@ -203,7 +203,7 @@ func GetMySQLPort() int {
 	return p
 }
 
-// GetPostgreSQLAddress return the cassandra address
+// GetPostgreSQLAddress return the Postgres address
 func GetPostgreSQLAddress() string {
 	addr := os.Getenv(PostgresSeeds)
 	if addr == "" {

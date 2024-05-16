@@ -58,6 +58,14 @@ type (
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
+		Put(
+			shardContext shard.Context,
+			namespaceID namespace.ID,
+			execution *commonpb.WorkflowExecution,
+			workflowCtx workflow.Context,
+			handler metrics.Handler,
+		) (workflow.Context, error)
+
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
 			shardContext shard.Context,
@@ -228,6 +236,23 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	return weCtx, weReleaseFunc, err
 }
 
+func (c *CacheImpl) Put(
+	shardContext shard.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	workflowCtx workflow.Context,
+	handler metrics.Handler,
+) (workflow.Context, error) {
+	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
+	existing, err := c.PutIfNotExist(cacheKey, workflowCtx)
+	if err != nil {
+		metrics.CacheFailures.With(handler).Record(1)
+		return nil, err
+	}
+	//nolint:revive
+	return existing.(workflow.Context), nil
+}
+
 func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	shardContext shard.Context,
@@ -237,23 +262,25 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
-
-	cacheKey := Key{
-		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
-		ShardUUID:   shardContext.GetOwner(),
-	}
+	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
 	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
 	if !cacheHit {
 		metrics.CacheMissCounter.With(handler).Record(1)
-		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, shardContext.GetLogger(), shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
-		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
+		workflowCtx = workflow.NewContext(
+			shardContext.GetConfig(),
+			cacheKey.WorkflowKey,
+			shardContext.GetLogger(),
+			shardContext.GetThrottledLogger(),
+			shardContext.GetMetricsHandler(),
+		)
+
+		var err error
+		workflowCtx, err = c.Put(shardContext, namespaceID, execution, workflowCtx, handler)
 		if err != nil {
-			metrics.CacheFailures.With(handler).Record(1)
 			return nil, nil, err
 		}
-		workflowCtx = elem.(workflow.Context)
 	}
+
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, lockPriority)
@@ -436,5 +463,16 @@ func GetCurrentRunID(
 		return "", err
 	default:
 		return "", err
+	}
+}
+
+func makeCacheKey(
+	shardContext shard.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+) Key {
+	return Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		ShardUUID:   shardContext.GetOwner(),
 	}
 }

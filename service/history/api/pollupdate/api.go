@@ -51,7 +51,7 @@ func Invoke(
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
-	wfKey, upd, ok, err := func() (*definition.WorkflowKey, *update.Update, bool, error) {
+	wfKey, upd, err := func() (*definition.WorkflowKey, *update.Update, error) {
 		workflowLease, err := ctxLookup.GetWorkflowLease(
 			ctx,
 			nil,
@@ -64,19 +64,19 @@ func Invoke(
 			workflow.LockPriorityHigh,
 		)
 		if err != nil {
-			return nil, nil, false, err
+			return nil, nil, err
 		}
 		release := workflowLease.GetReleaseFn()
 		defer release(nil)
 		wfCtx := workflowLease.GetContext()
-		upd, found := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
+		upd := wfCtx.UpdateRegistry(ctx, nil).Find(ctx, updateRef.UpdateId)
 		wfKey := wfCtx.GetWorkflowKey()
-		return &wfKey, upd, found, nil
+		return &wfKey, upd, nil
 	}()
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	if upd == nil {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
 	}
 

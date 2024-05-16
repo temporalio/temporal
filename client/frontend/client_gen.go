@@ -133,6 +133,16 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *clientImpl) ExecuteMultiOperation(
+	ctx context.Context,
+	request *workflowservice.ExecuteMultiOperationRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ExecuteMultiOperationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ExecuteMultiOperation(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
@@ -181,6 +191,16 @@ func (c *clientImpl) GetWorkerTaskReachability(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.GetWorkerTaskReachability(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.GetWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerVersioningRulesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetWorkerVersioningRules(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkflowExecutionHistory(
@@ -621,6 +641,16 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerVersioningRules(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkflowExecution(

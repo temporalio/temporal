@@ -75,11 +75,10 @@ func (s *FunctionalSuite) TestRateLimitBufferedEvents() {
 	workflowComplete := false
 	signalsSent := false
 	signalCount := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, h *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		// Count signals
-		for _, event := range h.Events[previousStartedEventID:] {
+		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 				signalCount++
 			}
@@ -170,8 +169,7 @@ func (s *FunctionalSuite) TestBufferedEvents() {
 	workflowComplete := false
 	signalSent := false
 	var signalEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !signalSent {
 			signalSent = true
 
@@ -200,8 +198,8 @@ func (s *FunctionalSuite) TestBufferedEvents() {
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
-		} else if previousStartedEventID > 0 && signalEvent == nil {
-			for _, event := range history.Events[previousStartedEventID:] {
+		} else if task.PreviousStartedEventId > 0 && signalEvent == nil {
+			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 				}
@@ -289,9 +287,7 @@ func (s *FunctionalSuite) TestBufferedEventsOutOfOrder() {
 	// workflow logic
 	firstWorkflowTask := false
 	secondWorkflowTask := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !firstWorkflowTask {
 			firstWorkflowTask = true
 			return []*commandpb.Command{{
@@ -336,8 +332,7 @@ func (s *FunctionalSuite) TestBufferedEventsOutOfOrder() {
 		}}, nil
 	}
 	// activity handler
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 

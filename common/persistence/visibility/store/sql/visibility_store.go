@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.temporal.io/api/common/v1"
@@ -165,153 +164,6 @@ func (s *VisibilityStore) UpsertWorkflowExecution(
 		return fmt.Errorf("UpsertWorkflowExecution unexpected numRows (%v) updates", noRowsAffected)
 	}
 	return nil
-}
-
-func (s *VisibilityStore) ListOpenWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   request.NamespaceID,
-			Namespace:     request.Namespace,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
-			Query: s.buildQueryStringFromListRequest(
-				request,
-				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				"",
-				"",
-			),
-		},
-	)
-}
-
-func (s *VisibilityStore) ListClosedWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   request.NamespaceID,
-			Namespace:     request.Namespace,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
-			Query: s.buildQueryStringFromListRequest(
-				request,
-				enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
-				"",
-				"",
-			),
-		},
-	)
-}
-
-func (s *VisibilityStore) ListOpenWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   request.NamespaceID,
-			Namespace:     request.Namespace,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
-			Query: s.buildQueryStringFromListRequest(
-				request.ListWorkflowExecutionsRequest,
-				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				"",
-				request.WorkflowTypeName,
-			),
-		},
-	)
-}
-
-func (s *VisibilityStore) ListClosedWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   request.NamespaceID,
-			Namespace:     request.Namespace,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
-			Query: s.buildQueryStringFromListRequest(
-				request.ListWorkflowExecutionsRequest,
-				enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
-				"",
-				request.WorkflowTypeName,
-			),
-		},
-	)
-}
-
-func (s *VisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   request.NamespaceID,
-			Namespace:     request.Namespace,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
-			Query: s.buildQueryStringFromListRequest(
-				request.ListWorkflowExecutionsRequest,
-				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				request.WorkflowID,
-				"",
-			),
-		},
-	)
-}
-
-func (s *VisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   request.NamespaceID,
-			Namespace:     request.Namespace,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
-			Query: s.buildQueryStringFromListRequest(
-				request.ListWorkflowExecutionsRequest,
-				enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
-				request.WorkflowID,
-				"",
-			),
-		},
-	)
-}
-
-func (s *VisibilityStore) ListClosedWorkflowExecutionsByStatus(
-	ctx context.Context,
-	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   request.NamespaceID,
-			Namespace:     request.Namespace,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
-			Query: s.buildQueryStringFromListRequest(
-				request.ListWorkflowExecutionsRequest,
-				request.Status,
-				"",
-				"",
-			),
-		},
-	)
 }
 
 func (s *VisibilityStore) DeleteWorkflowExecution(
@@ -537,6 +389,8 @@ func (s *VisibilityStore) generateVisibilityRow(
 		SearchAttributes: searchAttributes,
 		ParentWorkflowID: request.ParentWorkflowID,
 		ParentRunID:      request.ParentRunID,
+		RootWorkflowID:   request.RootWorkflowID,
+		RootRunID:        request.RootRunID,
 	}, nil
 }
 
@@ -596,14 +450,16 @@ func (s *VisibilityStore) rowToInfo(
 		row.ExecutionTime = row.StartTime
 	}
 	info := &store.InternalWorkflowExecutionInfo{
-		WorkflowID:    row.WorkflowID,
-		RunID:         row.RunID,
-		TypeName:      row.WorkflowTypeName,
-		StartTime:     row.StartTime,
-		ExecutionTime: row.ExecutionTime,
-		Status:        enumspb.WorkflowExecutionStatus(row.Status),
-		TaskQueue:     row.TaskQueue,
-		Memo:          persistence.NewDataBlob(row.Memo, row.Encoding),
+		WorkflowID:     row.WorkflowID,
+		RunID:          row.RunID,
+		TypeName:       row.WorkflowTypeName,
+		StartTime:      row.StartTime,
+		ExecutionTime:  row.ExecutionTime,
+		Status:         enumspb.WorkflowExecutionStatus(row.Status),
+		TaskQueue:      row.TaskQueue,
+		RootWorkflowID: row.RootWorkflowID,
+		RootRunID:      row.RootRunID,
+		Memo:           persistence.NewDataBlob(row.Memo, row.Encoding),
 	}
 	if row.SearchAttributes != nil && len(*row.SearchAttributes) > 0 {
 		searchAttributes, err := s.processRowSearchAttributes(*row.SearchAttributes, nsName)
@@ -681,78 +537,4 @@ func (s *VisibilityStore) processRowSearchAttributes(
 		return nil, err
 	}
 	return aliasedSas, nil
-}
-
-func (s *VisibilityStore) buildQueryStringFromListRequest(
-	request *manager.ListWorkflowExecutionsRequest,
-	executionStatus enumspb.WorkflowExecutionStatus,
-	workflowID string,
-	workflowTypeName string,
-) string {
-	var queryTerms []string
-
-	switch executionStatus {
-	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED:
-		queryTerms = append(
-			queryTerms,
-			fmt.Sprintf(
-				"%s != %d",
-				searchattribute.ExecutionStatus,
-				int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-			),
-		)
-	default:
-		queryTerms = append(
-			queryTerms,
-			fmt.Sprintf("%s = %d", searchattribute.ExecutionStatus, int32(executionStatus)),
-		)
-	}
-
-	var timeAttr string
-	if executionStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		timeAttr = searchattribute.StartTime
-	} else {
-		timeAttr = searchattribute.CloseTime
-	}
-	queryTerms = append(
-		queryTerms,
-		fmt.Sprintf(
-			"%s BETWEEN '%s' AND '%s'",
-			timeAttr,
-			request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
-			request.LatestStartTime.UTC().Format(time.RFC3339Nano),
-		),
-	)
-
-	if request.NamespaceDivision != "" {
-		queryTerms = append(
-			queryTerms,
-			fmt.Sprintf(
-				"%s = '%s'",
-				searchattribute.TemporalNamespaceDivision,
-				request.NamespaceDivision,
-			),
-		)
-	} else {
-		queryTerms = append(
-			queryTerms,
-			fmt.Sprintf("%s IS NULL", searchattribute.TemporalNamespaceDivision),
-		)
-	}
-
-	if workflowID != "" {
-		queryTerms = append(
-			queryTerms,
-			fmt.Sprintf("%s = '%s'", searchattribute.WorkflowID, workflowID),
-		)
-	}
-
-	if workflowTypeName != "" {
-		queryTerms = append(
-			queryTerms,
-			fmt.Sprintf("%s = '%s'", searchattribute.WorkflowType, workflowTypeName),
-		)
-	}
-
-	return strings.Join(queryTerms, " AND ")
 }

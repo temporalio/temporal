@@ -34,10 +34,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -45,6 +45,7 @@ type (
 		ReapplyEvents(
 			ctx context.Context,
 			ms workflow.MutableState,
+			updateRegistry update.Registry,
 			historyEvents []*historypb.HistoryEvent,
 			runID string,
 		) ([]*historypb.HistoryEvent, error)
@@ -67,93 +68,34 @@ func NewEventsReapplier(
 	}
 }
 
-// TODO (dan) this function is almost identical to reapplyEvents in workflow_resetter.go: unify them.
 func (r *EventsReapplierImpl) ReapplyEvents(
 	ctx context.Context,
 	ms workflow.MutableState,
+	updateRegistry update.Registry,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
 ) ([]*historypb.HistoryEvent, error) {
-	var reappliedEvents []*historypb.HistoryEvent
-	for _, event := range historyEvents {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-			if ms.IsResourceDuplicated(dedupResource) {
-				continue
-			}
-			reappliedEvents = append(reappliedEvents, event)
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
-			// Test coverage: TestNDCEventReapplicationSuite/TestReapplyEvents_AppliedEvent_Update
-			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-			if ms.IsResourceDuplicated(dedupResource) {
-				continue
-			}
-			reappliedEvents = append(reappliedEvents, event)
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
-			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			request := attr.GetAcceptedRequest()
-			if request == nil {
-				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateAdmitted
-				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateAdmitted
-				// event then we reapply it (converting it to UpdateAdmitted on the new branch). But if there is a
-				// preceding UpdateAdmitted event then we do not reapply the UpdateAccepted event.
-				continue
-			}
-			// Test coverage: TestNDCEventReapplicationSuite/TestReapplyEvents_AppliedEvent_Update
-			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-			if ms.IsResourceDuplicated(dedupResource) {
-				continue
-			}
-			reappliedEvents = append(reappliedEvents, event)
-		}
-	}
-
-	if len(reappliedEvents) == 0 {
-		return nil, nil
-	}
-
 	// sanity check workflow still running
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
+	reappliedEvents, err := reapplyEvents(ms, updateRegistry, historyEvents, nil, runID)
+	if err != nil {
+		return nil, err
+	}
+	if len(reappliedEvents) == 0 {
+		return nil, nil
+	}
 
 	shouldScheduleWorkflowTask := false
 	for _, event := range reappliedEvents {
-		switch event.GetEventType() {
+		switch event.GetEventType() { //nolint:exhaustive
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			signal := event.GetWorkflowExecutionSignaledEventAttributes()
 			shouldScheduleWorkflowTask = shouldScheduleWorkflowTask || !signal.GetSkipGenerateWorkflowTask()
-			if _, err := ms.AddWorkflowExecutionSignaled(
-				signal.GetSignalName(),
-				signal.GetInput(),
-				signal.GetIdentity(),
-				signal.GetHeader(),
-				signal.GetSkipGenerateWorkflowTask(),
-			); err != nil {
-				return nil, err
-			}
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
-			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
-			if _, err := ms.AddWorkflowExecutionUpdateAdmittedEvent(
-				attr.GetRequest(),
-				attr.Origin,
-			); err != nil {
-				return nil, err
-			}
-			shouldScheduleWorkflowTask = true
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
-			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			if _, err := ms.AddWorkflowExecutionUpdateAdmittedEvent(
-				attr.GetAcceptedRequest(),
-				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
-			); err != nil {
-				return nil, err
-			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			shouldScheduleWorkflowTask = true
 		}
-		deDupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-		ms.UpdateDuplicatedResource(deDupResource)
 	}
 
 	// After reapply event, checking if we should schedule a workflow task

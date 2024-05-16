@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -107,6 +108,7 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	}
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, versionHistoryItems)
 	localEventsBlobs := make([]*common.DataBlob, len(localEvents))
+	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.clusterMetadata.GetClusterID(), h.clusterMetadata.GetFailoverVersionIncrement())
 
 	for index, batch := range localEvents {
 		blob, err := h.eventSerializer.SerializeEvents(batch, enumspb.ENCODING_TYPE_PROTO3)
@@ -114,6 +116,32 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 			return err
 		}
 		localEventsBlobs[index] = blob
+	}
+	_, err = engine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		NamespaceId: workflowKey.NamespaceID,
+		Execution: &common.WorkflowExecution{
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
+		},
+	})
+
+	switch err.(type) {
+	case nil:
+	case *serviceerror.NotFound:
+		// if mutable state not found, we import from beginning
+		return h.importEvents(
+			ctx,
+			sourceClusterName,
+			engine,
+			workflowKey,
+			common2.FirstEventID,
+			localVersionHistory[0].Version,
+			localVersionHistory[len(localVersionHistory)-1].EventId,
+			localVersionHistory[len(localVersionHistory)-1].Version,
+			nil,
+		)
+	default:
+		return err
 	}
 	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, localEventsBlobs, versionHistory, nil)
 	if err != nil {
@@ -123,26 +151,29 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 		return nil
 	}
 
-	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.clusterMetadata.GetClusterID(), h.clusterMetadata.GetFailoverVersionIncrement())
-
 	lastBatch := localEvents[len(localEvents)-1]
-	lastLocalEvent := lastBatch[len(lastBatch)-1]
+	lastEvent := lastBatch[len(lastBatch)-1]
 
-	if lastLocalEvent.EventId == localVersionHistory[len(localVersionHistory)-1].EventId {
-		// all local events were imported successfully
+	if lastEvent.EventId == localVersionHistory[len(localVersionHistory)-1].EventId {
+		// all local events were imported successfully, we call commit to finish the transaction
 		_, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, nil, versionHistory, response.Token)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
+	nextEventId := lastEvent.EventId + 1
+	nextEventVersion, err := versionhistory.GetVersionHistoryEventVersion(versionHistory, nextEventId)
+	if err != nil {
+		return err
+	}
 	return h.importEvents(
 		ctx,
 		sourceClusterName,
 		engine,
 		workflowKey,
-		lastLocalEvent.EventId,
-		lastLocalEvent.Version,
+		nextEventId,
+		nextEventVersion,
 		localVersionHistory[len(localVersionHistory)-1].EventId,
 		localVersionHistory[len(localVersionHistory)-1].Version,
 		response.Token,
@@ -175,7 +206,6 @@ func (h *localEventsHandlerImpl) importEvents(
 	blobs := []*common.DataBlob{}
 	blobSize := 0
 	var versionHistory *historyspb.VersionHistory
-
 	for historyIterator.HasNext() {
 		batch, err := historyIterator.Next()
 		if err != nil {
@@ -194,7 +224,14 @@ func (h *localEventsHandlerImpl) importEvents(
 
 		blobSize++
 		blobs = append(blobs, batch.RawEventBatch)
-		if blobSize >= historyImportBlobSize || len(blobs) >= historyImportPageSize {
+		events, err := h.eventSerializer.DeserializeEvents(batch.RawEventBatch)
+		if err != nil {
+			return err
+		}
+
+		if blobSize >= historyImportBlobSize ||
+			len(blobs) >= historyImportPageSize ||
+			h.isLastEventAtHistoryBoundary(events[len(events)-1], versionHistory) { // Import API only take events that has same version
 			response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token)
 			if err != nil {
 				return err
@@ -224,6 +261,18 @@ func (h *localEventsHandlerImpl) importEvents(
 		return serviceerror.NewInternal("Failed to commit import transaction")
 	}
 	return nil
+}
+
+func (h *localEventsHandlerImpl) isLastEventAtHistoryBoundary(
+	lastLocalEvent *historypb.HistoryEvent,
+	versionHistory *historyspb.VersionHistory,
+) bool {
+	for _, item := range versionHistory.Items {
+		if item.EventId == lastLocalEvent.EventId {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *localEventsHandlerImpl) invokeImportWorkflowExecutionCall(

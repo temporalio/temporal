@@ -34,12 +34,12 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -90,15 +90,16 @@ type AdvancedVisibilitySuite struct {
 
 // This cluster use customized threshold for history config
 func (s *AdvancedVisibilitySuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.VisibilityDisableOrderByClause:             false,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
-		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
-		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
-		dynamicconfig.BuildIdScavengerEnabled:                    true,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.VisibilityDisableOrderByClause.Key():             false,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
+		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
+		dynamicconfig.ReachabilityTaskQueueScanLimit.Key():             2,
+		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():              1,
+		dynamicconfig.BuildIdScavengerEnabled.Key():                    true,
 		// Allow the scavenger to remove any build id regardless of when it was last default for a set.
-		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
+		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
 
 	if UsingSQLAdvancedVisibility() {
@@ -278,9 +279,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 
 	searchAttributes := s.createSearchAttributes()
 	// test upsert
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
@@ -1203,14 +1202,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	commandCount := 0
-	wtHandler := func(
-		execution *commonpb.WorkflowExecution,
-		wt *commonpb.WorkflowType,
-		previousStartedEventID,
-		startedEventID int64,
-		history *historypb.History,
-	) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{
@@ -1501,14 +1493,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	commandCount := 0
-	wtHandler := func(
-		execution *commonpb.WorkflowExecution,
-		wt *commonpb.WorkflowType,
-		previousStartedEventID,
-		startedEventID int64,
-		history *historypb.History,
-	) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		modifyCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES,
 			Attributes: &commandpb.Command_ModifyWorkflowPropertiesCommandAttributes{
@@ -1777,8 +1762,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
@@ -1830,18 +1814,23 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	var (
 		ctx         = NewContext()
-		id          = s.randomizeStr(s.T().Name())
-		childWfType = "child-wf-type-" + id
-		wfType      = "wf-type-" + id
-		taskQueue   = "task-queue-" + id
+		wfID        = s.randomizeStr(s.T().Name())
+		childWfID   = s.randomizeStr(s.T().Name())
+		childWfType = "child-wf-type-" + wfID
+		wfType      = "wf-type-" + wfID
+		taskQueue   = "task-queue-" + wfID
 	)
 
 	childWf := func(ctx workflow.Context) error {
 		return nil
 	}
 	wf := func(ctx workflow.Context) error {
-		err := workflow.ExecuteChildWorkflow(ctx, childWfType).Get(ctx, nil)
-		return err
+		cwo := workflow.ChildWorkflowOptions{
+			WorkflowID: childWfID,
+		}
+		return workflow.
+			ExecuteChildWorkflow(workflow.WithChildOptions(ctx, cwo), childWfType).
+			Get(ctx, nil)
 	}
 
 	w := worker.New(s.sdkClient, taskQueue, worker.Options{})
@@ -1850,7 +1839,7 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	s.Require().NoError(w.Start())
 
 	startOptions := sdkclient.StartWorkflowOptions{
-		ID:        id,
+		ID:        wfID,
 		TaskQueue: taskQueue,
 	}
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, wfType)
@@ -1858,39 +1847,9 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	s.NoError(run.Get(ctx, nil))
 	w.Stop()
 
-	// check child workflow has parent workflow
-	var childWfInfo *workflowpb.WorkflowExecutionInfo
-	s.Eventually(
-		func() bool {
-			resp, err := s.engine.ListWorkflowExecutions(
-				ctx,
-				&workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.namespace,
-					Query:     fmt.Sprintf("WorkflowType = %q", childWfType),
-					PageSize:  defaultPageSize,
-				},
-			)
-			if err != nil {
-				return false
-			}
-			if len(resp.Executions) != 1 {
-				return false
-			}
-			childWfInfo = resp.Executions[0]
-			return true
-		},
-		waitForESToSettle,
-		100*time.Millisecond,
-	)
-	s.NotNil(childWfInfo)
-	parentExecution := childWfInfo.GetParentExecution()
-	s.NotNil(parentExecution)
-	s.Equal(id, parentExecution.GetWorkflowId())
-
-	// check main workflow doesn't have parent workflow
-	var wfInfo *workflowpb.WorkflowExecutionInfo
-	s.Eventually(
-		func() bool {
+	// check main workflow doesn't have parent workflow and root is itself
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
 			resp, err := s.engine.ListWorkflowExecutions(
 				ctx,
 				&workflowservice.ListWorkflowExecutionsRequest{
@@ -1899,20 +1858,45 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 					PageSize:  defaultPageSize,
 				},
 			)
-			if err != nil {
-				return false
+			assert.NoError(c, err)
+			if assert.Len(c, resp.Executions, 1) {
+				wfInfo := resp.Executions[0]
+				assert.Nil(c, wfInfo.GetParentExecution())
+				assert.NotNil(c, wfInfo.GetRootExecution())
+				assert.Equal(c, wfID, wfInfo.RootExecution.GetWorkflowId())
+				assert.Equal(c, run.GetRunID(), wfInfo.RootExecution.GetRunId())
 			}
-			if len(resp.Executions) != 1 {
-				return false
-			}
-			wfInfo = resp.Executions[0]
-			return true
 		},
 		waitForESToSettle,
 		100*time.Millisecond,
 	)
-	s.NotNil(wfInfo)
-	s.Nil(wfInfo.GetParentExecution())
+
+	// check child workflow has parent workflow and root is the parent
+	var childWfInfo *workflowpb.WorkflowExecutionInfo
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
+			resp, err := s.engine.ListWorkflowExecutions(
+				ctx,
+				&workflowservice.ListWorkflowExecutionsRequest{
+					Namespace: s.namespace,
+					Query:     fmt.Sprintf("WorkflowType = %q", childWfType),
+					PageSize:  defaultPageSize,
+				},
+			)
+			assert.NoError(c, err)
+			if assert.Len(c, resp.Executions, 1) {
+				childWfInfo = resp.Executions[0]
+				assert.NotNil(c, childWfInfo.GetParentExecution())
+				assert.Equal(c, wfID, childWfInfo.ParentExecution.GetWorkflowId())
+				assert.Equal(c, run.GetRunID(), childWfInfo.ParentExecution.GetRunId())
+				assert.NotNil(c, childWfInfo.GetRootExecution())
+				assert.Equal(c, wfID, childWfInfo.RootExecution.GetWorkflowId())
+				assert.Equal(c, run.GetRunID(), childWfInfo.RootExecution.GetRunId())
+			}
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 }
 
 func (s *AdvancedVisibilitySuite) Test_LongWorkflowID() {

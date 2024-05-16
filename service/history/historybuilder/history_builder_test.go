@@ -661,6 +661,8 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		s.now,
 		false,
 		123678,
+		nil,
+		int64(0),
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -839,12 +841,15 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 func (s *historyBuilderSuite) TestActivityTaskStarted() {
 	scheduledEventID := rand.Int63()
 	attempt := rand.Int31()
+	stamp := &commonpb.WorkerVersionStamp{BuildId: "bld", UseVersioning: false}
 	event := s.historyBuilder.AddActivityTaskStartedEvent(
 		scheduledEventID,
 		attempt,
 		testRequestID,
 		testIdentity,
 		testFailure,
+		stamp,
+		int64(0),
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -860,6 +865,7 @@ func (s *historyBuilderSuite) TestActivityTaskStarted() {
 				Identity:         testIdentity,
 				RequestId:        testRequestID,
 				LastFailure:      testFailure,
+				WorkerVersion:    stamp,
 			},
 		},
 	}, event)
@@ -2235,6 +2241,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:         true,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                    true,
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED:                            true,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:                     true,
 	}
 
 	// events corresponding to message from client will be assigned an event ID immediately
@@ -2308,6 +2316,11 @@ func (s *historyBuilderSuite) TestReorder() {
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:  {},
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:   {},
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED: {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED:             {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:           {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:              {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:            {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:           {},
 	}
 	var reorderEvents []*historypb.HistoryEvent
 	for eventType := range reorderEventTypes {

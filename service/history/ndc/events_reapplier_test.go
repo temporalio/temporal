@@ -36,7 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/update/v1"
+	updatepb "go.temporal.io/api/update/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -97,6 +98,9 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
+	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(msCurrent)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -115,7 +119,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,
 	}
-	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, events, runID)
+	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
 	s.Equal(1, len(appliedEvent))
 }
@@ -130,7 +134,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 			EventId:   105,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
-				Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
+				Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}, Meta: &updatepb.Meta{UpdateId: "update-1"}},
 				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			}},
 		},
@@ -138,12 +142,15 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 			EventId:   105,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
-				AcceptedRequest: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
+				AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}, Meta: &updatepb.Meta{UpdateId: "update-2"}},
 			}},
 		},
 	} {
 
 		msCurrent := workflow.NewMockMutableState(s.controller)
+		msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
+		msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
+		updateRegistry := update.NewRegistry(msCurrent)
 		msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 		msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 		msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -169,7 +176,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 			{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 			event,
 		}
-		appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, events, runID)
+		appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 		s.NoError(err)
 		s.Equal(1, len(appliedEvent))
 	}
@@ -188,13 +195,17 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	}
 
 	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
+	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(msCurrent)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true)
+	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,
 	}
-	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, events, runID)
+	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
 	s.Equal(0, len(appliedEvent))
 }
@@ -227,6 +238,9 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
+	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(msCurrent)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -248,7 +262,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		event1,
 		event2,
 	}
-	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, events, runID)
+	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
 	s.Equal(1, len(appliedEvent))
 }
@@ -271,6 +285,9 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
+	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(msCurrent)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -287,7 +304,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,
 	}
-	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, events, runID)
+	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.Error(err)
 	s.Equal(0, len(appliedEvent))
 }

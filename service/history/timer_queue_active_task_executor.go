@@ -29,12 +29,11 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -48,7 +47,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -59,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -431,6 +430,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 		return nil
 	}
 
+	// TODO: deprecated, remove below 3 metrics after v1.25
 	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
 		metrics.WorkflowRetryBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
@@ -447,6 +447,12 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	}
+
+	nsName := mutableState.GetNamespaceEntry().Name().String()
+	metrics.WorkflowBackoffCount.With(t.metricHandler).Record(
+		1,
+		metrics.NamespaceTag(nsName),
+		metrics.StringTag("backoff_type", task.WorkflowBackoffType.String()))
 
 	if mutableState.HadOrHasWorkflowTask() {
 		// already has workflow task
@@ -511,12 +517,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
-	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), activityInfo.UseCompatibleVersion)
+	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
+	useWfBuildId := activityInfo.GetUseWorkflowBuildIdInfo() != nil
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
 
-	_, retError = t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.GetNamespaceID(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowID(),
@@ -528,8 +535,25 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
+	if err != nil {
+		return err
+	}
 
-	return retError
+	if useWfBuildId {
+		// activity's build ID is the same as WF's, so no need to update MS
+		return nil
+	}
+
+	return updateIndependentActivityBuildId(
+		ctx,
+		task,
+		resp.AssignedBuildId,
+		t.shardContext,
+		workflow.TransactionPolicyActive,
+		t.cache,
+		t.metricHandler,
+		t.logger,
+	)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
@@ -642,7 +666,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 
 	newExecutionInfo := newMutableState.GetExecutionInfo()
 	newExecutionState := newMutableState.GetExecutionState()
-	return weContext.UpdateWorkflowExecutionWithNewAsActive(
+	updateErr := weContext.UpdateWorkflowExecutionWithNewAsActive(
 		ctx,
 		t.shardContext,
 		workflow.NewContext(
@@ -658,6 +682,13 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		),
 		newMutableState,
 	)
+
+	if updateErr != nil {
+		return updateErr
+	}
+
+	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	return nil
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
@@ -689,7 +720,13 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return err
 	}
 
-	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+	updateErr := t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+	if updateErr != nil {
+		return updateErr
+	}
+
+	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	return nil
 }
 
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(

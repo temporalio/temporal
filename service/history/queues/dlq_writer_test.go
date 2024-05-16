@@ -126,6 +126,8 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	counter, ok := recordings[0].Value.(int64)
 	assert.True(t, ok)
 	assert.Equal(t, int64(1), counter)
+	assert.Len(t, recordings[0].Tags, 1)
+	assert.Equal(t, "transfer", recordings[0].Tags[metrics.TaskCategoryTagName])
 }
 
 func TestDLQWriter_Ok(t *testing.T) {
@@ -172,4 +174,6 @@ func TestDLQWriter_Ok(t *testing.T) {
 	counter, ok := recordings[0].Value.(int64)
 	assert.True(t, ok)
 	assert.Equal(t, int64(1), counter)
+	assert.Len(t, recordings[0].Tags, 1)
+	assert.Equal(t, "transfer", recordings[0].Tags[metrics.TaskCategoryTagName])
 }

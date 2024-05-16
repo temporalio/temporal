@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -163,6 +164,13 @@ func (tv *TestVars) WorkflowExecution(key ...string) *commonpb.WorkflowExecution
 	}
 }
 
+func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
+	return &updatepb.UpdateRef{
+		UpdateId:          tv.UpdateID(),
+		WorkflowExecution: tv.WorkflowExecution(),
+	}
+}
+
 func (tv *TestVars) TaskQueue(key ...string) *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{
 		Name: tv.getOrCreate("task_queue", key).(string),
@@ -236,6 +244,15 @@ func (tv *TestVars) HandlerName(key ...string) string {
 
 func (tv *TestVars) WithHandlerName(handlerName string, key ...string) *TestVars {
 	return tv.cloneSet("handler_name", key, handlerName)
+}
+
+//revive:disable:unchecked-type-assertion
+func (tv *TestVars) ClientIdentity(key ...string) string {
+	return tv.getOrCreate("client_identity", key).(string)
+}
+
+func (tv *TestVars) WithClientIdentity(identity string, key ...string) *TestVars {
+	return tv.cloneSet("client_identity", key, identity)
 }
 
 func (tv *TestVars) WorkerIdentity(key ...string) string {

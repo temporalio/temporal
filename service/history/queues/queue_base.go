@@ -234,7 +234,7 @@ func newQueueBase(
 		// pollTimer and checkpointTimer are initialized on Start()
 		checkpointRetrier: backoff.NewRetrier(
 			createCheckpointRetryPolicy(),
-			backoff.SystemClock,
+			clock.NewRealTimeSource(),
 		),
 
 		alertCh: monitor.AlertCh(),

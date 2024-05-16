@@ -26,7 +26,10 @@ package replication
 
 import (
 	"context"
+	"math/rand"
+	"strconv"
 
+	"github.com/dgryski/go-farm"
 	historypb "go.temporal.io/api/history/v1"
 	"go.uber.org/fx"
 
@@ -55,7 +58,14 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
-	replicationStreamSchedulerProvider,
+	fx.Annotated{
+		Name:   "HighPriorityTaskScheduler",
+		Target: replicationStreamHighPrioritySchedulerProvider,
+	},
+	fx.Annotated{
+		Name:   "LowPriorityTaskScheduler",
+		Target: replicationStreamLowPrioritySchedulerProvider,
+	},
 	executableTaskConverterProvider,
 	streamReceiverMonitorProvider,
 	ndcHistoryResenderProvider,
@@ -116,7 +126,7 @@ func replicationTaskExecutorProvider() TaskExecutorProvider {
 	}
 }
 
-func replicationStreamSchedulerProvider(
+func replicationStreamHighPrioritySchedulerProvider(
 	config *configs.Config,
 	logger log.Logger,
 	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
@@ -128,6 +138,36 @@ func replicationStreamSchedulerProvider(
 			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
 		},
 		WorkflowKeyHashFn,
+		queueFactory,
+		logger,
+	)
+	lc.Append(fx.StartStopHook(scheduler.Start, scheduler.Stop))
+	return scheduler
+}
+
+func replicationStreamLowPrioritySchedulerProvider(
+	config *configs.Config,
+	logger log.Logger,
+	lc fx.Lifecycle,
+) ctasks.Scheduler[TrackableExecutableTask] {
+	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+		return NewSequentialTaskQueue(task)
+	}
+	taskQueueHashFunc := func(item interface{}) uint32 {
+		workflowKey, ok := item.(definition.WorkflowKey)
+		if !ok {
+			return 0
+		}
+
+		idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID + "_" + strconv.Itoa(rand.Intn(config.ReplicationLowPriorityTaskParallelism())))
+		return farm.Fingerprint32(idBytes)
+	}
+	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
+		&ctasks.SequentialSchedulerOptions{
+			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
+			WorkerCount: config.ReplicationLowPriorityProcessorSchedulerWorkerCount,
+		},
+		taskQueueHashFunc,
 		queueFactory,
 		logger,
 	)

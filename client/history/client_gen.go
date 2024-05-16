@@ -74,12 +74,32 @@ func (c *clientImpl) CloseShard(
 	return response, nil
 }
 
+func (c *clientImpl) CompleteNexusOperation(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CompleteNexusOperationResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetCompletion().GetNamespaceId(), request.GetCompletion().GetWorkflowId())
+	var response *historyservice.CompleteNexusOperationResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.CompleteNexusOperation(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.DeleteWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.DeleteWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -99,7 +119,7 @@ func (c *clientImpl) DeleteWorkflowVisibilityRecord(
 	request *historyservice.DeleteWorkflowVisibilityRecordRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.DeleteWorkflowVisibilityRecordResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.DeleteWorkflowVisibilityRecordResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -119,7 +139,7 @@ func (c *clientImpl) DescribeMutableState(
 	request *historyservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.DescribeMutableStateResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.DescribeMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -139,7 +159,7 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	request *historyservice.DescribeWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.DescribeWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -154,12 +174,32 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	return response, nil
 }
 
+func (c *clientImpl) ExecuteMultiOperation(
+	ctx context.Context,
+	request *historyservice.ExecuteMultiOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowId())
+	var response *historyservice.ExecuteMultiOperationResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ExecuteMultiOperation(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) ForceDeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.ForceDeleteWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -179,7 +219,7 @@ func (c *clientImpl) GenerateLastHistoryReplicationTasks(
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.GenerateLastHistoryReplicationTasksResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -243,7 +283,7 @@ func (c *clientImpl) GetMutableState(
 	request *historyservice.GetMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetMutableStateResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.GetMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -283,7 +323,7 @@ func (c *clientImpl) GetWorkflowExecutionHistory(
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.GetWorkflowExecutionHistoryResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -303,7 +343,7 @@ func (c *clientImpl) GetWorkflowExecutionHistoryReverse(
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.GetWorkflowExecutionHistoryReverseResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -363,7 +403,7 @@ func (c *clientImpl) ImportWorkflowExecution(
 	request *historyservice.ImportWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.ImportWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -383,7 +423,7 @@ func (c *clientImpl) IsActivityTaskValid(
 	request *historyservice.IsActivityTaskValidRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.IsActivityTaskValidResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.IsActivityTaskValidResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -403,7 +443,7 @@ func (c *clientImpl) IsWorkflowTaskValid(
 	request *historyservice.IsWorkflowTaskValidRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.IsWorkflowTaskValidResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.IsWorkflowTaskValidResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -443,7 +483,7 @@ func (c *clientImpl) PollMutableState(
 	request *historyservice.PollMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.PollMutableStateResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.PollMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -463,7 +503,7 @@ func (c *clientImpl) PollWorkflowExecutionUpdate(
 	request *historyservice.PollWorkflowExecutionUpdateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetUpdateRef().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetRequest().GetUpdateRef().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.PollWorkflowExecutionUpdateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -503,7 +543,7 @@ func (c *clientImpl) QueryWorkflow(
 	request *historyservice.QueryWorkflowRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.QueryWorkflowResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.QueryWorkflowResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -543,7 +583,7 @@ func (c *clientImpl) RebuildMutableState(
 	request *historyservice.RebuildMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RebuildMutableStateResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.RebuildMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -588,7 +628,7 @@ func (c *clientImpl) RecordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RecordActivityTaskStartedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -608,7 +648,7 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordChildExecutionCompletedResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetParentExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetParentExecution().GetWorkflowId())
 	var response *historyservice.RecordChildExecutionCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -628,7 +668,7 @@ func (c *clientImpl) RecordWorkflowTaskStarted(
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RecordWorkflowTaskStartedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -668,7 +708,7 @@ func (c *clientImpl) RemoveSignalMutableState(
 	request *historyservice.RemoveSignalMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RemoveSignalMutableStateResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RemoveSignalMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -708,7 +748,7 @@ func (c *clientImpl) ReplicateEventsV2(
 	request *historyservice.ReplicateEventsV2Request,
 	opts ...grpc.CallOption,
 ) (*historyservice.ReplicateEventsV2Response, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.ReplicateEventsV2Response
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -728,7 +768,7 @@ func (c *clientImpl) ReplicateWorkflowState(
 	request *historyservice.ReplicateWorkflowStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ReplicateWorkflowStateResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowState().GetExecutionInfo().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowState().GetExecutionInfo().GetWorkflowId())
 	var response *historyservice.ReplicateWorkflowStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -748,7 +788,7 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RequestCancelWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -768,7 +808,7 @@ func (c *clientImpl) ResetStickyTaskQueue(
 	request *historyservice.ResetStickyTaskQueueRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ResetStickyTaskQueueResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
 	var response *historyservice.ResetStickyTaskQueueResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -788,7 +828,7 @@ func (c *clientImpl) ResetWorkflowExecution(
 	request *historyservice.ResetWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ResetWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetResetRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetResetRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.ResetWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -933,7 +973,7 @@ func (c *clientImpl) ScheduleWorkflowTask(
 	request *historyservice.ScheduleWorkflowTaskRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ScheduleWorkflowTaskResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.ScheduleWorkflowTaskResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -953,7 +993,7 @@ func (c *clientImpl) SignalWithStartWorkflowExecution(
 	request *historyservice.SignalWithStartWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetSignalWithStartRequest().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetSignalWithStartRequest().GetWorkflowId())
 	var response *historyservice.SignalWithStartWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -973,7 +1013,7 @@ func (c *clientImpl) SignalWorkflowExecution(
 	request *historyservice.SignalWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.SignalWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetSignalRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetSignalRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.SignalWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -993,7 +1033,7 @@ func (c *clientImpl) StartWorkflowExecution(
 	request *historyservice.StartWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetStartRequest().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetStartRequest().GetWorkflowId())
 	var response *historyservice.StartWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1013,7 +1053,7 @@ func (c *clientImpl) SyncActivity(
 	request *historyservice.SyncActivityRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.SyncActivityResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowId())
 	var response *historyservice.SyncActivityResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1053,7 +1093,7 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	request *historyservice.TerminateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.TerminateWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.TerminateWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1073,7 +1113,7 @@ func (c *clientImpl) UpdateWorkflowExecution(
 	request *historyservice.UpdateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.UpdateWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1093,7 +1133,7 @@ func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetParentExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetParentExecution().GetWorkflowId())
 	var response *historyservice.VerifyChildExecutionCompletionRecordedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1113,7 +1153,7 @@ func (c *clientImpl) VerifyFirstWorkflowTaskScheduled(
 	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.VerifyFirstWorkflowTaskScheduledResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error

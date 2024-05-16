@@ -48,11 +48,9 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
@@ -110,16 +108,6 @@ const (
 	sdkClientFactoryRetryInitialInterval    = 200 * time.Millisecond
 	sdkClientFactoryRetryMaxInterval        = 5 * time.Second
 	sdkClientFactoryRetryExpirationInterval = time.Minute
-
-	defaultInitialInterval            = time.Second
-	defaultMaximumIntervalCoefficient = 100.0
-	defaultBackoffCoefficient         = 2.0
-	defaultMaximumAttempts            = 0
-
-	initialIntervalInSecondsConfigKey   = "InitialIntervalInSeconds"
-	maximumIntervalCoefficientConfigKey = "MaximumIntervalCoefficient"
-	backoffCoefficientConfigKey         = "BackoffCoefficient"
-	maximumAttemptsConfigKey            = "MaximumAttempts"
 
 	contextExpireThreshold = 10 * time.Millisecond
 
@@ -348,13 +336,12 @@ func IsServiceClientTransientError(err error) bool {
 
 	switch err := err.(type) {
 	case *serviceerror.ResourceExhausted:
-		if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			return true
-		}
+		return err.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
 	case *serviceerrors.ShardOwnershipLost:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
@@ -470,12 +457,6 @@ func VerifyShardIDMapping(
 	)
 }
 
-// TaskQueueRoutingKey returns the string that should be passed to Lookup to find the owner of
-// a task queue partition.
-func TaskQueueRoutingKey(namespaceId string, fullName string, tqType enumspb.TaskQueueType) string {
-	return fmt.Sprintf("%s:%s:%d", namespaceId, fullName, tqType)
-}
-
 func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	var sb strings.Builder
 	_, _ = sb.WriteString("==========================================================================\n")
@@ -545,112 +526,6 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 	}
 
 	return matchingResp
-}
-
-// EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
-func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultRetrySettings) {
-	if originalPolicy.GetMaximumAttempts() == 0 {
-		originalPolicy.MaximumAttempts = defaultSettings.MaximumAttempts
-	}
-
-	if timestamp.DurationValue(originalPolicy.GetInitialInterval()) == 0 {
-		originalPolicy.InitialInterval = durationpb.New(defaultSettings.InitialInterval)
-	}
-
-	if timestamp.DurationValue(originalPolicy.GetMaximumInterval()) == 0 {
-		originalPolicy.MaximumInterval = durationpb.New(time.Duration(defaultSettings.MaximumIntervalCoefficient) * timestamp.DurationValue(originalPolicy.GetInitialInterval()))
-	}
-
-	if originalPolicy.GetBackoffCoefficient() == 0 {
-		originalPolicy.BackoffCoefficient = defaultSettings.BackoffCoefficient
-	}
-}
-
-// ValidateRetryPolicy validates a retry policy
-func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
-	if policy == nil {
-		// nil policy is valid which means no retry
-		return nil
-	}
-
-	if policy.GetMaximumAttempts() == 1 {
-		// One maximum attempt effectively disable retries. Validating the
-		// rest of the arguments is pointless
-		return nil
-	}
-	if timestamp.DurationValue(policy.GetInitialInterval()) < 0 {
-		return serviceerror.NewInvalidArgument("InitialInterval cannot be negative on retry policy.")
-	}
-	if policy.GetBackoffCoefficient() < 1 {
-		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
-	}
-	if timestamp.DurationValue(policy.GetMaximumInterval()) < 0 {
-		return serviceerror.NewInvalidArgument("MaximumInterval cannot be negative on retry policy.")
-	}
-	if timestamp.DurationValue(policy.GetMaximumInterval()) > 0 && timestamp.DurationValue(policy.GetMaximumInterval()) < timestamp.DurationValue(policy.GetInitialInterval()) {
-		return serviceerror.NewInvalidArgument("MaximumInterval cannot be less than InitialInterval on retry policy.")
-	}
-	if policy.GetMaximumAttempts() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
-	}
-
-	for _, nrt := range policy.NonRetryableErrorTypes {
-		if strings.HasPrefix(nrt, TimeoutFailureTypePrefix) {
-			timeoutTypeValue := nrt[len(TimeoutFailureTypePrefix):]
-			timeoutType, err := enumspb.TimeoutTypeFromString(timeoutTypeValue)
-			if err != nil || enumspb.TimeoutType(timeoutType) == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid timeout type value: %v.", timeoutTypeValue))
-			}
-		}
-	}
-
-	return nil
-}
-
-func GetDefaultRetryPolicyConfigOptions() map[string]interface{} {
-	return map[string]interface{}{
-		initialIntervalInSecondsConfigKey:   int(defaultInitialInterval.Seconds()),
-		maximumIntervalCoefficientConfigKey: defaultMaximumIntervalCoefficient,
-		backoffCoefficientConfigKey:         defaultBackoffCoefficient,
-		maximumAttemptsConfigKey:            defaultMaximumAttempts,
-	}
-}
-
-func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRetrySettings {
-	defaultSettings := DefaultRetrySettings{
-		InitialInterval:            defaultInitialInterval,
-		MaximumIntervalCoefficient: defaultMaximumIntervalCoefficient,
-		BackoffCoefficient:         defaultBackoffCoefficient,
-		MaximumAttempts:            defaultMaximumAttempts,
-	}
-
-	if seconds, ok := options[initialIntervalInSecondsConfigKey]; ok {
-		defaultSettings.InitialInterval = time.Duration(
-			number.NewNumber(
-				seconds,
-			).GetIntOrDefault(int(defaultInitialInterval.Nanoseconds())),
-		) * time.Second
-	}
-
-	if coefficient, ok := options[maximumIntervalCoefficientConfigKey]; ok {
-		defaultSettings.MaximumIntervalCoefficient = number.NewNumber(
-			coefficient,
-		).GetFloatOrDefault(defaultMaximumIntervalCoefficient)
-	}
-
-	if coefficient, ok := options[backoffCoefficientConfigKey]; ok {
-		defaultSettings.BackoffCoefficient = number.NewNumber(
-			coefficient,
-		).GetFloatOrDefault(defaultBackoffCoefficient)
-	}
-
-	if attempts, ok := options[maximumAttemptsConfigKey]; ok {
-		defaultSettings.MaximumAttempts = int32(number.NewNumber(
-			attempts,
-		).GetIntOrDefault(defaultMaximumAttempts))
-	}
-
-	return defaultSettings
 }
 
 // CreateHistoryStartWorkflowRequest create a start workflow request for history.
@@ -801,7 +676,7 @@ func OverrideWorkflowTaskTimeout(
 	namespace string,
 	taskStartToCloseTimeout time.Duration,
 	workflowRunTimeout time.Duration,
-	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter,
+	getDefaultTimeoutFunc func(namespace string) time.Duration,
 ) time.Duration {
 
 	if taskStartToCloseTimeout == 0 {

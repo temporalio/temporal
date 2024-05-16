@@ -33,7 +33,7 @@ import (
 
 const GlobalDefaultNumTaskQueuePartitions = 4
 
-var defaultNumTaskQueuePartitions = []ConstrainedValue{
+var defaultNumTaskQueuePartitions = []TypedConstrainedValue[int]{
 	// The per-ns worker task queue in all namespaces should only have one partition, since
 	// we'll only run one worker per task queue.
 	{
@@ -76,7 +76,7 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 	},
 }
 
-var DefaultPerShardNamespaceRPSMax = GetIntPropertyFilteredByNamespace(0)
+var DefaultPerShardNamespaceRPSMax = GetIntPropertyFnFilteredByNamespace(0)
 
 const (
 	// dynamic config map keys and defaults for client.DynamicRateLimitingParams for controlling dynamic rate limiting options

@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -159,7 +160,7 @@ type (
 			transactionPolicy TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
-		UpdateRegistry(ctx context.Context) update.Registry
+		UpdateRegistry(ctx context.Context, ms MutableState) update.Registry
 	}
 )
 
@@ -234,8 +235,12 @@ func (c *ContextImpl) Clear() {
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
+		c.MutableState = nil
 	}
-	c.MutableState = nil
+	if c.updateRegistry != nil {
+		c.updateRegistry.Clear()
+		c.updateRegistry = nil
+	}
 }
 
 func (c *ContextImpl) GetWorkflowKey() definition.WorkflowKey {
@@ -913,11 +918,26 @@ func (c *ContextImpl) ReapplyEvents(
 	return err
 }
 
-func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
+// TODO: remove `fallbackMutableState` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
+func (c *ContextImpl) UpdateRegistry(ctx context.Context, fallbackMutableState MutableState) update.Registry {
+	ms := c.MutableState
+	if ms == nil {
+		if fallbackMutableState == nil {
+			panic("both c.MutableState and fallbackMutableState are nil")
+		}
+		ms = fallbackMutableState
+	}
+
+	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ms.GetCurrentVersion() {
+		c.updateRegistry.Clear()
+		c.updateRegistry = nil
+	}
+
 	if c.updateRegistry == nil {
-		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
+		nsIDStr := ms.GetNamespaceEntry().ID().String()
+
 		c.updateRegistry = update.NewRegistry(
-			func() update.Store { return c.MutableState },
+			ms,
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
@@ -1076,6 +1096,11 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	if !c.MutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
+
+	// Abort updates before clearing context.
+	// MS is not persisted yet, but this code is executed only when something
+	// really bad happened with workflow, and it won't make any progress anyway.
+	c.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
 
 	// Discard pending changes in MutableState so we can apply terminate state transition
 	c.Clear()

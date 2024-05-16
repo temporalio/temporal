@@ -356,159 +356,6 @@ func (s *visibilityStore) checkProcessor() {
 	}
 }
 
-func (s *visibilityStore) ListOpenWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request, boolQuery, true)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutions failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListClosedWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request, boolQuery, false)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutions failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(
-			elastic.NewTermQuery(searchattribute.WorkflowType, request.WorkflowTypeName),
-			elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, true)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutionsByType failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.WorkflowType, request.WorkflowTypeName)).
-		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByType failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(
-			elastic.NewTermQuery(searchattribute.WorkflowID, request.WorkflowID),
-			elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, true)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutionsByWorkflowID failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.WorkflowID, request.WorkflowID)).
-		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByWorkflowID failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
-	ctx context.Context,
-	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, request.Status.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByStatus failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
 func (s *visibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
@@ -886,7 +733,7 @@ func (s *visibilityStore) convertQuery(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapperProvider)
-	queryConverter := newQueryConverter(
+	queryConverter := NewQueryConverter(
 		nameInterceptor,
 		NewValuesInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider),
 	)
@@ -1024,6 +871,8 @@ func (s *visibilityStore) generateESDoc(
 		searchattribute.ExecutionTime:     request.ExecutionTime,
 		searchattribute.ExecutionStatus:   request.Status.String(),
 		searchattribute.TaskQueue:         request.TaskQueue,
+		searchattribute.RootWorkflowID:    request.RootWorkflowID,
+		searchattribute.RootRunID:         request.RootRunID,
 	}
 
 	if request.ParentWorkflowID != nil {
@@ -1168,6 +1017,10 @@ func (s *visibilityStore) parseESDoc(
 			record.ParentWorkflowID = fieldValueParsed.(string)
 		case searchattribute.ParentRunID:
 			record.ParentRunID = fieldValueParsed.(string)
+		case searchattribute.RootWorkflowID:
+			record.RootWorkflowID = fieldValueParsed.(string)
+		case searchattribute.RootRunID:
+			record.RootRunID = fieldValueParsed.(string)
 		default:
 			// All custom and predefined search attributes are handled here.
 			if customSearchAttributes == nil {

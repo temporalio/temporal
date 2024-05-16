@@ -253,6 +253,8 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				timestamp.TimeValue(event.GetEventTime()),
 				attributes.GetSuggestContinueAsNew(),
 				attributes.GetHistorySizeBytes(),
+				attributes.GetWorkerVersion(),
+				attributes.GetBuildIdRedirectCounter(),
 			)
 			if err != nil {
 				return nil, err

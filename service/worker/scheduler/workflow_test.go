@@ -1256,11 +1256,6 @@ func (s *workflowSuite) TestBackfill() {
 }
 
 func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
-	// TODO: remove once default version is InclusiveBackfillStartTime
-	currentVersion := currentTweakablePolicies.Version
-	currentTweakablePolicies.Version = InclusiveBackfillStartTime
-	defer func() { currentTweakablePolicies.Version = currentVersion }()
-
 	s.runAcrossContinue(
 		[]workflowRun{
 			// if start and end time were not inclusive, this backfill run would not exist
@@ -1322,9 +1317,7 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 }
 
 func (s *workflowSuite) TestHugeBackfillAllowAll() {
-	// TODO: remove once default version is IncrementalBackfill
 	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = IncrementalBackfill
 	currentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
 	defer func() { currentTweakablePolicies = prevTweakables }()
 
@@ -1386,9 +1379,7 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 }
 
 func (s *workflowSuite) TestHugeBackfillBuffer() {
-	// TODO: remove once default version is IncrementalBackfill
 	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = IncrementalBackfill
 	currentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
 	defer func() { currentTweakablePolicies = prevTweakables }()
 
@@ -1586,6 +1577,11 @@ func (s *workflowSuite) TestUpdate() {
 							},
 							Action: s.defaultAction("newid"),
 						},
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"myfield": payload.EncodeString("another value"),
+							},
+						},
 					})
 				},
 			},
@@ -1673,11 +1669,6 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 // Tests that an update between a nominal time and jittered time for a start, that doesn't
 // modify that start, will still start it.
 func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
-	// TODO: remove once default version is UpdateFromPrevious
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = UpdateFromPrevious
-	defer func() { currentTweakablePolicies = prevTweakables }()
-
 	spec := &schedpb.ScheduleSpec{
 		Interval: []*schedpb.IntervalSpec{{
 			Interval: durationpb.New(1 * time.Hour),
@@ -2043,6 +2034,67 @@ func (s *workflowSuite) TestCANBySuggested() {
 		},
 		Policies: &schedpb.SchedulePolicies{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 0) // 0 means use suggested
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestCANBySuggestedWithSignals() {
+	// TODO: remove once default version is CANAfterSignals
+	prevTweakables := currentTweakablePolicies
+	currentTweakablePolicies.Version = CANAfterSignals
+	defer func() { currentTweakablePolicies = prevTweakables }()
+
+	// written using low-level mocks so we can control iteration count
+
+	runs := []time.Duration{
+		1 * time.Minute,
+		2 * time.Minute,
+		3 * time.Minute,
+		5 * time.Minute, // suggestCAN will be true for this signal
+		8 * time.Minute, // this one won't be reached
+	}
+	suggestCANAt := 4 * time.Minute
+	for _, d := range runs {
+		t := baseStartTime.Add(d)
+		s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			return nil, nil
+		})
+		if d > suggestCANAt {
+			// the first one after the CAN flag is flipped will run, further ones will not
+			break
+		}
+	}
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Fail("too many starts", req.Request.WorkflowId)
+		return nil, nil
+	}).Times(0).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	}, suggestCANAt)
+
+	for _, d := range runs {
+		s.env.RegisterDelayedCallback(func() {
+			s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+				TriggerImmediately: &schedpb.TriggerImmediatelyRequest{},
+			})
+		}, d)
+	}
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: durationpb.New(100 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+		State: &schedpb.ScheduleState{
+			Paused: true,
 		},
 	}, 0) // 0 means use suggested
 	s.True(s.env.IsWorkflowCompleted())

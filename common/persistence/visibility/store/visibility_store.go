@@ -57,13 +57,6 @@ type (
 		DeleteWorkflowExecution(ctx context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error
 
 		// Read APIs.
-		ListOpenWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByType(ctx context.Context, request *manager.ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByType(ctx context.Context, request *manager.ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByWorkflowID(ctx context.Context, request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByWorkflowID(ctx context.Context, request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByStatus(ctx context.Context, request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
@@ -88,6 +81,8 @@ type (
 		SearchAttributes     *commonpb.SearchAttributes
 		ParentWorkflowID     string
 		ParentRunID          string
+		RootWorkflowID       string
+		RootRunID            string
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
@@ -119,6 +114,8 @@ type (
 		SearchAttributes *commonpb.SearchAttributes
 		ParentWorkflowID *string
 		ParentRunID      *string
+		RootWorkflowID   string
+		RootRunID        string
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted

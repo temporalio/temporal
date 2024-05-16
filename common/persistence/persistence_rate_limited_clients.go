@@ -101,10 +101,10 @@ type (
 		logger               log.Logger
 	}
 
-	nexusIncomingServiceRateLimitedPersistenceClient struct {
+	nexusEndpointRateLimitedPersistenceClient struct {
 		systemRateLimiter    quotas.RequestRateLimiter
 		namespaceRateLimiter quotas.RequestRateLimiter
-		persistence          NexusIncomingServiceManager
+		persistence          NexusEndpointManager
 		logger               log.Logger
 	}
 )
@@ -115,7 +115,7 @@ var _ TaskManager = (*taskRateLimitedPersistenceClient)(nil)
 var _ MetadataManager = (*metadataRateLimitedPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
-var _ NexusIncomingServiceManager = (*nexusIncomingServiceRateLimitedPersistenceClient)(nil)
+var _ NexusEndpointManager = (*nexusEndpointRateLimitedPersistenceClient)(nil)
 
 // NewShardPersistenceRateLimitedClient creates a client to manage shards
 func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter quotas.RequestRateLimiter, namespaceRateLimiter quotas.RequestRateLimiter, logger log.Logger) ShardManager {
@@ -177,9 +177,9 @@ func NewQueuePersistenceRateLimitedClient(persistence Queue, systemRateLimiter q
 	}
 }
 
-// NewNexusIncomingServicePersistenceRateLimitedClient creates a NexusIncomingServiceManager to manage nexus services
-func NewNexusIncomingServicePersistenceRateLimitedClient(persistence NexusIncomingServiceManager, systemRateLimiter quotas.RequestRateLimiter, namespaceRateLimiter quotas.RequestRateLimiter, logger log.Logger) NexusIncomingServiceManager {
-	return &nexusIncomingServiceRateLimitedPersistenceClient{
+// NewNexusEndpointPersistenceRateLimitedClient creates a NexusEndpointManager to manage nexus endpoints
+func NewNexusEndpointPersistenceRateLimitedClient(persistence NexusEndpointManager, systemRateLimiter quotas.RequestRateLimiter, namespaceRateLimiter quotas.RequestRateLimiter, logger log.Logger) NexusEndpointManager {
+	return &nexusEndpointRateLimitedPersistenceClient{
 		persistence:          persistence,
 		systemRateLimiter:    systemRateLimiter,
 		namespaceRateLimiter: namespaceRateLimiter,
@@ -491,17 +491,6 @@ func (p *taskRateLimitedPersistenceClient) GetTasks(
 
 	response, err := p.persistence.GetTasks(ctx, request)
 	return response, err
-}
-
-func (p *taskRateLimitedPersistenceClient) CompleteTask(
-	ctx context.Context,
-	request *CompleteTaskRequest,
-) error {
-	if err := allow(ctx, "CompleteTask", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
-		return err
-	}
-
-	return p.persistence.CompleteTask(ctx, request)
 }
 
 func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(
@@ -1058,61 +1047,52 @@ func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(
 	return c.persistence.DeleteClusterMetadata(ctx, request)
 }
 
-func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetName() string {
+func (p *nexusEndpointRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *nexusIncomingServiceRateLimitedPersistenceClient) Close() {
+func (p *nexusEndpointRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingServicesTableVersion(
+func (p *nexusEndpointRateLimitedPersistenceClient) GetNexusEndpoint(
 	ctx context.Context,
-) (int64, error) {
-	if err := allow(ctx, "ListNexusIncomingServices", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
-		return 0, err
-	}
-	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
-}
-
-func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingService(
-	ctx context.Context,
-	request *GetNexusIncomingServiceRequest,
-) (*persistencepb.NexusIncomingServiceEntry, error) {
-	if err := allow(ctx, "GetNexusIncomingService", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
+	request *GetNexusEndpointRequest,
+) (*persistencepb.NexusEndpointEntry, error) {
+	if err := allow(ctx, "GetNexusEndpoint", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
 		return nil, err
 	}
-	return p.persistence.GetNexusIncomingService(ctx, request)
+	return p.persistence.GetNexusEndpoint(ctx, request)
 }
 
-func (p *nexusIncomingServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
+func (p *nexusEndpointRateLimitedPersistenceClient) ListNexusEndpoints(
 	ctx context.Context,
-	request *ListNexusIncomingServicesRequest,
-) (*ListNexusIncomingServicesResponse, error) {
-	if err := allow(ctx, "ListNexusIncomingServices", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
+	request *ListNexusEndpointsRequest,
+) (*ListNexusEndpointsResponse, error) {
+	if err := allow(ctx, "ListNexusEndpoints", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
 		return nil, err
 	}
-	return p.persistence.ListNexusIncomingServices(ctx, request)
+	return p.persistence.ListNexusEndpoints(ctx, request)
 }
 
-func (p *nexusIncomingServiceRateLimitedPersistenceClient) CreateOrUpdateNexusIncomingService(
+func (p *nexusEndpointRateLimitedPersistenceClient) CreateOrUpdateNexusEndpoint(
 	ctx context.Context,
-	request *CreateOrUpdateNexusIncomingServiceRequest,
-) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
-	if err := allow(ctx, "CreateOrUpdateNexusIncomingService", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
+	request *CreateOrUpdateNexusEndpointRequest,
+) (*CreateOrUpdateNexusEndpointResponse, error) {
+	if err := allow(ctx, "CreateOrUpdateNexusEndpoint", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
 		return nil, err
 	}
-	return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
+	return p.persistence.CreateOrUpdateNexusEndpoint(ctx, request)
 }
 
-func (p *nexusIncomingServiceRateLimitedPersistenceClient) DeleteNexusIncomingService(
+func (p *nexusEndpointRateLimitedPersistenceClient) DeleteNexusEndpoint(
 	ctx context.Context,
-	request *DeleteNexusIncomingServiceRequest,
+	request *DeleteNexusEndpointRequest,
 ) error {
-	if err := allow(ctx, "DeleteNexusIncomingService", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
+	if err := allow(ctx, "DeleteNexusEndpoint", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
 		return err
 	}
-	return p.persistence.DeleteNexusIncomingService(ctx, request)
+	return p.persistence.DeleteNexusEndpoint(ctx, request)
 }
 
 func allow(
