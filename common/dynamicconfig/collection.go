@@ -273,19 +273,34 @@ func convertMap(val any) (map[string]any, error) {
 	return nil, errors.New("value type is not map")
 }
 
-// ConvertStructure can be used as a conversion function for New*TypedSetting.
-func ConvertStructure[T any](v any) (T, error) {
-	var out T
-	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result: &out,
-		// If we want more than one hook in the future, combine them with mapstructure.OrComposeDecodeHookFunc
-		DecodeHook: mapstructureHookDuration,
-	})
-	if err != nil {
+// ConvertStructure can be used as a conversion function for New*TypedSetting. The value from
+// dynamic config will be converted to T, on top of the given default.
+//
+// Note that any failure in conversion of _any_ field will result in the overall default being used,
+// ignoring the fields that successfully converted.
+//
+// Note that the default value will be shallow-copied, so it should not have any deep structure.
+// Scalar types and values are fine, and slice and map types are fine too as long as they're set to
+// nil in the default.
+//
+// To avoid confusion, the default passed to ConvertStructure should be either the same as the
+// overall default for the setting (if you want any value set to be merged over the default, i.e.
+// treat the fields independently), or the zero value of its type (if you want to treat the fields
+// as a group and default unset fields to zero).
+func ConvertStructure[T any](def T) func(v any) (T, error) {
+	return func(v any) (T, error) {
+		out := def
+		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result: &out,
+			// If we want more than one hook in the future, combine them with mapstructure.OrComposeDecodeHookFunc
+			DecodeHook: mapstructureHookDuration,
+		})
+		if err != nil {
+			return out, err
+		}
+		err = dec.Decode(v)
 		return out, err
 	}
-	err = dec.Decode(v)
-	return out, err
 }
 
 // Parses string into time.Duration. mapstructure has an implementation of this already but it

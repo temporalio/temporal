@@ -291,7 +291,7 @@ func (s *collectionSuite) TestGetTyped() {
 	}
 	setting := NewGlobalTypedSetting(
 		testGetTypedPropertyKey,
-		ConvertStructure[myFancyType],
+		ConvertStructure(myFancyType{-3, nil}), // used if convert is called
 		myFancyType{28, []string{"global", "typed", "setting"}},
 		"",
 	)
@@ -315,10 +315,10 @@ func (s *collectionSuite) TestGetTyped() {
 
 	s.Run("CaseInsensitive", func() {
 		s.client[testGetTypedPropertyKey] = map[string]any{
-			"numBER": 999,
+			"naMES": []string{"case", "insensitive"},
 		}
-		s.Equal(999, get().Number)
-		s.Zero(len(get().Names))
+		s.Equal(-3, get().Number) // note the convert default is used here
+		s.Equal([]string{"case", "insensitive"}, get().Names)
 	})
 
 	s.Run("WrongType", func() {
@@ -330,7 +330,7 @@ func (s *collectionSuite) TestGetTyped() {
 func (s *collectionSuite) TestGetTypedSimpleList() {
 	setting := NewGlobalTypedSetting(
 		testGetTypedPropertyKey,
-		ConvertStructure[[]float64],
+		ConvertStructure([]float64(nil)),
 		[]float64{1.5, 1.1, 2.6, 3.7, 6.3},
 		"",
 	)
@@ -355,7 +355,7 @@ func (s *collectionSuite) TestGetTypedListOfStruct() {
 	type simple struct{ A, B int }
 	setting := NewGlobalTypedSetting(
 		testGetTypedPropertyKey,
-		ConvertStructure[[]simple],
+		ConvertStructure([]simple(nil)),
 		[]simple{{1, 5}, {2, 9}},
 		"",
 	)

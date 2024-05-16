@@ -223,7 +223,7 @@ func (s *fileBasedClientSuite) TestGetTypedValue() {
 			Key2 bool
 		}
 	}
-	v := NewGlobalTypedSetting(testGetTypedPropertyKey, ConvertStructure[myStruct], myStruct{}, "").Get(s.collection)()
+	v := NewGlobalTypedSetting(testGetTypedPropertyKey, ConvertStructure(myStruct{}), myStruct{}, "").Get(s.collection)()
 	expectedVal := myStruct{
 		Number: 23,
 		Days:   6 * 24 * time.Hour,
