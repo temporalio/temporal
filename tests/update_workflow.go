@@ -938,7 +938,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 	}{
 		{
 			Name:                     "message-update-id-not-found",
-			RespondWorkflowTaskError: "not found",
+			RespondWorkflowTaskError: "wasn't found",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
@@ -2342,7 +2342,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	// Try to accept update in workflow: get malformed response.
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Error(err)
-	s.Contains(err.Error(), "not found")
+	s.Contains(err.Error(), "wasn't found")
 	// New normal (but transient) WT will be created but not returned.
 
 	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
@@ -3878,7 +3878,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
-	s.ErrorContains(err, fmt.Sprintf("update %s not found", tv.UpdateID("1")))
+	s.ErrorContains(err, fmt.Sprintf("update %s wasn't found", tv.UpdateID("1")))
 
 	<-updateResultCh
 
