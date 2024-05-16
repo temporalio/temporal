@@ -948,7 +948,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
-							AcceptedRequest:                  nil,
+							AcceptedRequest:                  nil, // Important not to pass original request back.
 						}),
 					},
 				}
@@ -972,12 +972,12 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.MessageID("update-accepted"),
-						ProtocolInstanceId: tv.WithUpdateID("bogus-update-id").UpdateID(),
+						ProtocolInstanceId: tv.WithUpdateID("lost-update-id").UpdateID(),
 						SequencingId:       nil,
 						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
-							AcceptedRequest:                  updRequest,
+							AcceptedRequest:                  updRequest, // Update will be resurrected from original request.
 						}),
 					},
 				}
@@ -3912,6 +3912,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResur
 	updateResp := res.NewTask
 	<-updateResultCh
 	pollResult, err := s.pollUpdate(tv, "1", &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	s.NoError(err)
+	s.NotNil(pollResult)
 	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, pollResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 

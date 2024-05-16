@@ -387,11 +387,7 @@ func (r *registry) checkLimits(ctx context.Context) error {
 		}
 	}
 
-	if err := r.checkTotalLimit(ctx); err != nil {
-		return err
-	}
-
-	return nil
+	return r.checkTotalLimit(ctx)
 }
 
 func (r *registry) checkTotalLimit(_ context.Context) error {
