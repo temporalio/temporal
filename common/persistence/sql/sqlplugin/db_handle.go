@@ -85,19 +85,23 @@ func NewDatabaseHandle(
 }
 
 // Close and reopen the underlying database connection
-func (h *DatabaseHandle) reconnect(force bool) {
+func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 	h.Lock()
 	defer h.Unlock()
 
 	// Don't reconnect if we've been closed
 	if !h.running {
-		return
+		return nil
 	}
 
-	if !force && h.db.Load() != nil {
-		// Another goroutine already reconnected
-		return
-	} else if prevConn := h.db.Swap(nil); prevConn != nil {
+	prevConn := h.db.Load()
+	if prevConn != nil {
+		if !force {
+			// Another goroutine already reconnected
+			return prevConn
+		}
+
+		h.db.Store(nil)
 		// Store `nil` to prevent other goroutines from slamming the now-unusable database with
 		// transactions we know will fail
 		go prevConn.Close()
@@ -113,7 +117,7 @@ func (h *DatabaseHandle) reconnect(force bool) {
 			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := h.metrics.WithTags(metrics.FailureTag("throttle"))
 		metrics.PersistenceSessionRefreshFailures.With(handler).Record(1)
-		return
+		return nil
 	}
 
 	newConn, err := h.connect()
@@ -121,10 +125,11 @@ func (h *DatabaseHandle) reconnect(force bool) {
 		h.logger.Error("sql handle: unable to refresh database connection pool", tag.Error(err))
 		handler := h.metrics.WithTags(metrics.FailureTag("error"))
 		metrics.PersistenceSessionRefreshFailures.With(handler).Record(1)
-		return
+		return nil
 	}
 
 	h.db.Store(newConn)
+	return newConn
 }
 
 func (h *DatabaseHandle) Close() {
@@ -141,21 +146,25 @@ func (h *DatabaseHandle) Close() {
 }
 
 func (h *DatabaseHandle) DB() (*sqlx.DB, error) {
-	db := h.db.Load()
-	if db == nil {
-		h.reconnect(false)
-		return nil, DatabaseUnavailableError
+	if db := h.db.Load(); db != nil {
+		return db, nil
 	}
-	return db, nil
+
+	if db := h.reconnect(false); db != nil {
+		return db, nil
+	}
+	return nil, DatabaseUnavailableError
 }
 
 func (h *DatabaseHandle) Conn() Conn {
-	db := h.db.Load()
-	if db == nil {
-		h.reconnect(false)
-		return invalidConn{}
+	if db := h.db.Load(); db != nil {
+		return db
 	}
-	return db
+
+	if db := h.reconnect(false); db != nil {
+		return db
+	}
+	return invalidConn{}
 }
 
 func (h *DatabaseHandle) ConvertError(err error) error {
