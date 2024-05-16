@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package interceptor
 
 import (
 	"context"
@@ -61,7 +61,7 @@ type (
 		clientBean      *client.MockBean
 		clusterMetadata *cluster.MockMetadata
 
-		redirector *RedirectionInterceptor
+		redirector *Redirection
 	}
 )
 
@@ -86,7 +86,7 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.redirector = NewRedirectionInterceptor(
-		NewConfig(dynamicconfig.NewNoopCollection(), 1),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{
 			Policy: DCRedirectionPolicyAllAPIsForwarding,

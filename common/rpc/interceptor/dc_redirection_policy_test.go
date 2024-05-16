@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package interceptor
 
 import (
 	"context"
@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/frontend"
 )
 
 type (
@@ -63,7 +64,7 @@ type (
 		namespaceID            namespace.ID
 		currentClusterName     string
 		alternativeClusterName string
-		mockConfig             *Config
+		mockConfig             *frontend.Config
 
 		policy *SelectedAPIsForwardingRedirectionPolicy
 	}
@@ -138,7 +139,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 
 	logger := log.NewTestLogger()
 
-	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), logger), 0)
+	s.mockConfig = frontend.NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), logger), 0)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.policy = NewSelectedAPIsForwardingPolicy(
 		s.currentClusterName,
