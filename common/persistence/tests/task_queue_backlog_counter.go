@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"go.temporal.io/api/serviceerror"
 	"math/rand"
 	"testing"
 	"time"
@@ -171,6 +172,11 @@ func (s *TaskQueueBacklogCounterSuite) ValidateBacklogCounterWithDB(
 		TaskQueue:   taskQueueInfo.Name,
 		TaskType:    taskQueueInfo.TaskType,
 	})
+	// if we get an unimplemented error, we just check if respTasks had 0.
+	if _, ok := err.(*serviceerror.Unimplemented); ok {
+		err = nil
+		s.Equal(0, respTasks)
+	}
 	s.NoError(err)
 	if s.isSQL {
 		s.Equal(expectedBacklogCounter, int64(respTasks))

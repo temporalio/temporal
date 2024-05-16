@@ -254,7 +254,8 @@ func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 	}
 	err := backlogMgr.SpoolTask(task)
 	require.NoError(t, err)
-	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(1))
+
+	require.NoError(t, validateBacklogCounter(t, backlogMgr, int64(1)))
 	backlogMgr.taskWriter.Stop()
 }
 
@@ -276,8 +277,15 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 		err := backlogMgr.SpoolTask(task)
 		require.NoError(t, err)
 	}
-	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(10))
+	require.NoError(t, validateBacklogCounter(t, backlogMgr, int64(10)))
 	backlogMgr.taskWriter.Stop()
+}
+
+// validateBacklogCounter validates the backlog counter by calling BacklogManager's getApproximateBacklogCount method
+func validateBacklogCounter(t *testing.T, backlogMgr *backlogManagerImpl, expectedBacklogCount int64) error {
+	approximateBacklogCount, err := backlogMgr.getApproximateBacklogCount(context.Background())
+	require.Equal(t, expectedBacklogCount, approximateBacklogCount)
+	return err
 }
 
 func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {

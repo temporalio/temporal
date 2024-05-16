@@ -655,7 +655,7 @@ func (d *MatchingTaskStore) CountTaskQueuesByBuildId(ctx context.Context, reques
 }
 
 func (d *MatchingTaskStore) CountTasksExact(ctx context.Context, request *p.CountTasksExactRequest) (int, error) {
-	return 0, nil
+	return 0, serviceerror.NewUnimplemented("CountTasksExact not implemented")
 }
 
 func (d *MatchingTaskStore) GetName() string {

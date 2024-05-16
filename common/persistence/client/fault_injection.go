@@ -1150,7 +1150,7 @@ func (t *FaultInjectionTaskStore) CountTaskQueuesByBuildId(ctx context.Context, 
 }
 
 func (t *FaultInjectionTaskStore) CountTasksExact(ctx context.Context, request *persistence.CountTasksExactRequest) (int, error) {
-	return 0, nil
+	return 0, serviceerror.NewUnimplemented("CountTasksExact not implemented")
 }
 
 func (t *FaultInjectionTaskStore) UpdateRate(rate float64) {

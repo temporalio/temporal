@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/api/serviceerror"
 	"sync/atomic"
 	"time"
 
@@ -309,7 +310,9 @@ func (c *backlogManagerImpl) countTasksFromTaskQueue(ctx context.Context) (int64
 		TaskQueue:   c.db.queue.PersistenceName(),
 		TaskType:    c.db.queue.TaskType(),
 	})
-	if err != nil {
+	if _, ok := err.(*serviceerror.Unimplemented); ok {
+		tasksPresent = 0
+	} else if err != nil {
 		return 0, err
 	}
 	return int64(tasksPresent), nil
@@ -320,7 +323,12 @@ func (c *backlogManagerImpl) getApproximateBacklogCount(ctx context.Context) (in
 	if err != nil {
 		return 0, err
 	}
-	// max is returned so that we never return a negative value for the counter and to also
-	// prevent under-counting for SQL databases
-	return max(exactTasks, c.db.getApproximateBacklogCount()), nil
+
+	if exactTasks > 0 {
+		// since this will be more accurate than approximateBacklogCounter
+		return exactTasks, nil
+	} else {
+		// to ensure our in-memory counter never goes below 0
+		return max(0, c.db.getApproximateBacklogCount()), nil
+	}
 }
