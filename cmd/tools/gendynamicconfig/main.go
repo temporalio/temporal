@@ -135,7 +135,21 @@ func generateType(w io.Writer, tp *settingType, prec *settingPrecedence) {
 {{ if .T.IsGeneric -}}
 type {{.P.Name}}TypedSetting[T any] setting[T, func({{.P.GoArgs}})]
 
-func New{{.P.Name}}TypedSetting[T any](key Key, convert func(any) (T, error), def T, description string) {{.P.Name}}TypedSetting[T] {
+// New{{.P.Name}}TypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func New{{.P.Name}}TypedSetting[T any](key Key, def T, description string) {{.P.Name}}TypedSetting[T] {
+	s := {{.P.Name}}TypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	return s
+}
+
+// New{{.P.Name}}TypedSettingWithConverter creates a setting with a custom converter function.
+func New{{.P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) {{.P.Name}}TypedSetting[T] {
 	s := {{.P.Name}}TypedSetting[T]{
 		key:         key,
 		def:         def,

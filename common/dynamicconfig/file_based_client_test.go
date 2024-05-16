@@ -222,8 +222,9 @@ func (s *fileBasedClientSuite) TestGetTypedValue() {
 			Key1 float64
 			Key2 bool
 		}
+		UnsetInFile string
 	}
-	v := NewGlobalTypedSetting(testGetTypedPropertyKey, ConvertStructure(myStruct{}), myStruct{}, "").Get(s.collection)()
+	v := NewGlobalTypedSetting(testGetTypedPropertyKey, myStruct{UnsetInFile: "unset"}, "").Get(s.collection)()
 	expectedVal := myStruct{
 		Number: 23,
 		Days:   6 * 24 * time.Hour,
@@ -234,6 +235,7 @@ func (s *fileBasedClientSuite) TestGetTypedValue() {
 			Key1: 12345.0,
 			Key2: true,
 		},
+		UnsetInFile: "unset", // note this value comes from the default
 	}
 	s.Equal(expectedVal, v)
 }

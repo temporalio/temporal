@@ -289,7 +289,7 @@ func (s *collectionSuite) TestGetTyped() {
 		Number int
 		Names  []string
 	}
-	setting := NewGlobalTypedSetting(
+	setting := NewGlobalTypedSettingWithConverter(
 		testGetTypedPropertyKey,
 		ConvertStructure(myFancyType{-3, nil}), // used if convert is called
 		myFancyType{28, []string{"global", "typed", "setting"}},
@@ -328,7 +328,7 @@ func (s *collectionSuite) TestGetTyped() {
 }
 
 func (s *collectionSuite) TestGetTypedSimpleList() {
-	setting := NewGlobalTypedSetting(
+	setting := NewGlobalTypedSettingWithConverter(
 		testGetTypedPropertyKey,
 		ConvertStructure([]float64(nil)),
 		[]float64{1.5, 1.1, 2.6, 3.7, 6.3},
@@ -353,7 +353,7 @@ func (s *collectionSuite) TestGetTypedSimpleList() {
 
 func (s *collectionSuite) TestGetTypedListOfStruct() {
 	type simple struct{ A, B int }
-	setting := NewGlobalTypedSetting(
+	setting := NewGlobalTypedSettingWithConverter(
 		testGetTypedPropertyKey,
 		ConvertStructure([]simple(nil)),
 		[]simple{{1, 5}, {2, 9}},

@@ -2233,7 +2233,21 @@ func GetMapPropertyFnFilteredByDestination(value map[string]any) MapPropertyFnWi
 
 type GlobalTypedSetting[T any] setting[T, func()]
 
-func NewGlobalTypedSetting[T any](key Key, convert func(any) (T, error), def T, description string) GlobalTypedSetting[T] {
+// NewGlobalTypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func NewGlobalTypedSetting[T any](key Key, def T, description string) GlobalTypedSetting[T] {
+	s := GlobalTypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	return s
+}
+
+// NewGlobalTypedSettingWithConverter creates a setting with a custom converter function.
+func NewGlobalTypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) GlobalTypedSetting[T] {
 	s := GlobalTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -2267,7 +2281,21 @@ func (s GlobalTypedSetting[T]) Get(c *Collection) func() T {
 
 type NamespaceTypedSetting[T any] setting[T, func(namespace string)]
 
-func NewNamespaceTypedSetting[T any](key Key, convert func(any) (T, error), def T, description string) NamespaceTypedSetting[T] {
+// NewNamespaceTypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func NewNamespaceTypedSetting[T any](key Key, def T, description string) NamespaceTypedSetting[T] {
+	s := NamespaceTypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	return s
+}
+
+// NewNamespaceTypedSettingWithConverter creates a setting with a custom converter function.
+func NewNamespaceTypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) NamespaceTypedSetting[T] {
 	s := NamespaceTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -2301,7 +2329,21 @@ func (s NamespaceTypedSetting[T]) Get(c *Collection) func(namespace string) T {
 
 type NamespaceIDTypedSetting[T any] setting[T, func(namespaceID string)]
 
-func NewNamespaceIDTypedSetting[T any](key Key, convert func(any) (T, error), def T, description string) NamespaceIDTypedSetting[T] {
+// NewNamespaceIDTypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func NewNamespaceIDTypedSetting[T any](key Key, def T, description string) NamespaceIDTypedSetting[T] {
+	s := NamespaceIDTypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	return s
+}
+
+// NewNamespaceIDTypedSettingWithConverter creates a setting with a custom converter function.
+func NewNamespaceIDTypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) NamespaceIDTypedSetting[T] {
 	s := NamespaceIDTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -2335,7 +2377,21 @@ func (s NamespaceIDTypedSetting[T]) Get(c *Collection) func(namespaceID string) 
 
 type TaskQueueTypedSetting[T any] setting[T, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
 
-func NewTaskQueueTypedSetting[T any](key Key, convert func(any) (T, error), def T, description string) TaskQueueTypedSetting[T] {
+// NewTaskQueueTypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func NewTaskQueueTypedSetting[T any](key Key, def T, description string) TaskQueueTypedSetting[T] {
+	s := TaskQueueTypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	return s
+}
+
+// NewTaskQueueTypedSettingWithConverter creates a setting with a custom converter function.
+func NewTaskQueueTypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) TaskQueueTypedSetting[T] {
 	s := TaskQueueTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -2369,7 +2425,21 @@ func (s TaskQueueTypedSetting[T]) Get(c *Collection) func(namespace string, task
 
 type ShardIDTypedSetting[T any] setting[T, func(shardID int32)]
 
-func NewShardIDTypedSetting[T any](key Key, convert func(any) (T, error), def T, description string) ShardIDTypedSetting[T] {
+// NewShardIDTypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func NewShardIDTypedSetting[T any](key Key, def T, description string) ShardIDTypedSetting[T] {
+	s := ShardIDTypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	return s
+}
+
+// NewShardIDTypedSettingWithConverter creates a setting with a custom converter function.
+func NewShardIDTypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) ShardIDTypedSetting[T] {
 	s := ShardIDTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -2403,7 +2473,21 @@ func (s ShardIDTypedSetting[T]) Get(c *Collection) func(shardID int32) T {
 
 type TaskTypeTypedSetting[T any] setting[T, func(taskType enumsspb.TaskType)]
 
-func NewTaskTypeTypedSetting[T any](key Key, convert func(any) (T, error), def T, description string) TaskTypeTypedSetting[T] {
+// NewTaskTypeTypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func NewTaskTypeTypedSetting[T any](key Key, def T, description string) TaskTypeTypedSetting[T] {
+	s := TaskTypeTypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	return s
+}
+
+// NewTaskTypeTypedSettingWithConverter creates a setting with a custom converter function.
+func NewTaskTypeTypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) TaskTypeTypedSetting[T] {
 	s := TaskTypeTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -2437,7 +2521,21 @@ func (s TaskTypeTypedSetting[T]) Get(c *Collection) func(taskType enumsspb.TaskT
 
 type DestinationTypedSetting[T any] setting[T, func(namespace string, destination string)]
 
-func NewDestinationTypedSetting[T any](key Key, convert func(any) (T, error), def T, description string) DestinationTypedSetting[T] {
+// NewDestinationTypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func NewDestinationTypedSetting[T any](key Key, def T, description string) DestinationTypedSetting[T] {
+	s := DestinationTypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	return s
+}
+
+// NewDestinationTypedSettingWithConverter creates a setting with a custom converter function.
+func NewDestinationTypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) DestinationTypedSetting[T] {
 	s := DestinationTypedSetting[T]{
 		key:         key,
 		def:         def,
