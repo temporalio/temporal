@@ -553,6 +553,9 @@ func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowRe
 func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriority {
 	switch t := task.(type) {
 	case *tasks.SyncWorkflowStateTask:
+		if t.Priority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
+			return enumsspb.TASK_PRIORITY_LOW
+		}
 		return t.Priority
 	default:
 		return enumsspb.TASK_PRIORITY_HIGH
