@@ -167,7 +167,7 @@ type Config struct {
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
-	OutboundQueueCircuitBreakerSettings                 dynamicconfig.MapPropertyFnWithDestinationFilter
+	OutboundQueueCircuitBreakerSettings                 func(string, string) dynamicconfig.CircuitBreakerSettings
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn

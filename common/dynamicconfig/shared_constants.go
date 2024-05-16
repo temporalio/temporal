@@ -121,3 +121,14 @@ func AccessHistory(accessHistoryFraction FloatPropertyFn, metricsHandler metrics
 	metricsHandler.Counter(metrics.AccessHistoryOld).Record(1)
 	return false
 }
+
+type CircuitBreakerSettings struct {
+	// MaxRequests: Maximum number of requests allowed to pass through when
+	// it is in half-open state (default 1).
+	MaxRequests int
+	// Interval: Cyclic period in closed state to clear the internal counts;
+	// if interval is 0, then it never clears the internal counts (default 0).
+	Interval time.Duration
+	// Timeout: Period of open state before changing to half-open state (default 60s).`
+	Timeout time.Duration
+}

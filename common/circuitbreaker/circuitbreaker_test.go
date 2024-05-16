@@ -80,7 +80,7 @@ func TestDynamicSettings(t *testing.T) {
 	s.Equal(1, settingsCallCount)
 
 	// settingsCallCount = 2
-	ds := tscb.getDynamicSettings()
+	ds := tscb.settingsFn()
 	s.Equal(2, settingsCallCount)
 	s.Equal(
 		dynamicSettings{
@@ -92,7 +92,7 @@ func TestDynamicSettings(t *testing.T) {
 	)
 
 	// settingsCallCount = 3
-	ds = tscb.getDynamicSettings()
+	ds = tscb.settingsFn()
 	s.Equal(3, settingsCallCount)
 	s.Equal(
 		dynamicSettings{

@@ -1653,15 +1653,15 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		100.0,
 		`OutboundQueueHostSchedulerMaxTaskRPS is the host scheduler max task RPS`,
 	)
-	OutboundQueueCircuitBreakerSettings = NewDestinationMapSetting(
+	OutboundQueueCircuitBreakerSettings = NewDestinationTypedSetting(
 		"history.outboundQueue.circuitBreakerSettings",
-		map[string]any{},
+		CircuitBreakerSettings{},
 		`OutboundQueueCircuitBreakerSettings are circuit breaker settings.
-Accepted config keys (see gobreaker reference for more details):
-- maxRequests: maximum number of requests allowed to pass through when it is half-open (default 1).
-- interval (seconds): cyclic period in closed state to clear the internal counts;
+Fields (see gobreaker reference for more details):
+- MaxRequests: maximum number of requests allowed to pass through when it is half-open (default 1).
+- Interval (duration): cyclic period in closed state to clear the internal counts;
   if interval is 0, then it never clears the internal counts (default 0).
-- timeout (seconds): period of open state before changing to half-open state (default 60).`,
+- Timeout (duration): period of open state before changing to half-open state (default 60).`,
 	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
