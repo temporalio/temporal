@@ -1019,34 +1019,34 @@ type (
 		MaxRecordsPruned int
 	}
 
-	GetNexusIncomingServiceRequest struct {
-		ServiceID string
+	GetNexusEndpointRequest struct {
+		ID string
 	}
 
-	ListNexusIncomingServicesRequest struct {
+	ListNexusEndpointsRequest struct {
 		LastKnownTableVersion int64
 		NextPageToken         []byte
 		PageSize              int
 	}
 
-	ListNexusIncomingServicesResponse struct {
+	ListNexusEndpointsResponse struct {
 		TableVersion  int64
 		NextPageToken []byte
-		Entries       []*persistencespb.NexusIncomingServiceEntry
+		Entries       []*persistencespb.NexusEndpointEntry
 	}
 
-	CreateOrUpdateNexusIncomingServiceRequest struct {
+	CreateOrUpdateNexusEndpointRequest struct {
 		LastKnownTableVersion int64
-		Entry                 *persistencespb.NexusIncomingServiceEntry
+		Entry                 *persistencespb.NexusEndpointEntry
 	}
 
-	CreateOrUpdateNexusIncomingServiceResponse struct {
+	CreateOrUpdateNexusEndpointResponse struct {
 		Version int64
 	}
 
-	DeleteNexusIncomingServiceRequest struct {
+	DeleteNexusEndpointRequest struct {
 		LastKnownTableVersion int64
-		ServiceID             string
+		ID                    string
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
@@ -1190,20 +1190,21 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	// NexusIncomingServiceManager is used to manage CRUD for Nexus services
-	NexusIncomingServiceManager interface {
+	// NexusEndpointManager is used to manage CRUD for Nexus endpoints.
+	NexusEndpointManager interface {
 		Closeable
 		GetName() string
-		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*persistencespb.NexusIncomingServiceEntry, error)
-		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
-		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error)
-		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
+		GetNexusEndpoint(ctx context.Context, request *GetNexusEndpointRequest) (*persistencespb.NexusEndpointEntry, error)
+		ListNexusEndpoints(ctx context.Context, request *ListNexusEndpointsRequest) (*ListNexusEndpointsResponse, error)
+		CreateOrUpdateNexusEndpoint(ctx context.Context, request *CreateOrUpdateNexusEndpointRequest) (*CreateOrUpdateNexusEndpointResponse, error)
+		DeleteNexusEndpoint(ctx context.Context, request *DeleteNexusEndpointRequest) error
 	}
 
 	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history
 	// task queue manager, but the actual history task queues are not managed by this object. Instead, this object is
 	// responsible for managing a generic queue of history tasks (which is what the history task DLQ is).
 	HistoryTaskQueueManager interface {
+		Closeable
 		EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error)
 		ReadRawTasks(
 			ctx context.Context,

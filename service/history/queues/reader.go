@@ -156,7 +156,7 @@ func NewReader(
 
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
-			backoff.SystemClock,
+			clock.NewRealTimeSource(),
 		),
 
 		rateLimitContext:       rateLimitContext,

@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/common/v1"
@@ -36,6 +37,9 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -114,8 +118,22 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
+			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
+				namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+					Namespace: &persistencespb.NamespaceDetail{
+						Info: &persistencespb.NamespaceInfo{
+							Id:   "namespace-id",
+							Name: "namespace-name",
+						},
+						Config: &persistencespb.NamespaceConfig{},
+					},
+				}),
+				nil,
+			)
+
 			root := newRoot(t)
 			cb := callbacks.Callback{
 				CallbackInfo: &persistencespb.CallbackInfo{
@@ -138,11 +156,18 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 
 			key := definition.NewWorkflowKey("namespace-id", "", "")
 			reg := hsm.NewRegistry()
-			require.NoError(t, callbacks.RegisterExecutor(reg, callbacks.ActiveExecutorOptions{
-				CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
-					return tc.caller
+			require.NoError(t, callbacks.RegisterExecutor(
+				reg,
+				callbacks.ActiveExecutorOptions{
+					NamespaceRegistry: namespaceRegistryMock,
+					CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+						return tc.caller
+					},
 				},
-			}, &callbacks.Config{RequestTimeout: func() time.Duration { return time.Second }}))
+				&callbacks.Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+				},
+			))
 
 			err = hsm.Execute(context.Background(), reg, env,
 				hsm.Ref{
@@ -194,11 +219,17 @@ func TestProcessBackoffTask(t *testing.T) {
 	env := fakeEnv{node}
 
 	reg := hsm.NewRegistry()
-	require.NoError(t, callbacks.RegisterExecutor(reg, callbacks.ActiveExecutorOptions{
-		CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
-			return nil
+	require.NoError(t, callbacks.RegisterExecutor(
+		reg,
+		callbacks.ActiveExecutorOptions{
+			CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+				return nil
+			},
 		},
-	}, &callbacks.Config{RequestTimeout: func() time.Duration { return time.Second }}))
+		&callbacks.Config{
+			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+		},
+	))
 
 	err = hsm.Execute(context.Background(), reg, env,
 		hsm.Ref{

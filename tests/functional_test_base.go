@@ -124,11 +124,12 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
 	maps.Copy(clusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryScannerEnabled.Key():    false,
-		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
-		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
-		dynamicconfig.BuildIdScavengerEnabled.Key():  false,
-		dynamicconfig.FrontendEnableNexusAPIs.Key():  true,
+		dynamicconfig.HistoryScannerEnabled.Key():                        false,
+		dynamicconfig.TaskQueueScannerEnabled.Key():                      false,
+		dynamicconfig.ExecutionsScannerEnabled.Key():                     false,
+		dynamicconfig.BuildIdScavengerEnabled.Key():                      false,
+		dynamicconfig.FrontendEnableNexusAPIs.Key():                      true,
+		dynamicconfig.EnableNexusEndpointRegistryBackgroundRefresh.Key(): true,
 	})
 	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
 	clusterConfig.ServiceFxOptions = params.ServiceOptions
@@ -238,12 +239,27 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	// #nosec
 	confContent, err := os.ReadFile(configLocation)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read test cluster config file %v: %v", configLocation, err)
+		return nil, fmt.Errorf("failed to read test cluster config file %s: %w", configLocation, err)
 	}
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 	var options TestClusterConfig
 	if err := yaml.Unmarshal(confContent, &options); err != nil {
-		return nil, fmt.Errorf("failed to decode test cluster config %v", err)
+		return nil, fmt.Errorf("failed to decode test cluster config %s: %w", configLocation, err)
+	}
+
+	// If -FaultInjectionConfigFile is passed to the test runner,
+	// then fault injection config will be added to the test cluster config.
+	if TestFlags.FaultInjectionConfigFile != "" {
+		fiConfigContent, err := os.ReadFile(TestFlags.FaultInjectionConfigFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read test cluster fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err)
+		}
+
+		var fiOptions TestClusterConfig
+		if err := yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
+			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
+		}
+		options.FaultInjection = fiOptions.FaultInjection
 	}
 
 	options.FrontendAddress = TestFlags.FrontendAddr

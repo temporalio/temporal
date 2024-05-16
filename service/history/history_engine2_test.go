@@ -229,7 +229,6 @@ func (s *engine2Suite) SetupTest() {
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
 	}
 	s.mockShard.SetEngineForTesting(h)
-	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	s.historyEngine = h
 }
@@ -1110,6 +1109,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 		identity,
 	)
 
+	s.mockShard.SetLoggers(s.logger)
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
 	var commands []*commandpb.Command

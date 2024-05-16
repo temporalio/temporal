@@ -610,7 +610,7 @@ func ApplyClusterMetadataConfigProvider(
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
 	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
-	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
 		&svc.Persistence,

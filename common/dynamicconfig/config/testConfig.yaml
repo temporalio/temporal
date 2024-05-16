@@ -89,11 +89,11 @@ testGetIntPropertyFilteredByDestinationKey:
     constraints: {}
   - value: 20
     constraints:
-      namespaceID: test-namespace-id
+      namespace: test-namespace
       destination: test-destination-1
   - value: 30
     constraints:
-      namespaceID: test-namespace-id
+      namespace: test-namespace
   - value: 40
     constraints:
       destination: test-destination-1

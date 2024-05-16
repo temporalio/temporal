@@ -41,7 +41,7 @@ const (
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
-	nexusServiceTagName         = "service"
+	nexusEndpointTagName        = "nexus_endpoint"
 	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
@@ -273,14 +273,14 @@ const (
 	PersistenceListNamespacesScope = "ListNamespaces"
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
-	// PersistenceGetNexusIncomingServiceScope tracks GetNexusIncomingService calls made by service to persistence layer
-	PersistenceGetNexusIncomingServiceScope = "GetNexusIncomingService"
-	// PersistenceListNexusIncomingServicesScope tracks ListNexusIncomingService calls made by service to persistence layer
-	PersistenceListNexusIncomingServicesScope = "ListNexusIncomingServices"
-	// PersistenceCreateOrUpdateNexusIncomingServiceScope tracks CreateOrUpdateNexusIncomingService calls made by service to persistence layer
-	PersistenceCreateOrUpdateNexusIncomingServiceScope = "CreateOrUpdateNexusIncomingService"
-	// PersistenceDeleteNexusIncomingServiceScope tracks DeleteNexusIncomingService calls made by service to persistence layer
-	PersistenceDeleteNexusIncomingServiceScope = "DeleteNexusIncomingService"
+	// PersistenceGetNexusEndpointScope tracks GetNexusEndpoint calls made by service to persistence layer
+	PersistenceGetNexusEndpointScope = "GetNexusEndpoint"
+	// PersistenceListNexusEndpointsScope tracks ListNexusEndpoint calls made by service to persistence layer
+	PersistenceListNexusEndpointsScope = "ListNexusEndpoints"
+	// PersistenceCreateOrUpdateNexusEndpointScope tracks CreateOrUpdateNexusEndpoint calls made by service to persistence layer
+	PersistenceCreateOrUpdateNexusEndpointScope = "CreateOrUpdateNexusEndpoint"
+	// PersistenceDeleteNexusEndpointScope tracks DeleteNexusEndpoint calls made by service to persistence layer
+	PersistenceDeleteNexusEndpointScope = "DeleteNexusEndpoint"
 
 	// VisibilityPersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to visibility persistence layer
 	VisibilityPersistenceRecordWorkflowExecutionStartedScope = "RecordWorkflowExecutionStarted"
@@ -288,20 +288,6 @@ const (
 	VisibilityPersistenceRecordWorkflowExecutionClosedScope = "RecordWorkflowExecutionClosed"
 	// VisibilityPersistenceUpsertWorkflowExecutionScope tracks UpsertWorkflowExecution calls made by service to persistence visibility layer
 	VisibilityPersistenceUpsertWorkflowExecutionScope = "UpsertWorkflowExecution"
-	// VisibilityPersistenceListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to visibility persistence layer
-	VisibilityPersistenceListOpenWorkflowExecutionsScope = "ListOpenWorkflowExecutions"
-	// VisibilityPersistenceListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to visibility persistence layer
-	VisibilityPersistenceListClosedWorkflowExecutionsScope = "ListClosedWorkflowExecutions"
-	// VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to visibility persistence layer
-	VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope = "ListOpenWorkflowExecutionsByType"
-	// VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to visibility persistence layer
-	VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope = "ListClosedWorkflowExecutionsByType"
-	// VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to visibility persistence layer
-	VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope = "ListOpenWorkflowExecutionsByWorkflowID"
-	// VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to visibility persistence layer
-	VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope = "ListClosedWorkflowExecutionsByWorkflowID"
-	// VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to visibility persistence layer
-	VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope = "ListClosedWorkflowExecutionsByStatus"
 	// VisibilityPersistenceDeleteWorkflowExecutionScope tracks DeleteWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceDeleteWorkflowExecutionScope = "DeleteWorkflowExecution"
 	// VisibilityPersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to visibility persistence layer
@@ -930,6 +916,7 @@ var (
 	TotalRequestCancelExternalCount       = NewDimensionlessHistogramDef("total_request_cancel_external_count")
 	TotalSignalExternalCount              = NewDimensionlessHistogramDef("total_signal_external_count")
 	TotalSignalCount                      = NewDimensionlessHistogramDef("total_signal_count")
+	WorkflowBackoffCount                  = NewCounterDef("workflow_backoff_timer")
 	WorkflowRetryBackoffTimerCount        = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount         = NewCounterDef("workflow_cron_backoff_timer")
 	WorkflowDelayedStartBackoffTimerCount = NewCounterDef("workflow_delayed_start_backoff_timer")

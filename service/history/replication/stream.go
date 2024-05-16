@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -71,13 +72,13 @@ func WrapEventLoop(
 ) {
 	defer streamStopper()
 
-	for {
+	for i := 0; i < 50; i++ {
 		err := originalEventLoop()
 
 		if err == nil { // shutdown case
 			return
 		}
-		// if it is stream error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
+
 		if streamError, ok := err.(*StreamError); ok {
 			metrics.ReplicationStreamError.With(metricsHandler).Record(
 				int64(1),
@@ -85,14 +86,18 @@ func WrapEventLoop(
 				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
+		} else {
+			metrics.ReplicationServiceError.With(metricsHandler).Record(
+				int64(1),
+				metrics.ServiceErrorTypeTag(err),
+				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+				metrics.ToClusterIDTag(toClusterKey.ClusterID),
+			)
+		}
+		// if it is not a retryable error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
+		if !IsRetryableError(err) {
 			return
 		}
-		metrics.ReplicationServiceError.With(metricsHandler).Record(
-			int64(1),
-			metrics.ServiceErrorTypeTag(err),
-			metrics.FromClusterIDTag(fromClusterKey.ClusterID),
-			metrics.ToClusterIDTag(toClusterKey.ClusterID),
-		)
 
 		time.Sleep(retryInterval)
 	}
@@ -101,4 +106,16 @@ func WrapEventLoop(
 func IsStreamError(err error) bool {
 	var streamError *StreamError
 	return errors.As(err, &streamError)
+}
+
+func IsRetryableError(err error) bool {
+	if shard.IsShardOwnershipLostError(err) {
+		return false
+	}
+	switch err.(type) {
+	case *StreamError:
+		return false
+	default:
+		return true
+	}
 }

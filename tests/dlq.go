@@ -260,7 +260,6 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 			},
 		},
 	} {
-		tc := tc
 		s.Run(tc.name, func() {
 			tc.maxMessageCount = "999"
 			tc.lastMessageID = "999"
