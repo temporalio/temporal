@@ -399,6 +399,8 @@ func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *pe
 				return 0
 			}
 			return 2
+		case enumsspb.TASK_PRIORITY_UNSPECIFIED:
+			return 0
 		default:
 			return 0
 		}
