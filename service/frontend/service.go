@@ -198,7 +198,7 @@ type Config struct {
 	MaxCallbacksPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
-	MaskInternalOrUnknownErrors dynamicconfig.BoolPropertyFn
+	MaskInternalOrUnknownErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -308,6 +308,8 @@ func NewConfig(
 		CallbackHeaderMaxSize:       dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		MaxCallbacksPerWorkflow:     dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
+
+		MaskInternalOrUnknownErrors: dynamicconfig.FrontendMaskInternalOrUnknownErrors.Get(dc),
 	}
 }
 

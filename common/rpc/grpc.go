@@ -36,7 +36,6 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -78,6 +77,8 @@ const (
 	// ResourceExhaustedScopeHeader will be added to rpc response if request returns ResourceExhausted error.
 	// Value of this header will be the scope of exhausted resource.
 	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
+
+	shardUnavailableErrorMessage = "shard unavailable, please backoff and retry"
 )
 
 // Dial creates a client connection to the given target with default options.
@@ -179,7 +180,12 @@ func NewServiceErrorInterceptor(
 		resp, err := handler(ctx, req)
 		if err != nil {
 			addHeadersForResourceExhausted(ctx, logger, err)
+
+			if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
+				err = serviceerror.NewUnavailable(shardUnavailableErrorMessage)
+			}
 		}
+
 		return resp, serviceerror.ToStatus(err).Err()
 	}
 }

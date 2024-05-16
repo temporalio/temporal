@@ -29,15 +29,17 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 )
+
+var errorFrontendMasked = "something went wrong, please retry"
 
 type MaskInternalErrorsInterceptor struct {
 	maskInternalError dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -45,17 +47,15 @@ type MaskInternalErrorsInterceptor struct {
 }
 
 func NewMaskInternalErrorsInterceptor(
-	dc *dynamicconfig.Collection,
+	maskErrorSetting dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
 ) *MaskInternalErrorsInterceptor {
 
 	return &MaskInternalErrorsInterceptor{
-		maskInternalError: dynamicconfig.MaskInternalOrUnknownErrors.Get(dc),
+		maskInternalError: maskErrorSetting,
 		namespaceRegistry: namespaceRegistry,
 	}
 }
-
-var shardUnabailableErrorMessage = "shard unavailable, please backoff and retry"
 
 func (i *MaskInternalErrorsInterceptor) Intercept(
 	ctx context.Context,
@@ -66,17 +66,13 @@ func (i *MaskInternalErrorsInterceptor) Intercept(
 
 	resp, err := handler(ctx, req)
 
-	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
-		return resp, serviceerror.NewUnavailable(shardUnabailableErrorMessage)
-	}
-
 	if err != nil && i.shouldMaskErrors(req) {
 		err = maskUnknownOrInternalErrors(err)
 	}
 	return resp, err
 }
 
-func (i *MaskInternalErrorsInterceptor) shouldMaskErrors(req interface{}) bool {
+func (i *MaskInternalErrorsInterceptor) shouldMaskErrors(req any) bool {
 	ns := MustGetNamespaceName(i.namespaceRegistry, req)
 	if ns.IsEmpty() {
 		return false
@@ -84,10 +80,9 @@ func (i *MaskInternalErrorsInterceptor) shouldMaskErrors(req interface{}) bool {
 	return i.maskInternalError(ns.String())
 }
 
-var errorFrontendMasked = "something went wrong, please retry"
-
 func maskUnknownOrInternalErrors(err error) error {
 	st := serviceerror.ToStatus(err)
+
 	if st.Code() != codes.Unknown && st.Code() != codes.Internal {
 		return err
 	}

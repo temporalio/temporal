@@ -399,10 +399,12 @@ func RateLimitInterceptorProvider(
 }
 
 func MaskInternalErrorsInterceptorProvider(
-	dc *dynamicconfig.Collection,
+	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 ) *interceptor.MaskInternalErrorsInterceptor {
-	return interceptor.NewMaskInternalErrorsInterceptor(dc, namespaceRegistry)
+	return interceptor.NewMaskInternalErrorsInterceptor(
+		serviceConfig.MaskInternalOrUnknownErrors, namespaceRegistry,
+	)
 }
 
 func NamespaceRateLimitInterceptorProvider(

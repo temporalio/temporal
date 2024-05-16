@@ -713,7 +713,7 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10,
 		`FrontendMaxBadBinaries is the max number of bad binaries in namespace config`,
 	)
-	MaskInternalOrUnknownErrors = NewNamespaceBoolSetting(
+	FrontendMaskInternalOrUnknownErrors = NewNamespaceBoolSetting(
 		"frontend.maskInternalErrors",
 		true,
 		`MaskInternalErrors is whether to replace internal/unknown errors with default error`,

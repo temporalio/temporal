@@ -25,7 +25,6 @@
 package interceptor
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -35,9 +34,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -77,13 +74,8 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelp
 func TestMaskUnknownOrInternalErrorsInterceptor(t *testing.T) {
 
 	mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
-
-	client := make(dynamicconfig.StaticClient)
-	logger := log.NewNoopLogger()
-
-	cln := dynamicconfig.NewCollection(client, logger)
-
-	errorMask := NewMaskInternalErrorsInterceptor(cln, mockRegistry)
+	dc := dynamicconfig.NewNoopCollection()
+	errorMask := NewMaskInternalErrorsInterceptor(dynamicconfig.FrontendMaskInternalOrUnknownErrors.Get(dc), mockRegistry)
 
 	test_namespace := "test-namespace"
 	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: test_namespace}
@@ -102,23 +94,4 @@ func TestMaskUnknownOrInternalErrorsInterceptor(t *testing.T) {
 
 	var ei interface{}
 	assert.False(t, errorMask.shouldMaskErrors(ei))
-}
-
-func TestMaskShardOwnershipLost(t *testing.T) {
-	mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
-
-	client := make(dynamicconfig.StaticClient)
-	logger := log.NewNoopLogger()
-
-	cln := dynamicconfig.NewCollection(client, logger)
-
-	errorMask := NewMaskInternalErrorsInterceptor(cln, mockRegistry)
-
-	var ei interface{}
-	_, err := errorMask.Intercept(context.Background(), ei, nil, func(ctx context.Context, req any) (any, error) {
-		return nil, serviceerrors.NewShardOwnershipLost("ownerHost", "currentHost")
-	})
-
-	assert.Equal(t, shardUnabailableErrorMessage, err.Error())
-
 }
