@@ -117,6 +117,8 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		}
 		if strings.HasPrefix(alias, "AliasFor") {
 			return strings.TrimPrefix(alias, "AliasFor"), nil
+		} else if strings.HasPrefix(alias, "AliasWithHyphenFor-") {
+			return strings.TrimPrefix(alias, "AliasWithHyphenFor-"), nil
 		}
 		return "", serviceerror.NewInvalidArgument("mapper error")
 	}
