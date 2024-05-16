@@ -81,17 +81,18 @@ func (c *SourceTaskConverterImpl) Convert(
 
 	var ctx context.Context
 	var cancel context.CancelFunc
+	var nsName string
 	namespaceEntry, err := c.namespaceCache.GetNamespaceByID(
 		namespace.ID(task.GetNamespaceID()),
 	)
 	if err != nil {
 		// if there is error, then blindly send the task, better safe than sorry
-		ctx, cancel = context.WithTimeout(context.Background(), applyReplicationTimeout)
+		nsName = namespace.EmptyName.String()
 	}
 	if namespaceEntry != nil {
-		ctx, cancel = newTaskContext(namespaceEntry.Name().String())
+		nsName = namespaceEntry.Name().String()
 	}
-
+	ctx, cancel = newTaskContext(nsName)
 	defer cancel()
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
 	if err != nil {
