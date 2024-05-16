@@ -29,6 +29,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkworker "go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
@@ -2309,10 +2310,10 @@ If the service configures with archival feature enabled, update worker.historySc
 		1,
 		`WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace`,
 	)
-	WorkerPerNamespaceWorkerOptions = NewNamespaceMapSetting(
+	WorkerPerNamespaceWorkerOptions = NewNamespaceTypedSetting(
 		"worker.perNamespaceWorkerOptions",
-		map[string]any{},
-		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker`,
+		sdkworker.Options{},
+		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace workers`,
 	)
 	WorkerPerNamespaceWorkerStartRate = NewGlobalFloatSetting(
 		"worker.perNamespaceWorkerStartRate",
@@ -2340,5 +2341,14 @@ If the service configures with archival feature enabled, update worker.historySc
 		1*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
+	)
+	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
+		"worker.deleteNamespaceActivityLimitsConfig",
+		sdkworker.Options{},
+		`WorkerDeleteNamespaceActivityLimitsConfig is a struct with relevant sdkworker.Options
+settings for controlling remote activity concurrency for delete namespace workflows.
+Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
+WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
+`,
 	)
 )

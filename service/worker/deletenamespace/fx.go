@@ -47,7 +47,7 @@ import (
 type (
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
-		atWorkerCfg       workercommon.ActivityWorkerLimitsConfig
+		atWorkerCfg       sdkworker.Options
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
 		historyClient     resource.HistoryClient
@@ -67,20 +67,11 @@ type (
 
 var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
-var (
-	WorkerDeleteNamespaceActivityLimits = dynamicconfig.NewGlobalTypedSetting[workercommon.ActivityWorkerLimitsConfig](
-		"worker.deleteNamespaceActivityLimitsConfig",
-		workercommon.ActivityWorkerLimitsConfig{},
-		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
-settings for controlling remote activity concurrency for delete namespace workflows.`,
-	)
-)
-
 func newComponent(
 	params componentParams,
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
-		atWorkerCfg:       WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
+		atWorkerCfg:       dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
 		visibilityManager: params.VisibilityManager,
 		metadataManager:   params.MetadataManager,
 		historyClient:     params.HistoryClient,
