@@ -38,21 +38,21 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/server/service/history/consts"
 
-	updatespb "go.temporal.io/server/api/update/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type mockUpdateStore struct {
 	update.Store
-	VisitUpdatesFunc               func(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+	VisitUpdatesFunc               func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 	GetUpdateOutcomeFunc           func(context.Context, string) (*updatepb.Outcome, error)
 	GetCurrentVersionFunc          func() int64
 	IsWorkflowExecutionRunningFunc func() bool
 }
 
 func (m mockUpdateStore) VisitUpdates(
-	visitor func(updID string, updInfo *updatespb.UpdateInfo),
+	visitor func(updID string, updInfo *persistencespb.UpdateInfo),
 ) {
 	m.VisitUpdatesFunc(visitor)
 }
@@ -79,7 +79,7 @@ func (m mockUpdateStore) IsWorkflowExecutionRunning() bool {
 }
 
 var emptyUpdateStore = mockUpdateStore{
-	VisitUpdatesFunc: func(func(updID string, updInfo *updatespb.UpdateInfo)) {
+	VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
 	},
 	GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
 		return nil, serviceerror.NewNotFound("not found")
@@ -92,7 +92,7 @@ func TestFind(t *testing.T) {
 		ctx      = context.Background()
 		updateID = t.Name() + "-update-id"
 		store    = mockUpdateStore{
-			VisitUpdatesFunc: func(func(updID string, updInfo *updatespb.UpdateInfo)) {
+			VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
 			},
 			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
 				return nil, serviceerror.NewNotFound("not found")
@@ -117,7 +117,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 		ctx      = context.Background()
 		updateID = t.Name() + "-update-id"
 		store    = mockUpdateStore{
-			VisitUpdatesFunc: func(func(updID string, updInfo *updatespb.UpdateInfo)) {
+			VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
 			},
 			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
 				return nil, serviceerror.NewNotFound("not found")
@@ -163,17 +163,17 @@ func TestFindOrCreate(t *testing.T) {
 		completedUpdateID = t.Name() + "-completed-update-id"
 		completedOutcome  = successOutcome(t, "success!")
 
-		storeData = map[string]*updatespb.UpdateInfo{
+		storeData = map[string]*persistencespb.UpdateInfo{
 			acceptedUpdateID: {
-				Value: &updatespb.UpdateInfo_Acceptance{
-					Acceptance: &updatespb.AcceptanceInfo{
+				Value: &persistencespb.UpdateInfo_Acceptance{
+					Acceptance: &persistencespb.AcceptanceInfo{
 						EventId: 120,
 					},
 				},
 			},
 			completedUpdateID: {
-				Value: &updatespb.UpdateInfo_Completion{
-					Completion: &updatespb.CompletionInfo{
+				Value: &persistencespb.UpdateInfo_Completion{
+					Completion: &persistencespb.CompletionInfo{
 						EventId: 123,
 					},
 				},
@@ -181,7 +181,7 @@ func TestFindOrCreate(t *testing.T) {
 		}
 		// make a store with 1 accepted and 1 completed update
 		store = mockUpdateStore{
-			VisitUpdatesFunc: func(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 				for updID, updInfo := range storeData {
 					visitor(updID, updInfo)
 				}
@@ -241,10 +241,10 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 		ctx                    = context.Background()
 		storedAcceptedUpdateID = t.Name() + "-accepted-update-id"
 		regStore               = mockUpdateStore{
-			VisitUpdatesFunc: func(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
-				storedAcceptedUpdateInfo := &updatespb.UpdateInfo{
-					Value: &updatespb.UpdateInfo_Acceptance{
-						Acceptance: &updatespb.AcceptanceInfo{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				storedAcceptedUpdateInfo := &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Acceptance{
+						Acceptance: &persistencespb.AcceptanceInfo{
 							EventId: 120,
 						},
 					},
@@ -282,10 +282,10 @@ func TestUpdateAccepted_WorkflowCompleted(t *testing.T) {
 		ctx                    = context.Background()
 		storedAcceptedUpdateID = t.Name() + "-accepted-update-id"
 		regStore               = mockUpdateStore{
-			VisitUpdatesFunc: func(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
-				storedAcceptedUpdateInfo := &updatespb.UpdateInfo{
-					Value: &updatespb.UpdateInfo_Acceptance{
-						Acceptance: &updatespb.AcceptanceInfo{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				storedAcceptedUpdateInfo := &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Acceptance{
+						Acceptance: &persistencespb.AcceptanceInfo{
 							EventId: 22,
 						},
 					},
@@ -555,10 +555,10 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 		completedUpdateID = t.Name() + "-completed-update-id"
 		expectError       = fmt.Errorf("expected error in %s", t.Name())
 		regStore          = mockUpdateStore{
-			VisitUpdatesFunc: func(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
-				completedUpdateInfo := &updatespb.UpdateInfo{
-					Value: &updatespb.UpdateInfo_Completion{
-						Completion: &updatespb.CompletionInfo{EventId: 123},
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				completedUpdateInfo := &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Completion{
+						Completion: &persistencespb.CompletionInfo{EventId: 123},
 					},
 				}
 				visitor(completedUpdateID, completedUpdateInfo)

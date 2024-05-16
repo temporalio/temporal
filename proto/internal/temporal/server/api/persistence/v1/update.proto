@@ -22,8 +22,8 @@
 
 syntax = "proto3";
 
-package temporal.server.api.update.v1;
-option go_package = "go.temporal.io/server/api/update/v1;update";
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 // AdmissionInfo contains information about a durably admitted update. Note that updates in Admitted state are typically
 // non-durable (i.e. do not have a corresponding event in history). Durably admitted updates arise as a result of

@@ -43,7 +43,7 @@ import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
-import "temporal/server/api/update/v1/message.proto";
+import "temporal/server/api/persistence/v1/update.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
 // shard column
@@ -185,7 +185,7 @@ message WorkflowExecutionInfo {
     int64 build_id_redirect_counter = 87;
 
     // index of update IDs and pointers to associated history events.
-    map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
+    map<string, UpdateInfo> update_infos = 79;
     repeated VersionedTransition transition_history = 80;
     // Map of state machine type to map of machine by ID.
     // (-- api-linter: core::0140::prepositions=disabled

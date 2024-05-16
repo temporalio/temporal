@@ -36,7 +36,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	updatespb "go.temporal.io/server/api/update/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -94,7 +94,7 @@ type (
 
 	// Store represents the update package's requirements for reading updates from the store.
 	Store interface {
-		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		GetCurrentVersion() int64
 		IsWorkflowExecutionRunning() bool
@@ -170,7 +170,7 @@ func NewRegistry(
 		opt(r)
 	}
 
-	r.store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+	r.store.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
 			// An update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
