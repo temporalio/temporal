@@ -34,9 +34,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -839,13 +841,25 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 100
 	item0 := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: "1",
+			WorkflowID:  "1",
+		},
 		Priority: enumsspb.TASK_PRIORITY_LOW,
 	}
 
 	item1 := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: "1",
+			WorkflowID:  "1",
+		},
 		Priority: enumsspb.TASK_PRIORITY_HIGH,
 	}
 	item2 := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: "1",
+			WorkflowID:  "1",
+		},
 		Priority: enumsspb.TASK_PRIORITY_LOW,
 	}
 	task1 := &replicationspb.ReplicationTask{
@@ -853,7 +867,12 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_HIGH,
 	}
-
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("1")).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	iter := collection.NewPagingIterator[tasks.Task](
 		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			return []tasks.Task{item0, item1, item2}, nil, nil
@@ -898,12 +917,24 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 100
 	item0 := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: "1",
+			WorkflowID:  "1",
+		},
 		Priority: enumsspb.TASK_PRIORITY_LOW,
 	}
 	item1 := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: "1",
+			WorkflowID:  "1",
+		},
 		Priority: enumsspb.TASK_PRIORITY_HIGH,
 	}
 	item2 := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: "1",
+			WorkflowID:  "1",
+		},
 		Priority: enumsspb.TASK_PRIORITY_LOW,
 	}
 
@@ -917,6 +948,12 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_LOW,
 	}
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("1")).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	iter := collection.NewPagingIterator[tasks.Task](
 		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			return []tasks.Task{item0, item1, item2}, nil, nil
