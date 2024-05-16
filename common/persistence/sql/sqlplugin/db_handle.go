@@ -64,7 +64,7 @@ type DatabaseHandle struct {
 	sync.Mutex
 }
 
-// An invalid connection returns `databaseUnavailable` for all operations
+// An invalid connection returns `DatabaseUnavailableError` for all operations
 type invalidConn struct{}
 
 func NewDatabaseHandle(
