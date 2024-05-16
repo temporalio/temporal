@@ -2341,10 +2341,4 @@ If the service configures with archival feature enabled, update worker.historySc
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
-	WorkerDeleteNamespaceActivityLimitsConfig = NewGlobalMapSetting(
-		"worker.deleteNamespaceActivityLimitsConfig",
-		map[string]any{},
-		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
-settings for controlling remote activity concurrency for delete namespace workflows.`,
-	)
 )
