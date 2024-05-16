@@ -289,6 +289,11 @@ func convertMap(val any) (map[string]any, error) {
 // as a group and default unset fields to zero).
 func ConvertStructure[T any](def T) func(v any) (T, error) {
 	return func(v any) (T, error) {
+		// if we already have the right type, no conversion is necessary
+		if typedV, ok := v.(T); ok {
+			return typedV, nil
+		}
+
 		out := def
 		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result: &out,
