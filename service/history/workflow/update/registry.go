@@ -233,9 +233,7 @@ func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Me
 	}
 
 	// Check only total limit here. This might add more than maxInFlight updates to registry,
-	// but:
-	//   1. for a very short time,
-	//   2. it is better developer experience, to process lost update, if possible.
+	// but provides better developer experience.
 	if err := r.checkTotalLimit(ctx); err != nil {
 		return nil, err
 	}
