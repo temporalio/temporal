@@ -33,7 +33,6 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/service/history/configs"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -69,10 +69,10 @@ type (
 		logger        log.Logger
 
 		status                  int32
-    clientClusterName       string
+		clientClusterName       string
 		clientShardKey          ClusterShardKey
 		serverShardKey          ClusterShardKey
-    clientClusterShardCount int32
+		clientClusterShardCount int32
 		shutdownChan            channel.ShutdownOnce
 		config                  *configs.Config
 		isTieredStackEnabled    bool
@@ -104,10 +104,10 @@ func NewStreamSender(
 		logger:        logger,
 
 		status:                  common.DaemonStatusInitialized,
-    clientClusterName:       clientClusterName,
+		clientClusterName:       clientClusterName,
 		clientShardKey:          clientShardKey,
 		serverShardKey:          serverShardKey,
-    clientClusterShardCount: clientClusterShardCount,
+		clientClusterShardCount: clientClusterShardCount,
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
@@ -487,7 +487,6 @@ Loop:
 		if err != nil {
 			return err
 		}
-
 
 		if !s.shouldProcessTask(item) {
 			continue
