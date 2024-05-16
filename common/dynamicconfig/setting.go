@@ -53,7 +53,6 @@ type (
 	// them generically..
 	GenericSetting interface {
 		Key() Key
-		Type() Type
 		Precedence() Precedence
 	}
 )
