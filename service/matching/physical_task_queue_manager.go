@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"sync/atomic"
 	"time"
 
@@ -106,6 +107,7 @@ type (
 		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
+		Matcher() *TaskMatcher
 	}
 
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
@@ -419,7 +421,7 @@ func (c *physicalTaskQueueManagerImpl) GetBacklogInfo(ctx context.Context) (*tas
 	}
 	return &taskqueuepb.BacklogInfo{
 		ApproximateBacklogCount: approximateBacklogCount,
-		ApproximateBacklogAge:   nil,        // TODO: Shivam - add this feature
+		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.taskReader.getBacklogHeadCreateTime()),
 		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
 		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature
 	}, nil
@@ -481,6 +483,10 @@ func newChildContext(
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
+}
+
+func (c *physicalTaskQueueManagerImpl) Matcher() *TaskMatcher {
+	return c.matcher
 }
 
 func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {

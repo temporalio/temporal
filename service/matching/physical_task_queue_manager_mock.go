@@ -189,6 +189,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) MarkAlive() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAlive", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MarkAlive))
 }
 
+// Matcher mocks base method.
+func (m *MockphysicalTaskQueueManager) Matcher() *TaskMatcher {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Matcher")
+	ret0, _ := ret[0].(*TaskMatcher)
+	return ret0
+}
+
+// Matcher indicates an expected call of Matcher.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) Matcher() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Matcher", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Matcher))
+}
+
 // PollTask mocks base method.
 func (m *MockphysicalTaskQueueManager) PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	m.ctrl.T.Helper()

@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"math"
 	"math/rand"
 	"sync"
@@ -930,7 +931,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							// Aggregating counts; for now, we only aggregate approximateBacklogCount
 							bInfo = &taskqueuepb.BacklogInfo{
 								ApproximateBacklogCount: bInfo_Root.ApproximateBacklogCount + bInfo_Partition.ApproximateBacklogCount,
-								ApproximateBacklogAge:   nil,
+								ApproximateBacklogAge:   e.largerBacklogAge(bInfo_Root.ApproximateBacklogAge, bInfo_Partition.ApproximateBacklogAge),
 								TasksAddRate:            float32(0),
 								TasksDispatchRate:       float32(0),
 							}
@@ -2128,4 +2129,12 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
+}
+
+// largerBacklogAge returns the larger BacklogAge
+func (e *matchingEngineImpl) largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *durationpb.Duration) *durationpb.Duration {
+	if rootBacklogAge.AsDuration() > currentPartitionAge.AsDuration() {
+		return rootBacklogAge
+	}
+	return currentPartitionAge
 }

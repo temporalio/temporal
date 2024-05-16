@@ -26,6 +26,9 @@ package matching
 
 import (
 	"context"
+	"github.com/pborman/uuid"
+	"golang.org/x/exp/rand"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"testing"
 	"time"
 
@@ -86,6 +89,58 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
 	tlm.backlogMgr.taskReader.gorogrp.Cancel()
 	tlm.backlogMgr.taskReader.gorogrp.Wait()
+}
+
+func TestBacklogManager_BacklogAge(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	backlogMgr := newBacklogMgr(controller)
+
+	require.Equal(t, time.Duration(0), backlogMgr.taskReader.getBacklogHeadCreateTime()) // no tasks have been read
+
+	// adding tasks
+	backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
+	backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Second, 2)
+
+	backlogMgr.taskReader.gorogrp.Go(backlogMgr.taskReader.dispatchBufferedTasks)
+
+	require.Eventually(t, func() bool {
+		return assert.InEpsilon(t, time.Minute, backlogMgr.taskReader.getBacklogHeadCreateTime(), float64(10*time.Millisecond))
+	}, time.Millisecond*100, time.Millisecond)
+
+	_, err := backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return assert.InEpsilon(t, time.Second, backlogMgr.taskReader.getBacklogHeadCreateTime(), float64(10*time.Millisecond))
+	}, time.Millisecond*100, time.Millisecond)
+
+	_, err = backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	require.NoError(t, err)
+
+	backlogMgr.taskReader.gorogrp.Cancel()
+	backlogMgr.taskReader.gorogrp.Wait()
+
+	// backlog age being reset cause of no tasks in the buffer
+	require.Equal(t, time.Duration(0), backlogMgr.taskReader.getBacklogHeadCreateTime())
+
+}
+
+func randomTaskInfoWithAgeTaskID(age time.Duration, TaskID int64) *persistencespb.AllocatedTaskInfo {
+	rt1 := time.Now().Add(-age)
+	rt2 := rt1.Add(time.Hour)
+
+	return &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
+			NamespaceId:      uuid.New(),
+			WorkflowId:       uuid.New(),
+			RunId:            uuid.New(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamppb.New(rt1),
+			ExpiryTime:       timestamppb.New(rt2),
+		},
+		TaskId: TaskID,
+	}
 }
 
 func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
@@ -306,6 +361,7 @@ func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
 	// Expected calls
 	pqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
 	pqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	pqMgr.EXPECT().PollTask(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	handler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
 	handler.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
