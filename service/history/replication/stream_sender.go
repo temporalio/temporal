@@ -33,7 +33,6 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/service/history/configs"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -46,7 +45,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -67,12 +68,14 @@ type (
 		metrics       metrics.Handler
 		logger        log.Logger
 
-		status               int32
-		clientShardKey       ClusterShardKey
-		serverShardKey       ClusterShardKey
-		shutdownChan         channel.ShutdownOnce
-		config               *configs.Config
-		isTieredStackEnabled bool
+		status                  int32
+		clientClusterName       string
+		clientShardKey          ClusterShardKey
+		serverShardKey          ClusterShardKey
+		clientClusterShardCount int32
+		shutdownChan            channel.ShutdownOnce
+		config                  *configs.Config
+		isTieredStackEnabled    bool
 	}
 )
 
@@ -82,6 +85,7 @@ func NewStreamSender(
 	historyEngine shard.Engine,
 	taskConverter SourceTaskConverter,
 	clientClusterName string,
+	clientClusterShardCount int32,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 	config *configs.Config,
@@ -99,12 +103,14 @@ func NewStreamSender(
 		metrics:       shardContext.GetMetricsHandler(),
 		logger:        logger,
 
-		status:               common.DaemonStatusInitialized,
-		clientShardKey:       clientShardKey,
-		serverShardKey:       serverShardKey,
-		shutdownChan:         channel.NewShutdownOnce(),
-		config:               config,
-		isTieredStackEnabled: config.EnableReplicationTaskTieredProcessing(),
+		status:                  common.DaemonStatusInitialized,
+		clientClusterName:       clientClusterName,
+		clientShardKey:          clientShardKey,
+		serverShardKey:          serverShardKey,
+		clientClusterShardCount: clientClusterShardCount,
+		shutdownChan:            channel.NewShutdownOnce(),
+		config:                  config,
+		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
 	}
 }
 
@@ -481,6 +487,11 @@ Loop:
 		if err != nil {
 			return err
 		}
+
+		if !s.shouldProcessTask(item) {
+			continue
+		}
+
 		skipCount++
 		// To avoid a situation: we are skipping a lot of tasks and never send any task, receiver side will not have updated high watermark,
 		// so it will not ACK back to sender, sender will not update the ACK level.
@@ -550,6 +561,34 @@ func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowRe
 		return NewStreamError("ReplicationStreamError send failed", err)
 	}
 	return nil
+}
+
+func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
+	clientShardID := common.WorkflowIDToHistoryShard(item.GetNamespaceID(), item.GetWorkflowID(), s.clientClusterShardCount)
+	if clientShardID != s.clientShardKey.ShardID {
+		return false
+	}
+
+	var shouldProcessTask bool
+	namespaceEntry, err := s.shardContext.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(item.GetNamespaceID()),
+	)
+	if err != nil {
+		// if there is error, then blindly send the task, better safe than sorry
+		shouldProcessTask = true
+	}
+
+	if namespaceEntry != nil {
+	FilterLoop:
+		for _, targetCluster := range namespaceEntry.ClusterNames() {
+			if s.clientClusterName == targetCluster {
+				shouldProcessTask = true
+				break FilterLoop
+			}
+		}
+	}
+
+	return shouldProcessTask
 }
 
 func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriority {
