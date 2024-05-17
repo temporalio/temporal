@@ -110,10 +110,6 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// tasks from new ones. If polls from different build ids never go to the same matcher
 		// anymore then we don't need it.
 		dynamicconfig.MatchingLongPollExpirationInterval.Key(): longPollTime,
-		// Reduce user data long poll time for faster propagation of the versioning data. This is needed because of the
-		// exponential minWaitTime logic in userDataManagerImpl that gets triggered because rules change very fast in
-		// some tests.
-		dynamicconfig.MatchingGetUserDataLongPollTimeout.Key(): 2 * time.Second,
 
 		// this is overridden for tests using testWithMatchingBehavior
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
@@ -2073,6 +2069,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 }
 
 func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
+	//s.T().Skip()
 	// Testing that wf never "goes back" to older build ID in presence of concurrent activities and random failures.
 	//
 	// SETUP:
@@ -2096,6 +2093,12 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	// 5- Redirect rules were applied at least to one activity.
 	// 6- At least one activity was retried.
 	// 7- Some history events are unordered based on event timestamp (due to parallel activity random delay)
+
+	// Reduce user data long poll time for faster propagation of the versioning data. This is needed because of the
+	// exponential minWaitTime logic in userDataManagerImpl that gets triggered because rules change very fast in
+	// this test.
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingGetUserDataLongPollTimeout, 2 * time.Second)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1.0")
@@ -4802,7 +4805,7 @@ func (s *VersioningIntegSuite) waitForPropagation(
 			}
 		}
 		return len(remaining) == 0
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {
