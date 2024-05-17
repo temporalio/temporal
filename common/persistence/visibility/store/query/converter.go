@@ -75,7 +75,7 @@ type (
 		fnInterceptor    FieldNameInterceptor
 		fvInterceptor    FieldValuesInterceptor
 		allowedOperators map[string]struct{}
-		nameType         searchattribute.NameTypeMap
+		saNameType       searchattribute.NameTypeMap
 	}
 
 	isConverter struct {
@@ -170,7 +170,7 @@ func NewComparisonExprConverter(
 	fnInterceptor FieldNameInterceptor,
 	fvInterceptor FieldValuesInterceptor,
 	allowedOperators map[string]struct{},
-	nameType searchattribute.NameTypeMap,
+	saNameType searchattribute.NameTypeMap,
 ) ExprConverter {
 	if fnInterceptor == nil {
 		fnInterceptor = &NopFieldNameInterceptor{}
@@ -182,7 +182,7 @@ func NewComparisonExprConverter(
 		fnInterceptor:    fnInterceptor,
 		fvInterceptor:    fvInterceptor,
 		allowedOperators: allowedOperators,
-		nameType:         nameType,
+		saNameType:       saNameType,
 	}
 }
 
@@ -475,7 +475,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		return nil, NewConverterError("operator '%v' not allowed in comparison expression", comparisonExpr.Operator)
 	}
 
-	tp, err := c.nameType.GetType(colName)
+	tp, err := c.saNameType.GetType(colName)
 	if err != nil {
 		return nil, err
 	}

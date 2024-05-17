@@ -49,7 +49,7 @@ var allowedComparisonOperators = map[string]struct{}{
 func NewQueryConverter(
 	fnInterceptor query.FieldNameInterceptor,
 	fvInterceptor query.FieldValuesInterceptor,
-	nameType searchattribute.NameTypeMap,
+	saNameType searchattribute.NameTypeMap,
 ) *query.Converter {
 	if fnInterceptor == nil {
 		fnInterceptor = &query.NopFieldNameInterceptor{}
@@ -60,7 +60,7 @@ func NewQueryConverter(
 	}
 
 	rangeCond := query.NewRangeCondConverter(fnInterceptor, fvInterceptor, true)
-	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, nameType)
+	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, saNameType)
 	is := query.NewIsConverter(fnInterceptor)
 
 	whereConverter := &query.WhereConverter{
