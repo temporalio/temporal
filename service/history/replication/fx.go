@@ -102,7 +102,9 @@ func eagerNamespaceRefresherProvider(
 	)
 }
 
-func replicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
+func replicationTaskConverterFactoryProvider(
+	config *configs.Config,
+) SourceTaskConverterProvider {
 	return func(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
@@ -110,7 +112,8 @@ func replicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
 	) SourceTaskConverter {
 		return NewSourceTaskConverter(
 			historyEngine,
-			shardContext.GetNamespaceRegistry())
+			shardContext.GetNamespaceRegistry(),
+			config)
 	}
 }
 

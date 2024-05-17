@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -54,6 +55,7 @@ type (
 	SourceTaskConverterImpl struct {
 		historyEngine  shard.Engine
 		namespaceCache namespace.Registry
+		config         *configs.Config
 	}
 	SourceTaskConverter interface {
 		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
@@ -68,10 +70,12 @@ type (
 func NewSourceTaskConverter(
 	historyEngine shard.Engine,
 	namespaceCache namespace.Registry,
+	config *configs.Config,
 ) *SourceTaskConverterImpl {
 	return &SourceTaskConverterImpl{
 		historyEngine:  historyEngine,
 		namespaceCache: namespaceCache,
+		config:         config,
 	}
 }
 
@@ -92,7 +96,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	if namespaceEntry != nil {
 		nsName = namespaceEntry.Name().String()
 	}
-	ctx, cancel = newTaskContext(nsName)
+	ctx, cancel = newTaskContext(nsName, c.config.ReplicationTaskApplyTimeout())
 	defer cancel()
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
 	if err != nil {
