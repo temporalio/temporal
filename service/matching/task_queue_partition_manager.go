@@ -526,7 +526,6 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	delete(pm.versionedQueues, version)
 	pm.versionedQueuesLock.Unlock()
 	unloadedDbq.Stop()
-
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadFromEngine() {

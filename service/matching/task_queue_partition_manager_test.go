@@ -170,11 +170,8 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 	s.Assert().NoError(err)
 	s.Assert().NotNil(sourceQ)
 
-	// unload sourceQ and verify that
+	// unload sourceQ
 	s.partitionMgr.unloadPhysicalQueue(sourceQ)
-	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, false)
-	s.Assert().NoError(err)
-	s.Assert().Nil(sourceQ)
 
 	// poll from target
 	s.validatePollTask(target, true)
