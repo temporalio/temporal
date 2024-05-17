@@ -43,8 +43,8 @@ import (
 )
 
 const (
-	// TODO: this should be dynamic config. For now we reuse the same setting as our cassandra implementation
-	sessionRefreshMinInternal = 5 * time.Second
+	// TODO: this should be dynamic config.
+	sessionRefreshMinInternal = 1 * time.Second
 )
 
 var (
