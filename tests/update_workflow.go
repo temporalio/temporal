@@ -3904,6 +3904,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResur
 	}
 	go updateWorkflowFn()
 
+	// To make sure that first WFT has update message.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
 	// Process update in workflow. Update won't be found on server but will be resurrected from acceptance message and completed.
 	res, err := poller.PollAndProcessWorkflowTask(WithForceNewWorkflowTask)
 	s.NoError(err)

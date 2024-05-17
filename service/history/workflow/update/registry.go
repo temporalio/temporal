@@ -60,11 +60,11 @@ type (
 		// new update if no update is found.
 		Find(ctx context.Context, protocolInstanceID string) *Update
 
-		// TryResurrect tries to resurrect update from the protocol message which
-		// Body is Acceptance or Rejection message.
-		// It returns error if some unexpected error happened, but if there is no
-		// enough data in the message, it just returns nil Update.
-		// If update was successfully resurrected it is added to the registry in stateAdmitted.
+		// TryResurrect tries to resurrect the update from the protocol message,
+		// whose body contains Acceptance or Rejection message.
+		// It returns an error if some unexpected error happened, but if there is not
+		// enough data in the message, it just returns a nil update.
+		// If the update was successfully resurrected it is added to the registry in stateAdmitted.
 		TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error)
 
 		// HasOutgoingMessages returns true if the registry has any Updates
@@ -244,7 +244,7 @@ func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Me
 	}
 	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
 	if err != nil {
-		return nil, invalidArgf("unable to unmarshal request: %v", err)
+		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 	var reqMsg *updatepb.Request
 	switch updMsg := body.(type) {
@@ -252,13 +252,14 @@ func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Me
 		reqMsg = updMsg.GetAcceptedRequest()
 	case *updatepb.Rejection:
 		reqMsg = updMsg.GetRejectedRequest()
+		// Ignore all other message types.
 	}
 	if reqMsg == nil {
 		return nil, nil
 	}
 	reqAny, err := anypb.New(reqMsg)
 	if err != nil {
-		return nil, invalidArgf("unable to marshal request: %v", err)
+		return nil, invalidArgf("unable to unmarshal request body: %v", err)
 	}
 
 	updateID := acptOrRejMsg.ProtocolInstanceId

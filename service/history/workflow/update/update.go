@@ -94,6 +94,19 @@ type (
 		//   - update was restored in stateAdmitted with newAdmitted from UpdateInfo.AdmissionInfo.
 		//       We don't load request form event because if there is durable UpdateAdmitted event with request,
 		//       then we don't write this request 2nd time to UpdateAccepted event.
+
+		// The `request` field holds the update payload submitted with the original request. It is stored in the
+		// registry in order to be sent to the worker and then written to history in an UpdateAccepted event.
+		// Therefore, it is nil when the update in the registry is in stateAccepted, stateCompleted etc, since then the
+		// request has already been written to an UpdateAccepted event.
+		// In addition, it is nil when the update in the registry is in stateAdmitted AND it was created from an
+		// UpdateInfo.AdmissionInfo entry in MutableState. In this case, the reason it is nil is the following:
+		// 1. The presence of the AdmissionInfo entry in MutableState implies that there is an UpdateAdmitted event in
+		//    history. This event always contains the original request payload.
+		// 2. Therefore, it is not necessary to write a second copy of the request payload to an UpdateAccepted event,
+		//    so we don't *need* to load the request into the registry.
+		// 3. Furthermore, it is possible that many UpdateAdmitted events were created after a Reset or during conflict
+		//    resolution. In that situation we *must not* attempt to load all the payloads into the registry.
 		request         *anypb.Any // of type *updatepb.Request
 		acceptedEventID int64
 		onComplete      func()
@@ -302,7 +315,7 @@ func (u *Update) abort(reason AbortReason) {
 // is in stateCreated then it builds a protocolpb.Message that will be sent
 // when Send is called.
 func (u *Update) Admit(
-	ctx context.Context,
+	_ context.Context,
 	req *updatepb.Request,
 	eventStore EventStore, // Will be useful for durable admitted.
 ) error {
@@ -322,11 +335,11 @@ func (u *Update) Admit(
 	u.instrumentation.countRequestMsg()
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
 	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
-		return invalidArgf("unable to marshal request: %v", err)
+		return invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 	reqAny, err := anypb.New(req)
 	if err != nil {
-		return invalidArgf("unable to marshal request: %v", err)
+		return invalidArgf("unable to unmarshal request: %v", err)
 	}
 	u.request = reqAny
 	prevState := u.setState(stateProvisionallyAdmitted)
@@ -377,7 +390,7 @@ func (u *Update) OnProtocolMessage(
 	}
 	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
 	if err != nil {
-		return invalidArgf("unable to unmarshal request: %v", err)
+		return invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 
 	// If no new events can be added to the event store (e.g. workflow is completed),
