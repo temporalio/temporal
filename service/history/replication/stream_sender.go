@@ -73,6 +73,7 @@ type (
 		shutdownChan         channel.ShutdownOnce
 		config               *configs.Config
 		isTieredStackEnabled bool
+		flowController       SenderFlowController
 	}
 )
 
@@ -105,6 +106,7 @@ func NewStreamSender(
 		shutdownChan:         channel.NewShutdownOnce(),
 		config:               config,
 		isTieredStackEnabled: config.EnableReplicationTaskTieredProcessing(),
+		flowController:       NewSenderFlowController(enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW),
 	}
 }
 
@@ -511,6 +513,10 @@ Loop:
 		}
 		task.Priority = priority
 		s.logger.Debug("StreamSender send replication task", tag.TaskID(task.SourceTaskId))
+		err = s.flowController.Wait(priority)
+		if err != nil {
+			return err
+		}
 		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
