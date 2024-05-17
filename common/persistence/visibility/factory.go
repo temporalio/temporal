@@ -260,6 +260,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
 			logger,
+			metricsHandler,
 		)
 	} else if dsConfig.Elasticsearch != nil {
 		visStore = newElasticsearchVisibilityStore(

@@ -45,3 +45,11 @@ func (p *PGXDriver) IsDupDatabaseError(err error) bool {
 	pqErr, ok := err.(*pgconn.PgError)
 	return ok && pqErr.Code == dupDatabaseCode
 }
+
+func (p *PGXDriver) IsConnNeedsRefreshError(err error) bool {
+	pqErr, ok := err.(*pgconn.PgError)
+	if !ok {
+		return false
+	}
+	return isConnNeedsRefreshError(pqErr.Code, pqErr.Message)
+}
