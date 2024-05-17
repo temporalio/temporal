@@ -1080,8 +1080,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
 			s.Equal(1, len(dw.GetPendingActivities()))
-			s.Equal(v1, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId())
-			return true
+			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
 		},
 		10*time.Second,
 		50*time.Millisecond,
