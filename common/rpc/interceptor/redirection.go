@@ -182,7 +182,7 @@ func (i *Redirection) Intercept(
 ) (_ any, retError error) {
 	defer log.CapturePanic(i.logger, &retError)
 
-	if strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
+	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
 		return handler(ctx, req)
 	}
 	if !i.redirectionAllowed(ctx) {
