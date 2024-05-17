@@ -30,42 +30,42 @@ import (
 )
 
 type (
-	// InvalidDispatchBuildId happens when matching wants to dispatch task to a wrong build ID. This is expected to
+	// ObsoleteDispatchBuildId happens when matching wants to dispatch task to an obsolete build ID. This is expected to
 	// happen when a workflow has concurrent tasks (and in some other edge cases) and redirect rules apply to the WF.
 	// In that case, tasks already scheduled but not started will become invalid and History reschedules them in the
 	// new build ID. Matching will still try dispatching the old tasks but it will face this error.
 	// Matching can safely drop tasks which face this error.
-	InvalidDispatchBuildId struct {
+	ObsoleteDispatchBuildId struct {
 		Message string
 		st      *status.Status
 	}
 )
 
-func NewInvalidDispatchBuildId() error {
-	return &InvalidDispatchBuildId{
-		Message: "dispatch build ID is not the workflows current build ID",
+func NewObsoleteDispatchBuildId() error {
+	return &ObsoleteDispatchBuildId{
+		Message: "dispatch build ID is not the workflow's current build ID",
 	}
 }
 
 // Error returns string message.
-func (e *InvalidDispatchBuildId) Error() string {
+func (e *ObsoleteDispatchBuildId) Error() string {
 	return e.Message
 }
 
-func (e *InvalidDispatchBuildId) Status() *status.Status {
+func (e *ObsoleteDispatchBuildId) Status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}
 
 	st := status.New(codes.FailedPrecondition, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.InvalidDispatchBuildIdFailure{},
+		&errordetails.ObsoleteDispatchBuildIdFailure{},
 	)
 	return st
 }
 
-func newInvalidDispatchBuildId(st *status.Status) error {
-	return &InvalidDispatchBuildId{
+func newObsoleteDispatchBuildId(st *status.Status) error {
+	return &ObsoleteDispatchBuildId{
 		Message: st.Message(),
 		st:      st,
 	}

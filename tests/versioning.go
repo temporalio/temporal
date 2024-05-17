@@ -2069,7 +2069,6 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 }
 
 func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
-	//s.T().Skip()
 	// Testing that wf never "goes back" to older build ID in presence of concurrent activities and random failures.
 	//
 	// SETUP:
@@ -4805,7 +4804,7 @@ func (s *VersioningIntegSuite) waitForPropagation(
 			}
 		}
 		return len(remaining) == 0
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {

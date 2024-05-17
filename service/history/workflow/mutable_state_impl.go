@@ -2394,7 +2394,7 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 // validateBuildIdRedirectInfo validates build ID for the task being dispatched and returned the redirect counter
 // that should be used in the task started event.
 // If the given versioning stamp and redirect info is not valid based on the WF's assigned build ID
-// InvalidDispatchBuildId error will be returned.
+// ObsoleteDispatchBuildId error will be returned.
 func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 	startedWorkerStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueue.BuildIdRedirectInfo,
@@ -2411,7 +2411,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 		// Workflow hs already completed tasks but no redirect or a redirect based on a wrong assigned build ID is
 		// reported. This must be a task backlogged on an old build ID. rejecting this task, there should be another
 		// task scheduled on the right build ID.
-		return 0, serviceerrors.NewInvalidDispatchBuildId()
+		return 0, serviceerrors.NewObsoleteDispatchBuildId()
 	}
 
 	if assignedBuildId == "" && !ms.HasCompletedAnyWorkflowTask() {

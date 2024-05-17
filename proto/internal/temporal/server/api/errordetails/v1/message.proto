@@ -54,5 +54,5 @@ message RetryReplicationFailure {
 message StickyWorkerUnavailableFailure {
 }
 
-message InvalidDispatchBuildIdFailure {
+message ObsoleteDispatchBuildIdFailure {
 }

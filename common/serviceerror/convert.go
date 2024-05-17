@@ -65,8 +65,8 @@ func FromStatus(st *status.Status) error {
 		}
 	case codes.FailedPrecondition:
 		switch errDetails.(type) {
-		case *errordetails.InvalidDispatchBuildIdFailure:
-			return newInvalidDispatchBuildId(st)
+		case *errordetails.ObsoleteDispatchBuildIdFailure:
+			return newObsoleteDispatchBuildId(st)
 		}
 	}
 
