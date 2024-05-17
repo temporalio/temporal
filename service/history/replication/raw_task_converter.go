@@ -52,11 +52,8 @@ import (
 
 type (
 	SourceTaskConverterImpl struct {
-		historyEngine           shard.Engine
-		namespaceCache          namespace.Registry
-		clientClusterShardCount int32
-		clientClusterName       string
-		clientShardKey          ClusterShardKey
+		historyEngine  shard.Engine
+		namespaceCache namespace.Registry
 	}
 	SourceTaskConverter interface {
 		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
@@ -64,67 +61,38 @@ type (
 	SourceTaskConverterProvider func(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
-		clientClusterShardCount int32,
-		clientClusterName string,
-		clientShardKey ClusterShardKey,
+		clientClusterName string, // Some task converter may use the client cluster name.
 	) SourceTaskConverter
 )
 
 func NewSourceTaskConverter(
 	historyEngine shard.Engine,
 	namespaceCache namespace.Registry,
-	clientClusterShardCount int32,
-	clientClusterName string,
-	clientShardKey ClusterShardKey,
 ) *SourceTaskConverterImpl {
 	return &SourceTaskConverterImpl{
-		historyEngine:           historyEngine,
-		namespaceCache:          namespaceCache,
-		clientClusterShardCount: clientClusterShardCount,
-		clientClusterName:       clientClusterName,
-		clientShardKey:          clientShardKey,
+		historyEngine:  historyEngine,
+		namespaceCache: namespaceCache,
 	}
 }
 
 func (c *SourceTaskConverterImpl) Convert(
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
-	var shouldProcessTask bool
+
+	var ctx context.Context
+	var cancel context.CancelFunc
+	var nsName string
 	namespaceEntry, err := c.namespaceCache.GetNamespaceByID(
 		namespace.ID(task.GetNamespaceID()),
 	)
 	if err != nil {
 		// if there is error, then blindly send the task, better safe than sorry
-		shouldProcessTask = true
+		nsName = namespace.EmptyName.String()
 	}
-
 	if namespaceEntry != nil {
-	FilterLoop:
-		for _, targetCluster := range namespaceEntry.ClusterNames() {
-			if c.clientClusterName == targetCluster {
-				shouldProcessTask = true
-				break FilterLoop
-			}
-		}
+		nsName = namespaceEntry.Name().String()
 	}
-
-	if !shouldProcessTask {
-		return nil, nil
-	}
-
-	clientShardID := common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), c.clientClusterShardCount)
-	if clientShardID != c.clientShardKey.ShardID {
-		return nil, nil
-	}
-	var ctx context.Context
-	var cancel context.CancelFunc
-
-	if namespaceEntry != nil {
-		ctx, cancel = newTaskContext(namespaceEntry.Name().String())
-	} else {
-		ctx, cancel = context.WithTimeout(context.Background(), applyReplicationTimeout)
-	}
-
+	ctx, cancel = newTaskContext(nsName)
 	defer cancel()
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
 	if err != nil {
