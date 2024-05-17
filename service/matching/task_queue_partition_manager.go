@@ -299,7 +299,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 				versionSetUsed = true
 				dbq, err = pm.getVersionedQueue(ctx, versionSet, "", true)
 			} else {
-				activeRules := getActiveRedirectRules(versioningData.RedirectRules)
+				activeRules := getActiveRedirectRules(versioningData.GetRedirectRules())
 				terminalBuildId := findTerminalBuildId(buildId, activeRules)
 				if terminalBuildId != buildId {
 					return nil, false, serviceerror.NewNewerBuildExists(terminalBuildId)
