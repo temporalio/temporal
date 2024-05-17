@@ -1659,6 +1659,16 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		100.0,
 		`OutboundQueueHostSchedulerMaxTaskRPS is the host scheduler max task RPS`,
 	)
+	OutboundQueueCircuitBreakerSettings = NewDestinationMapSetting(
+		"history.outboundQueue.circuitBreakerSettings",
+		map[string]any{},
+		`OutboundQueueCircuitBreakerSettings are circuit breaker settings.
+Accepted config keys (see gobreaker reference for more details):
+- maxRequests: maximum number of requests allowed to pass through when it is half-open (default 1).
+- interval (seconds): cyclic period in closed state to clear the internal counts;
+  if interval is 0, then it never clears the internal counts (default 0).
+- timeout (seconds): period of open state before changing to half-open state (default 60).`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",
@@ -2079,6 +2089,17 @@ that task will be sent to DLQ.`,
 		512,
 		`ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count`,
 	)
+	ReplicationLowPriorityProcessorSchedulerWorkerCount = NewGlobalIntSetting(
+		"history.ReplicationLowPriorityProcessorSchedulerWorkerCount",
+		128,
+		`ReplicationLowPriorityProcessorSchedulerWorkerCount is the low priority replication task executor worker count`,
+	)
+	ReplicationLowPriorityTaskParallelism = NewGlobalIntSetting(
+		"history.ReplicationLowPriorityTaskParallelism",
+		4,
+		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
+	)
+
 	EnableEagerNamespaceRefresher = NewGlobalBoolSetting(
 		"history.EnableEagerNamespaceRefresher",
 		false,
@@ -2093,6 +2114,11 @@ that task will be sent to DLQ.`,
 		"history.EnableReplicateLocalGeneratedEvents",
 		false,
 		`EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events`,
+	)
+	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
+		"history.EnableReplicationTaskTieredProcessing",
+		false,
+		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
 
 	// keys for worker

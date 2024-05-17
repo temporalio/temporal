@@ -26,25 +26,27 @@ package replication
 
 import (
 	"context"
+	"math/rand"
+	"strconv"
 
+	"github.com/dgryski/go-farm"
 	historypb "go.temporal.io/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
-
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -56,7 +58,14 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
-	replicationStreamSchedulerProvider,
+	fx.Annotated{
+		Name:   "HighPriorityTaskScheduler",
+		Target: replicationStreamHighPrioritySchedulerProvider,
+	},
+	fx.Annotated{
+		Name:   "LowPriorityTaskScheduler",
+		Target: replicationStreamLowPrioritySchedulerProvider,
+	},
 	executableTaskConverterProvider,
 	streamReceiverMonitorProvider,
 	ndcHistoryResenderProvider,
@@ -97,16 +106,11 @@ func replicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
 	return func(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
-		clientClusterShardCount int32,
 		clientClusterName string,
-		clientShardKey ClusterShardKey,
 	) SourceTaskConverter {
 		return NewSourceTaskConverter(
 			historyEngine,
-			shardContext.GetNamespaceRegistry(),
-			clientClusterShardCount,
-			clientClusterName,
-			clientShardKey)
+			shardContext.GetNamespaceRegistry())
 	}
 }
 
@@ -122,7 +126,7 @@ func replicationTaskExecutorProvider() TaskExecutorProvider {
 	}
 }
 
-func replicationStreamSchedulerProvider(
+func replicationStreamHighPrioritySchedulerProvider(
 	config *configs.Config,
 	logger log.Logger,
 	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
@@ -134,6 +138,36 @@ func replicationStreamSchedulerProvider(
 			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
 		},
 		WorkflowKeyHashFn,
+		queueFactory,
+		logger,
+	)
+	lc.Append(fx.StartStopHook(scheduler.Start, scheduler.Stop))
+	return scheduler
+}
+
+func replicationStreamLowPrioritySchedulerProvider(
+	config *configs.Config,
+	logger log.Logger,
+	lc fx.Lifecycle,
+) ctasks.Scheduler[TrackableExecutableTask] {
+	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+		return NewSequentialTaskQueue(task)
+	}
+	taskQueueHashFunc := func(item interface{}) uint32 {
+		workflowKey, ok := item.(definition.WorkflowKey)
+		if !ok {
+			return 0
+		}
+
+		idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID + "_" + strconv.Itoa(rand.Intn(config.ReplicationLowPriorityTaskParallelism())))
+		return farm.Fingerprint32(idBytes)
+	}
+	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
+		&ctasks.SequentialSchedulerOptions{
+			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
+			WorkerCount: config.ReplicationLowPriorityProcessorSchedulerWorkerCount,
+		},
+		taskQueueHashFunc,
 		queueFactory,
 		logger,
 	)

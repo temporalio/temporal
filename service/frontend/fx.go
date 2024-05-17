@@ -213,7 +213,7 @@ func GrpcServerOptionsProvider(
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
-	redirectionInterceptor *RedirectionInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
@@ -329,9 +329,9 @@ func RedirectionInterceptorProvider(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	clusterMetadata cluster.Metadata,
-) *RedirectionInterceptor {
-	return NewRedirectionInterceptor(
-		configuration,
+) *interceptor.Redirection {
+	return interceptor.NewRedirection(
+		configuration.EnableNamespaceNotActiveAutoForwarding,
 		namespaceCache,
 		policy,
 		logger,

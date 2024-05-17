@@ -34,42 +34,42 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/testing/testvars"
 )
 
 const (
-	waitForPersistence = 10 * time.Second
+	// Internal task processing for DeleteExecutionTask checks if there is no pending CloseExecutionTask
+	// comparing ack levels of the last processed task and DeleteExecutionTask TaskID.
+	// Queue states/ack levels are updated with delay from "history.transferProcessorUpdateAckInterval"
+	// which default 30s, but it is overridden in tests to 1s (see overrideHistoryDynamicConfig in onebox.go).
+	// With few executions closed and deleted in parallel, it is hard to predict time needed for every DeleteExecutionTask
+	// to process. Set it to 20s here, as minimum sufficient interval. Increase it, if tests in this file are failing with
+	// "Condition never satisfied" error.
+	waitForTaskProcessing = 20 * time.Second
 )
 
-func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
-	id := "functional-delete-workflow-completed-test"
-	wt := "functional-delete-workflow-completed-test-type"
-	tl := "functional-delete-workflow-completed-test-taskqueue"
-	identity := "worker1"
+func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
+	tv := testvars.New(s.T().Name())
 
 	const numExecutions = 5
 
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
-		wid := id + strconv.Itoa(i)
 		we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:             uuid.New(),
-			Namespace:             s.namespace,
-			WorkflowId:            wid,
-			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			WorkflowType:          &commonpb.WorkflowType{Name: wt},
-			TaskQueue:             &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Input:                 nil,
-			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
-			Identity:              identity,
+			RequestId:    uuid.New(),
+			Namespace:    s.namespace,
+			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: wid,
+			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
 			RunId:      we.RunId,
 		})
 	}
@@ -85,12 +85,11 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:            identity,
+		TaskQueue:           tv.TaskQueue(),
+		Identity:            tv.WorkerIdentity(),
 		WorkflowTaskHandler: wtHandler,
-		// ActivityTaskHandler: atHandler,
-		Logger: s.Logger,
-		T:      s.T(),
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	for range wes {
@@ -135,7 +134,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 		s.NoError(err)
 	}
 
-	for _, we := range wes {
+	for i, we := range wes {
 		s.Eventually(
 			func() bool {
 				// Check execution is deleted.
@@ -147,7 +146,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 					},
 				)
 				if err == nil {
-					s.Logger.Warn("Execution not deleted yet")
+					s.Logger.Warn("Execution is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				var notFoundErr *serviceerror.NotFound
@@ -155,7 +154,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 				s.Nil(describeResponse)
 				return true
 			},
-			waitForPersistence,
+			waitForTaskProcessing,
 			100*time.Millisecond,
 		)
 
@@ -196,33 +195,25 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 	}
 }
 
-func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
-	id := "functional-delete-workflow-running-test"
-	wt := "functional-delete-workflow-running-test-type"
-	tl := "functional-delete-workflow-running-test-taskqueue"
-	identity := "worker1"
+func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
+	tv := testvars.New(s.T().Name())
 
 	const numExecutions = 5
 
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
-		wid := id + strconv.Itoa(i)
 		we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:             uuid.New(),
-			Namespace:             s.namespace,
-			WorkflowId:            wid,
-			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			WorkflowType:          &commonpb.WorkflowType{Name: wt},
-			TaskQueue:             &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Input:                 nil,
-			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
-			Identity:              identity,
+			RequestId:    uuid.New(),
+			Namespace:    s.namespace,
+			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: wid,
+			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
 			RunId:      we.RunId,
 		})
 	}
@@ -252,16 +243,13 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
 	// Delete workflow executions.
 	for _, we := range wes {
 		_, err := s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-			Namespace: s.namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: we.WorkflowId,
-				RunId:      we.RunId,
-			},
+			Namespace:         s.namespace,
+			WorkflowExecution: we,
 		})
 		s.NoError(err)
 	}
 
-	for _, we := range wes {
+	for i, we := range wes {
 		s.Eventually(
 			func() bool {
 				// Check execution is deleted.
@@ -273,7 +261,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
 					},
 				)
 				if err == nil {
-					s.Logger.Warn("Execution not deleted yet")
+					s.Logger.Warn("Execution is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				var notFoundErr *serviceerror.NotFound
@@ -281,7 +269,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
 				s.Nil(describeResponse)
 				return true
 			},
-			waitForPersistence,
+			waitForTaskProcessing,
 			100*time.Millisecond,
 		)
 
@@ -322,33 +310,25 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
 	}
 }
 
-func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
-	id := "functional-delete-workflow-running-with-terminate-test"
-	wt := "functional-delete-workflow-running-with-terminate-test-type"
-	tl := "functional-delete-workflow-running-with-terminate-test-taskqueue"
-	identity := "worker1"
+func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
+	tv := testvars.New(s.T().Name())
 
 	const numExecutions = 3
 
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
-		wid := id + strconv.Itoa(i)
 		we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:             uuid.New(),
-			Namespace:             s.namespace,
-			WorkflowId:            wid,
-			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			WorkflowType:          &commonpb.WorkflowType{Name: wt},
-			TaskQueue:             &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Input:                 nil,
-			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
-			Identity:              identity,
+			RequestId:    uuid.New(),
+			Namespace:    s.namespace,
+			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: wid,
+			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
 			RunId:      we.RunId,
 		})
 	}
@@ -375,27 +355,30 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 		)
 	}
 
-	// Terminate and delete workflow executions.
-	for _, we := range wes {
+	// Internal task processing for DeleteExecutionTask checks if there is no pending CloseExecutionTask
+	// to make sure that the workflow is closed successfully before deleting it. Otherwise, the mutable state
+	// might be deleted before the close task is executed, and so the close task will be dropped.
+	// See comment about ensureNoPendingCloseTask in transferQueueTaskExecutorBase.deleteExecution() for more details.
+
+	// This is why this test _terminates_ and _immediately deletes_ workflow execution to simulate race between
+	// two types of tasks and make sure that they are executed in correct order.
+
+	for i, we := range wes {
 		_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace: s.namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: we.WorkflowId,
-				RunId:      we.RunId,
-			},
+			Namespace:         s.namespace,
+			WorkflowExecution: we,
 		})
 		s.NoError(err)
+		s.Logger.Warn("Execution is terminated", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 		_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-			Namespace: s.namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: we.WorkflowId,
-				RunId:      we.RunId,
-			},
+			Namespace:         s.namespace,
+			WorkflowExecution: we,
 		})
 		s.NoError(err)
+		s.Logger.Warn("Execution is scheduled for deletion", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 	}
 
-	for _, we := range wes {
+	for i, we := range wes {
 		s.Eventually(
 			func() bool {
 				// Check execution is deleted.
@@ -407,7 +390,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 					},
 				)
 				if err == nil {
-					s.Logger.Warn("Execution not deleted yet")
+					s.Logger.Warn("Execution is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				var notFoundErr *serviceerror.NotFound
@@ -415,7 +398,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 				s.Nil(describeResponse)
 				return true
 			},
-			waitForPersistence,
+			waitForTaskProcessing,
 			1*time.Second,
 		)
 
@@ -445,7 +428,7 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 				)
 				s.NoError(err)
 				if len(visibilityResponse.Executions) != 0 {
-					s.Logger.Warn("Visibility is not deleted yet")
+					s.Logger.Warn("Visibility is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				return true

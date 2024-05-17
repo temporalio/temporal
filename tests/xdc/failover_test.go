@@ -274,8 +274,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -835,8 +834,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
