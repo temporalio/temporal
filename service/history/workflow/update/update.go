@@ -89,12 +89,6 @@ type (
 		// accessed only while holding workflow lock
 		id    string
 		state state
-		// request is nil when:
-		//   - update is in stateAccepted,
-		//   - update was restored in stateAdmitted with newAdmitted from UpdateInfo.AdmissionInfo.
-		//       We don't load request form event because if there is durable UpdateAdmitted event with request,
-		//       then we don't write this request 2nd time to UpdateAccepted event.
-
 		// The `request` field holds the update payload submitted with the original request. It is stored in the
 		// registry in order to be sent to the worker and then written to history in an UpdateAccepted event.
 		// Therefore, it is nil when the update in the registry is in stateAccepted, stateCompleted etc, since then the
