@@ -613,7 +613,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	defer w2.Stop()
 
 	counter := make(map[string]int)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 50; i++ {
 		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 		var out string
@@ -4709,7 +4709,6 @@ func (s *VersioningIntegSuite) validateWorkflowEventsVersionStamps(
 			taskStartedStamp = wfStarted.GetWorkerVersion()
 		}
 		if taskStartedStamp != nil {
-			fmt.Printf("shahab> bld: %s\n", taskStartedStamp.GetBuildId())
 			if counter >= len(expectedBuildIds) {
 				s.Fail("found more task started events than expected")
 			}
