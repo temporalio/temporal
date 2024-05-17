@@ -138,6 +138,8 @@ func replicationStreamHighPrioritySchedulerProvider(
 	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
+	// SequentialScheduler has panic wrapper when executing task,
+	// if changing the executor, please make sure other executor has panic wrapper
 	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
 		&ctasks.SequentialSchedulerOptions{
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
@@ -168,6 +170,8 @@ func replicationStreamLowPrioritySchedulerProvider(
 		idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID + "_" + strconv.Itoa(rand.Intn(config.ReplicationLowPriorityTaskParallelism())))
 		return farm.Fingerprint32(idBytes)
 	}
+	// SequentialScheduler has panic wrapper when executing task,
+	// if changing the executor, please make sure other executor has panic wrapper
 	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
 		&ctasks.SequentialSchedulerOptions{
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
