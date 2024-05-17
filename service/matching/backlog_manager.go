@@ -29,9 +29,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/api/serviceerror"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
