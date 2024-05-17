@@ -291,6 +291,8 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 	var historyEvent *historypb.HistoryEvent
 	var err error
 
+	// TODO: ideally history events should not be exposed here. We should be passing the command
+	// all the way down but it requires a bigger refactor of the mutable state interface.
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 		historyEvent, response, err = handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
