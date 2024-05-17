@@ -4009,32 +4009,24 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateCompletedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+		// UpdateInfo must be created by preceding UpdateAccepted event.
+		return serviceerror.NewInvalidArgument("WorkflowExecutionUpdateCompletedEvent doesn't have preceding WorkflowExecutionUpdateAcceptedEvent")
 	}
 	updateID := attrs.GetMeta().GetUpdateId()
 	var sizeDelta int
-	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		sizeBefore := ui.Size()
-		ui.Value = &updatespb.UpdateInfo_Completion{
-			Completion: &updatespb.CompletionInfo{
-				EventId:      event.EventId,
-				EventBatchId: batchID,
-			},
-		}
-		sizeDelta = ui.Size() - sizeBefore
-	} else {
-		// TODO (alex): this should never happened because UpdateInfo should always be created before
-		// with UpdateAccepted event which MUST preceded UpdateCompleted event.
-		// Better to return error here!
-		ui := updatespb.UpdateInfo{
-			Value: &updatespb.UpdateInfo_Completion{
-				Completion: &updatespb.CompletionInfo{EventId: event.EventId},
-			},
-		}
-		ms.executionInfo.UpdateInfos[updateID] = &ui
-		ms.executionInfo.UpdateCount++
-		sizeDelta = ui.Size() + len(updateID)
+	ui, uiExists := ms.executionInfo.UpdateInfos[updateID]
+	if !uiExists {
+		// UpdateInfo must be created by preceding UpdateAccepted event.
+		return serviceerror.NewInvalidArgument("WorkflowExecutionUpdateCompletedEvent doesn't have preceding WorkflowExecutionUpdateAcceptedEvent")
 	}
+	sizeBefore := ui.Size()
+	ui.Value = &updatespb.UpdateInfo_Completion{
+		Completion: &updatespb.CompletionInfo{
+			EventId:      event.EventId,
+			EventBatchId: batchID,
+		},
+	}
+	sizeDelta = ui.Size() - sizeBefore
 	ms.approximateSize += sizeDelta
 	ms.writeEventToCache(event)
 	return nil
