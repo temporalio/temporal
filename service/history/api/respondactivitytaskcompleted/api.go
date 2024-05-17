@@ -63,6 +63,7 @@ func Invoke(
 	var activityStartedTime time.Time
 	var taskQueue string
 	var workflowTypeName string
+	var fabricateStartedEvent bool
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -108,7 +109,8 @@ func Invoke(
 
 			// We fabricate a started event only when the activity is not started yet and
 			// we need to force complete an activity
-			if isCompletedByID && ai.StartedEventId == common.EmptyEventID {
+			fabricateStartedEvent = ai.StartedEventId == common.EmptyEventID
+			if fabricateStartedEvent {
 				_, err := mutableState.AddActivityTaskStartedEvent(ai, scheduledEventID,
 					"",
 					req.GetCompleteRequest().GetIdentity(),
@@ -135,7 +137,7 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 
-	if err == nil && !activityStartedTime.IsZero() {
+	if err == nil && !activityStartedTime.IsZero() && !fabricateStartedEvent {
 		metrics.ActivityE2ELatency.With(shard.GetMetricsHandler()).Record(
 			time.Since(activityStartedTime),
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
