@@ -31,6 +31,8 @@ import (
 	"testing"
 
 	"github.com/temporalio/sqlparser"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -74,7 +76,7 @@ func TestNameInterceptor(t *testing.T) {
 	assert.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"match":{"ExecutionStatus1":{"query":"Running"}}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
 	var actualSorterMaps []interface{}
 	for _, sorter := range queryParams.Sorter {
 		actualSorterMap, _ := sorter.Source()
@@ -94,7 +96,7 @@ func TestValuesInterceptor(t *testing.T) {
 	assert.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"match":{"ExecutionStatus":{"query":"Status1"}}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus":"Status1"}}}}`, string(actualQueryJson))
 
 	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus in (1,2)")
 	assert.NoError(t, err)
@@ -114,11 +116,17 @@ func TestValuesInterceptor(t *testing.T) {
 }
 
 func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *Converter {
+	testNameTypeMap := searchattribute.NewNameTypeMapStub(
+		map[string]enumspb.IndexedValueType{
+			"ExecutionStatus1": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"StartTime1":       enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+	)
 	whereConverter := NewWhereConverter(
 		nil,
 		nil,
 		NewRangeCondConverter(fnInterceptor, fvInterceptor, false),
-		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]struct{}{sqlparser.EqualStr: {}, sqlparser.InStr: {}}),
+		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]struct{}{sqlparser.EqualStr: {}, sqlparser.InStr: {}}, testNameTypeMap),
 		nil)
 	return NewConverter(fnInterceptor, whereConverter)
 }

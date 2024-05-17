@@ -31,23 +31,22 @@ import (
 
 	"github.com/dgryski/go-farm"
 	historypb "go.temporal.io/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
-
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -103,20 +102,18 @@ func eagerNamespaceRefresherProvider(
 	)
 }
 
-func replicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
+func replicationTaskConverterFactoryProvider(
+	config *configs.Config,
+) SourceTaskConverterProvider {
 	return func(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
-		clientClusterShardCount int32,
 		clientClusterName string,
-		clientShardKey ClusterShardKey,
 	) SourceTaskConverter {
 		return NewSourceTaskConverter(
 			historyEngine,
 			shardContext.GetNamespaceRegistry(),
-			clientClusterShardCount,
-			clientClusterName,
-			clientShardKey)
+			config)
 	}
 }
 

@@ -1015,7 +1015,8 @@ func TestWaitLifecycleStage(t *testing.T) {
 
 	t.Run("timeout is soft iff due to server-imposed deadline (accepted)", func(t *testing.T) {
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout*2)
+		// Use 10x user timeout as a buffer to make sure that it won't be exceeded before serverTimeout.
+		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout*10)
 		defer cancel()
 		assertSoftTimeoutWhileWaitingForAccepted(ctx, t, upd)
 		ctx, cancel = context.WithTimeout(context.Background(), serverTimeout/2)
@@ -1024,7 +1025,8 @@ func TestWaitLifecycleStage(t *testing.T) {
 	})
 
 	t.Run("timeout is soft iff due to server-imposed deadline (completed)", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout*2)
+		// Use 10x user timeout as a buffer to make sure that it won't be exceeded before serverTimeout.
+		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout*10)
 		defer cancel()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		assertAdmitted(ctx, t, upd)
