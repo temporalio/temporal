@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -41,7 +42,9 @@ import (
 	"go.temporal.io/server/service/history/consts"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -1111,4 +1114,107 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
+}
+
+func (s *FunctionalSuite) TestActivityTaskCompleteForceCompletion() {
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
+		Namespace: s.namespace,
+	})
+	s.NoError(err)
+
+	activityInfo := make(chan activity.Info, 1)
+	taskQueue := s.randomizeStr(s.T().Name())
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	ctx := NewContext()
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        uuid.New(),
+		TaskQueue: taskQueue,
+	}
+	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	s.NoError(err)
+	ai := <-activityInfo
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(description.PendingActivities))
+		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+	},
+		10*time.Second,
+		500*time.Millisecond)
+
+	err = sdkClient.CompleteActivityByID(ctx, s.namespace, run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
+	s.NoError(err)
+
+	// Ensure the activity is completed and the workflow is unblcked.
+	s.NoError(run.Get(ctx, nil))
+}
+
+func (s *FunctionalSuite) TestActivityTaskCompleteRejectCompletion() {
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
+		Namespace: s.namespace,
+	})
+	s.NoError(err)
+
+	activityInfo := make(chan activity.Info, 1)
+	taskQueue := s.randomizeStr(s.T().Name())
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	ctx := NewContext()
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        uuid.New(),
+		TaskQueue: taskQueue,
+	}
+	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	s.NoError(err)
+	ai := <-activityInfo
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(description.PendingActivities))
+		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+	},
+		10*time.Second,
+		500*time.Millisecond)
+
+	err = sdkClient.CompleteActivity(ctx, ai.TaskToken, nil, nil)
+	var svcErr *serviceerror.NotFound
+	s.ErrorAs(err, &svcErr, "invalid activityID or activity already timed out or invoking workflow is completed")
+}
+
+func (s *FunctionalSuite) mockWorkflowWithErrorActivity(activityInfo chan<- activity.Info, sdkClient sdkclient.Client, taskQueue string) (worker.Worker, func(ctx workflow.Context) error) {
+	mockErrorActivity := func(ctx context.Context) error {
+		ai := activity.GetInfo(ctx)
+		activityInfo <- ai
+		return errors.New("mock error of an activity")
+	}
+	wf := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 3 * time.Minute,
+			RetryPolicy: &temporal.RetryPolicy{
+				// Add long initial interval to make sure the next attempt is not scheduled
+				// before the test gets a chance to complete the activity via API call.
+				InitialInterval: 2 * time.Minute,
+			},
+		}
+		ctx2 := workflow.WithActivityOptions(ctx, ao)
+		var mockErrorResult error
+		err := workflow.ExecuteActivity(ctx2, mockErrorActivity).Get(ctx2, &mockErrorResult)
+		if err != nil {
+			return err
+		}
+		return mockErrorResult
+	}
+
+	workflowType := "test"
+	w := worker.New(sdkClient, taskQueue, worker.Options{})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	w.RegisterActivity(mockErrorActivity)
+	return w, wf
 }
