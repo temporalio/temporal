@@ -85,7 +85,7 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.redirector = NewRedirectionInterceptor(
+	s.redirector = NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{

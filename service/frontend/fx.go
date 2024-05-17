@@ -330,7 +330,7 @@ func RedirectionInterceptorProvider(
 	timeSource clock.TimeSource,
 	clusterMetadata cluster.Metadata,
 ) *interceptor.Redirection {
-	return interceptor.NewRedirectionInterceptor(
+	return interceptor.NewRedirection(
 		configuration.EnableNamespaceNotActiveAutoForwarding,
 		namespaceCache,
 		policy,

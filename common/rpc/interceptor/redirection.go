@@ -143,8 +143,8 @@ type (
 	}
 )
 
-// NewRedirectionInterceptor creates DC redirection interceptor
-func NewRedirectionInterceptor(
+// NewRedirection creates DC redirection interceptor
+func NewRedirection(
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceCache namespace.Registry,
 	policy config.DCRedirectionPolicy,
