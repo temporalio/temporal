@@ -408,6 +408,22 @@ func isActiveRedirectRuleSource(buildID string, redirectRules []*persistencespb.
 	return false
 }
 
+// findTerminalBuildId follows redirect rules from the given build ID and returns the target of the last redirect rule.
+// Returns empty if a cycle is found.
+func findTerminalBuildId(buildID string, activeRedirectRules []*persistencespb.RedirectRule) string {
+outer:
+	for i := 0; i <= len(activeRedirectRules); i++ { // limiting the cycles to protect against loops in the graph.
+		for _, r := range activeRedirectRules {
+			if r.GetRule().GetSourceBuildId() == buildID {
+				buildID = r.GetRule().GetTargetBuildId()
+				continue outer
+			}
+		}
+		return buildID
+	}
+	return ""
+}
+
 // isConditionalAssignmentRuleTarget checks whether the given buildID is the target of a conditional assignment rule
 // (one with a ramp). We check this for any buildID that is the source of a proposed redirect rule, because having a
 // ramped assignment rule target as the source for a redirect rule would lead to an unpredictable amount of traffic
