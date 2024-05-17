@@ -1068,19 +1068,17 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 		func() bool {
 			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
+			if len(dw.GetPendingActivities()) == 0 {
+				return false
+			}
 			if versionedWf {
-				if wfV1 != dw.GetWorkflowExecutionInfo().GetAssignedBuildId() {
-					return false
-				}
+				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			} else {
-				if "" != dw.GetWorkflowExecutionInfo().GetAssignedBuildId() {
-					return false
-				}
+				s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
-			s.Equal(1, len(dw.GetPendingActivities()))
-			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+			return v1 != dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
 		},
 		10*time.Second,
 		50*time.Millisecond,
