@@ -131,6 +131,8 @@ func replicationStreamSchedulerProvider(
 	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
+	// SequentialScheduler has panic wrapper when executing task,
+	// if changing the executor, please make sure other executor has panic wrapper
 	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
 		&ctasks.SequentialSchedulerOptions{
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
