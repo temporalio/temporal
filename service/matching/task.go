@@ -28,8 +28,9 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
@@ -69,29 +70,55 @@ type (
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        namespace.Name
 		source           enumsspb.TaskSource
-		forwardedFrom    string     // name of the child partition this task is forwarded from (empty if not forwarded)
 		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
 		backlogCountHint func() int64
+		// forwardInfo contains information about forward source partition and versioning decisions made by it
+		// a parent partition receiving forwarded tasks makes no versioning decisions and only follows what the source
+		// partition instructed.
+		forwardInfo *taskqueuespb.TaskForwardInfo
+		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
+		// based on forwardInfo.
+		redirectInfo *taskqueuespb.BuildIdRedirectInfo
 	}
 )
 
-func newInternalTask(
+func newInternalTaskForSyncMatch(
+	info *persistencespb.TaskInfo,
+	forwardInfo *taskqueuespb.TaskForwardInfo,
+) *internalTask {
+	var redirectInfo *taskqueuespb.BuildIdRedirectInfo
+	// if this task is not forwarded, source can only be history
+	source := enumsspb.TASK_SOURCE_HISTORY
+	if forwardInfo != nil {
+		// if task is forwarded, it may be history or backlog. setting based on forward info
+		source = forwardInfo.TaskSource
+		redirectInfo = forwardInfo.GetRedirectInfo()
+	}
+	task := &internalTask{
+		event: &genericTaskInfo{
+			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
+				Data:   info,
+				TaskId: syncMatchTaskId,
+			},
+		},
+		forwardInfo:  forwardInfo,
+		source:       source,
+		redirectInfo: redirectInfo,
+		responseC:    make(chan error, 1),
+	}
+	return task
+}
+
+func newInternalTaskFromBacklog(
 	info *persistencespb.AllocatedTaskInfo,
 	completionFunc func(*persistencespb.AllocatedTaskInfo, error),
-	source enumsspb.TaskSource,
-	forwardedFrom string,
-	forSyncMatch bool,
 ) *internalTask {
 	task := &internalTask{
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
 		},
-		source:        source,
-		forwardedFrom: forwardedFrom,
-	}
-	if forSyncMatch {
-		task.responseC = make(chan error, 1)
+		source: enumsspb.TASK_SOURCE_DB_BACKLOG,
 	}
 	return task
 }
@@ -105,8 +132,9 @@ func newInternalQueryTask(
 			taskID:  taskID,
 			request: request,
 		},
-		forwardedFrom: request.GetForwardedSource(),
-		responseC:     make(chan error, 1),
+		forwardInfo: request.GetForwardInfo(),
+		responseC:   make(chan error, 1),
+		source:      enumsspb.TASK_SOURCE_HISTORY,
 	}
 }
 
@@ -121,8 +149,9 @@ func newInternalNexusTask(
 			deadline: deadline,
 			request:  request,
 		},
-		forwardedFrom: request.GetForwardedSource(),
+		forwardInfo: request.GetForwardInfo(),
 		responseC:     make(chan error, 1),
+		source:      enumsspb.TASK_SOURCE_HISTORY,
 	}
 }
 
@@ -143,7 +172,7 @@ func (task *internalTask) isStarted() bool {
 // isForwarded returns true if the underlying task is forwarded by a remote matching host
 // forwarded tasks are already marked as started in history
 func (task *internalTask) isForwarded() bool {
-	return task.forwardedFrom != ""
+	return task.forwardInfo != nil
 }
 
 func (task *internalTask) isSyncMatchTask() bool {

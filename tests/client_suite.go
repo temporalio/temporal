@@ -1898,7 +1898,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 		return err == nil && len(resp.Executions) == 1
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// reset it using v2 as the bad build id
+	// reset it using v2 as the bad build ID
 	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace:       s.namespace,
 		VisibilityQuery: query,

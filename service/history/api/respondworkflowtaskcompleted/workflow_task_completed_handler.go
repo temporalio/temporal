@@ -529,6 +529,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		uuid.New(),
 		handler.identity,
 		stamp,
+		nil,
 	); err != nil {
 		return nil, err
 	}

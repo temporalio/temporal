@@ -152,7 +152,7 @@ func (h *Handler) AddActivityTask(
 		metrics.MatchingAddActivityTaskScope,
 	)
 
-	if request.GetForwardedSource() != "" {
+	if request.GetForwardInfo() != nil {
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
@@ -176,7 +176,7 @@ func (h *Handler) AddWorkflowTask(
 		metrics.MatchingAddWorkflowTaskScope,
 	)
 
-	if request.GetForwardedSource() != "" {
+	if request.GetForwardInfo() != nil {
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
@@ -253,7 +253,7 @@ func (h *Handler) QueryWorkflow(
 		metrics.MatchingQueryWorkflowScope,
 	)
 
-	if request.GetForwardedSource() != "" {
+	if request.GetForwardInfo() != nil {
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 

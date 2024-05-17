@@ -355,6 +355,7 @@ func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencesp
 		uuid.New(),
 		"worker-identity",
 		nil,
+		nil,
 	)
 	s.NoError(err)
 

@@ -633,7 +633,7 @@ func TestAddRedirectRuleMaxRules(t *testing.T) {
 func TestAddRedirectRuleInVersionSet(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
-	// make version set with build id "0" in it
+	// make version set with build ID "0" in it
 	initialData := mkInitialData(1, clock)
 
 	// insert with source build id "0" --> failure
@@ -767,7 +767,7 @@ func TestReplaceRedirectRuleBasic(t *testing.T) {
 func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
-	// make a version set with build id 0
+	// make a version set with build ID 0
 	data := mkInitialData(1, clock)
 	data.RedirectRules = []*persistencepb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("1", "2"), clock, nil),

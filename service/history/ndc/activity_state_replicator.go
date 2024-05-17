@@ -148,6 +148,8 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			Attempt:            request.Attempt,
 			LastFailure:        request.LastFailure,
 			LastWorkerIdentity: request.LastWorkerIdentity,
+			LastStartedBuildId: request.LastStartedBuildId,
+			LastStartedRedirectCounter: request.LastStartedRedirectCounter,
 			VersionHistory:     request.VersionHistory,
 		},
 	)
