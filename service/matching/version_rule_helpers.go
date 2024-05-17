@@ -411,7 +411,8 @@ func isActiveRedirectRuleSource(buildID string, redirectRules []*persistencespb.
 // findTerminalBuildId follows redirect rules from the given build ID and returns the target of the last redirect rule.
 // Do not call on cyclic rule set.
 func findTerminalBuildId(buildID string, activeRedirectRules []*persistencespb.RedirectRule) string {
-	outer: for {
+outer:
+	for {
 		for _, r := range activeRedirectRules {
 			if r.GetRule().GetSourceBuildId() == buildID {
 				buildID = r.GetRule().GetTargetBuildId()
