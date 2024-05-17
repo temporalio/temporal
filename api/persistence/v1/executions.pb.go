@@ -190,11 +190,11 @@ type WorkflowExecutionInfo struct {
 	WorkflowTaskType                  v1.WorkflowTaskType    `protobuf:"varint,68,opt,name=workflow_task_type,json=workflowTaskType,proto3,enum=temporal.server.api.enums.v1.WorkflowTaskType" json:"workflow_task_type,omitempty"`
 	WorkflowTaskSuggestContinueAsNew  bool                   `protobuf:"varint,69,opt,name=workflow_task_suggest_continue_as_new,json=workflowTaskSuggestContinueAsNew,proto3" json:"workflow_task_suggest_continue_as_new,omitempty"`
 	WorkflowTaskHistorySizeBytes      int64                  `protobuf:"varint,70,opt,name=workflow_task_history_size_bytes,json=workflowTaskHistorySizeBytes,proto3" json:"workflow_task_history_size_bytes,omitempty"`
-	// tracks the started build id for transient/speculative WFT. This info is used for two purposes:
+	// tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
 	// - verify WFT completes by the same Build ID that started in the latest attempt
 	// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
 	WorkflowTaskBuildId string `protobuf:"bytes,88,opt,name=workflow_task_build_id,json=workflowTaskBuildId,proto3" json:"workflow_task_build_id,omitempty"`
-	// tracks the started build id redirect counter for transient/speculative WFT. This info is to
+	// tracks the started build ID redirect counter for transient/speculative WFT. This info is to
 	// ensure the right redirect counter is used in the WFT started event created later
 	// for a transient/speculative WFT.
 	WorkflowTaskBuildIdRedirectCounter int64  `protobuf:"varint,89,opt,name=workflow_task_build_id_redirect_counter,json=workflowTaskBuildIdRedirectCounter,proto3" json:"workflow_task_build_id_redirect_counter,omitempty"`

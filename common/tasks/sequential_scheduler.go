@@ -298,15 +298,28 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 
 // TODO: change this function to process all available tasks in the queue.
 func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
+	var panicErr error
+	defer log.CapturePanic(s.logger, &panicErr)
+	shouldRetry := true
 	task := queue.Remove()
-	operation := func() error {
+
+	operation := func() (retErr error) {
+		var executePanic error
+		defer func() {
+			if executePanic != nil {
+				retErr = executePanic
+				shouldRetry = false // do not retry if panic
+			}
+		}()
+		defer log.CapturePanic(s.logger, &executePanic)
+
 		if err := task.Execute(); err != nil {
 			return task.HandleErr(err)
 		}
 		return nil
 	}
 	isRetryable := func(err error) bool {
-		return !s.isStopped() && task.IsRetryableError(err)
+		return !s.isStopped() && shouldRetry && task.IsRetryableError(err)
 	}
 	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if s.isStopped() {

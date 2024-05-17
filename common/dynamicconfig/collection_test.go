@@ -46,6 +46,7 @@ const (
 	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
 	testGetStringPropertyKey                          = "testGetStringPropertyKey"
 	testGetMapPropertyKey                             = "testGetMapPropertyKey"
+	testGetTypedPropertyKey                           = "testGetTypedPropertyKey"
 	testGetIntPropertyFilteredByNamespaceKey          = "testGetIntPropertyFilteredByNamespaceKey"
 	testGetDurationPropertyFilteredByNamespaceKey     = "testGetDurationPropertyFilteredByNamespaceKey"
 	testGetIntPropertyFilteredByTaskQueueInfoKey      = "testGetIntPropertyFilteredByTaskQueueInfoKey"
@@ -78,10 +79,7 @@ func (s *collectionSuite) SetupSuite() {
 }
 
 func (s *collectionSuite) TestGetIntProperty() {
-	setting := GlobalIntSetting{
-		key: testGetIntPropertyKey,
-		def: 10,
-	}
+	setting := NewGlobalIntSetting(testGetIntPropertyKey, 10, "")
 	value := setting.Get(s.cln)
 	s.Equal(10, value())
 	s.client[testGetIntPropertyKey] = 50
@@ -89,10 +87,7 @@ func (s *collectionSuite) TestGetIntProperty() {
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
-	setting := NamespaceIntSetting{
-		key: testGetIntPropertyFilteredByNamespaceKey,
-		def: 10,
-	}
+	setting := NewNamespaceIntSetting(testGetIntPropertyFilteredByNamespaceKey, 10, "")
 	namespace := "testNamespace"
 	value := setting.Get(s.cln)
 	s.Equal(10, value(namespace))
@@ -109,10 +104,7 @@ func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
 }
 
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
-	setting := NamespaceIDStringSetting{
-		key: testGetStringPropertyFilteredByNamespaceIDKey,
-		def: "abc",
-	}
+	setting := NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
 	namespaceID := "testNamespaceID"
 	value := setting.Get(s.cln)
 	s.Equal("abc", value(namespaceID))
@@ -121,10 +113,7 @@ func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByTaskQueueInfo() {
-	setting := TaskQueueIntSetting{
-		key: testGetIntPropertyFilteredByTaskQueueInfoKey,
-		def: 10,
-	}
+	setting := NewTaskQueueIntSetting(testGetIntPropertyFilteredByTaskQueueInfoKey, 10, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
 	value := setting.Get(s.cln)
@@ -134,10 +123,7 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByTaskQueueInfo() {
 }
 
 func (s *collectionSuite) TestGetFloat64Property() {
-	setting := GlobalFloatSetting{
-		key: testGetFloat64PropertyKey,
-		def: 0.1,
-	}
+	setting := NewGlobalFloatSetting(testGetFloat64PropertyKey, 0.1, "")
 	value := setting.Get(s.cln)
 	s.Equal(0.1, value())
 	s.client[testGetFloat64PropertyKey] = 0.01
@@ -145,10 +131,7 @@ func (s *collectionSuite) TestGetFloat64Property() {
 }
 
 func (s *collectionSuite) TestGetBoolProperty() {
-	setting := GlobalBoolSetting{
-		key: testGetBoolPropertyKey,
-		def: true,
-	}
+	setting := NewGlobalBoolSetting(testGetBoolPropertyKey, true, "")
 	value := setting.Get(s.cln)
 	s.Equal(true, value())
 	s.client[testGetBoolPropertyKey] = false
@@ -156,10 +139,7 @@ func (s *collectionSuite) TestGetBoolProperty() {
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
-	setting := NamespaceIDBoolSetting{
-		key: testGetBoolPropertyFilteredByNamespaceIDKey,
-		def: true,
-	}
+	setting := NewNamespaceIDBoolSetting(testGetBoolPropertyFilteredByNamespaceIDKey, true, "")
 	namespaceID := "testNamespaceID"
 	value := setting.Get(s.cln)
 	s.Equal(true, value(namespaceID))
@@ -168,10 +148,7 @@ func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
-	setting := TaskQueueBoolSetting{
-		key: testGetBoolPropertyFilteredByTaskQueueInfoKey,
-		def: false,
-	}
+	setting := NewTaskQueueBoolSetting(testGetBoolPropertyFilteredByTaskQueueInfoKey, false, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
 	value := setting.Get(s.cln)
@@ -181,10 +158,7 @@ func (s *collectionSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
 }
 
 func (s *collectionSuite) TestGetDurationProperty() {
-	setting := GlobalDurationSetting{
-		key: testGetDurationPropertyKey,
-		def: 1 * time.Second,
-	}
+	setting := NewGlobalDurationSetting(testGetDurationPropertyKey, 1*time.Second, "")
 	value := setting.Get(s.cln)
 	s.Equal(time.Second, value())
 	s.client[testGetDurationPropertyKey] = time.Minute
@@ -196,10 +170,7 @@ func (s *collectionSuite) TestGetDurationProperty() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {
-	setting := NamespaceDurationSetting{
-		key: testGetDurationPropertyFilteredByNamespaceKey,
-		def: time.Second,
-	}
+	setting := NewNamespaceDurationSetting(testGetDurationPropertyFilteredByNamespaceKey, time.Second, "")
 	namespace := "testNamespace"
 	value := setting.Get(s.cln)
 	s.Equal(time.Second, value(namespace))
@@ -208,10 +179,7 @@ func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
-	setting := TaskQueueDurationSetting{
-		key: testGetDurationPropertyFilteredByTaskQueueInfoKey,
-		def: time.Second,
-	}
+	setting := NewTaskQueueDurationSetting(testGetDurationPropertyFilteredByTaskQueueInfoKey, time.Second, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
 	value := setting.Get(s.cln)
@@ -221,10 +189,7 @@ func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskType() {
-	setting := TaskTypeDurationSetting{
-		key: testGetDurationPropertyFilteredByTaskTypeKey,
-		def: time.Second,
-	}
+	setting := NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, time.Second, "")
 	taskType := enumsspb.TASK_TYPE_UNSPECIFIED
 	value := setting.Get(s.cln)
 	s.Equal(time.Second, value(taskType))
@@ -233,9 +198,9 @@ func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskType() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
-	setting := TaskQueueDurationSetting{
-		key: testGetDurationPropertyStructuredDefaults,
-		cdef: []TypedConstrainedValue[time.Duration]{
+	setting := NewTaskQueueDurationSettingWithConstrainedDefault(
+		testGetDurationPropertyStructuredDefaults,
+		[]TypedConstrainedValue[time.Duration]{
 			{
 				Constraints: Constraints{
 					Namespace:     "ns2",
@@ -253,7 +218,8 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 				Value: 7 * time.Minute,
 			},
 		},
-	}
+		"",
+	)
 	value := setting.Get(s.cln)
 	s.Equal(7*time.Minute, value("ns1", "tq1", 0))
 	s.Equal(7*time.Minute, value("ns2", "tq1", 0))
@@ -304,12 +270,11 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 }
 
 func (s *collectionSuite) TestGetMapProperty() {
-	setting := GlobalMapSetting{
-		key: testGetMapPropertyKey,
-		def: map[string]interface{}{
-			"testKey": 123,
-		},
-	}
+	setting := NewGlobalMapSetting(
+		testGetMapPropertyKey,
+		map[string]interface{}{"testKey": 123},
+		"",
+	)
 	value := setting.Get(s.cln)
 	s.Equal(setting.def, value())
 	val := maps.Clone(setting.def)
@@ -319,11 +284,106 @@ func (s *collectionSuite) TestGetMapProperty() {
 	s.Equal("321", value()["testKey"])
 }
 
-func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
-	setting := DestinationIntSetting{
-		key: testGetIntPropertyFilteredByDestinationKey,
-		def: 10,
+func (s *collectionSuite) TestGetTyped() {
+	type myFancyType struct {
+		Number int
+		Names  []string
 	}
+	setting := NewGlobalTypedSettingWithConverter(
+		testGetTypedPropertyKey,
+		ConvertStructure(myFancyType{-3, nil}), // used if convert is called
+		myFancyType{28, []string{"global", "typed", "setting"}},
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(setting.def, get())
+	})
+
+	s.Run("Basic", func() {
+		// map[string]any is what the yaml library decodes arbitrary data into
+		s.client[testGetTypedPropertyKey] = map[string]any{
+			"Number": 39,
+			"Names":  []string{"new", "names"},
+		}
+		s.Equal(myFancyType{
+			Number: 39,
+			Names:  []string{"new", "names"},
+		}, get())
+	})
+
+	s.Run("CaseInsensitive", func() {
+		s.client[testGetTypedPropertyKey] = map[string]any{
+			"naMES": []string{"case", "insensitive"},
+		}
+		s.Equal(-3, get().Number) // note the convert default is used here
+		s.Equal([]string{"case", "insensitive"}, get().Names)
+	})
+
+	s.Run("WrongType", func() {
+		s.client[testGetTypedPropertyKey] = 200
+		s.Equal(setting.def, get())
+	})
+}
+
+func (s *collectionSuite) TestGetTypedSimpleList() {
+	setting := NewGlobalTypedSettingWithConverter(
+		testGetTypedPropertyKey,
+		ConvertStructure([]float64(nil)),
+		[]float64{1.5, 1.1, 2.6, 3.7, 6.3},
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(setting.def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client[testGetTypedPropertyKey] = []any{19.0, -2.0}
+		s.Equal([]float64{19.0, -2.0}, get())
+	})
+
+	s.Run("WrongType", func() {
+		s.client[testGetTypedPropertyKey] = []any{88.8, false, -5, "oops"}
+		s.Equal(setting.def, get())
+	})
+}
+
+func (s *collectionSuite) TestGetTypedListOfStruct() {
+	type simple struct{ A, B int }
+	setting := NewGlobalTypedSettingWithConverter(
+		testGetTypedPropertyKey,
+		ConvertStructure([]simple(nil)),
+		[]simple{{1, 5}, {2, 9}},
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(setting.def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client[testGetTypedPropertyKey] = []any{
+			map[string]any{"A": 12, "B": 6},
+			map[string]any{"A": -23, "B": 0},
+			map[string]any{"B": 555, "C": "ignored"},
+		}
+		s.Equal([]simple{{12, 6}, {-23, 0}, {0, 555}}, get())
+	})
+
+	s.Run("WrongType", func() {
+		s.client[testGetTypedPropertyKey] = []any{
+			map[string]any{"A": false, "B": true},
+		}
+		s.Equal(setting.def, get())
+	})
+}
+
+func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
+	setting := NewDestinationIntSetting(testGetIntPropertyFilteredByDestinationKey, 10, "")
 	namespaceName := "testNamespace"
 	destination1 := "testDestination1"
 	destination2 := "testDestination2"

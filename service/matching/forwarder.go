@@ -34,8 +34,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/tqid"
-	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -139,48 +140,60 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		expirationDuration = durationpb.New(remaining)
 	}
 
-	directive := task.event.Data.GetVersionDirective()
-	if fwdr.queue.BuildId() != "" {
-		// Build ID is already selected for this task, so we override directive to reflect that.
-		directive = worker_versioning.MakeBuildIdDirective(fwdr.queue.BuildId())
-	}
-
 	switch fwdr.partition.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
-		_, err = fwdr.client.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
-			NamespaceId: task.event.Data.GetNamespaceId(),
-			Execution:   task.workflowExecution(),
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: target.RpcName(),
-				Kind: fwdr.partition.Kind(),
+		_, err = fwdr.client.AddWorkflowTask(
+			ctx, &matchingservice.AddWorkflowTaskRequest{
+				NamespaceId: task.event.Data.GetNamespaceId(),
+				Execution:   task.workflowExecution(),
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: target.RpcName(),
+					Kind: fwdr.partition.Kind(),
+				},
+				ScheduledEventId:       task.event.Data.GetScheduledEventId(),
+				Clock:                  task.event.Data.GetClock(),
+				ScheduleToStartTimeout: expirationDuration,
+				ForwardInfo:            fwdr.getForwardInfo(task),
 			},
-			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
-			Clock:                  task.event.Data.GetClock(),
-			Source:                 task.source,
-			ScheduleToStartTimeout: expirationDuration,
-			ForwardedSource:        fwdr.partition.RpcName(),
-			VersionDirective:       directive,
-		})
+		)
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
-		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-			NamespaceId: task.event.Data.GetNamespaceId(),
-			Execution:   task.workflowExecution(),
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: target.RpcName(),
-				Kind: fwdr.partition.Kind(),
+		_, err = fwdr.client.AddActivityTask(
+			ctx, &matchingservice.AddActivityTaskRequest{
+				NamespaceId: task.event.Data.GetNamespaceId(),
+				Execution:   task.workflowExecution(),
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: target.RpcName(),
+					Kind: fwdr.partition.Kind(),
+				},
+				ScheduledEventId:       task.event.Data.GetScheduledEventId(),
+				Clock:                  task.event.Data.GetClock(),
+				ScheduleToStartTimeout: expirationDuration,
+				ForwardInfo:            fwdr.getForwardInfo(task),
 			},
-			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
-			Clock:                  task.event.Data.GetClock(),
-			Source:                 task.source,
-			ScheduleToStartTimeout: expirationDuration,
-			ForwardedSource:        fwdr.partition.RpcName(),
-			VersionDirective:       directive,
-		})
+		)
 	default:
 		return errInvalidTaskQueueType
 	}
 
 	return fwdr.handleErr(err)
+}
+
+func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForwardInfo {
+	if task.isForwarded() {
+		// task is already forwarded from a child partition, only overwrite SourcePartition
+		clone := common.CloneProto(task.forwardInfo)
+		clone.SourcePartition = fwdr.partition.RpcName()
+		return clone
+	}
+	// task is forwarded for the first time
+	forwardInfo := &taskqueuespb.TaskForwardInfo{
+		TaskSource:         task.source,
+		SourcePartition:    fwdr.partition.RpcName(),
+		DispatchBuildId:    fwdr.queue.BuildId(),
+		DispatchVersionSet: fwdr.queue.VersionSet(),
+		RedirectInfo:       task.redirectInfo,
+	}
+	return forwardInfo
 }
 
 // ForwardQueryTask forwards a query task to parent task queue partition, if it exists
@@ -201,8 +214,8 @@ func (fwdr *Forwarder) ForwardQueryTask(
 			Kind: fwdr.partition.Kind(),
 		},
 		QueryRequest:     task.query.request.QueryRequest,
-		ForwardedSource:  fwdr.partition.RpcName(),
 		VersionDirective: task.query.request.VersionDirective,
+		ForwardInfo:      fwdr.getForwardInfo(task),
 	})
 
 	return resp, fwdr.handleErr(err)
@@ -222,8 +235,8 @@ func (fwdr *Forwarder) ForwardNexusTask(ctx context.Context, task *internalTask)
 			Name: target.RpcName(),
 			Kind: fwdr.partition.Kind(),
 		},
-		Request:         task.nexus.request.Request,
-		ForwardedSource: fwdr.partition.RpcName(),
+		Request:     task.nexus.request.Request,
+		ForwardInfo: fwdr.getForwardInfo(task),
 	})
 
 	return resp, fwdr.handleErr(err)

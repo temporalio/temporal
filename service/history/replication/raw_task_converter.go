@@ -140,6 +140,12 @@ func convertActivityStateReplicationTask(
 			if err != nil {
 				return nil, err
 			}
+
+			lastStartedBuildId := activityInfo.GetLastIndependentlyAssignedBuildId()
+			if lastStartedBuildId == "" {
+				lastStartedBuildId = activityInfo.GetUseWorkflowBuildIdInfo().GetLastUsedBuildId()
+			}
+
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 				SourceTaskId: taskInfo.TaskID,
@@ -158,6 +164,8 @@ func convertActivityStateReplicationTask(
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
+						LastStartedBuildId: lastStartedBuildId,
+						LastStartedRedirectCounter: activityInfo.GetUseWorkflowBuildIdInfo().GetLastRedirectCounter(),
 						BaseExecutionInfo:  persistence.CopyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
 						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
 					},

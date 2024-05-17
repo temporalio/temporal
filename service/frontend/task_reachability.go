@@ -186,7 +186,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		if isDefaultInQueue {
 			reachableByNewWorkflows = true
 		} else {
-			// If the queue became versioned just recently, consider the unversioned build id reachable.
+			// If the queue became versioned just recently, consider the unversioned build ID reachable.
 			queueBecameVersionedAt := util.FoldSlice(versionSets, &hlc.Clock{WallClock: math.MaxInt64}, func(c *hlc.Clock, set *persistencespb.CompatibleVersionSet) *hlc.Clock {
 				return hlc.Min(c, set.BecameDefaultTimestamp)
 			})
@@ -198,12 +198,12 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	} else { // Query for a versioned worker
 		setIdx, buildIdIdx := worker_versioning.FindBuildId(request.versioningData, request.buildId)
 		if setIdx == -1 {
-			// build id not in set - unreachable
+			// build ID not in set - unreachable
 			return &taskQueueReachability, nil
 		}
 		set := versionSets[setIdx]
 		if set.BuildIds[buildIdIdx].State == persistencespb.STATE_DELETED {
-			// build id not in set anymore - unreachable
+			// build ID not in set anymore - unreachable
 			return &taskQueueReachability, nil
 		}
 		isDefaultInSet := buildIdIdx == len(set.BuildIds)-1

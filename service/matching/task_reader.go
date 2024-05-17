@@ -31,7 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -122,7 +121,7 @@ dispatchLoop:
 			if !ok { // Task queue getTasks pump is shutdown
 				break dispatchLoop
 			}
-			task := newInternalTask(taskInfo, tr.backlogMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+			task := newInternalTaskFromBacklog(taskInfo, tr.backlogMgr.completeTask)
 			for ctx.Err() == nil {
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
 				err := tr.backlogMgr.processSpooledTask(taskCtx, task)
