@@ -485,6 +485,31 @@ func (s *namespaceValidatorSuite) Test_Intercept_RegisterNamespace() {
 	s.False(handlerCalled)
 }
 
+func (s *namespaceValidatorSuite) Test_StateValidationIntercept_ShouldValidate() {
+	testCases := []struct {
+		req            any
+		shouldValidate bool
+	}{
+		{
+			req:            &adminservice.AddSearchAttributesRequest{},
+			shouldValidate: true,
+		},
+		{
+			req:            &workflowservice.RegisterNamespaceRequest{},
+			shouldValidate: true,
+		},
+		{
+			req:            &adminservice.DescribeHistoryHostRequest{},
+			shouldValidate: false,
+		},
+	}
+	nvi := NewNamespaceValidatorInterceptor(nil, nil, nil)
+	for _, testCase := range testCases {
+		result := nvi.shouldValidateNamespace(testCase.req)
+		s.Equal(testCase.shouldValidate, result)
+	}
+}
+
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEnforcement() {
 	testCases := []struct {
 		tokenNamespaceID                namespace.ID

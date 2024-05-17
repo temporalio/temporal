@@ -212,6 +212,11 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+
+	if !ni.shouldValidateNamespace(req) {
+		return handler(ctx, req)
+	}
+
 	namespaceEntry, err := ni.extractNamespace(req)
 	if err != nil {
 		return nil, err
@@ -222,6 +227,16 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 	}
 
 	return handler(ctx, req)
+}
+
+// while most(all?) workflow related requests must have namespace field
+// admin request at most should
+func (ni *NamespaceValidatorInterceptor) shouldValidateNamespace(req interface{}) bool {
+	switch req.(type) {
+	case *adminservice.DescribeHistoryHostRequest:
+		return false
+	}
+	return true
 }
 
 // ValidateState validates:
