@@ -35,6 +35,8 @@ import (
 
 	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -73,6 +75,7 @@ type (
 		fnInterceptor    FieldNameInterceptor
 		fvInterceptor    FieldValuesInterceptor
 		allowedOperators map[string]struct{}
+		nameType         searchattribute.NameTypeMap
 	}
 
 	isConverter struct {
@@ -167,6 +170,7 @@ func NewComparisonExprConverter(
 	fnInterceptor FieldNameInterceptor,
 	fvInterceptor FieldValuesInterceptor,
 	allowedOperators map[string]struct{},
+	nameType searchattribute.NameTypeMap,
 ) ExprConverter {
 	if fnInterceptor == nil {
 		fnInterceptor = &NopFieldNameInterceptor{}
@@ -178,6 +182,7 @@ func NewComparisonExprConverter(
 		fnInterceptor:    fnInterceptor,
 		fvInterceptor:    fvInterceptor,
 		allowedOperators: allowedOperators,
+		nameType:         nameType,
 	}
 }
 
@@ -470,6 +475,11 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		return nil, NewConverterError("operator '%v' not allowed in comparison expression", comparisonExpr.Operator)
 	}
 
+	tp, err := c.nameType.GetType(colName)
+	if err != nil {
+		return nil, err
+	}
+
 	var query elastic.Query
 	switch comparisonExpr.Operator {
 	case sqlparser.GreaterEqualStr:
@@ -482,10 +492,18 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
 	case sqlparser.EqualStr:
 		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
-		query = elastic.NewMatchQuery(colName, colValues[0])
+		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD || tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
+			query = elastic.NewTermQuery(colName, colValues[0])
+		} else {
+			query = elastic.NewMatchQuery(colName, colValues[0])
+		}
 	case sqlparser.NotEqualStr:
 		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
-		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, colValues[0]))
+		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD || tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
+			query = elastic.NewBoolQuery().MustNot(elastic.NewTermQuery(colName, colValues[0]))
+		} else {
+			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, colValues[0]))
+		}
 	case sqlparser.InStr:
 		query = elastic.NewTermsQuery(colName, colValues...)
 	case sqlparser.NotInStr:
