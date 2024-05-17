@@ -937,10 +937,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		CommandFn                func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command
 	}{
 		{
-			Name:                     "message-update-id-not-found",
+			Name:                     "message-update-id-not-found-and-accepted-request-not-set",
 			RespondWorkflowTaskError: "wasn't found",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.MessageID("update-accepted"),
@@ -949,7 +948,36 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
-							AcceptedRequest:                  updRequest,
+							AcceptedRequest:                  nil, // Important not to pass original request back.
+						}),
+					},
+				}
+			},
+			CommandFn: func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command {
+				return []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
+						Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
+							MessageId: tv.MessageID("update-accepted"),
+						}},
+					},
+				}
+			},
+		},
+		{
+			Name:                     "message-update-id-not-found-and-accepted-request-is-set",
+			RespondWorkflowTaskError: "",
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 tv.MessageID("update-accepted"),
+						ProtocolInstanceId: tv.WithUpdateID("lost-update-id").UpdateID(),
+						SequencingId:       nil,
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest, // Update will be resurrected from original request.
 						}),
 					},
 				}
@@ -3784,7 +3812,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLo
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_BecauseOfShardMove() {
+func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResurrectedAfterShardMove() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3799,17 +3827,16 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
 `, task.History)
-			// Close shard. InvalidArgument error will be returned to RespondWorkflowTaskCompleted.
+			// Close shard. Update registry is lost but update will be resurrected in registry from acceptance message.
 			s.closeShard(tv.WorkflowID())
-			return nil, nil
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 2:
 			s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // New WT is scheduled after previous WT has failed. It doesn't have new events and messages.
-  6 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
 `, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -3831,7 +3858,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 
 			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 2:
-			s.Empty(task.Messages, "update must be lost due to shard reload")
+			s.Empty(task.Messages, "update must be processed and not delivered again")
 			return nil, nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
@@ -3866,6 +3893,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 				},
 			},
 		})
+
+		// Even if update was resurrected on server and completed, original initiator
+		// lost connection to it and times out. Following poll for update results returns them right away.
 		assert.Error(s.T(), err1)
 		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
 		assert.Nil(s.T(), updateResponse)
@@ -3874,16 +3904,24 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 	}
 	go updateWorkflowFn()
 
-	// Process update in workflow. Update won't be found on server due to shard reload and server will fail WT.
-	_, err := poller.PollAndProcessWorkflowTask()
-	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
-	s.ErrorContains(err, fmt.Sprintf("update %s wasn't found", tv.UpdateID("1")))
+	// To make sure that first WFT has update message.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
+	// Process update in workflow. Update won't be found on server but will be resurrected from acceptance message and completed.
+	res, err := poller.PollAndProcessWorkflowTask(WithForceNewWorkflowTask)
+	s.NoError(err)
+	s.NotNil(res)
+
+	updateResp := res.NewTask
 	<-updateResultCh
+	pollResult, err := s.pollUpdate(tv, "1", &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	s.NoError(err)
+	s.NotNil(pollResult)
+	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, pollResult.GetOutcome().GetSuccess()))
+	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask()
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 
@@ -3896,11 +3934,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted
-  7 WorkflowTaskCompleted
-  8 WorkflowExecutionCompleted`, events)
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionCompleted`, events)
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_DeduplicateID() {
