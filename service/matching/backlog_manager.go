@@ -300,34 +300,31 @@ func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()
 }
 
-// countTasksFromTaskQueue counts the total number of tasks present in a task queue; returns 0 for
-// cassandra databases since the in-memory counter is a good estimate for the number of tasks present while it returns
-// the actual number of tasks in the task queue for sql databases. This is required since SQL databases do not persist
-// taskQueueInfo when tasks are created.
-func (c *backlogManagerImpl) countTasksFromTaskQueue(ctx context.Context) (int64, error) {
-	tasksPresent, err := c.db.store.CountTasksExact(ctx, &persistence.CountTasksExactRequest{
+// getApproximateBacklogCount returns an estimate for the number of tasks in the backlog. It returns an exact count for SQL
+// databases while an approximate value for Cassandra. The approximate value is susceptible to under-counting and over-counting in the following scenarios:
+//
+// 1. Under-counting: The latest ackLevel is not persisted with task creation. Consider a case where we add 10 tasks and complete 9 of them, moving the ackLevel
+// to 9, and then add 1 more task. This shall make the backlog counter read 2 which also gets persisted. On the event that `UpdateState` does not get called, the node crashes,
+// and `skipFinalUpdate` is set to true, the latest value of ackLevel does not get persisted. On restarting the node, the backlog counter would be an under-count since
+// there are 11 tasks in the backlog, according to the ackLevel read (0), but our counter reads 2.
+//
+// 2. Under-counting: If there is an ownership transfer and the old owner writes more tasks to backlog between the `GetTaskQueue` and `UpdateTaskQueue`
+// calls of the new owner lease takeover.
+//
+// 3. Over-counting: Cassandra randomly TTL'es out tasks which can lead to the counter being an overestimate.
+func (c *backlogManagerImpl) getApproximateBacklogCount(ctx context.Context) (int64, error) {
+	exactTasks, err := c.db.store.CountTasksExact(ctx, &persistence.CountTasksExactRequest{
 		NamespaceID: c.db.queue.NamespaceId().String(),
 		TaskQueue:   c.db.queue.PersistenceName(),
 		TaskType:    c.db.queue.TaskType(),
 	})
-	if _, ok := err.(*serviceerror.Unimplemented); ok {
-		tasksPresent = 0
-	} else if err != nil {
-		return 0, err
-	}
-	return int64(tasksPresent), nil
-}
 
-func (c *backlogManagerImpl) getApproximateBacklogCount(ctx context.Context) (int64, error) {
-	exactTasks, err := c.countTasksFromTaskQueue(ctx)
+	// preventing a negative valued backlog count
+	if _, ok := err.(*serviceerror.Unimplemented); ok {
+		return max(0, c.db.getApproximateBacklogCount()), nil
+	}
 	if err != nil {
 		return 0, err
 	}
-
-	if exactTasks > 0 {
-		// since this will be more accurate than approximateBacklogCounter
-		return exactTasks, nil
-	}
-	// to ensure our in-memory counter never goes below 0
-	return max(0, c.db.getApproximateBacklogCount()), nil
+	return int64(exactTasks), nil
 }

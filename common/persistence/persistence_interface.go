@@ -78,12 +78,8 @@ type (
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*InternalListTaskQueueUserDataEntriesResponse, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
-		// CountTasksExact returns the number of tasks present in a task queue which use SQL databases while 0 for those using Cassandra.
-		// When using SQL, creation of batches of tasks result in no task queue information being persisted. On failure and restart of such task queues, *before the UpdateState*
-		// operation, this will result in the approximateBacklogCounter being 0 despite having tasks in the backlog. To prevent such under-counting,
-		// this function counts number of tasks present in the task queue which is then used to update the in-memory backlog counter.
-		// For Cassandra, the implementation returns 0 since the in-memory counter is an accurate value of the backlog since task queue information
-		// is stored during task creation.
+		// CountTasksExact is an optional method which, if implemented, will be used to populate `BacklogInfo.ApproximateBacklogCount` in `DescribeTaskQueue` response.
+		// If this is method returns a `serviceerror.Unimplemented` error, we'll use an approximate value tracked by server to return in `BacklogInfo`.
 		CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error)
 	}
 	// MetadataStore is a lower level of MetadataManager
