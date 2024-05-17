@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -57,6 +58,7 @@ type (
 		clientClusterShardCount int32
 		clientClusterName       string
 		clientShardKey          ClusterShardKey
+		config                  *configs.Config
 	}
 	SourceTaskConverter interface {
 		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
@@ -76,6 +78,7 @@ func NewSourceTaskConverter(
 	clientClusterShardCount int32,
 	clientClusterName string,
 	clientShardKey ClusterShardKey,
+	config *configs.Config,
 ) *SourceTaskConverterImpl {
 	return &SourceTaskConverterImpl{
 		historyEngine:           historyEngine,
@@ -83,6 +86,7 @@ func NewSourceTaskConverter(
 		clientClusterShardCount: clientClusterShardCount,
 		clientClusterName:       clientClusterName,
 		clientShardKey:          clientShardKey,
+		config:                  config,
 	}
 }
 
@@ -120,9 +124,9 @@ func (c *SourceTaskConverterImpl) Convert(
 	var cancel context.CancelFunc
 
 	if namespaceEntry != nil {
-		ctx, cancel = newTaskContext(namespaceEntry.Name().String())
+		ctx, cancel = newTaskContext(namespaceEntry.Name().String(), c.config.ReplicationTaskApplyTimeout())
 	} else {
-		ctx, cancel = context.WithTimeout(context.Background(), applyReplicationTimeout)
+		ctx, cancel = context.WithTimeout(context.Background(), c.config.ReplicationTaskApplyTimeout())
 	}
 
 	defer cancel()

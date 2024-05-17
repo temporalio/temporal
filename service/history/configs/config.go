@@ -249,6 +249,7 @@ type Config struct {
 	ContinueAsNewMinInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// The following is used by the new RPC replication stack
+	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherAggregationInterval            dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient         dynamicconfig.FloatPropertyFn
@@ -530,6 +531,7 @@ func NewConfig(
 		WorkflowTaskCriticalAttempts: dc.GetIntProperty(dynamicconfig.WorkflowTaskCriticalAttempts, 10),
 		WorkflowTaskRetryMaxInterval: dc.GetDurationProperty(dynamicconfig.WorkflowTaskRetryMaxInterval, time.Minute*10),
 
+		ReplicationTaskApplyTimeout:                  dc.GetDurationProperty(dynamicconfig.ReplicationTaskApplyTimeout, 20*time.Second),
 		ReplicationTaskFetcherParallelism:            dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 4),
 		ReplicationTaskFetcherAggregationInterval:    dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
 		ReplicationTaskFetcherTimerJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),

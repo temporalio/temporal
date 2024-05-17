@@ -57,8 +57,6 @@ const (
 )
 
 const (
-	applyReplicationTimeout = 20 * time.Second
-
 	ResendAttempt = 2
 )
 
@@ -454,11 +452,12 @@ FilterLoop:
 
 func newTaskContext(
 	namespaceName string,
+	timeout time.Duration,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemPreemptableCallerInfo,
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
-	return context.WithTimeout(ctx, applyReplicationTimeout)
+	return context.WithTimeout(ctx, timeout)
 }

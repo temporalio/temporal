@@ -918,6 +918,8 @@ const (
 	// MutableStateChecksumInvalidateBefore is the epoch timestamp before which all checksums are to be discarded
 	MutableStateChecksumInvalidateBefore = "history.mutableStateChecksumInvalidateBefore"
 
+	// ReplicationTaskApplyTimeout is the context timeout for replication task apply
+	ReplicationTaskApplyTimeout = "history.ReplicationTaskApplyTimeout"
 	// ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
 	ReplicationTaskFetcherParallelism = "history.ReplicationTaskFetcherParallelism"
 	// ReplicationTaskFetcherAggregationInterval determines how frequently the fetch requests are sent
