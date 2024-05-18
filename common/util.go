@@ -391,7 +391,7 @@ func ErrorHash(err error) string {
 	if err != nil {
 		return fmt.Sprintf("%08x", farm.Fingerprint32([]byte(err.Error())))
 	}
-	return "0000000"
+	return "00000000"
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.

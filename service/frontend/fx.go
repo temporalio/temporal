@@ -257,7 +257,8 @@ func GrpcServerOptionsProvider(
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorsInterceptor.Intercept,
-		rpc.NewServiceErrorInterceptor(logger),
+		rpc.ServiceErrorInterceptor,
+		rpc.NewFrontendServiceErrorInterceptor(logger),
 		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor

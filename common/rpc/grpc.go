@@ -154,20 +154,18 @@ func headersInterceptor(
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
-func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
-	var reErr *serviceerror.ResourceExhausted
-	if errors.As(err, &reErr) {
-		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
-			ResourceExhaustedCauseHeader, reErr.Cause.String(),
-			ResourceExhaustedScopeHeader, reErr.Scope.String(),
-		))
-		if headerErr != nil {
-			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))
-		}
-	}
+func ServiceErrorInterceptor(
+	ctx context.Context,
+	req interface{},
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+
+	resp, err := handler(ctx, req)
+	return resp, serviceerror.ToStatus(err).Err()
 }
 
-func NewServiceErrorInterceptor(
+func NewFrontendServiceErrorInterceptor(
 	logger log.Logger,
 ) grpc.UnaryServerInterceptor {
 	return func(
@@ -178,14 +176,34 @@ func NewServiceErrorInterceptor(
 	) (interface{}, error) {
 
 		resp, err := handler(ctx, req)
-		if err != nil {
-			addHeadersForResourceExhausted(ctx, logger, err)
 
-			if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
-				err = serviceerror.NewUnavailable(shardUnavailableErrorMessage)
-			}
+		if err == nil {
+			return resp, err
 		}
 
-		return resp, serviceerror.ToStatus(err).Err()
+		// mask some internal service errors at frontend
+		switch err.(type) {
+		case *serviceerrors.ShardOwnershipLost:
+			err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+		case *serviceerror.DataLoss:
+			err = serviceerror.NewUnavailable("internal history service error")
+		}
+
+		addHeadersForResourceExhausted(ctx, logger, err)
+
+		return resp, err
+	}
+}
+
+func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
+	var reErr *serviceerror.ResourceExhausted
+	if errors.As(err, &reErr) {
+		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
+			ResourceExhaustedCauseHeader, reErr.Cause.String(),
+			ResourceExhaustedScopeHeader, reErr.Scope.String(),
+		))
+		if headerErr != nil {
+			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))
+		}
 	}
 }
