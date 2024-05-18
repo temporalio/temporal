@@ -59,6 +59,18 @@ func (m *MockNamespaceReplicationQueue) EXPECT() *MockNamespaceReplicationQueueM
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockNamespaceReplicationQueue) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockNamespaceReplicationQueueMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Close))
+}
+
 // DeleteMessageFromDLQ mocks base method.
 func (m *MockNamespaceReplicationQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int64) error {
 	m.ctrl.T.Helper()

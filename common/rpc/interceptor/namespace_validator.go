@@ -304,6 +304,9 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
 		}
 		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	case *adminservice.DescribeHistoryHostRequest:
+		// Special case for DescribeHistoryHost API which should run regardless of namespace state.
+		return nil, nil
 	case *adminservice.AddSearchAttributesRequest,
 		*adminservice.RemoveSearchAttributesRequest,
 		*adminservice.GetSearchAttributesRequest,

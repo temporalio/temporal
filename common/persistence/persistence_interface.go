@@ -51,6 +51,27 @@ type (
 	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
 
+	// DataStoreFactory is a low level interface to be implemented by a datastore
+	// Examples of datastores are cassandra, mysql etc
+	DataStoreFactory interface {
+		// Close closes the factory
+		Close()
+		// NewTaskStore returns a new task store
+		NewTaskStore() (TaskStore, error)
+		// NewShardStore returns a new shard store
+		NewShardStore() (ShardStore, error)
+		// NewMetadataStore returns a new metadata store
+		NewMetadataStore() (MetadataStore, error)
+		// NewExecutionStore returns a new execution store
+		NewExecutionStore() (ExecutionStore, error)
+		NewQueue(queueType QueueType) (Queue, error)
+		NewQueueV2() (QueueV2, error)
+		// NewClusterMetadataStore returns a new metadata store
+		NewClusterMetadataStore() (ClusterMetadataStore, error)
+		// NewNexusEndpointStore returns a new nexus service store
+		NewNexusEndpointStore() (NexusEndpointStore, error)
+	}
+
 	// ShardStore is a lower level of ShardManager
 	ShardStore interface {
 		Closeable
@@ -181,14 +202,14 @@ type (
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
-	// NexusIncomingServiceStore is a store for managing Nexus services
-	NexusIncomingServiceStore interface {
+	// NexusEndpointStore is a store for managing Nexus endpoints
+	NexusEndpointStore interface {
 		Closeable
 		GetName() string
-		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
-		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
-		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*InternalNexusIncomingService, error)
-		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
+		CreateOrUpdateNexusEndpoint(ctx context.Context, request *InternalCreateOrUpdateNexusEndpointRequest) error
+		DeleteNexusEndpoint(ctx context.Context, request *DeleteNexusEndpointRequest) error
+		GetNexusEndpoint(ctx context.Context, request *GetNexusEndpointRequest) (*InternalNexusEndpoint, error)
+		ListNexusEndpoints(ctx context.Context, request *ListNexusEndpointsRequest) (*InternalListNexusEndpointsResponse, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -741,21 +762,21 @@ type (
 		RecordExpiry time.Time
 	}
 
-	InternalNexusIncomingService struct {
-		ServiceID string
-		Version   int64
-		Data      *commonpb.DataBlob
+	InternalNexusEndpoint struct {
+		ID      string
+		Version int64
+		Data    *commonpb.DataBlob
 	}
 
-	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
+	InternalCreateOrUpdateNexusEndpointRequest struct {
 		LastKnownTableVersion int64
-		Service               InternalNexusIncomingService
+		Endpoint              InternalNexusEndpoint
 	}
 
-	InternalListNexusIncomingServicesResponse struct {
+	InternalListNexusEndpointsResponse struct {
 		TableVersion  int64
 		NextPageToken []byte
-		Services      []InternalNexusIncomingService
+		Endpoints     []InternalNexusEndpoint
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we

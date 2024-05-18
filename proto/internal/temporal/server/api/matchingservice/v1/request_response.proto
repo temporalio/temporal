@@ -36,7 +36,6 @@ import "temporal/api/query/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
-import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 import "temporal/server/api/taskqueue/v1/message.proto";
@@ -115,12 +114,11 @@ message AddWorkflowTaskRequest {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 5;
-    string forwarded_source = 6;
-    temporal.server.api.enums.v1.TaskSource source = 7;
     temporal.server.api.clock.v1.VectorClock clock = 9;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
 }
 
 message AddWorkflowTaskResponse {
@@ -137,12 +135,11 @@ message AddActivityTaskRequest {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 6;
-    string forwarded_source = 7;
-    temporal.server.api.enums.v1.TaskSource source = 8;
     temporal.server.api.clock.v1.VectorClock clock = 9;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
 }
 
 message AddActivityTaskResponse {
@@ -154,10 +151,10 @@ message QueryWorkflowRequest {
     string namespace_id = 1;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.workflowservice.v1.QueryWorkflowRequest query_request = 3;
-    string forwarded_source = 4;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
 }
 
 message QueryWorkflowResponse {
@@ -374,8 +371,7 @@ message DispatchNexusTaskRequest {
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     // Nexus request extracted by the frontend and translated into Temporal API format.
     temporal.api.nexus.v1.Request request = 3;
-    // Non-empty if this task was forwarded from a child partition.
-    string forwarded_source = 4;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 4;
 }
 
 message DispatchNexusTaskResponse {
@@ -427,58 +423,58 @@ message RespondNexusTaskFailedResponse {
 }
 
 // (-- api-linter: core::0133::request-unknown-fields=disabled
-//     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0133::request-resource-field=disabled
-//     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0133::request-parent-required=disabled
-//     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
-message CreateNexusIncomingServiceRequest {
-    temporal.api.nexus.v1.IncomingServiceSpec spec = 1;
+//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+message CreateNexusEndpointRequest {
+    temporal.api.nexus.v1.EndpointSpec spec = 1;
 }
 
-message CreateNexusIncomingServiceResponse {
-    temporal.api.nexus.v1.IncomingService service = 1;
+message CreateNexusEndpointResponse {
+    temporal.api.nexus.v1.Endpoint endpoint = 1;
 }
 
 // (-- api-linter: core::0134::request-resource-required=disabled
-//     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0134::request-mask-required=disabled
-//     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
-message UpdateNexusIncomingServiceRequest {
-    // ID of the service to update.
+//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+message UpdateNexusEndpointRequest {
+    // ID of the endpoint to update.
     string id = 1;
-    // Version of the service, used for optimistic concurrency. Must match current version in persistence or the request
-    // will fail a FAILED_PRECONDITION error.
+    // Version of the endpoint, used for optimistic concurrency. Must match current version in persistence or the
+    // request will fail a FAILED_PRECONDITION error.
     int64 version = 2; 
-    temporal.api.nexus.v1.IncomingServiceSpec spec = 3;
+    temporal.api.nexus.v1.EndpointSpec spec = 3;
 }
 
-message UpdateNexusIncomingServiceResponse {
-    temporal.api.nexus.v1.IncomingService service = 1;
+message UpdateNexusEndpointResponse {
+    temporal.api.nexus.v1.Endpoint endpoint = 1;
 }
 
 // (-- api-linter: core::0135::request-name-behavior=disabled
-//     aip.dev/not-precedent: DeleteNexusIncomingServiceRequest RPC doesn't follow Google API format. --)
+//     aip.dev/not-precedent: DeleteNexusEndpointRequest RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0135::request-name-reference=disabled
-//     aip.dev/not-precedent: DeleteNexusIncomingServiceRequest RPC doesn't follow Google API format. --)
-message DeleteNexusIncomingServiceRequest {
-    // ID of the service to delete.
+//     aip.dev/not-precedent: DeleteNexusEndpointRequest RPC doesn't follow Google API format. --)
+message DeleteNexusEndpointRequest {
+    // ID of the endpoint to delete.
     string id = 1;
 }
 
-message DeleteNexusIncomingServiceResponse {
+message DeleteNexusEndpointResponse {
 }
 
-message ListNexusIncomingServicesRequest {
-    // To get the next page, pass in `ListServicesResponse.next_page_token` from the previous page's response. The token
-    // will be empty if there's no other page.
+message ListNexusEndpointsRequest {
+    // To get the next page, pass in `ListNexusEndpointsResponse.next_page_token` from the previous page's response. The
+    // token will be empty if there's no other page.
     // Note: the last page may be empty if the total number of services registered is a multiple of the page size.
     // Mutually exclusive with wait. Specifying both will result in an invalid argument error.
     bytes next_page_token = 1;
     int32 page_size = 2;
-    // The services table has a monotonically increasing version number that is incremented on every change to the
-    // table. This field can be used to provide the last known table version in conjuction with the `wait` field to long
-    // poll on changes to the table.
+    // The nexus_endpoints table has a monotonically increasing version number that is incremented on every change to
+    // the table. This field can be used to provide the last known table version in conjuction with the `wait` field to
+    // long poll on changes to the table.
     // If next_page_token is not empty and the current table version does not match this field, this request will fail
     // with a failed precondition error.
     int64 last_known_table_version = 3;
@@ -487,9 +483,9 @@ message ListNexusIncomingServicesRequest {
     bool wait = 4;
 }
 
-message ListNexusIncomingServicesResponse {
+message ListNexusEndpointsResponse {
     // Token for getting the next page.
     bytes next_page_token = 1;
     int64 table_version = 2;
-    repeated temporal.api.nexus.v1.IncomingService services = 3;
+    repeated temporal.api.nexus.v1.Endpoint endpoints = 3;
 }

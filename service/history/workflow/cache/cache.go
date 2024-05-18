@@ -439,7 +439,7 @@ func GetCurrentRunID(
 	if err != nil {
 		return "", err
 	}
-	defer currentRelease(retErr)
+	defer func() { currentRelease(retErr) }()
 
 	resp, err := shardContext.GetCurrentExecution(
 		ctx,
