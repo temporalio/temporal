@@ -218,7 +218,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				mockSdkClientFactory,
 				metrics.NoopMetricsHandler,
 				p.NewMockExecutionManager(ctrl),
-				// These nils are irrelevant since they're only used by the build id scavenger which is not tested here.
+				// These nils are irrelevant since they're only used by the build ID scavenger which is not tested here.
 				nil,
 				nil,
 				p.NewMockTaskManager(ctrl),
@@ -293,7 +293,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		mockSdkClientFactory,
 		metrics.NoopMetricsHandler,
 		p.NewMockExecutionManager(ctrl),
-		// These nils are irrelevant since they're only used by the build id scavenger which is not tested here.
+		// These nils are irrelevant since they're only used by the build ID scavenger which is not tested here.
 		nil,
 		nil,
 		p.NewMockTaskManager(ctrl),

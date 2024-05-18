@@ -103,6 +103,7 @@ type (
 
 	// NamespaceReplicationQueue is used to publish and list namespace replication tasks
 	NamespaceReplicationQueue interface {
+		Closeable
 		Publish(ctx context.Context, task *replicationspb.ReplicationTask) error
 		GetReplicationMessages(
 			ctx context.Context,
@@ -145,6 +146,10 @@ func (q *namespaceReplicationQueueImpl) Stop() {
 	close(q.done)
 
 	q.gorogrp.Cancel()
+}
+
+func (q *namespaceReplicationQueueImpl) Close() {
+	q.Stop()
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
@@ -245,13 +250,9 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 	}
 
 	// Ignore possibly delayed message
-	if ack, ok := ackLevels[clusterName]; ok && ack > lastProcessedMessageID {
+	if ack, ok := ackLevels[clusterName]; ok && ack >= lastProcessedMessageID {
 		return nil
 	}
-
-	// TODO remove this block in 1.12.x
-	delete(ackLevels, "")
-	// TODO remove this block in 1.12.x
 
 	// update ack level
 	ackLevels[clusterName] = lastProcessedMessageID

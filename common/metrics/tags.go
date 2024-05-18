@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/primitives"
@@ -54,6 +55,7 @@ const (
 	commandType    = "commandType"
 	serviceName    = "service_name"
 	actionType     = "action_type"
+	workerBuildId  = "worker-build-id"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
@@ -163,6 +165,13 @@ func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
 }
 
+func WorkerBuildIdTag(buildId string) Tag {
+	if buildId == "" {
+		buildId = "_unversioned_"
+	}
+	return &tagImpl{key: workerBuildId, value: buildId}
+}
+
 // WorkflowTypeTag returns a new workflow type tag.
 func WorkflowTypeTag(value string) Tag {
 	if len(value) == 0 {
@@ -217,6 +226,13 @@ func TaskTypeTag(value string) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: value}
 }
 
+func PartitionTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: PartitionTypeName, value: value}
+}
+
 func TaskPriorityTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
@@ -264,6 +280,13 @@ func NexusOutcomeTag(outcome string) Tag {
 
 func NexusMethodTag(value string) Tag {
 	return &tagImpl{key: nexusMethodTagName, value: value}
+}
+
+func NexusEndpointTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: nexusEndpointTagName, value: value}
 }
 
 // HttpStatusTag returns a new httpStatusTag.

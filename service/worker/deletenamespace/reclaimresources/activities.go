@@ -100,6 +100,7 @@ func (a *LocalActivities) CountExecutionsAdvVisibilityActivity(ctx context.Conte
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
@@ -122,6 +123,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {

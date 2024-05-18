@@ -63,7 +63,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -231,7 +231,11 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 		failure.NewServerFailure("some random workflow task failure details", false),
 		"some random workflow task failure identity",
-		"", "", "", 0,
+		nil,
+		"",
+		"",
+		"",
+		0,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -490,14 +494,16 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	err = s.mutableState.UpdateCurrentVersion(version+1, true)
 	s.NoError(err)
 
-	name, err := tqname.FromBaseName("tq")
+	f, err := tqid.NewTaskQueueFamily("", "tq")
 	s.NoError(err)
 
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		s.mutableState.GetNextEventID(),
 		uuid.New(),
-		&taskqueuepb.TaskQueue{Name: name.WithPartition(5).FullName()},
+		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
+		nil,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -509,6 +515,42 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	attrs := mutation.DBEventsBatches[0][0].GetWorkflowTaskScheduledEventAttributes()
 	s.NotNil(attrs)
 	s.Equal("tq", attrs.TaskQueue.Name)
+}
+
+func (s *mutableStateSuite) TestNewMutableStateInChain() {
+	executionTimerTaskStatuses := []int32{
+		TimerTaskStatusNone,
+		TimerTaskStatusCreated,
+	}
+
+	for _, taskStatus := range executionTimerTaskStatuses {
+		s.T().Run(
+			fmt.Sprintf("TimerTaskStatus: %v", taskStatus),
+			func(t *testing.T) {
+				currentMutableState := TestGlobalMutableState(
+					s.mockShard,
+					s.mockEventsCache,
+					s.logger,
+					1000,
+					tests.WorkflowID,
+					uuid.New(),
+				)
+				currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus = taskStatus
+
+				newMutableState := NewMutableStateInChain(
+					s.mockShard,
+					s.mockEventsCache,
+					s.logger,
+					tests.GlobalNamespaceEntry,
+					tests.WorkflowID,
+					uuid.New(),
+					s.mockShard.GetTimeSource().Now(),
+					currentMutableState,
+				)
+				s.Equal(taskStatus, newMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus)
+			},
+		)
+	}
 }
 
 func (s *mutableStateSuite) TestSanitizedMutableState() {
@@ -534,6 +576,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 			Clock:   1,
 		},
 	}}
+	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
 
 	mutableStateProto := mutableState.CloneToProto()
 	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0, 0)
@@ -543,6 +586,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	for _, childInfo := range sanitizedMutableState.pendingChildExecutionInfoIDs {
 		s.Nil(childInfo.Clock)
 	}
+	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 }
 
 func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchApplied(version int64, workflowID, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
@@ -646,7 +690,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(nil,
+	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
+		nil,
 		workflowTaskStartedEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskStartedEvent.GetEventId(),
@@ -654,6 +699,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()),
 		false,
 		123678,
+		nil,
+		int64(0),
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -700,7 +747,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(nil,
+	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
+		nil,
 		newWorkflowTaskStartedEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetEventId(),
@@ -708,6 +756,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()),
 		false,
 		123678,
+		nil,
+		int64(0),
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -872,9 +922,10 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 
 	acceptedUpdateID := s.T().Name() + "-accepted-update-id"
 	acceptedMsgID := s.T().Name() + "-accepted-msg-id"
+	var acptEvents []*historypb.HistoryEvent
 	for i := 0; i < 2; i++ {
 		updateID := fmt.Sprintf("%s-%d", acceptedUpdateID, i)
-		_, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
 			updateID,
 			fmt.Sprintf("%s-%d", acceptedMsgID, i),
 			1,
@@ -883,25 +934,39 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 			},
 		)
 		s.Require().NoError(err)
+		s.Require().NotNil(acptEvent)
+		acptEvents = append(acptEvents, acptEvent)
 	}
-	completedUpdateID := s.T().Name() + "-completed-update-id"
-	completedOutcome := &updatepb.Outcome{
-		Value: &updatepb.Outcome_Success{Success: testPayloads},
-	}
+	s.Require().Len(acptEvents, 2, "expected to create 2 UpdateAccepted events")
+
 	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
 		1234,
 		&updatepb.Response{
-			Meta:    &updatepb.Meta{UpdateId: completedUpdateID},
-			Outcome: completedOutcome,
+			Meta: &updatepb.Meta{UpdateId: s.T().Name() + "-completed-update-without-accepted-event"},
+			Outcome: &updatepb.Outcome{
+				Value: &updatepb.Outcome_Success{Success: testPayloads},
+			},
+		},
+	)
+	s.Require().Error(err)
+
+	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		acptEvents[0].EventId,
+		&updatepb.Response{
+			Meta: &updatepb.Meta{UpdateId: acptEvents[0].GetWorkflowExecutionUpdateAcceptedEventAttributes().GetProtocolInstanceId()},
+			Outcome: &updatepb.Outcome{
+				Value: &updatepb.Outcome_Success{Success: testPayloads},
+			},
 		},
 	)
 	s.Require().NoError(err)
+	s.Require().NotNil(completedEvent)
 
-	s.Require().Len(cacheStore, 3, "expected 1 completed update + 2 accepted in cache")
+	s.Require().Len(cacheStore, 3, "expected 1 UpdateCompleted event + 2 UpdateAccepted events in cache")
 
-	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedUpdateID)
+	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetMeta().GetUpdateId())
 	s.Require().NoError(err)
-	s.Require().Equal(completedOutcome, outcome)
+	s.Require().Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), outcome)
 
 	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
 	s.Require().Error(err)
@@ -918,12 +983,12 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		}
 	})
 	s.Require().Equal(numCompleted, 1, "expected 1 completed")
-	s.Require().Equal(numAccepted, 2, "expected 2 accepted")
+	s.Require().Equal(numAccepted, 1, "expected 1 accepted")
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
 	s.Require().NoError(err)
-	s.Require().Len(mutation.ExecutionInfo.UpdateInfos, 3,
-		"expected 1 completed update + 2 accepted in mutation")
+	s.Require().Len(mutation.ExecutionInfo.UpdateInfos, 2,
+		"expected 1 completed update + 1 accepted in mutation")
 }
 
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
@@ -1013,7 +1078,11 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(1234, &updatepb.Response{})
+	accptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent("random-updateId", "random", 0, &updatepb.Request{})
+	s.NoError(err)
+	s.NotNil(accptEvent)
+
+	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(accptEvent.EventId, &updatepb.Response{})
 	s.NoError(err)
 
 	_, err = s.mutableState.AddWorkflowExecutionSignaled(
@@ -1132,6 +1201,8 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		activityInfo.ScheduledEventId,
 		uuid.New(),
 		"worker-identity",
+		nil,
+		nil,
 	)
 	s.NoError(err)
 
@@ -1203,25 +1274,25 @@ func (s *mutableStateSuite) TestUpdateBuildIdsSearchAttribute() {
 			s.NoError(err)
 
 			// Max 0
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 0)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 0)
 			s.NoError(err)
 			s.Equal([]string{}, s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 40)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
 			// Add the same build ID
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 40)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.2"), 4, 40)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.2"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
 
 			// Limit applies
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.3"), 4, 40)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.3"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
 		})

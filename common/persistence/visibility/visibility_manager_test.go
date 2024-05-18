@@ -93,16 +93,38 @@ func (s *VisibilityManagerSuite) TearDownTest() {
 }
 
 func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
+	startTime := time.Now().UTC()
+	executionTime := startTime.Add(1 * time.Minute)
 	request := &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
 			Execution:        &testWorkflowExecution,
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTime:        time.Now().UTC(),
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 	}
-	s.visibilityStore.EXPECT().RecordWorkflowExecutionStarted(gomock.Any(), gomock.Any()).Return(nil)
+
+	memoBlob, err := serializeMemo(request.Memo)
+	s.NoError(err)
+
+	s.visibilityStore.EXPECT().RecordWorkflowExecutionStarted(
+		gomock.Any(),
+		&store.InternalRecordWorkflowExecutionStartedRequest{
+			InternalVisibilityRequestBase: &store.InternalVisibilityRequestBase{
+				NamespaceID:      request.NamespaceID.String(),
+				WorkflowID:       request.Execution.GetWorkflowId(),
+				RunID:            request.Execution.GetRunId(),
+				WorkflowTypeName: request.WorkflowTypeName,
+				StartTime:        request.StartTime,
+				ExecutionTime:    request.ExecutionTime,
+				Status:           request.Status,
+				Memo:             memoBlob,
+			},
+		},
+	).Return(nil)
 	s.metricsHandler.EXPECT().
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
@@ -112,23 +134,49 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
 
 	// no remaining tokens
-	err := s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request)
+	err = s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request)
 	s.Error(err)
 	s.ErrorIs(err, persistence.ErrPersistenceLimitExceeded)
 }
 
 func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
+	startTime := time.Now().UTC()
+	executionTime := startTime.Add(1 * time.Minute)
+	closeTime := startTime.Add(2 * time.Minute)
 	request := &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
 			Execution:        &testWorkflowExecution,
 			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		},
+		CloseTime:         closeTime,
+		ExecutionDuration: closeTime.Sub(executionTime),
 	}
 
-	s.visibilityStore.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).Return(nil)
+	memoBlob, err := serializeMemo(request.Memo)
+	s.NoError(err)
+
+	s.visibilityStore.EXPECT().RecordWorkflowExecutionClosed(
+		gomock.Any(),
+		&store.InternalRecordWorkflowExecutionClosedRequest{
+			InternalVisibilityRequestBase: &store.InternalVisibilityRequestBase{
+				NamespaceID:      request.NamespaceID.String(),
+				WorkflowID:       request.Execution.GetWorkflowId(),
+				RunID:            request.Execution.GetRunId(),
+				WorkflowTypeName: request.WorkflowTypeName,
+				StartTime:        request.StartTime,
+				ExecutionTime:    request.ExecutionTime,
+				Status:           request.Status,
+				Memo:             memoBlob,
+			},
+			CloseTime:         request.CloseTime,
+			ExecutionDuration: request.ExecutionDuration,
+		},
+	).Return(nil)
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope),
@@ -137,170 +185,9 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
 
-	err := s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request)
+	err = s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request)
 	s.Error(err)
 	s.ErrorIs(err, persistence.ErrPersistenceLimitExceeded)
-}
-
-func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutions() {
-	request := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID: testNamespaceUUID,
-		Namespace:   testNamespace,
-	}
-	s.visibilityStore.EXPECT().ListOpenWorkflowExecutions(gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.metricsHandler.EXPECT().
-		WithTags(metrics.OperationTag(
-			metrics.VisibilityPersistenceListOpenWorkflowExecutionsScope),
-			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-		).
-		Return(metrics.NoopMetricsHandler).Times(2)
-	_, err := s.visibilityManager.ListOpenWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-
-	// no remaining tokens
-	_, err = s.visibilityManager.ListOpenWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
-}
-
-func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutions() {
-	request := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID: testNamespaceUUID,
-		Namespace:   testNamespace,
-	}
-	s.visibilityStore.EXPECT().ListClosedWorkflowExecutions(gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.metricsHandler.EXPECT().
-		WithTags(metrics.OperationTag(
-			metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope),
-			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-		).
-		Return(metrics.NoopMetricsHandler).Times(2)
-	_, err := s.visibilityManager.ListClosedWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-
-	// no remaining tokens
-	_, err = s.visibilityManager.ListClosedWorkflowExecutions(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
-}
-
-func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByType() {
-	req := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID: testNamespaceUUID,
-		Namespace:   testNamespace,
-	}
-	request := &manager.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: req,
-		WorkflowTypeName:              testWorkflowTypeName,
-	}
-	s.visibilityStore.EXPECT().ListOpenWorkflowExecutionsByType(gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.metricsHandler.EXPECT().
-		WithTags(metrics.OperationTag(
-			metrics.VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope),
-			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-		).
-		Return(metrics.NoopMetricsHandler).Times(2)
-	_, err := s.visibilityManager.ListOpenWorkflowExecutionsByType(context.Background(), request)
-	s.NoError(err)
-
-	// no remaining tokens
-	_, err = s.visibilityManager.ListOpenWorkflowExecutionsByType(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
-}
-
-func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByType() {
-	req := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID: testNamespaceUUID,
-		Namespace:   testNamespace,
-	}
-	request := &manager.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: req,
-		WorkflowTypeName:              testWorkflowTypeName,
-	}
-	s.visibilityStore.EXPECT().ListClosedWorkflowExecutionsByType(gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.metricsHandler.EXPECT().
-		WithTags(metrics.OperationTag(
-			metrics.VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope),
-			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-		).
-		Return(metrics.NoopMetricsHandler).Times(2)
-	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByType(context.Background(), request)
-	s.NoError(err)
-
-	// no remaining tokens
-	_, err = s.visibilityManager.ListClosedWorkflowExecutionsByType(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
-}
-
-func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
-	req := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID: testNamespaceUUID,
-		Namespace:   testNamespace,
-	}
-	request := &manager.ListWorkflowExecutionsByWorkflowIDRequest{
-		ListWorkflowExecutionsRequest: req,
-		WorkflowID:                    testWorkflowExecution.GetWorkflowId(),
-	}
-	s.visibilityStore.EXPECT().ListOpenWorkflowExecutionsByWorkflowID(gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.metricsHandler.EXPECT().
-		WithTags(metrics.OperationTag(
-			metrics.VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope),
-			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-		).
-		Return(metrics.NoopMetricsHandler).Times(2)
-	_, err := s.visibilityManager.ListOpenWorkflowExecutionsByWorkflowID(context.Background(), request)
-	s.NoError(err)
-
-	// no remaining tokens
-	_, err = s.visibilityManager.ListOpenWorkflowExecutionsByWorkflowID(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
-}
-
-func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByWorkflowID() {
-	req := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID: testNamespaceUUID,
-		Namespace:   testNamespace,
-	}
-	request := &manager.ListWorkflowExecutionsByWorkflowIDRequest{
-		ListWorkflowExecutionsRequest: req,
-		WorkflowID:                    testWorkflowExecution.GetWorkflowId(),
-	}
-	s.visibilityStore.EXPECT().ListClosedWorkflowExecutionsByWorkflowID(gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.metricsHandler.EXPECT().
-		WithTags(metrics.OperationTag(
-			metrics.VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope),
-			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-		).
-		Return(metrics.NoopMetricsHandler).Times(2)
-	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByWorkflowID(context.Background(), request)
-	s.NoError(err)
-
-	// no remaining tokens
-	_, err = s.visibilityManager.ListClosedWorkflowExecutionsByWorkflowID(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
-}
-
-func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByStatus() {
-	req := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID: testNamespaceUUID,
-		Namespace:   testNamespace,
-	}
-	request := &manager.ListClosedWorkflowExecutionsByStatusRequest{
-		ListWorkflowExecutionsRequest: req,
-		Status:                        enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-	}
-	s.visibilityStore.EXPECT().ListClosedWorkflowExecutionsByStatus(gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.metricsHandler.EXPECT().
-		WithTags(
-			metrics.OperationTag(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope),
-			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-		).
-		Return(metrics.NoopMetricsHandler).Times(2)
-	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
-	s.NoError(err)
-
-	// no remaining tokens
-	_, err = s.visibilityManager.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }
 
 func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {

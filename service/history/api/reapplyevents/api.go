@@ -108,7 +108,7 @@ func Invoke(
 				// to accept events to be reapplied
 				baseRunID := mutableState.GetExecutionState().GetRunId()
 				resetRunID := uuid.New()
-				baseRebuildLastEventID := mutableState.GetLastWorkflowTaskStartedEventID()
+				baseRebuildLastEventID := mutableState.GetStartedEventIdOfLastCompletedWorkflowTask()
 
 				// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
 				//  since cannot reapply event to a finished workflow which had no workflow tasks started
@@ -177,6 +177,7 @@ func Invoke(
 			reappliedEvents, err := eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
+				context.UpdateRegistry(ctx, nil),
 				toReapplyEvents,
 				runID,
 			)

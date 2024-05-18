@@ -71,10 +71,31 @@ var (
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"UpdateNamespace":                  {},
-		"GetReplicationMessages":           {},
-		"ReplicateEventsV2":                {},
-		"GetWorkflowExecutionRawHistoryV2": {},
+		"DescribeNamespace":                  {},
+		"UpdateNamespace":                    {},
+		"GetReplicationMessages":             {},
+		"ReplicateEventsV2":                  {},
+		"GetWorkflowExecutionRawHistory":     {},
+		"GetWorkflowExecutionRawHistoryV2":   {},
+		"GetWorkflowExecutionHistory":        {},
+		"GetWorkflowExecutionHistoryReverse": {},
+		"DescribeWorkflowExecution":          {},
+		"DescribeTaskQueue":                  {},
+		"ListTaskQueuePartitions":            {},
+		"ListOpenWorkflowExecutions":         {},
+		"ListClosedWorkflowExecutions":       {},
+		"ListWorkflowExecutions":             {},
+		"ListArchivedWorkflowExecutions":     {},
+		"ScanWorkflowExecutions":             {},
+		"CountWorkflowExecutions":            {},
+		"DescribeSchedule":                   {},
+		"ListScheduleMatchingTimes":          {},
+		"ListSchedules":                      {},
+		"GetWorkerBuildIdCompatibility":      {},
+		"GetWorkerVersioningRules":           {},
+		"GetWorkerTaskReachability":          {},
+		"DescribeBatchOperation":             {},
+		"ListBatchOperations":                {},
 	}
 )
 
@@ -283,6 +304,9 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
 		}
 		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	case *adminservice.DescribeHistoryHostRequest:
+		// Special case for DescribeHistoryHost API which should run regardless of namespace state.
+		return nil, nil
 	case *adminservice.AddSearchAttributesRequest,
 		*adminservice.RemoveSearchAttributesRequest,
 		*adminservice.GetSearchAttributesRequest,

@@ -44,7 +44,8 @@ const (
 	OpenAPIV3APIName                                = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV3Docs"
 	OpenAPIV2APIName                                = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV2Docs"
 	DispatchNexusTaskByNamespaceAndTaskQueueAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
-	DispatchNexusTaskByServiceAPIName               = "/temporal.api.nexusservice.v1.NexusService/DispatchByService"
+	DispatchNexusTaskByEndpointAPIName              = "/temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint"
+	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
 )
 
 var (
@@ -64,9 +65,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 
+		// potentially long-running, depending on the operations
+		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
+
 		// Dispatching a Nexus task is a potentially long running RPC, it's classified in the same bucket as QueryWorkflow.
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName: 1,
-		DispatchNexusTaskByServiceAPIName:               1,
+		DispatchNexusTaskByEndpointAPIName:              1,
 	}
 
 	// APIToPriority determines common API priorities.
@@ -86,10 +90,11 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation":            1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
-		DispatchNexusTaskByServiceAPIName:                                                   1,
+		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
 		// P2: Change State APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution": 2,
@@ -104,8 +109,8 @@ var (
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":             3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":      3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":       3,
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":              3,
@@ -126,6 +131,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":           4,
+		CompleteNexusOperation: 4,
 
 		// P5: Poll APIs and other low priority APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              5,
@@ -154,6 +160,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -165,6 +172,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      2,
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}

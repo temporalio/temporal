@@ -29,12 +29,15 @@ import (
 	"strings"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
@@ -50,19 +53,40 @@ type (
 
 	TelemetryInterceptor struct {
 		namespaceRegistry namespace.Registry
+		serializer        common.TaskTokenSerializer
 		metricsHandler    metrics.Handler
 		logger            log.Logger
+	}
+	ExecutionGetter interface {
+		GetExecution() *commonpb.WorkflowExecution
+	}
+	WorkflowExecutionGetter interface {
+		GetWorkflowExecution() *commonpb.WorkflowExecution
+	}
+	WorkflowIdGetter interface {
+		GetWorkflowId() string
+	}
+	RunIdGetter interface {
+		GetRunId() string
 	}
 )
 
 var (
 	metricsCtxKey = metricsContextKey{}
 
+	updateAcceptanceMessageBody anypb.Any
+	_                           = updateAcceptanceMessageBody.MarshalFrom(&updatepb.Acceptance{})
+
+	updateRejectionMessageBody anypb.Any
+	_                          = updateRejectionMessageBody.MarshalFrom(&updatepb.Rejection{})
+
+	updateResponseMessageBody anypb.Any
+	_                         = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
+
 	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).UnaryIntercept
 	_ grpc.StreamServerInterceptor = (*TelemetryInterceptor)(nil).StreamIntercept
 )
 
-// static variables used to emit action metrics.
 var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
@@ -82,9 +106,9 @@ var (
 		"UpdateSchedule":                   {},
 		"DeleteSchedule":                   {},
 		"PatchSchedule":                    {},
-		"UpdateWorkflowExecution":          {},
 	}
 
+	// commandActions is a subset of all the commands that are counted as actions.
 	commandActions = map[enums.CommandType]struct{}{
 		enums.COMMAND_TYPE_RECORD_MARKER:                      {},
 		enums.COMMAND_TYPE_START_TIMER:                        {},
@@ -104,6 +128,7 @@ func NewTelemetryInterceptor(
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
+		serializer:        common.NewProtoTaskTokenSerializer(),
 		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
@@ -174,7 +199,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	}
 
 	if err != nil {
-		ti.handleError(metricsHandler, logTags, err)
+		ti.handleError(req, metricsHandler, logTags, err)
 		return nil, err
 	}
 
@@ -196,7 +221,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 
 	err := handler(service, serverStream)
 	if err != nil {
-		ti.handleError(metricsHandler, logTags, err)
+		ti.handleError(nil, metricsHandler, logTags, err)
 		return err
 	}
 	return nil
@@ -233,27 +258,44 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 
 		hasMarker := false
 		for _, command := range completedRequest.Commands {
-			if _, ok := commandActions[command.CommandType]; ok {
-				switch command.CommandType {
-				case enums.COMMAND_TYPE_RECORD_MARKER:
-					// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
-					hasMarker = true
-				case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-					// Each child workflow counts as 2 actions. We use separate tags to track them separately.
-					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
-					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
-				default:
-					// handle all other command action
-					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
-				}
+			if _, ok := commandActions[command.CommandType]; !ok {
+				continue
+			}
+
+			switch command.CommandType { // nolint:exhaustive
+			case enums.COMMAND_TYPE_RECORD_MARKER:
+				// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
+				hasMarker = true
+			case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+				// Each child workflow counts as 2 actions. We use separate tags to track them separately.
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
+			default:
+				// handle all other command action
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
 			}
 		}
+
 		if hasMarker {
 			// Emit separate action metric for batch of markers.
 			// One workflow task response may contain multiple marker commands. Each marker will emit one
 			// command_RecordMarker_Xxx action metric. Depending on pricing model, you may want to ignore all individual
 			// command_RecordMarker_Xxx and use command_BatchMarkers instead.
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_BatchMarkers"))
+		}
+
+		for _, msg := range completedRequest.Messages {
+			if msg == nil || msg.Body == nil {
+				continue
+			}
+			switch msg.Body.GetTypeUrl() {
+			case updateAcceptanceMessageBody.TypeUrl:
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("message_UpdateWorkflowExecution:Acceptance"))
+			case updateRejectionMessageBody.TypeUrl:
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("message_UpdateWorkflowExecution:Rejection"))
+			case updateResponseMessageBody.TypeUrl:
+				// not billed
+			}
 		}
 
 	case pollActivityTaskQueue:
@@ -304,6 +346,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 }
 
 func (ti *TelemetryInterceptor) handleError(
+	req interface{},
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
 	err error,
@@ -364,8 +407,46 @@ func (ti *TelemetryInterceptor) handleError(
 			}
 		}
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
+		logTags = append(logTags, ti.getWorkflowTags(req)...)
 		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 	}
+}
+
+func (ti *TelemetryInterceptor) getWorkflowTags(
+	req interface{},
+) []tag.Tag {
+	if executionGetter, ok := req.(ExecutionGetter); ok {
+		execution := executionGetter.GetExecution()
+		return []tag.Tag{tag.WorkflowID(execution.WorkflowId), tag.WorkflowRunID(execution.RunId)}
+	}
+	if workflowExecutionGetter, ok := req.(WorkflowExecutionGetter); ok {
+		execution := workflowExecutionGetter.GetWorkflowExecution()
+		return []tag.Tag{tag.WorkflowID(execution.WorkflowId), tag.WorkflowRunID(execution.RunId)}
+	}
+	if taskTokenGetter, ok := req.(TaskTokenGetter); ok {
+		taskTokenBytes := taskTokenGetter.GetTaskToken()
+		if len(taskTokenBytes) == 0 {
+			return []tag.Tag{}
+		}
+		// Special case for avoiding deprecated RespondQueryTaskCompleted API token which does not have workflow id.
+		if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
+			return []tag.Tag{}
+		}
+		taskToken, err := ti.serializer.Deserialize(taskTokenBytes)
+		if err != nil {
+			ti.logger.Error("unable to deserialize task token", tag.Error(err))
+			return []tag.Tag{}
+		}
+		return []tag.Tag{tag.WorkflowID(taskToken.WorkflowId), tag.WorkflowRunID(taskToken.RunId)}
+	}
+	if workflowIdGetter, ok := req.(WorkflowIdGetter); ok {
+		workflowTags := []tag.Tag{tag.WorkflowID(workflowIdGetter.GetWorkflowId())}
+		if runIdGetter, ok := req.(RunIdGetter); ok {
+			workflowTags = append(workflowTags, tag.WorkflowRunID(runIdGetter.GetRunId()))
+		}
+		return workflowTags
+	}
+	return []tag.Tag{}
 }
 
 func GetMetricsHandlerFromContext(

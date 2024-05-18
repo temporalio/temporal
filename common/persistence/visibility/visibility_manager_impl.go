@@ -35,6 +35,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/log"
@@ -126,7 +127,7 @@ func (p *visibilityManagerImpl) RecordWorkflowExecutionClosed(
 		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
 		HistorySizeBytes:              request.HistorySizeBytes,
-		ExecutionDuration:             request.CloseTime.Sub(request.ExecutionTime),
+		ExecutionDuration:             request.ExecutionDuration,
 		StateTransitionCount:          request.StateTransitionCount,
 	}
 	return p.store.RecordWorkflowExecutionClosed(ctx, req)
@@ -151,89 +152,6 @@ func (p *visibilityManagerImpl) DeleteWorkflowExecution(
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
 	return p.store.DeleteWorkflowExecution(ctx, request)
-}
-
-func (p *visibilityManagerImpl) ListOpenWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListOpenWorkflowExecutions(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutions(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListOpenWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListOpenWorkflowExecutionsByType(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutionsByType(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListOpenWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByStatus(
-	ctx context.Context,
-	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutionsByStatus(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
 }
 
 func (p *visibilityManagerImpl) ListWorkflowExecutions(
@@ -293,7 +211,7 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 	if request == nil {
 		return nil, nil
 	}
-	memoBlob, err := p.serializeMemo(request.Memo)
+	memoBlob, err := serializeMemo(request.Memo)
 	if err != nil {
 		return nil, err
 	}
@@ -337,6 +255,8 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 		SearchAttributes: searchAttrs,
 		ParentWorkflowID: parentWorkflowID,
 		ParentRunID:      parentRunID,
+		RootWorkflowID:   request.RootExecution.GetWorkflowId(),
+		RootRunID:        request.RootExecution.GetRunId(),
 	}, nil
 }
 
@@ -367,7 +287,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 	if internalExecution == nil {
 		return nil, nil
 	}
-	memo, err := p.deserializeMemo(internalExecution.Memo)
+	memo, err := deserializeMemo(internalExecution.Memo)
 	if err != nil {
 		return nil, err
 	}
@@ -386,6 +306,10 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 		SearchAttributes: internalExecution.SearchAttributes,
 		TaskQueue:        internalExecution.TaskQueue,
 		Status:           internalExecution.Status,
+		RootExecution: &commonpb.WorkflowExecution{
+			WorkflowId: internalExecution.RootWorkflowID,
+			RunId:      internalExecution.RootRunID,
+		},
 	}
 
 	if internalExecution.ParentWorkflowID != "" {
@@ -398,6 +322,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 	// for close records
 	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		executionInfo.CloseTime = timestamppb.New(internalExecution.CloseTime)
+		executionInfo.ExecutionDuration = durationpb.New(internalExecution.ExecutionDuration)
 		executionInfo.HistoryLength = internalExecution.HistoryLength
 		executionInfo.HistorySizeBytes = internalExecution.HistorySizeBytes
 		executionInfo.StateTransitionCount = internalExecution.StateTransitionCount
@@ -413,7 +338,8 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 
 	return executionInfo, nil
 }
-func (p *visibilityManagerImpl) deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
+
+func deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
 	if data == nil || len(data.Data) == 0 {
 		return &commonpb.Memo{}, nil
 	}
@@ -436,7 +362,7 @@ func (p *visibilityManagerImpl) deserializeMemo(data *commonpb.DataBlob) (*commo
 	}
 }
 
-func (p *visibilityManagerImpl) serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
+func serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
 	if memo == nil {
 		memo = &commonpb.Memo{}
 	}

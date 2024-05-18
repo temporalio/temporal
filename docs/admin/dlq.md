@@ -13,6 +13,11 @@ To enable the DLQ for non-replication history tasks, set `history.TaskDLQEnabled
 You can specify the maximum number of task execution attempts with unexpected errors using the dynamic config
 `history.TaskDLQUnexpectedErrorAttempts`. The task will be sent to DLQ after the specified number of attempts.
 
+If you need to capture tasks that fail with specific errors, you can utilize the config flag `history.TaskDLQErrorPattern`. 
+This allows you to define a regular expression that will match one or more errors. However, exercise caution when 
+specifying the regular expression to avoid unintended matches. Once configured, all task processing errors will be 
+compared against this pattern, which could affect performance. Therefore, use this flag only when necessary.
+
 ## Detection
 There is a metric `dlq_writes`, which is incremented each time a message is enqueued to the DLQ.
 You can use this to determine when a task encountered a terminal error and needs manual resolution.
@@ -47,13 +52,13 @@ cause them to be retried).
 ## Resolution
 
 ### Deleting Tasks
-To purge a message, execute the command `tdbg dlq --dlq-version v2 purge --dlq-type {type} --last_message_id {message_id}`. 
+To purge a message, execute the command `tdbg dlq --dlq-version v2 purge --dlq-type {type} --last-message-id {message_id}`. 
 Note that this command will purge all messages with an ID less than or equal to the specified `message_id`. 
 The output of this command will have a job token which can be used to manage the purge job.
 Before executing this command, you can list the messages in the queue using the command mentioned in step 6 above to make sure more messages are not purged by mistake.
 
 ### Retrying Tasks
-To merge a message, execute the command `tdbg dlq --dlq-version v2 merge --dlq-type {type} --last_message_id {message_id}`.
+To merge a message, execute the command `tdbg dlq --dlq-version v2 merge --dlq-type {type} --last-message-id {message_id}`.
 This command will merge all messages with an ID less than or equal to `message_id` back into the original queue for reprocessing.
 The output of this command will have a job token that can be used to manage the merge job.
 

@@ -255,7 +255,7 @@ func MutableStateToGetResponse(
 		LastFirstEventId:       lastFirstEventID,
 		LastFirstEventTxnId:    lastFirstEventTxnID,
 		NextEventId:            mutableState.GetNextEventID(),
-		PreviousStartedEventId: mutableState.GetLastWorkflowTaskStartedEventID(),
+		PreviousStartedEventId: mutableState.GetStartedEventIdOfLastCompletedWorkflowTask(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: executionInfo.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -273,7 +273,9 @@ func MutableStateToGetResponse(
 		VersionHistories: versionhistory.CopyVersionHistories(
 			mutableState.GetExecutionInfo().GetVersionHistories(),
 		),
-		FirstExecutionRunId: executionInfo.FirstExecutionRunId,
-		WorkerVersionStamp:  executionInfo.WorkerVersionStamp,
+		FirstExecutionRunId:          executionInfo.FirstExecutionRunId,
+		AssignedBuildId:              mutableState.GetAssignedBuildId(),
+		InheritedBuildId:             mutableState.GetInheritedBuildId(),
+		MostRecentWorkerVersionStamp: executionInfo.GetMostRecentWorkerVersionStamp(),
 	}, nil
 }

@@ -266,7 +266,7 @@ func syncOfferTask[T any](
 			if err == nil {
 				return resp, nil
 			}
-			if err == errForwarderSlowDown {
+			if errors.Is(err, errForwarderSlowDown) {
 				// if we are rate limited, try only local match for the remainder of the context timeout
 				// left
 				fwdrTokenC = nil
@@ -306,7 +306,7 @@ func (tm *TaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (
 // The passed in context MUST NOT have a deadline associated with it
 // Note that calling MustOffer is the only way that matcher knows there are spooled tasks in the
 // backlog, in absence of a pending MustOffer call, the forwarding logic assumes that backlog is empty.
-func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh chan struct{}) error {
+func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh <-chan struct{}) error {
 	tm.registerBacklogTask(task)
 	defer tm.unregisterBacklogTask(task)
 
@@ -410,15 +410,9 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 		return // should not happen but for safety
 	}
 
-	source := task.source
-	if source == enumsspb.TASK_SOURCE_UNSPECIFIED {
-		// history may not specify the source
-		source = enumsspb.TASK_SOURCE_HISTORY
-	}
-
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
-		metrics.StringTag("source", source.String()),
+		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 	)
 }

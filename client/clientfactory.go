@@ -158,6 +158,8 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		timeout,
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider),
+		cf.metricsHandler,
+		cf.logger,
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
 	)
 

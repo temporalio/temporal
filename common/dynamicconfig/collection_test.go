@@ -25,6 +25,7 @@
 package dynamicconfig
 
 import (
+	"maps"
 	"testing"
 	"time"
 
@@ -45,6 +46,7 @@ const (
 	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
 	testGetStringPropertyKey                          = "testGetStringPropertyKey"
 	testGetMapPropertyKey                             = "testGetMapPropertyKey"
+	testGetTypedPropertyKey                           = "testGetTypedPropertyKey"
 	testGetIntPropertyFilteredByNamespaceKey          = "testGetIntPropertyFilteredByNamespaceKey"
 	testGetDurationPropertyFilteredByNamespaceKey     = "testGetDurationPropertyFilteredByNamespaceKey"
 	testGetIntPropertyFilteredByTaskQueueInfoKey      = "testGetIntPropertyFilteredByTaskQueueInfoKey"
@@ -54,6 +56,7 @@ const (
 	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
 	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
 	testGetStringPropertyFilteredByNamespaceIDKey     = "testGetStringPropertyFilteredByNamespaceIDKey"
+	testGetIntPropertyFilteredByDestinationKey        = "testGetIntPropertyFilteredByDestinationKey"
 )
 
 // Note: fileBasedClientSuite also heavily tests Collection, since some tests are easier with data
@@ -76,78 +79,87 @@ func (s *collectionSuite) SetupSuite() {
 }
 
 func (s *collectionSuite) TestGetIntProperty() {
-	value := s.cln.GetIntProperty(testGetIntPropertyKey, 10)
+	setting := NewGlobalIntSetting(testGetIntPropertyKey, 10, "")
+	value := setting.Get(s.cln)
 	s.Equal(10, value())
 	s.client[testGetIntPropertyKey] = 50
 	s.Equal(50, value())
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
+	setting := NewNamespaceIntSetting(testGetIntPropertyFilteredByNamespaceKey, 10, "")
 	namespace := "testNamespace"
-	value := s.cln.GetIntPropertyFilteredByNamespace(testGetIntPropertyFilteredByNamespaceKey, 10)
+	value := setting.Get(s.cln)
 	s.Equal(10, value(namespace))
 	s.client[testGetIntPropertyFilteredByNamespaceKey] = 50
 	s.Equal(50, value(namespace))
 }
 
-func (s *collectionSuite) TestGetStringPropertyFnWithNamespaceFilter() {
+func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
 	namespace := "testNamespace"
-	value := s.cln.GetStringPropertyFnWithNamespaceFilter(DefaultEventEncoding, "abc")
-	s.Equal("abc", value(namespace))
-	s.client[DefaultEventEncoding] = "efg"
+	value := DefaultEventEncoding.Get(s.cln)
+	s.Equal(DefaultEventEncoding.def, value(namespace))
+	s.client[DefaultEventEncoding.key] = "efg"
 	s.Equal("efg", value(namespace))
 }
 
-func (s *collectionSuite) TestGetStringPropertyFnWithNamespaceIDFilter() {
+func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
+	setting := NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
 	namespaceID := "testNamespaceID"
-	value := s.cln.GetStringPropertyFnWithNamespaceIDFilter(testGetStringPropertyFilteredByNamespaceIDKey, "abc")
+	value := setting.Get(s.cln)
 	s.Equal("abc", value(namespaceID))
 	s.client[testGetStringPropertyFilteredByNamespaceIDKey] = "efg"
 	s.Equal("efg", value(namespaceID))
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByTaskQueueInfo() {
+	setting := NewTaskQueueIntSetting(testGetIntPropertyFilteredByTaskQueueInfoKey, 10, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
-	value := s.cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyFilteredByTaskQueueInfoKey, 10)
+	value := setting.Get(s.cln)
 	s.Equal(10, value(namespace, taskQueue, 0))
 	s.client[testGetIntPropertyFilteredByTaskQueueInfoKey] = 50
 	s.Equal(50, value(namespace, taskQueue, 0))
 }
 
 func (s *collectionSuite) TestGetFloat64Property() {
-	value := s.cln.GetFloat64Property(testGetFloat64PropertyKey, 0.1)
+	setting := NewGlobalFloatSetting(testGetFloat64PropertyKey, 0.1, "")
+	value := setting.Get(s.cln)
 	s.Equal(0.1, value())
 	s.client[testGetFloat64PropertyKey] = 0.01
 	s.Equal(0.01, value())
 }
 
 func (s *collectionSuite) TestGetBoolProperty() {
-	value := s.cln.GetBoolProperty(testGetBoolPropertyKey, true)
+	setting := NewGlobalBoolSetting(testGetBoolPropertyKey, true, "")
+	value := setting.Get(s.cln)
 	s.Equal(true, value())
 	s.client[testGetBoolPropertyKey] = false
 	s.Equal(false, value())
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
+	setting := NewNamespaceIDBoolSetting(testGetBoolPropertyFilteredByNamespaceIDKey, true, "")
 	namespaceID := "testNamespaceID"
-	value := s.cln.GetBoolPropertyFnWithNamespaceIDFilter(testGetBoolPropertyFilteredByNamespaceIDKey, true)
+	value := setting.Get(s.cln)
 	s.Equal(true, value(namespaceID))
 	s.client[testGetBoolPropertyFilteredByNamespaceIDKey] = false
 	s.Equal(false, value(namespaceID))
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
+	setting := NewTaskQueueBoolSetting(testGetBoolPropertyFilteredByTaskQueueInfoKey, false, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
-	value := s.cln.GetBoolPropertyFilteredByTaskQueueInfo(testGetBoolPropertyFilteredByTaskQueueInfoKey, false)
+	value := setting.Get(s.cln)
 	s.Equal(false, value(namespace, taskQueue, 0))
 	s.client[testGetBoolPropertyFilteredByTaskQueueInfoKey] = true
 	s.Equal(true, value(namespace, taskQueue, 0))
 }
 
 func (s *collectionSuite) TestGetDurationProperty() {
-	value := s.cln.GetDurationProperty(testGetDurationPropertyKey, time.Second)
+	setting := NewGlobalDurationSetting(testGetDurationPropertyKey, 1*time.Second, "")
+	value := setting.Get(s.cln)
 	s.Equal(time.Second, value())
 	s.client[testGetDurationPropertyKey] = time.Minute
 	s.Equal(time.Minute, value())
@@ -158,50 +170,57 @@ func (s *collectionSuite) TestGetDurationProperty() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {
+	setting := NewNamespaceDurationSetting(testGetDurationPropertyFilteredByNamespaceKey, time.Second, "")
 	namespace := "testNamespace"
-	value := s.cln.GetDurationPropertyFilteredByNamespace(testGetDurationPropertyFilteredByNamespaceKey, time.Second)
+	value := setting.Get(s.cln)
 	s.Equal(time.Second, value(namespace))
 	s.client[testGetDurationPropertyFilteredByNamespaceKey] = time.Minute
 	s.Equal(time.Minute, value(namespace))
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
+	setting := NewTaskQueueDurationSetting(testGetDurationPropertyFilteredByTaskQueueInfoKey, time.Second, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
-	value := s.cln.GetDurationPropertyFilteredByTaskQueueInfo(testGetDurationPropertyFilteredByTaskQueueInfoKey, time.Second)
+	value := setting.Get(s.cln)
 	s.Equal(time.Second, value(namespace, taskQueue, 0))
 	s.client[testGetDurationPropertyFilteredByTaskQueueInfoKey] = time.Minute
 	s.Equal(time.Minute, value(namespace, taskQueue, 0))
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskType() {
+	setting := NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, time.Second, "")
 	taskType := enumsspb.TASK_TYPE_UNSPECIFIED
-	value := s.cln.GetDurationPropertyFilteredByTaskType(testGetDurationPropertyFilteredByTaskTypeKey, time.Second)
+	value := setting.Get(s.cln)
 	s.Equal(time.Second, value(taskType))
 	s.client[testGetDurationPropertyFilteredByTaskTypeKey] = time.Minute
 	s.Equal(time.Minute, value(taskType))
 }
 
 func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
-	defaults := []ConstrainedValue{
-		{
-			Constraints: Constraints{
-				Namespace:     "ns2",
-				TaskQueueName: "tq2",
+	setting := NewTaskQueueDurationSettingWithConstrainedDefault(
+		testGetDurationPropertyStructuredDefaults,
+		[]TypedConstrainedValue[time.Duration]{
+			{
+				Constraints: Constraints{
+					Namespace:     "ns2",
+					TaskQueueName: "tq2",
+				},
+				Value: 2 * time.Minute,
 			},
-			Value: 2 * time.Minute,
-		},
-		{
-			Constraints: Constraints{
-				TaskQueueName: "tq2",
+			{
+				Constraints: Constraints{
+					TaskQueueName: "tq2",
+				},
+				Value: 5 * time.Minute,
 			},
-			Value: 5 * time.Minute,
+			{
+				Value: 7 * time.Minute,
+			},
 		},
-		{
-			Value: 7 * time.Minute,
-		},
-	}
-	value := s.cln.GetDurationPropertyFilteredByTaskQueueInfo(testGetDurationPropertyStructuredDefaults, defaults)
+		"",
+	)
+	value := setting.Get(s.cln)
 	s.Equal(7*time.Minute, value("ns1", "tq1", 0))
 	s.Equal(7*time.Minute, value("ns2", "tq1", 0))
 	s.Equal(5*time.Minute, value("ns1", "tq2", 0))
@@ -251,15 +270,157 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 }
 
 func (s *collectionSuite) TestGetMapProperty() {
-	val := map[string]interface{}{
-		"testKey": 123,
-	}
-	value := s.cln.GetMapProperty(testGetMapPropertyKey, val)
-	s.Equal(val, value())
+	setting := NewGlobalMapSetting(
+		testGetMapPropertyKey,
+		map[string]interface{}{"testKey": 123},
+		"",
+	)
+	value := setting.Get(s.cln)
+	s.Equal(setting.def, value())
+	val := maps.Clone(setting.def)
 	val["testKey"] = "321"
 	s.client[testGetMapPropertyKey] = val
 	s.Equal(val, value())
 	s.Equal("321", value()["testKey"])
+}
+
+func (s *collectionSuite) TestGetTyped() {
+	type myFancyType struct {
+		Number int
+		Names  []string
+	}
+	setting := NewGlobalTypedSettingWithConverter(
+		testGetTypedPropertyKey,
+		ConvertStructure(myFancyType{-3, nil}), // used if convert is called
+		myFancyType{28, []string{"global", "typed", "setting"}},
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(setting.def, get())
+	})
+
+	s.Run("Basic", func() {
+		// map[string]any is what the yaml library decodes arbitrary data into
+		s.client[testGetTypedPropertyKey] = map[string]any{
+			"Number": 39,
+			"Names":  []string{"new", "names"},
+		}
+		s.Equal(myFancyType{
+			Number: 39,
+			Names:  []string{"new", "names"},
+		}, get())
+	})
+
+	s.Run("CaseInsensitive", func() {
+		s.client[testGetTypedPropertyKey] = map[string]any{
+			"naMES": []string{"case", "insensitive"},
+		}
+		s.Equal(-3, get().Number) // note the convert default is used here
+		s.Equal([]string{"case", "insensitive"}, get().Names)
+	})
+
+	s.Run("WrongType", func() {
+		s.client[testGetTypedPropertyKey] = 200
+		s.Equal(setting.def, get())
+	})
+}
+
+func (s *collectionSuite) TestGetTypedSimpleList() {
+	setting := NewGlobalTypedSettingWithConverter(
+		testGetTypedPropertyKey,
+		ConvertStructure([]float64(nil)),
+		[]float64{1.5, 1.1, 2.6, 3.7, 6.3},
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(setting.def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client[testGetTypedPropertyKey] = []any{19.0, -2.0}
+		s.Equal([]float64{19.0, -2.0}, get())
+	})
+
+	s.Run("WrongType", func() {
+		s.client[testGetTypedPropertyKey] = []any{88.8, false, -5, "oops"}
+		s.Equal(setting.def, get())
+	})
+}
+
+func (s *collectionSuite) TestGetTypedListOfStruct() {
+	type simple struct{ A, B int }
+	setting := NewGlobalTypedSettingWithConverter(
+		testGetTypedPropertyKey,
+		ConvertStructure([]simple(nil)),
+		[]simple{{1, 5}, {2, 9}},
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(setting.def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client[testGetTypedPropertyKey] = []any{
+			map[string]any{"A": 12, "B": 6},
+			map[string]any{"A": -23, "B": 0},
+			map[string]any{"B": 555, "C": "ignored"},
+		}
+		s.Equal([]simple{{12, 6}, {-23, 0}, {0, 555}}, get())
+	})
+
+	s.Run("WrongType", func() {
+		s.client[testGetTypedPropertyKey] = []any{
+			map[string]any{"A": false, "B": true},
+		}
+		s.Equal(setting.def, get())
+	})
+}
+
+func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
+	setting := NewDestinationIntSetting(testGetIntPropertyFilteredByDestinationKey, 10, "")
+	namespaceName := "testNamespace"
+	destination1 := "testDestination1"
+	destination2 := "testDestination2"
+	value := setting.Get(s.cln)
+	s.Equal(10, value(namespaceName, destination1))
+	s.client[testGetIntPropertyFilteredByDestinationKey] = []ConstrainedValue{
+		{
+			Constraints: Constraints{
+				Namespace:   namespaceName,
+				Destination: destination1,
+			},
+			Value: 50,
+		},
+		{
+			Constraints: Constraints{
+				Namespace: namespaceName,
+			},
+			Value: 75,
+		},
+		{
+			Constraints: Constraints{
+				Destination: destination1,
+			},
+			Value: 90,
+		},
+		{
+			Constraints: Constraints{
+				Destination: destination2,
+			},
+			Value: 100,
+		},
+	}
+	s.Equal(50, value(namespaceName, destination1))
+	s.Equal(75, value(namespaceName, "testAnotherDestination"))
+	s.Equal(90, value("testAnotherNamespace", destination1))
+	s.Equal(100, value(namespaceName, destination2)) // priority: destination >>> namespace
+	s.Equal(10, value("testAnotherNamespace", "testAnotherDestination"))
 }
 
 func (s *collectionSuite) TestFindMatch() {
@@ -307,9 +468,57 @@ func (s *collectionSuite) TestFindMatch() {
 	}
 
 	for _, tc := range testCases {
-		_, err := findMatch(tc.v, nil, tc.filters)
+		_, err := findMatch[struct{}](tc.v, nil, tc.filters)
 		s.Equal(tc.matched, err == nil)
-		_, err = findMatch(nil, tc.v, tc.filters)
+	}
+}
+
+func (s *collectionSuite) TestFindMatchWithTyped() {
+	testCases := []struct {
+		tv      []TypedConstrainedValue[struct{}]
+		filters []Constraints
+		matched bool
+	}{
+		{
+			tv: []TypedConstrainedValue[struct{}]{
+				{Constraints: Constraints{}},
+			},
+			filters: []Constraints{
+				{Namespace: "some random namespace"},
+			},
+			matched: false,
+		},
+		{
+			tv: []TypedConstrainedValue[struct{}]{
+				{Constraints: Constraints{Namespace: "samples-namespace"}},
+			},
+			filters: []Constraints{
+				{Namespace: "some random namespace"},
+			},
+			matched: false,
+		},
+		{
+			tv: []TypedConstrainedValue[struct{}]{
+				{Constraints: Constraints{Namespace: "samples-namespace", TaskQueueName: "sample-task-queue"}},
+			},
+			filters: []Constraints{
+				{Namespace: "samples-namespace", TaskQueueName: "sample-task-queue"},
+			},
+			matched: true,
+		},
+		{
+			tv: []TypedConstrainedValue[struct{}]{
+				{Constraints: Constraints{Namespace: "samples-namespace"}},
+			},
+			filters: []Constraints{
+				{TaskQueueName: "sample-task-queue"},
+			},
+			matched: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		_, err := findMatch(nil, tc.tv, tc.filters)
 		s.Equal(tc.matched, err == nil)
 	}
 }
@@ -317,40 +526,40 @@ func (s *collectionSuite) TestFindMatch() {
 func BenchmarkCollection(b *testing.B) {
 	// client with just one value
 	client1 := StaticClient(map[Key]any{
-		MatchingMaxTaskBatchSize: []ConstrainedValue{{Value: 12}},
+		MatchingMaxTaskBatchSize.Key(): []ConstrainedValue{{Value: 12}},
 	})
 	cln1 := NewCollection(client1, log.NewNoopLogger())
 	b.Run("global int", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/2; i++ {
-			size := cln1.GetIntProperty(MatchingMaxTaskBatchSize, 10)
+			size := MatchingThrottledLogRPS.Get(cln1)
 			_ = size()
-			size = cln1.GetIntProperty(MatchingGetTasksBatchSize, 10)
+			size = MatchingThrottledLogRPS.Get(cln1)
 			_ = size()
 		}
 	})
 	b.Run("namespace int", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/2; i++ {
-			size := cln1.GetIntPropertyFilteredByNamespace(MatchingMaxTaskBatchSize, 10)
+			size := HistoryMaxPageSize.Get(cln1)
 			_ = size("my-namespace")
-			size = cln1.GetIntPropertyFilteredByNamespace(MatchingGetTasksBatchSize, 10)
+			size = WorkflowExecutionMaxInFlightUpdates.Get(cln1)
 			_ = size("my-namespace")
 		}
 	})
 	b.Run("taskqueue int", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/2; i++ {
-			size := cln1.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			size := MatchingMaxTaskBatchSize.Get(cln1)
 			_ = size("my-namespace", "my-task-queue", 1)
-			size = cln1.GetIntPropertyFilteredByTaskQueueInfo(MatchingGetTasksBatchSize, 10)
+			size = MatchingGetTasksBatchSize.Get(cln1)
 			_ = size("my-namespace", "my-task-queue", 1)
 		}
 	})
 
 	// client with more constrained values
 	client2 := StaticClient(map[Key]any{
-		MatchingMaxTaskBatchSize: []ConstrainedValue{
+		MatchingMaxTaskBatchSize.Key(): []ConstrainedValue{
 			{
 				Constraints: Constraints{
 					TaskQueueName: "other-tq",
@@ -369,26 +578,26 @@ func BenchmarkCollection(b *testing.B) {
 	b.Run("single default", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/4; i++ {
-			size := cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			size := MatchingMaxTaskBatchSize.Get(cln2)
 			_ = size("my-namespace", "my-task-queue", 1)
-			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			size = MatchingMaxTaskBatchSize.Get(cln2)
 			_ = size("my-namespace", "other-tq", 1)
-			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			size = MatchingMaxTaskBatchSize.Get(cln2)
 			_ = size("other-ns", "my-task-queue", 1)
-			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			size = MatchingMaxTaskBatchSize.Get(cln2)
 			_ = size("other-ns", "other-tq", 1)
 		}
 	})
 	b.Run("structured default", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/4; i++ {
-			size := cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, defaultNumTaskQueuePartitions)
+			size := MatchingNumTaskqueueWritePartitions.Get(cln2)
 			_ = size("my-namespace", "my-task-queue", 1)
-			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, defaultNumTaskQueuePartitions)
+			size = MatchingNumTaskqueueWritePartitions.Get(cln2)
 			_ = size("my-namespace", "other-tq", 1)
-			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, defaultNumTaskQueuePartitions)
+			size = MatchingNumTaskqueueWritePartitions.Get(cln2)
 			_ = size("other-ns", "my-task-queue", 1)
-			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, defaultNumTaskQueuePartitions)
+			size = MatchingNumTaskqueueWritePartitions.Get(cln2)
 			_ = size("other-ns", "other-tq", 1)
 		}
 	})

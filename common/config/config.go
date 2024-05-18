@@ -270,15 +270,7 @@ type (
 	}
 
 	FaultInjection struct {
-		// Rate is the probability that we will return an error from any call to any datastore.
-		// The value should be between 0.0 and 1.0.
-		// The fault injector will inject different errors depending on the data store and method. See the
-		// implementation for details.
-		// This field is ignored if Targets is non-empty.
-		Rate float64 `yaml:"rate"`
-
 		// Targets is a mapping of data store name to a targeted fault injection config for that data store.
-		// If Targets is non-empty, then Rate is ignored.
 		// Here is an example config for targeted fault injection. This config will inject errors into the
 		// UpdateShard method of the ShardStore at a rate of 100%. No other methods will be affected.
 		/*
@@ -292,6 +284,7 @@ type (
 						ShardOwnershipLostError: 1.0 # all UpdateShard calls will fail with ShardOwnershipLostError
 		*/
 		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
+		// See config/development-cass-es-fi.yaml for a more detailed example.
 		Targets FaultInjectionTargets `yaml:"targets"`
 	}
 
@@ -354,6 +347,10 @@ type (
 		MaxConns int `yaml:"maxConns"`
 		// ConnectTimeout is a timeout for initial dial to cassandra server (default: 600 milliseconds)
 		ConnectTimeout time.Duration `yaml:"connectTimeout"`
+		// Timeout is a timeout for reads and, unless otherwise specified, writes. If not specified, ConnectTimeout is used.
+		Timeout time.Duration `yaml:"timeout"`
+		// WriteTimeout is a timeout for writing a query. If not specified, Timeout is used.
+		WriteTimeout time.Duration `yaml:"writeTimeout"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
 		// Consistency configuration (defaults to LOCAL_QUORUM / LOCAL_SERIAL for all stores if this field not set)
@@ -580,14 +577,14 @@ type (
 )
 
 const (
-	ShardStoreName                DataStoreName = "ShardStore"
-	TaskStoreName                 DataStoreName = "TaskStore"
-	MetadataStoreName             DataStoreName = "MetadataStore"
-	ExecutionStoreName            DataStoreName = "ExecutionStore"
-	QueueName                     DataStoreName = "Queue"
-	QueueV2Name                   DataStoreName = "QueueV2"
-	ClusterMDStoreName            DataStoreName = "ClusterMDStore"
-	NexusIncomingServiceStoreName DataStoreName = "NexusIncomingServiceStore"
+	ShardStoreName         DataStoreName = "ShardStore"
+	TaskStoreName          DataStoreName = "TaskStore"
+	MetadataStoreName      DataStoreName = "MetadataStore"
+	ExecutionStoreName     DataStoreName = "ExecutionStore"
+	QueueName              DataStoreName = "Queue"
+	QueueV2Name            DataStoreName = "QueueV2"
+	ClusterMDStoreName     DataStoreName = "ClusterMDStore"
+	NexusEndpointStoreName DataStoreName = "NexusEndpointStore"
 )
 
 const (

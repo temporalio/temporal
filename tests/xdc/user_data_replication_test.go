@@ -71,16 +71,17 @@ func TestUserDataReplicationTestSuite(t *testing.T) {
 }
 
 func (s *UserDataReplicationTestSuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS:                1000,
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
-		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                               1000,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                                    true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                                true,
-		dynamicconfig.BuildIdScavengerEnabled:                                                   true,
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():                                    true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():                                true,
+		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():                                    true,
+		dynamicconfig.BuildIdScavengerEnabled.Key():                                                   true,
 		// Ensure the scavenger can immediately delete build ids that are not in use.
-		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
+		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
 	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }
@@ -291,7 +292,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	}
 	activeAdminClient := s.cluster1.GetAdminClient()
 
-	// start build id scavenger workflow
+	// start build ID scavenger workflow
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
@@ -330,7 +331,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal("v2", attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].State)
 
-	// Add another build id to verify that tombstones were deleted after the first scavenger run
+	// Add another build ID to verify that tombstones were deleted after the first scavenger run
 	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
@@ -359,7 +360,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal("v3", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
 
-	// Add a new build id in standby cluster to verify it did not persist the replicated tombstones
+	// Add a new build ID in standby cluster to verify it did not persist the replicated tombstones
 	standbyFrontendClient := s.cluster2.GetFrontendClient()
 
 	s.Eventually(func() bool {

@@ -121,6 +121,7 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -140,6 +141,7 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                {},
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  {},
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -172,8 +174,10 @@ func (s *quotasSuite) TestAllAPIs() {
 	})
 	_, ok := apisWithPriority[DispatchNexusTaskByNamespaceAndTaskQueueAPIName]
 	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByNamespaceAndTaskQueueAPIName)
-	_, ok = apisWithPriority[DispatchNexusTaskByServiceAPIName]
-	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByServiceAPIName)
+	_, ok = apisWithPriority[DispatchNexusTaskByEndpointAPIName]
+	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByEndpointAPIName)
+	_, ok = apisWithPriority[CompleteNexusOperation]
+	s.Truef(ok, "missing priority for API: %q", CompleteNexusOperation)
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {

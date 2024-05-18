@@ -167,9 +167,14 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 		return err
 	}
 
-	if err := taskGenerator.GenerateWorkflowStartTasks(
+	// first clear execution timeout timer task status
+	executionInfo := mutableState.GetExecutionInfo()
+	executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
+
+	executionInfo.WorkflowExecutionTimerTaskStatus, err = taskGenerator.GenerateWorkflowStartTasks(
 		startEvent,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -300,7 +305,7 @@ Loop:
 		}
 
 		if err := taskGenerator.GenerateActivityTasks(
-			scheduleEvent,
+			scheduleEvent.GetEventId(),
 		); err != nil {
 			return err
 		}

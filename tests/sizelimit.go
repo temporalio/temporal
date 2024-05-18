@@ -102,8 +102,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 
 	activityCount := int32(4)
 	activityCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -132,8 +131,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -268,8 +266,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.NoError(err)
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		select {
 		case sigReadyToSendChan <- struct{}{}:
 		default:
@@ -384,8 +381,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	activityCount := int32(4)
 	activitiesScheduled := false
 	activityLargePayload := payloads.EncodeBytes(make([]byte, 900))
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !activitiesScheduled {
 			cmds := make([]*commandpb.Command, activityCount)
 			for i := range cmds {
@@ -414,8 +410,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}

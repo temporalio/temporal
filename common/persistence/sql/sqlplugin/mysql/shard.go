@@ -52,7 +52,7 @@ func (mdb *db) InsertIntoShards(
 	ctx context.Context,
 	row *sqlplugin.ShardsRow,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		createShardQry,
 		row.ShardID,
 		row.RangeID,
@@ -66,7 +66,7 @@ func (mdb *db) UpdateShards(
 	ctx context.Context,
 	row *sqlplugin.ShardsRow,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		updateShardQry,
 		row.RangeID,
 		row.Data,
@@ -81,7 +81,7 @@ func (mdb *db) SelectFromShards(
 	filter sqlplugin.ShardsFilter,
 ) (*sqlplugin.ShardsRow, error) {
 	var row sqlplugin.ShardsRow
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&row,
 		getShardQry,
 		filter.ShardID,
@@ -98,7 +98,7 @@ func (mdb *db) ReadLockShards(
 	filter sqlplugin.ShardsFilter,
 ) (int64, error) {
 	var rangeID int64
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&rangeID,
 		readLockShardQry,
 		filter.ShardID,
@@ -112,7 +112,7 @@ func (mdb *db) WriteLockShards(
 	filter sqlplugin.ShardsFilter,
 ) (int64, error) {
 	var rangeID int64
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&rangeID,
 		lockShardQry,
 		filter.ShardID,

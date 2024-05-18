@@ -29,18 +29,21 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sync"
+	"slices"
 
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/utf8validator"
+	"go.temporal.io/server/internal/effect"
 )
 
 type (
@@ -55,8 +58,14 @@ type (
 
 		// Find finds an existing update in this Registry but does not create a
 		// new update if no update is found.
-		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
-		// TODO: isn't the return `bool` always true when the *Update != nil?
+		Find(ctx context.Context, protocolInstanceID string) *Update
+
+		// TryResurrect tries to resurrect the update from the protocol message,
+		// whose body contains Acceptance or Rejection message.
+		// It returns an error if some unexpected error happened, but if there is not
+		// enough data in the message, it just returns a nil update.
+		// If the update was successfully resurrected it is added to the registry in stateAdmitted.
+		TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error)
 
 		// HasOutgoingMessages returns true if the registry has any Updates
 		// for which outgoing message can be generated.
@@ -67,40 +76,47 @@ type (
 		// Send returns messages for all Updates that need to be sent to the worker.
 		// If includeAlreadySent is set to true then messages will be created even
 		// for updates which were already sent but not processed by worker.
-		Send(ctx context.Context, includeAlreadySent bool, workflowTaskStartedEventID int64, eventStore EventStore) []*protocolpb.Message
+		Send(ctx context.Context, includeAlreadySent bool, workflowTaskStartedEventID int64) []*protocolpb.Message
 
 		// RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
 		// This method should be called after all messages from worker are handled to make sure
 		// that worker processed (rejected or accepted) all updates that were delivered on the workflow task.
-		RejectUnprocessed(ctx context.Context, eventStore EventStore) ([]string, error)
+		RejectUnprocessed(ctx context.Context, effects effect.Controller) ([]string, error)
 
-		// CancelIncomplete cancels all incomplete updates in the registry:
-		//   - updates in stateAdmitted, stateRequested, or stateSent are rejected,
-		//   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
-		//   - updates in stateCompleted are ignored.
-		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
+		// Abort all incomplete updates in the registry.
+		Abort(reason AbortReason)
+
+		Contains(protocolInstanceID string) bool
+
+		// Clear registry and abort all waiters.
+		Clear()
 
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
 
 		// GetSize returns the size of the update object
 		GetSize() int
+
+		// FailoverVersion of mutable state at the time of registry creation.
+		FailoverVersion() int64
 	}
 
 	// Store represents the update package's requirements for reading updates from the store.
 	Store interface {
 		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetCurrentVersion() int64
+		IsWorkflowExecutionRunning() bool
 	}
 
 	registry struct {
-		mu              sync.RWMutex
 		updates         map[string]*Update
-		getStoreFn      func() Store
+		store           Store
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
 		completedCount  int
+		failoverVersion int64
 	}
 
 	Option func(*registry)
@@ -148,31 +164,51 @@ func WithTracerProvider(t trace.TracerProvider) Option {
 var _ Registry = (*registry)(nil)
 
 func NewRegistry(
-	getStoreFn func() Store,
+	store Store,
 	opts ...Option,
 ) Registry {
 	r := &registry{
 		updates:         make(map[string]*Update),
-		getStoreFn:      getStoreFn,
+		store:           store,
 		instrumentation: noopInstrumentation,
 		maxInFlight:     func() int { return math.MaxInt },
 		maxTotal:        func() int { return math.MaxInt },
+		failoverVersion: store.GetCurrentVersion(),
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
 
-	getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
-		// need to eager load here so that Len and admit are correct.
-		if acc := updInfo.GetAcceptance(); acc != nil {
-			r.updates[updID] = newAccepted(
+	r.store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+		if updInfo.GetAdmission() != nil {
+			// An update entry in the registry may have a request payload: we use this to write the payload to an
+			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
+			// from mutable state, we do not have access to update request payloads. In this situation it is correct
+			// to create a registry entry in state Admitted with a nil payload for the following reason: the fact
+			// that we have encountered an UpdateInfo in state Admitted in mutable state implies that there is an
+			// UpdateAdmitted event in history; and when there is an UpdateAdmitted event in history, we will not
+			// attempt to write the request payload to the UpdateAccepted event, since the request payload is
+			// already present in the UpdateAdmitted event.
+			r.updates[updID] = newAdmitted(
+				updID,
+				nil,
+				r.remover(updID),
+				withInstrumentation(&r.instrumentation),
+			)
+		} else if acc := updInfo.GetAcceptance(); acc != nil {
+			u := newAccepted(
 				updID,
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
-		}
-		if updInfo.GetCompletion() != nil {
+			if !r.store.IsWorkflowExecutionRunning() {
+				// If workflow is completed, accepted update will never be completed.
+				// This will return "workflow completed" error to the pollers of outcome of accepted updates.
+				u.abort(AbortReasonWorkflowCompleted)
+			}
+			r.updates[updID] = u
+		} else if updInfo.GetCompletion() != nil {
 			r.completedCount++
 		}
 	})
@@ -180,12 +216,10 @@ func NewRegistry(
 }
 
 func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if upd, found := r.findLocked(ctx, id); found {
+	if upd := r.Find(ctx, id); upd != nil {
 		return upd, true, nil
 	}
-	if err := r.admit(ctx); err != nil {
+	if err := r.checkLimits(ctx); err != nil {
 		return nil, false, err
 	}
 	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
@@ -193,24 +227,62 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	return upd, false, nil
 }
 
-func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.findLocked(ctx, id)
+func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error) {
+	if acptOrRejMsg == nil || acptOrRejMsg.Body == nil {
+		return nil, nil
+	}
+
+	// Check only total limit here. This might add more than maxInFlight updates to registry,
+	// but provides better developer experience.
+	if err := r.checkTotalLimit(ctx); err != nil {
+		return nil, err
+	}
+
+	body, err := acptOrRejMsg.Body.UnmarshalNew()
+	if err != nil {
+		return nil, invalidArgf("unable to unmarshal request: %v", err)
+	}
+	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
+	if err != nil {
+		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
+	}
+	var reqMsg *updatepb.Request
+	switch updMsg := body.(type) {
+	case *updatepb.Acceptance:
+		reqMsg = updMsg.GetAcceptedRequest()
+	case *updatepb.Rejection:
+		reqMsg = updMsg.GetRejectedRequest()
+		// Ignore all other message types.
+	}
+	if reqMsg == nil {
+		return nil, nil
+	}
+	reqAny, err := anypb.New(reqMsg)
+	if err != nil {
+		return nil, invalidArgf("unable to unmarshal request body: %v", err)
+	}
+
+	updateID := acptOrRejMsg.ProtocolInstanceId
+	upd := newAdmitted(
+		updateID,
+		reqAny,
+		r.remover(updateID),
+		withInstrumentation(&r.instrumentation),
+	)
+	r.updates[updateID] = upd
+	return upd, nil
 }
 
-// CancelIncomplete cancels all incomplete updates in the registry:
-//   - updates in stateAdmitted, stateRequested, or stateSent are rejected,
-//   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
-//   - updates in stateCompleted are ignored.
-func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
-	incompleteUpdates := r.filter(func(u *Update) bool { return u.isIncomplete() })
-	for _, upd := range incompleteUpdates {
-		if err := upd.CancelIncomplete(ctx, reason, eventStore); err != nil {
-			return err
-		}
+// Abort all incomplete updates in the registry.
+func (r *registry) Abort(reason AbortReason) {
+	for _, upd := range r.updates {
+		upd.abort(reason)
 	}
-	return nil
+}
+
+// Contains returns true iff the update ID exists in the registry.
+func (r *registry) Contains(id string) bool {
+	return r.updates[id] != nil
 }
 
 // RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
@@ -218,11 +290,9 @@ func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, ev
 // that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
 func (r *registry) RejectUnprocessed(
 	ctx context.Context,
-	eventStore EventStore,
+	effects effect.Controller,
 ) ([]string, error) {
 
-	// Iterate over updates in the registry while holding read lock.
-	// Call to reject() bellow will acquire write lock, thus it needs to be done outside the read lock.
 	updatesToReject := r.filter(func(u *Update) bool { return u.isSent() })
 
 	if len(updatesToReject) == 0 {
@@ -231,7 +301,7 @@ func (r *registry) RejectUnprocessed(
 
 	var rejectedUpdateIDs []string
 	for _, upd := range updatesToReject {
-		if err := upd.reject(ctx, unprocessedUpdateFailure, eventStore); err != nil {
+		if err := upd.reject(ctx, unprocessedUpdateFailure, effects); err != nil {
 			return nil, err
 		}
 		rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
@@ -244,8 +314,6 @@ func (r *registry) RejectUnprocessed(
 // If includeAlreadySent is set to true then it will return true
 // even if update message was already sent but not processed by worker.
 func (r *registry) HasOutgoingMessages(includeAlreadySent bool) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
 		if upd.needToSend(includeAlreadySent) {
 			return true
@@ -261,10 +329,7 @@ func (r *registry) Send(
 	ctx context.Context,
 	includeAlreadySent bool,
 	workflowTaskStartedEventID int64,
-	eventStore EventStore,
 ) []*protocolpb.Message {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the
 	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
@@ -276,8 +341,15 @@ func (r *registry) Send(
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
 	var outgoingMessages []*protocolpb.Message
+
+	var sortedUpdates []*Update
 	for _, upd := range r.updates {
-		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID, eventStore)
+		sortedUpdates = append(sortedUpdates, upd)
+	}
+	slices.SortStableFunc(sortedUpdates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
+
+	for _, upd := range sortedUpdates {
+		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID)
 		if outgoingMessage != nil {
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
 		}
@@ -285,25 +357,30 @@ func (r *registry) Send(
 	return outgoingMessages
 }
 
+// Clear registry and abort all waiters.
+func (r *registry) Clear() {
+	r.Abort(AbortReasonRegistryCleared)
+
+	r.updates = nil
+	r.completedCount = 0
+}
+
 func (r *registry) Len() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 	return len(r.updates)
 }
 
 func (r *registry) remover(id string) updateOpt {
 	return withCompletionCallback(
 		func() {
-			r.mu.Lock()
-			defer r.mu.Unlock()
 			delete(r.updates, id)
 			r.completedCount++
 		},
 	)
 }
 
-func (r *registry) admit(ctx context.Context) error {
+func (r *registry) checkLimits(ctx context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
+		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -311,28 +388,32 @@ func (r *registry) admit(ctx context.Context) error {
 		}
 	}
 
+	return r.checkTotalLimit(ctx)
+}
+
+func (r *registry) checkTotalLimit(_ context.Context) error {
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
+		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
 	}
-
 	return nil
 }
 
-func (r *registry) findLocked(ctx context.Context, id string) (*Update, bool) {
+func (r *registry) Find(ctx context.Context, id string) *Update {
 	if upd, ok := r.updates[id]; ok {
-		return upd, true
+		return upd
 	}
 
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
-	updOutcome, err := r.getStoreFn().GetUpdateOutcome(ctx, id)
+	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
 
 	// Swallow NotFound error because it means that update doesn't exist.
 	var notFound *serviceerror.NotFound
 	if errors.As(err, &notFound) {
-		return nil, false
+		return nil
 	}
 
 	// Other errors go to the future of completed update because it means, that update exists, was found,
@@ -345,16 +426,13 @@ func (r *registry) findLocked(ctx context.Context, id string) (*Update, bool) {
 		id,
 		fut,
 		withInstrumentation(&r.instrumentation),
-	), true
+	)
 }
 
 // filter returns a slice of all updates in the registry for which the
-// provided predicate function returns true. The registry is locked for reading
-// while enumerating over the map. Resulted slice can be iterated w/o holding a lock.
+// provided predicate function returns true.
 func (r *registry) filter(predicate func(u *Update) bool) []*Update {
 	var res []*Update
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
 		if predicate(upd) {
 			res = append(res, upd)
@@ -368,5 +446,10 @@ func (r *registry) GetSize() int {
 	for key, update := range r.updates {
 		size += len(key) + update.GetSize()
 	}
+	r.instrumentation.updateRegistrySize(size)
 	return size
+}
+
+func (r *registry) FailoverVersion() int64 {
+	return r.failoverVersion
 }

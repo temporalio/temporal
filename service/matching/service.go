@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/util"
 )
@@ -47,15 +46,14 @@ type Service struct {
 	handler *Handler
 	config  *Config
 
-	server                         *grpc.Server
-	logger                         log.SnTaggedLogger
-	membershipMonitor              membership.Monitor
-	grpcListener                   net.Listener
-	runtimeMetricsReporter         *metrics.RuntimeMetricsReporter
-	metricsHandler                 metrics.Handler
-	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
-	healthServer                   *health.Server
-	visibilityManager              manager.VisibilityManager
+	server                 *grpc.Server
+	logger                 log.SnTaggedLogger
+	membershipMonitor      membership.Monitor
+	grpcListener           net.Listener
+	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
+	metricsHandler         metrics.Handler
+	healthServer           *health.Server
+	visibilityManager      manager.VisibilityManager
 }
 
 func NewService(
@@ -67,22 +65,20 @@ func NewService(
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
 	handler *Handler,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 	visibilityManager manager.VisibilityManager,
 ) *Service {
 	return &Service{
-		config:                         serviceConfig,
-		server:                         grpc.NewServer(grpcServerOptions...),
-		handler:                        handler,
-		logger:                         logger,
-		membershipMonitor:              membershipMonitor,
-		grpcListener:                   grpcListener,
-		runtimeMetricsReporter:         runtimeMetricsReporter,
-		metricsHandler:                 metricsHandler,
-		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
-		healthServer:                   healthServer,
-		visibilityManager:              visibilityManager,
+		config:                 serviceConfig,
+		server:                 grpc.NewServer(grpcServerOptions...),
+		handler:                handler,
+		logger:                 logger,
+		membershipMonitor:      membershipMonitor,
+		grpcListener:           grpcListener,
+		runtimeMetricsReporter: runtimeMetricsReporter,
+		metricsHandler:         metricsHandler,
+		healthServer:           healthServer,
+		visibilityManager:      visibilityManager,
 	}
 }
 
@@ -148,8 +144,4 @@ func (s *Service) Stop() {
 	s.visibilityManager.Close()
 
 	s.logger.Info("matching stopped")
-}
-
-func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
-	return s.faultInjectionDataStoreFactory
 }

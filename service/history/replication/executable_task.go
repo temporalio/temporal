@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -57,8 +56,6 @@ const (
 )
 
 const (
-	applyReplicationTimeout = 20 * time.Second
-
 	ResendAttempt = 2
 )
 
@@ -356,9 +353,7 @@ func (e *ExecutableTaskImpl) Resend(
 		//  c. attempt failed due to old workflow does not exist
 		//  d. return error to resend new workflow before the branching point
 
-		if resendErr.NamespaceId == retryErr.NamespaceId &&
-			resendErr.WorkflowId == retryErr.WorkflowId &&
-			resendErr.RunId == retryErr.RunId {
+		if resendErr.Equal(retryErr) {
 			e.Logger.Error("error resend history on the same workflow run",
 				tag.WorkflowNamespaceID(retryErr.NamespaceId),
 				tag.WorkflowID(retryErr.WorkflowId),
@@ -415,7 +410,6 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		WorkflowVersion:    common.EmptyVersion,
 		ClosedWorkflowOnly: false,
 	})
 	return err
@@ -456,11 +450,12 @@ FilterLoop:
 
 func newTaskContext(
 	namespaceName string,
+	timeout time.Duration,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemPreemptableCallerInfo,
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
-	return context.WithTimeout(ctx, applyReplicationTimeout)
+	return context.WithTimeout(ctx, timeout)
 }

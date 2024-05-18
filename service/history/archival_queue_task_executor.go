@@ -31,6 +31,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	carchiver "go.temporal.io/server/common/archiver"
@@ -161,6 +162,10 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 	if err != nil {
 		return nil, err
 	}
+	executionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
+	if err != nil {
+		return nil, err
+	}
 	branchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
@@ -227,6 +232,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		StartTime:            executionInfo.GetStartTime(),
 		ExecutionTime:        executionInfo.GetExecutionTime(),
 		CloseTime:            timestamppb.New(closeTime),
+		ExecutionDuration:    durationpb.New(executionDuration),
 		Status:               executionState.Status,
 		HistoryLength:        nextEventID - 1,
 		Memo:                 workflowAttributes.Memo,
@@ -312,7 +318,7 @@ var (
 func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 	ctx context.Context,
 	logger log.Logger,
-	task tasks.Task,
+	task *tasks.ArchiveExecutionTask,
 ) (lockedMutableState *lockedMutableState, err error) {
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.workflowCache, task)
 	if err != nil {

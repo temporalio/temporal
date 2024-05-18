@@ -25,6 +25,7 @@
 package scheduler
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"time"
@@ -78,6 +79,8 @@ const (
 	IncrementalBackfill = 5
 	// update from previous action instead of current time
 	UpdateFromPrevious = 6
+	// do continue-as-new after pending signals
+	CANAfterSignals = 7
 )
 
 const (
@@ -213,8 +216,8 @@ var (
 		BackfillsPerIteration:             10,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               14,                   // see note below
-		Version:                           DontTrackOverlapping, // TODO: upgrade to UpdateFromPrevious
+		NextTimeCacheV2Size:               14, // see note below
+		Version:                           UpdateFromPrevious,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -323,6 +326,13 @@ func (s *scheduler) run() error {
 		// if schedule is not paused and out of actions or do not have anything scheduled, exit the schedule workflow after retention period has passed
 		if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() && !exp.After(s.now()) {
 			return nil
+		}
+		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil && s.hasMinVersion(CANAfterSignals) {
+			// If suggestContinueAsNew was true but we had a pending update or patch, we would
+			// not break above, but process the update/patch. Now that we're done, we should
+			// break here to do CAN. (pendingUpdate and pendingPatch should always nil here,
+			// the check check above is just being defensive.)
+			break
 		}
 
 		// sleep returns on any of:
@@ -539,22 +549,6 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-		// Continue returning json temporarily for forwards-compatibility.
-		// TODO: remove this after releasing a version that understands proto.
-		if true {
-			cache := jsonNextTimeCacheV2{Version: s.tweakables.Version, Start: start}
-			for t := start; len(cache.Results) < s.tweakables.NextTimeCacheV2Size; {
-				next := s.cspec.getNextTime(s.jitterSeed(), t)
-				if next.Next.IsZero() {
-					cache.Completed = true
-					break
-				}
-				cache.Results = append(cache.Results, next)
-				t = next.Next
-			}
-			return cache
-		}
-
 		cache := &schedspb.NextTimeCache{
 			Version:      int64(s.tweakables.Version),
 			StartTime:    timestamppb.New(start),
@@ -873,6 +867,8 @@ func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 	s.ensureFields()
 	s.compileSpec()
 
+	s.updateCustomSearchAttributes(req.SearchAttributes)
+
 	if s.hasMinVersion(UpdateFromPrevious) {
 		// We need to start re-processing from the last event, so that we catch actions whose
 		// nominal time is before now but actual time (with jitter) is after now. Logic in
@@ -1001,6 +997,51 @@ func (s *scheduler) getListInfo(inWorkflowContext bool) *schedpb.ScheduleListInf
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     util.SliceTail(s.Info.RecentActions, s.tweakables.RecentActionCountForList),
 		FutureActionTimes: s.getFutureActionTimes(inWorkflowContext, s.tweakables.FutureActionCountForList),
+	}
+}
+
+func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.SearchAttributes) {
+	// We want to distinguish nil value from an empty object value.
+	// When it is nil, then it's a no-op. Otherwise, it will overwrite the search attributes.
+	// That is, if it is an empty map, it will unset all search attributes.
+	if searchAttributes == nil {
+		return
+	}
+
+	upsertMap := map[string]any{}
+	for key, valuePayload := range searchAttributes.GetIndexedFields() {
+		var value any
+		if err := payload.Decode(valuePayload, &value); err != nil {
+			s.logger.Error("error updating search attributes of the scheule", "error", err)
+			return
+		}
+		upsertMap[key] = value
+	}
+
+	//nolint:staticcheck // SA1019 Use untyped version for backwards compatibility.
+	currentSearchAttributes := workflow.GetInfo(s.ctx).SearchAttributes
+	for key, currentValuePayload := range currentSearchAttributes.GetIndexedFields() {
+		// This might violate determinism when a new system search attribute is added
+		// and the user already had a custom search attribute with same name. This is
+		// a general issue in the system, and it will be fixed when we introduce
+		// a system prefix to fix those conflicts.
+		if searchattribute.IsReserved(key) {
+			continue
+		}
+		if newValuePayload, exists := searchAttributes.GetIndexedFields()[key]; !exists {
+			// Key is not set, so needs to be deleted.
+			upsertMap[key] = nil
+		} else if bytes.Equal(currentValuePayload.Data, newValuePayload.Data) {
+			// If the payloads data are the same, then we don't need to update the value.
+			delete(upsertMap, key)
+		}
+	}
+	if len(upsertMap) == 0 {
+		return
+	}
+	//nolint:staticcheck // SA1019 The untyped function here is more convenient.
+	if err := workflow.UpsertSearchAttributes(s.ctx, upsertMap); err != nil {
+		s.logger.Error("error updating search attributes of the scheule", "error", err)
 	}
 }
 

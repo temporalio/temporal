@@ -74,7 +74,7 @@ type (
 
 	mockReg struct {
 		update.Registry
-		FindFunc func(context.Context, string) (*update.Update, bool)
+		FindFunc func(context.Context, string) *update.Update
 	}
 
 	mockUpdateEventStore struct {
@@ -104,7 +104,7 @@ func (m mockWorkflowLeaseCtx) GetContext() workflow.Context {
 	return m.GetContextFn()
 }
 
-func (m mockReg) Find(ctx context.Context, updateID string) (*update.Update, bool) {
+func (m mockReg) Find(ctx context.Context, updateID string) *update.Update {
 	return m.FindFunc(ctx, updateID)
 }
 
@@ -119,7 +119,7 @@ func TestPollOutcome(t *testing.T) {
 
 	wfCtx := workflow.NewMockContext(mockController)
 	wfCtx.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}).AnyTimes()
-	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
+	wfCtx.EXPECT().UpdateRegistry(gomock.Any(), gomock.Any()).Return(reg).AnyTimes()
 
 	apiCtx := mockWorkflowLeaseCtx{
 		GetReleaseFnFn: func() wcache.ReleaseCacheFunc { return func(error) {} },
@@ -164,16 +164,16 @@ func TestPollOutcome(t *testing.T) {
 	}
 
 	t.Run("update not found", func(t *testing.T) {
-		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
-			return nil, false
+		reg.FindFunc = func(ctx context.Context, updateID string) *update.Update {
+			return nil
 		}
 		_, err := pollupdate.Invoke(context.TODO(), &req, shardContext, wfcc)
 		var notfound *serviceerror.NotFound
 		require.ErrorAs(t, err, &notfound)
 	})
 	t.Run("context deadline expiry before server-imposed deadline expiry", func(t *testing.T) {
-		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
-			return update.New(updateID), true
+		reg.FindFunc = func(ctx context.Context, updateID string) *update.Update {
+			return update.New(updateID)
 		}
 		ctx, cncl := context.WithTimeout(context.Background(), serverImposedTimeout/2)
 		defer cncl()
@@ -181,15 +181,15 @@ func TestPollOutcome(t *testing.T) {
 		require.Error(t, err)
 	})
 	t.Run("context deadline expiry after server-imposed deadline expiry", func(t *testing.T) {
-		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
-			return update.New(updateID), true
+		reg.FindFunc = func(ctx context.Context, updateID string) *update.Update {
+			return update.New(updateID)
 		}
 		ctx, cncl := context.WithTimeout(context.Background(), serverImposedTimeout*2)
 		defer cncl()
 		resp, err := pollupdate.Invoke(ctx, &req, shardContext, wfcc)
 		require.NoError(t, err)
 		require.Nil(t, resp.GetResponse().Outcome)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, resp.Response.GetStage())
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Response.GetStage())
 	})
 	t.Run("non-blocking poll with omitted/unspecified wait policy", func(t *testing.T) {
 		for _, req := range []*historyservice.PollWorkflowExecutionUpdateRequest{{
@@ -210,8 +210,8 @@ func TestPollOutcome(t *testing.T) {
 				},
 			},
 		}} {
-			reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
-				return update.New(updateID), true
+			reg.FindFunc = func(ctx context.Context, updateID string) *update.Update {
+				return update.New(updateID)
 			}
 			resp, err := pollupdate.Invoke(context.Background(), req, shardContext, wfcc)
 			require.NoError(t, err)
@@ -222,8 +222,8 @@ func TestPollOutcome(t *testing.T) {
 	})
 	t.Run("get an outcome", func(t *testing.T) {
 		upd := update.New(updateID)
-		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
-			return upd, true
+		reg.FindFunc = func(ctx context.Context, updateID string) *update.Update {
+			return upd
 		}
 		reqMsg := updatepb.Request{
 			Meta:  &updatepb.Meta{UpdateId: updateID},
@@ -250,8 +250,8 @@ func TestPollOutcome(t *testing.T) {
 		}()
 
 		evStore := mockUpdateEventStore{}
-		require.NoError(t, upd.Request(context.TODO(), &reqMsg, evStore))
-		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208}, evStore)
+		require.NoError(t, upd.Admit(context.TODO(), &reqMsg, evStore))
+		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208})
 		require.NoError(t, upd.OnProtocolMessage(context.TODO(), &rejMsg, evStore))
 
 		require.NoError(t, <-errCh)

@@ -206,7 +206,6 @@ func (s *taskSerializerSuite) TestTimerActivityTask() {
 		EventID:             rand.Int63(),
 		Attempt:             rand.Int31(),
 		TimeoutType:         enumspb.TimeoutType(rand.Int31n(int32(len(enumspb.TimeoutType_name)))),
-		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(activityTaskTimer)
@@ -231,21 +230,32 @@ func (s *taskSerializerSuite) TestTimerUserTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		EventID:             rand.Int63(),
-		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(userTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowRun() {
-	workflowTimer := &tasks.WorkflowTimeoutTask{
+	workflowRunTimer := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 	}
 
-	s.assertEqualTasks(workflowTimer)
+	s.assertEqualTasks(workflowRunTimer)
+}
+
+func (s *taskSerializerSuite) TestTimerWorkflowExecution() {
+	workflowExecutionTimer := &tasks.WorkflowExecutionTimeoutTask{
+		NamespaceID:         s.workflowKey.NamespaceID,
+		WorkflowID:          s.workflowKey.WorkflowID,
+		FirstRunID:          s.workflowKey.RunID,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+	}
+
+	s.assertEqualTasks(workflowExecutionTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
@@ -275,7 +285,6 @@ func (s *taskSerializerSuite) TestVisibilityUpsertTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
-		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(visibilityUpsert)
@@ -335,7 +344,6 @@ func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
 		WorkflowKey:                    s.workflowKey,
 		VisibilityTimestamp:            time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:                         rand.Int63(),
-		Version:                        rand.Int63(),
 		CloseExecutionVisibilityTaskID: rand.Int63(),
 	}
 
@@ -347,7 +355,6 @@ func (s *taskSerializerSuite) TestDeleteExecutionTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
-		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(replicateHistoryTask)

@@ -51,13 +51,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		store sqlplugin.Namespace
+		store sqlplugin.DB
 	}
 )
 
 func NewNamespaceSuite(
 	t *testing.T,
-	store sqlplugin.Namespace,
+	store sqlplugin.DB,
 ) *namespaceSuite {
 	return &namespaceSuite{
 		Assertions: require.New(t),
@@ -353,11 +353,12 @@ func (s *namespaceSuite) TestSelectLockMetadata() {
 	row, err := s.store.SelectFromNamespaceMetadata(newExecutionContext())
 	s.NoError(err)
 
-	// NOTE: lock without transaction is equivalent to select
-	//  this test only test the select functionality
-	metadata, err := s.store.LockNamespaceMetadata(newExecutionContext())
+	tx, err := s.store.BeginTx(newExecutionContext())
+	s.NoError(err)
+	metadata, err := tx.LockNamespaceMetadata(newExecutionContext())
 	s.NoError(err)
 	s.Equal(row, metadata)
+	s.NoError(tx.Commit())
 }
 
 func (s *namespaceSuite) TestSelectUpdateSelectMetadata_Success() {

@@ -45,9 +45,9 @@ import (
 	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -138,7 +138,7 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
 			return !slices.Contains(
 				nonRetryableTypes,
-				common.TimeoutFailureTypePrefix+timeoutType.String(),
+				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
 			)
 		}
 
@@ -176,8 +176,9 @@ func SetupNewWorkflowForRetryOrCron(
 	initiator enumspb.ContinueAsNewInitiator,
 ) error {
 
-	// Extract ParentExecutionInfo from current run so it can be passed down to the next
+	// Extract ParentExecutionInfo and RootExecutionInfo from current run so it can be passed down to the next
 	var parentInfo *workflowspb.ParentExecutionInfo
+	var rootInfo *workflowspb.RootExecutionInfo
 	previousExecutionInfo := previousMutableState.GetExecutionInfo()
 	if previousMutableState.HasParentExecution() {
 		parentInfo = &workflowspb.ParentExecutionInfo{
@@ -190,6 +191,12 @@ func SetupNewWorkflowForRetryOrCron(
 			InitiatedId:      previousExecutionInfo.ParentInitiatedId,
 			InitiatedVersion: previousExecutionInfo.ParentInitiatedVersion,
 			Clock:            previousExecutionInfo.ParentClock,
+		}
+		rootInfo = &workflowspb.RootExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: previousExecutionInfo.RootWorkflowId,
+				RunId:      previousExecutionInfo.RootRunId,
+			},
 		}
 	}
 
@@ -253,11 +260,15 @@ func SetupNewWorkflowForRetryOrCron(
 		attempt = previousExecutionInfo.Attempt + 1
 	}
 
-	// For retry: propagate build-id version info to new workflow.
-	// For cron: do not propagate (always start on latest version).
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousMutableState.GetWorkerVersionStamp())
+	if previousExecutionInfo.AssignedBuildId == "" {
+		// TODO: only keeping this part for old versioning. The desired logic seem to be the same for both cron and
+		// retry: keep originally-inherited build ID. [cleanup-old-wv]
+		// For retry: propagate build-id version info to new workflow.
+		// For cron: do not propagate (always start on latest version).
+		if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousMutableState.GetMostRecentWorkerVersionStamp())
+		}
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -271,6 +282,8 @@ func SetupNewWorkflowForRetryOrCron(
 		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(durationpb.New(backoffInterval)),
 		Attempt:                  attempt,
 		SourceVersionStamp:       sourceVersionStamp,
+		RootExecutionInfo:        rootInfo,
+		InheritedBuildId:         startAttr.InheritedBuildId,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

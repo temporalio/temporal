@@ -41,6 +41,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -118,13 +119,6 @@ const (
 	taskCriticalLogMetricAttempts = 30
 )
 
-// ErrStaleTask is an indicator that a task cannot be executed because it is stale. This is expected in certain
-// situations and it is safe to drop the task.
-// An example of a stale task is when the task is pointing to a state machine in mutable state that has a newer version
-// than the version that task was created from, that is the state machine has already transitioned and the task is no
-// longer needed.
-var ErrStaleTask = errors.New("task stale")
-
 // UnprocessableTaskError is an indicator that an executor does not know how to handle a task. Considered terminal.
 type UnprocessableTaskError struct {
 	Message string
@@ -141,26 +135,6 @@ func (e UnprocessableTaskError) Error() string {
 
 // IsTerminalTaskError marks this error as terminal to be handled appropriately.
 func (UnprocessableTaskError) IsTerminalTaskError() bool {
-	return true
-}
-
-// StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that
-// state reload solves this issue but otherwise it is unexpected and considered terminal.
-type StaleStateError struct {
-	Message string
-}
-
-// NewStateStaleError returns a new StateStaleError from given message.
-func NewStateStaleError(message string) StaleStateError {
-	return StaleStateError{Message: message}
-}
-
-func (e StaleStateError) Error() string {
-	return "state stale: " + e.Message
-}
-
-// IsTerminalTaskError marks this error as terminal to be handled appropriately.
-func (StaleStateError) IsTerminalTaskError() bool {
 	return true
 }
 
@@ -383,6 +357,15 @@ func (e *executableImpl) writeToDLQ(ctx context.Context) error {
 }
 
 func (e *executableImpl) isSafeToDropError(err error) bool {
+	if errors.Is(err, consts.ErrStaleReference) {
+		// The task is stale and is safe to be dropped.
+		// Even though ErrStaleReference is castable to serviceerror.NotFound, we give this error special treatment
+		// because we're interested in the metric.
+		metrics.TaskSkipped.With(e.taggedMetricsHandler).Record(1)
+		e.logger.Info("Skipped task due with stale reference", tag.Error(err))
+		return true
+	}
+
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return true
 	}
@@ -456,12 +439,6 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 		metrics.TaskNamespaceHandoverCounter.With(e.taggedMetricsHandler).Record(1)
 		return true, consts.ErrNamespaceHandover
 	}
-	if errors.Is(err, ErrStaleTask) {
-		// The task is stale and is safe to be dropped.
-		metrics.TaskSkipped.With(e.taggedMetricsHandler).Record(1)
-		e.logger.Info("Skipped task due to task being stale", tag.Error(err))
-		return true, err
-	}
 
 	return false, nil
 }
@@ -508,7 +485,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			e.attempt++
 			if e.attempt > taskCriticalLogMetricAttempts {
 				metrics.TaskAttempt.With(e.taggedMetricsHandler).Record(int64(e.attempt))
-				e.logger.Error("Critical error processing task, retrying.", tag.Attempt(int32(e.attempt)), tag.Error(err), tag.OperationCritical)
+				e.logger.Error("Critical error processing task, retrying.",
+					tag.Attempt(int32(e.attempt)),
+					tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
+					tag.Error(err),
+					tag.OperationCritical)
 			}
 		}
 	}()
@@ -516,11 +497,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if len(e.dlqErrorPattern()) > 0 {
 		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
 		if mErr != nil {
-			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern))
+			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
 		} else if match {
 			e.logger.Error(
 				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
-					dynamicconfig.HistoryTaskDLQErrorPattern),
+					dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
 				tag.Error(err),
 				tag.ErrorType(err))
 			e.terminalFailureCause = err
@@ -564,7 +545,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
-			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
+			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
 		metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
@@ -815,4 +796,75 @@ func EstimateTaskMetricTag(
 		metrics.OperationTag(taskType), // for backward compatibility
 		// TODO: add task priority tag here as well
 	}
+}
+
+// CircuitBreakerExecutable wraps Executable with a circuit breaker.
+// If the executable returns DestinationDownError, it will signal the circuit breaker
+// of failure, and return the inner error.
+type CircuitBreakerExecutable struct {
+	Executable
+	cb circuitbreaker.TwoStepCircuitBreaker
+}
+
+func NewCircuitBreakerExecutable(
+	e Executable,
+	cb circuitbreaker.TwoStepCircuitBreaker,
+) *CircuitBreakerExecutable {
+	return &CircuitBreakerExecutable{
+		Executable: e,
+		cb:         cb,
+	}
+}
+
+// This is roughly the same implementation of the `gobreaker.CircuitBreaker.Execute` function,
+// but checks if the error is `DestinationDownError` to report success, and unwrap it.
+func (e *CircuitBreakerExecutable) Execute() error {
+	doneCb, err := e.cb.Allow()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		e := recover()
+		if e != nil {
+			doneCb(false)
+			panic(e)
+		}
+	}()
+
+	err = e.Executable.Execute()
+	destinationDownErr, destinationDown := err.(*DestinationDownError)
+	if destinationDown {
+		err = destinationDownErr.Unwrap()
+	}
+
+	doneCb(!destinationDown)
+	return err
+}
+
+// DestinationDownError indicates the destination is down and wraps another error.
+// It is a useful specific error that can be used, for example, in a circuit breaker
+// to distinguish when a destination service is down and an internal error.
+type DestinationDownError struct {
+	Message string
+	err     error
+}
+
+func NewDestinationDownError(msg string, err error) *DestinationDownError {
+	return &DestinationDownError{
+		Message: "destination down: " + msg,
+		err:     err,
+	}
+}
+
+func (e *DestinationDownError) Error() string {
+	msg := e.Message
+	if e.err != nil {
+		msg += "\n" + e.err.Error()
+	}
+	return msg
+}
+
+func (e *DestinationDownError) Unwrap() error {
+	return e.err
 }

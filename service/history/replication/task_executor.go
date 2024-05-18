@@ -158,6 +158,8 @@ func (e *taskExecutorImpl) handleActivityTask(
 		Attempt:            attr.Attempt,
 		LastFailure:        attr.LastFailure,
 		LastWorkerIdentity: attr.LastWorkerIdentity,
+		LastStartedBuildId: attr.LastStartedBuildId,
+		LastStartedRedirectCounter: attr.LastStartedRedirectCounter,
 		VersionHistory:     attr.GetVersionHistory(),
 	}
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)

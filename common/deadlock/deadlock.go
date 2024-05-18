@@ -85,11 +85,11 @@ func NewDeadlockDetector(params params) *deadlockDetector {
 		healthServer:   params.HealthServer,
 		metricsHandler: params.MetricsHandler.WithTags(metrics.OperationTag(metrics.DeadlockDetectorScope)),
 		config: config{
-			DumpGoroutines:    params.Collection.GetBoolProperty(dynamicconfig.DeadlockDumpGoroutines, true),
-			FailHealthCheck:   params.Collection.GetBoolProperty(dynamicconfig.DeadlockFailHealthCheck, false),
-			AbortProcess:      params.Collection.GetBoolProperty(dynamicconfig.DeadlockAbortProcess, false),
-			Interval:          params.Collection.GetDurationProperty(dynamicconfig.DeadlockInterval, 30*time.Second),
-			MaxWorkersPerRoot: params.Collection.GetIntProperty(dynamicconfig.DeadlockMaxWorkersPerRoot, 10),
+			DumpGoroutines:    dynamicconfig.DeadlockDumpGoroutines.Get(params.Collection),
+			FailHealthCheck:   dynamicconfig.DeadlockFailHealthCheck.Get(params.Collection),
+			AbortProcess:      dynamicconfig.DeadlockAbortProcess.Get(params.Collection),
+			Interval:          dynamicconfig.DeadlockInterval.Get(params.Collection),
+			MaxWorkersPerRoot: dynamicconfig.DeadlockMaxWorkersPerRoot.Get(params.Collection),
 		},
 		roots: params.Roots,
 	}

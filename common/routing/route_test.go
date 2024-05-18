@@ -105,7 +105,7 @@ func ExampleConstant() {
 	// Output: api/v1/namespaces
 }
 
-func ExampleVariable() {
+func ExampleStringVariable() {
 	fmt.Println(routing.StringVariable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).Representation())
 	// Output: {namespace}
 }
@@ -129,6 +129,6 @@ func TestNewRoute(t *testing.T) {
 			"namespace":  "TEST-NAMESPACE",
 			"workflowID": "TEST-WORKFLOW-ID",
 		})
-		assert.Equal(t, &QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}, params)
+		assert.Equal(t, QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}, params)
 	})
 }

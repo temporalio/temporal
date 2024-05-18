@@ -33,7 +33,6 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -79,17 +78,23 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 	}
 	dweResponse, err := describeWorkflowExecution()
 	s.NoError(err)
-	s.Nil(dweResponse.WorkflowExecutionInfo.CloseTime)
-	s.Equal(int64(2), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowStarted, WorkflowTaskScheduled
-	s.Equal(dweResponse.WorkflowExecutionInfo.GetStartTime(), dweResponse.WorkflowExecutionInfo.GetExecutionTime())
-	s.Equal(tq, dweResponse.WorkflowExecutionInfo.TaskQueue)
-	s.Greater(dweResponse.WorkflowExecutionInfo.GetHistorySizeBytes(), int64(0))
+	wfInfo := dweResponse.WorkflowExecutionInfo
+	s.Nil(wfInfo.CloseTime)
+	s.Nil(wfInfo.ExecutionDuration)
+	s.Equal(int64(2), wfInfo.HistoryLength) // WorkflowStarted, WorkflowTaskScheduled
+	s.Equal(wfInfo.GetStartTime(), wfInfo.GetExecutionTime())
+	s.Equal(tq, wfInfo.TaskQueue)
+	s.Greater(wfInfo.GetHistorySizeBytes(), int64(0))
+	s.Empty(wfInfo.GetParentNamespaceId())
+	s.Nil(wfInfo.GetParentExecution())
+	s.NotNil(wfInfo.GetRootExecution())
+	s.Equal(id, wfInfo.RootExecution.GetWorkflowId())
+	s.Equal(we.RunId, wfInfo.RootExecution.GetRunId())
 
 	// workflow logic
 	workflowComplete := false
 	signalSent := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !signalSent {
 			signalSent = true
 
@@ -118,8 +123,7 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
@@ -141,8 +145,11 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, dweResponse.WorkflowExecutionInfo.GetStatus())
-	s.Equal(int64(5), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, ActivityScheduled
+	wfInfo = dweResponse.WorkflowExecutionInfo
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, wfInfo.GetStatus())
+	s.Nil(wfInfo.CloseTime)
+	s.Nil(wfInfo.ExecutionDuration)
+	s.Equal(int64(5), wfInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, ActivityScheduled
 	s.Equal(1, len(dweResponse.PendingActivities))
 	s.Equal("test-activity-type", dweResponse.PendingActivities[0].ActivityType.GetName())
 	s.True(timestamp.TimeValue(dweResponse.PendingActivities[0].GetLastHeartbeatTime()).IsZero())
@@ -152,8 +159,9 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, dweResponse.WorkflowExecutionInfo.GetStatus())
-	s.Equal(int64(8), dweResponse.WorkflowExecutionInfo.HistoryLength) // ActivityTaskStarted, ActivityTaskCompleted, WorkflowTaskScheduled
+	wfInfo = dweResponse.WorkflowExecutionInfo
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, wfInfo.GetStatus())
+	s.Equal(int64(8), wfInfo.HistoryLength) // ActivityTaskStarted, ActivityTaskCompleted, WorkflowTaskScheduled
 	s.Equal(0, len(dweResponse.PendingActivities))
 
 	// Process signal in workflow
@@ -163,8 +171,15 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, dweResponse.WorkflowExecutionInfo.GetStatus())
-	s.Equal(int64(11), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, WorkflowCompleted
+	wfInfo = dweResponse.WorkflowExecutionInfo
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, wfInfo.GetStatus())
+	s.NotNil(wfInfo.CloseTime)
+	s.NotNil(wfInfo.ExecutionDuration)
+	s.Equal(
+		wfInfo.GetCloseTime().AsTime().Sub(wfInfo.ExecutionTime.AsTime()),
+		wfInfo.ExecutionDuration.AsDuration(),
+	)
+	s.Equal(int64(11), wfInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, WorkflowCompleted
 }
 
 func (s *FunctionalSuite) TestDescribeTaskQueue() {
@@ -196,9 +211,7 @@ func (s *FunctionalSuite) TestDescribeTaskQueue() {
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
@@ -227,8 +240,7 @@ func (s *FunctionalSuite) TestDescribeTaskQueue() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 

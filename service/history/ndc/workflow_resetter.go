@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -138,6 +139,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
+	currentUpdateRegistry := currentWorkflow.GetContext().UpdateRegistry(ctx, nil)
 	if currentMutableState.IsWorkflowExecutionRunning() {
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -158,6 +160,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
+				currentUpdateRegistry,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -172,7 +175,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
 				for _, event := range currentWorkflowEventsSeq {
-					if err := reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
+					if _, err := r.reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
 						return err
 					}
 				}
@@ -184,6 +187,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
+				currentUpdateRegistry,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -218,21 +222,27 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
-	if err := reapplyEvents(resetMS, additionalReapplyEvents, nil); err != nil {
+	if _, err := r.reapplyEvents(resetMS, additionalReapplyEvents, nil); err != nil {
 		return err
 	}
 
-	if err := workflow.ScheduleWorkflowTask(resetWorkflow.GetMutableState()); err != nil {
+	if err := workflow.ScheduleWorkflowTask(resetMS); err != nil {
 		return err
 	}
 
-	return r.persistToDB(
+	if err = r.persistToDB(
 		ctx,
 		currentWorkflow,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
 		resetWorkflow,
-	)
+	); err != nil {
+		return err
+	}
+
+	currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+
+	return nil
 }
 
 func (r *workflowResetterImpl) prepareResetWorkflow(
@@ -459,6 +469,10 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			workflowTask.RequestID,
 			workflowTask.TaskQueue,
 			consts.IdentityHistoryService,
+			// Passing nil versioning stamp means we want to skip versioning considerations because this task
+			// is not actually dispatched but will fail immediately.
+			nil,
+			nil,
 		)
 		if err != nil {
 			return err
@@ -470,6 +484,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		baseRunID,
 		resetRunID,
@@ -506,6 +521,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 				failure.NewResetWorkflowFailure(terminateReason, ai.LastHeartbeatDetails),
 				enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,
+				nil,
 			); err != nil {
 				return err
 			}
@@ -555,6 +571,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
+	currentUpdateRegistry update.Registry,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
@@ -570,7 +587,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	lastVisitedRunID := baseRunID
 
 	// First, special handling of remaining events for base workflow
-	nextRunID, err := r.reapplyWorkflowEvents(
+	nextRunID, err := r.reapplyEventsFromBranch(
 		ctx,
 		resetMutableState,
 		baseRebuildNextEventID,
@@ -627,7 +644,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			return "", err
 		}
 
-		nextRunID, err = r.reapplyWorkflowEvents(
+		nextRunID, err = r.reapplyEventsFromBranch(
 			ctx,
 			resetMutableState,
 			common.FirstEventID,
@@ -649,7 +666,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	return lastVisitedRunID, nil
 }
 
-func (r *workflowResetterImpl) reapplyWorkflowEvents(
+func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	ctx context.Context,
 	mutableState workflow.MutableState,
 	firstEventID int64,
@@ -678,7 +695,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if err := reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
+		if _, err := r.reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
 			return "", err
 		}
 	}
@@ -692,16 +709,40 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	return nextRunID, nil
 }
 
-func reapplyEvents(
+func (r *workflowResetterImpl) reapplyEvents(
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
-) error {
+) ([]*historypb.HistoryEvent, error) {
+	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
+	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
+	// did, before the refactoring that unified two code paths; see comment below.)
+	return reapplyEvents(mutableState, nil, events, resetReapplyExcludeTypes, "")
+}
+
+func reapplyEvents(
+	mutableState workflow.MutableState,
+	targetBranchUpdateRegistry update.Registry,
+	events []*historypb.HistoryEvent,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
+	runIdForDeduplication string,
+) ([]*historypb.HistoryEvent, error) {
+	// TODO (dan): This implementation is the result of unifying two previous implementations, one of which did
+	// deduplication. Can we always/never do this deduplication, or must it be decided by the caller?
+	isDuplicate := func(event *historypb.HistoryEvent) bool {
+		if runIdForDeduplication == "" {
+			return false
+		}
+		resource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())
+		return mutableState.IsResourceDuplicated(resource)
+	}
 	excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
+	excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
+	reappliedEvents := []*historypb.HistoryEvent{}
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-			if excludeSignal {
+			if excludeSignal || isDuplicate(event) {
 				continue
 			}
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -712,13 +753,57 @@ func reapplyEvents(
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
 			); err != nil {
-				return err
+				return reappliedEvents, err
 			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+			if excludeUpdate || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Contains(attr.Request.Meta.UpdateId) {
+				continue
+			}
+			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
+				attr.GetRequest(),
+				attr.Origin,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			if excludeUpdate || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Contains(attr.ProtocolInstanceId) {
+				continue
+			}
+			request := attr.GetAcceptedRequest()
+			if request == nil {
+				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateAdmitted
+				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateAdmitted
+				// event then we reapply it (converting it to UpdateAdmitted on the new branch). But if there is a
+				// preceding UpdateAdmitted event then we do not reapply the UpdateAccepted event.
+				continue
+			}
+			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
+				request,
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
 		default:
-			// events other than signal will be ignored
+			// Other event types are not reapplied.
+			continue
+		}
+		if runIdForDeduplication != "" {
+			deDupResource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())
+			mutableState.UpdateDuplicatedResource(deDupResource)
 		}
 	}
-	return nil
+	return reappliedEvents, nil
 }
 
 func (r *workflowResetterImpl) getPaginationFn(

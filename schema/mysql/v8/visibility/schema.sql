@@ -17,6 +17,8 @@ CREATE TABLE executions_visibility (
   search_attributes       JSON          NULL,
   parent_workflow_id      VARCHAR(255)  NULL,
   parent_run_id           VARCHAR(255)  NULL,
+  root_workflow_id        VARCHAR(255)  NULL,
+  root_run_id             VARCHAR(255)  NULL,
 
   -- Each search attribute has its own generated column.
   -- For string types (keyword and text), we need to unquote the json string,
@@ -58,6 +60,8 @@ CREATE INDEX by_state_transition_count  ON executions_visibility (namespace_id, 
 CREATE INDEX by_task_queue              ON executions_visibility (namespace_id, task_queue,             (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_parent_workflow_id      ON executions_visibility (namespace_id, parent_workflow_id,     (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_parent_run_id           ON executions_visibility (namespace_id, parent_run_id,          (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
+CREATE INDEX by_root_workflow_id        ON executions_visibility (namespace_id, root_workflow_id,       (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
+CREATE INDEX by_root_run_id             ON executions_visibility (namespace_id, root_run_id,            (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 
 -- Indexes for the predefined search attributes
 CREATE INDEX by_temporal_change_version       ON executions_visibility (namespace_id, (CAST(TemporalChangeVersion AS CHAR(255) ARRAY)), (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);

@@ -65,3 +65,188 @@ func (this *TaskVersionDirective) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type TaskQueueVersionInfoInternal to the protobuf v3 wire format
+func (val *TaskQueueVersionInfoInternal) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskQueueVersionInfoInternal from the protobuf v3 wire format
+func (val *TaskQueueVersionInfoInternal) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskQueueVersionInfoInternal) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskQueueVersionInfoInternal values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskQueueVersionInfoInternal) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskQueueVersionInfoInternal
+	switch t := that.(type) {
+	case *TaskQueueVersionInfoInternal:
+		that1 = t
+	case TaskQueueVersionInfoInternal:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type PhysicalTaskQueueInfo to the protobuf v3 wire format
+func (val *PhysicalTaskQueueInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type PhysicalTaskQueueInfo from the protobuf v3 wire format
+func (val *PhysicalTaskQueueInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *PhysicalTaskQueueInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two PhysicalTaskQueueInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *PhysicalTaskQueueInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *PhysicalTaskQueueInfo
+	switch t := that.(type) {
+	case *PhysicalTaskQueueInfo:
+		that1 = t
+	case PhysicalTaskQueueInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TaskQueuePartition to the protobuf v3 wire format
+func (val *TaskQueuePartition) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskQueuePartition from the protobuf v3 wire format
+func (val *TaskQueuePartition) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskQueuePartition) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskQueuePartition values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskQueuePartition) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskQueuePartition
+	switch t := that.(type) {
+	case *TaskQueuePartition:
+		that1 = t
+	case TaskQueuePartition:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type BuildIdRedirectInfo to the protobuf v3 wire format
+func (val *BuildIdRedirectInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BuildIdRedirectInfo from the protobuf v3 wire format
+func (val *BuildIdRedirectInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BuildIdRedirectInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BuildIdRedirectInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BuildIdRedirectInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BuildIdRedirectInfo
+	switch t := that.(type) {
+	case *BuildIdRedirectInfo:
+		that1 = t
+	case BuildIdRedirectInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TaskForwardInfo to the protobuf v3 wire format
+func (val *TaskForwardInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskForwardInfo from the protobuf v3 wire format
+func (val *TaskForwardInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskForwardInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskForwardInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskForwardInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskForwardInfo
+	switch t := that.(type) {
+	case *TaskForwardInfo:
+		that1 = t
+	case TaskForwardInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

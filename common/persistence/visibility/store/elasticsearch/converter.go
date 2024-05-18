@@ -30,6 +30,7 @@ import (
 	"github.com/temporalio/sqlparser"
 
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 var allowedComparisonOperators = map[string]struct{}{
@@ -45,9 +46,10 @@ var allowedComparisonOperators = map[string]struct{}{
 	sqlparser.NotStartsWithStr: {},
 }
 
-func newQueryConverter(
+func NewQueryConverter(
 	fnInterceptor query.FieldNameInterceptor,
 	fvInterceptor query.FieldValuesInterceptor,
+	saNameType searchattribute.NameTypeMap,
 ) *query.Converter {
 	if fnInterceptor == nil {
 		fnInterceptor = &query.NopFieldNameInterceptor{}
@@ -58,7 +60,7 @@ func newQueryConverter(
 	}
 
 	rangeCond := query.NewRangeCondConverter(fnInterceptor, fvInterceptor, true)
-	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators)
+	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, saNameType)
 	is := query.NewIsConverter(fnInterceptor)
 
 	whereConverter := &query.WhereConverter{

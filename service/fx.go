@@ -55,8 +55,8 @@ type (
 		PersistenceMaxQps                  persistenceClient.PersistenceMaxQps
 		PersistenceNamespaceMaxQps         persistenceClient.PersistenceNamespaceMaxQps
 		PersistencePerShardNamespaceMaxQPS persistenceClient.PersistencePerShardNamespaceMaxQPS
-		EnablePriorityRateLimiting         persistenceClient.EnablePriorityRateLimiting
 		OperatorRPSRatio                   persistenceClient.OperatorRPSRatio
+		PersistenceBurstRatio              persistenceClient.PersistenceBurstRatio
 		DynamicRateLimitingParams          persistenceClient.DynamicRateLimitingParams
 	}
 
@@ -92,9 +92,9 @@ func initPersistenceLazyLoadedServiceResolver(
 	logger.Info("Initialized service resolver for persistence rate limiting", tag.Service(serviceName))
 }
 
-func (p PersistenceLazyLoadedServiceResolver) MemberCount() int {
+func (p PersistenceLazyLoadedServiceResolver) AvailableMemberCount() int {
 	if value := p.Load(); value != nil {
-		return value.(membership.ServiceResolver).MemberCount()
+		return value.(membership.ServiceResolver).AvailableMemberCount()
 	}
 	return 0
 }
@@ -105,8 +105,8 @@ func NewPersistenceRateLimitingParams(
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	globalNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+	burstRatio dynamicconfig.FloatPropertyFn,
 	dynamicRateLimitingParams dynamicconfig.MapPropertyFn,
 	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
 	logger log.Logger,
@@ -135,8 +135,8 @@ func NewPersistenceRateLimitingParams(
 			return int(namespaceCalculator.GetQuota(namespace))
 		},
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
-		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
 		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(operatorRPSRatio),
+		PersistenceBurstRatio:              persistenceClient.PersistenceBurstRatio(burstRatio),
 		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(dynamicRateLimitingParams),
 	}
 }

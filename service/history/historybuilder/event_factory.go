@@ -86,7 +86,10 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		WorkflowId:                      req.WorkflowId,
 		SourceVersionStamp:              request.SourceVersionStamp,
 		CompletionCallbacks:             req.CompletionCallbacks,
+		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
+		InheritedBuildId:                request.InheritedBuildId,
 	}
+
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {
 		attributes.ParentWorkflowNamespaceId = parentInfo.NamespaceId
@@ -95,6 +98,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
 	}
+
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 		WorkflowExecutionStartedEventAttributes: attributes,
 	}
@@ -126,15 +130,19 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	startTime time.Time,
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
+	versioningStamp *commonpb.WorkerVersionStamp,
+	buildIdRedirectCounter int64,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-			ScheduledEventId:     scheduledEventID,
-			Identity:             identity,
-			RequestId:            requestID,
-			SuggestContinueAsNew: suggestContinueAsNew,
-			HistorySizeBytes:     historySizeBytes,
+			ScheduledEventId:       scheduledEventID,
+			Identity:               identity,
+			RequestId:              requestID,
+			SuggestContinueAsNew:   suggestContinueAsNew,
+			HistorySizeBytes:       historySizeBytes,
+			WorkerVersion:          versioningStamp,
+			BuildIdRedirectCounter: buildIdRedirectCounter,
 		},
 	}
 
@@ -229,7 +237,7 @@ func (b *EventFactory) CreateActivityTaskScheduledEvent(
 			StartToCloseTimeout:          command.StartToCloseTimeout,
 			HeartbeatTimeout:             command.HeartbeatTimeout,
 			RetryPolicy:                  command.RetryPolicy,
-			UseCompatibleVersion:         command.UseCompatibleVersion,
+			UseWorkflowBuildId:           command.UseWorkflowBuildId,
 		},
 	}
 	return event
@@ -241,15 +249,19 @@ func (b *EventFactory) CreateActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	lastFailure *failurepb.Failure,
+	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectCounter int64,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 		ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			Attempt:          attempt,
-			Identity:         identity,
-			RequestId:        requestID,
-			LastFailure:      lastFailure,
+			ScheduledEventId:       scheduledEventID,
+			Attempt:                attempt,
+			Identity:               identity,
+			RequestId:              requestID,
+			LastFailure:            lastFailure,
+			WorkerVersion:          versioningStamp,
+			BuildIdRedirectCounter: redirectCounter,
 		},
 	}
 	return event
@@ -408,6 +420,17 @@ func (b *EventFactory) CreateWorkflowExecutionUpdateCompletedEvent(
 	return event
 }
 
+func (b *EventFactory) CreateWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+		WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+			Request: request,
+			Origin:  origin,
+		},
+	}
+	return event
+}
+
 func (b EventFactory) CreateContinuedAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	newRunID string,
@@ -429,7 +452,7 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		LastCompletionResult:         command.LastCompletionResult,
 		Memo:                         command.Memo,
 		SearchAttributes:             command.SearchAttributes,
-		UseCompatibleVersion:         command.UseCompatibleVersion,
+		InheritBuildId:               command.InheritBuildId,
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
@@ -796,7 +819,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			Memo:                         command.Memo,
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
-			UseCompatibleVersion:         command.UseCompatibleVersion,
+			InheritBuildId:               command.InheritBuildId,
 		},
 	}
 	return event

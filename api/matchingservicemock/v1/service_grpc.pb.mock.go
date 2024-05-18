@@ -140,44 +140,44 @@ func (mr *MockMatchingServiceClientMockRecorder) CancelOutstandingPoll(ctx, in i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingPoll", reflect.TypeOf((*MockMatchingServiceClient)(nil).CancelOutstandingPoll), varargs...)
 }
 
-// CreateNexusIncomingService mocks base method.
-func (m *MockMatchingServiceClient) CreateNexusIncomingService(ctx context.Context, in *matchingservice.CreateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
+// CreateNexusEndpoint mocks base method.
+func (m *MockMatchingServiceClient) CreateNexusEndpoint(ctx context.Context, in *matchingservice.CreateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.CreateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "CreateNexusIncomingService", varargs...)
-	ret0, _ := ret[0].(*matchingservice.CreateNexusIncomingServiceResponse)
+	ret := m.ctrl.Call(m, "CreateNexusEndpoint", varargs...)
+	ret0, _ := ret[0].(*matchingservice.CreateNexusEndpointResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateNexusIncomingService indicates an expected call of CreateNexusIncomingService.
-func (mr *MockMatchingServiceClientMockRecorder) CreateNexusIncomingService(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// CreateNexusEndpoint indicates an expected call of CreateNexusEndpoint.
+func (mr *MockMatchingServiceClientMockRecorder) CreateNexusEndpoint(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNexusIncomingService", reflect.TypeOf((*MockMatchingServiceClient)(nil).CreateNexusIncomingService), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNexusEndpoint", reflect.TypeOf((*MockMatchingServiceClient)(nil).CreateNexusEndpoint), varargs...)
 }
 
-// DeleteNexusIncomingService mocks base method.
-func (m *MockMatchingServiceClient) DeleteNexusIncomingService(ctx context.Context, in *matchingservice.DeleteNexusIncomingServiceRequest, opts ...grpc.CallOption) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
+// DeleteNexusEndpoint mocks base method.
+func (m *MockMatchingServiceClient) DeleteNexusEndpoint(ctx context.Context, in *matchingservice.DeleteNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.DeleteNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", varargs...)
-	ret0, _ := ret[0].(*matchingservice.DeleteNexusIncomingServiceResponse)
+	ret := m.ctrl.Call(m, "DeleteNexusEndpoint", varargs...)
+	ret0, _ := ret[0].(*matchingservice.DeleteNexusEndpointResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// DeleteNexusIncomingService indicates an expected call of DeleteNexusIncomingService.
-func (mr *MockMatchingServiceClientMockRecorder) DeleteNexusIncomingService(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// DeleteNexusEndpoint indicates an expected call of DeleteNexusEndpoint.
+func (mr *MockMatchingServiceClientMockRecorder) DeleteNexusEndpoint(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusIncomingService", reflect.TypeOf((*MockMatchingServiceClient)(nil).DeleteNexusIncomingService), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusEndpoint", reflect.TypeOf((*MockMatchingServiceClient)(nil).DeleteNexusEndpoint), varargs...)
 }
 
 // DescribeTaskQueue mocks base method.
@@ -198,6 +198,26 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueue(ctx, in inter
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueue), varargs...)
+}
+
+// DescribeTaskQueuePartition mocks base method.
+func (m *MockMatchingServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *matchingservice.DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeTaskQueuePartition", varargs...)
+	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
+func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueuePartition(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueuePartition), varargs...)
 }
 
 // DispatchNexusTask mocks base method.
@@ -300,24 +320,44 @@ func (mr *MockMatchingServiceClientMockRecorder) GetWorkerBuildIdCompatibility(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerBuildIdCompatibility), varargs...)
 }
 
-// ListNexusIncomingServices mocks base method.
-func (m *MockMatchingServiceClient) ListNexusIncomingServices(ctx context.Context, in *matchingservice.ListNexusIncomingServicesRequest, opts ...grpc.CallOption) (*matchingservice.ListNexusIncomingServicesResponse, error) {
+// GetWorkerVersioningRules mocks base method.
+func (m *MockMatchingServiceClient) GetWorkerVersioningRules(ctx context.Context, in *matchingservice.GetWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "ListNexusIncomingServices", varargs...)
-	ret0, _ := ret[0].(*matchingservice.ListNexusIncomingServicesResponse)
+	ret := m.ctrl.Call(m, "GetWorkerVersioningRules", varargs...)
+	ret0, _ := ret[0].(*matchingservice.GetWorkerVersioningRulesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ListNexusIncomingServices indicates an expected call of ListNexusIncomingServices.
-func (mr *MockMatchingServiceClientMockRecorder) ListNexusIncomingServices(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// GetWorkerVersioningRules indicates an expected call of GetWorkerVersioningRules.
+func (mr *MockMatchingServiceClientMockRecorder) GetWorkerVersioningRules(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusIncomingServices", reflect.TypeOf((*MockMatchingServiceClient)(nil).ListNexusIncomingServices), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerVersioningRules), varargs...)
+}
+
+// ListNexusEndpoints mocks base method.
+func (m *MockMatchingServiceClient) ListNexusEndpoints(ctx context.Context, in *matchingservice.ListNexusEndpointsRequest, opts ...grpc.CallOption) (*matchingservice.ListNexusEndpointsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListNexusEndpoints", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ListNexusEndpointsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNexusEndpoints indicates an expected call of ListNexusEndpoints.
+func (mr *MockMatchingServiceClientMockRecorder) ListNexusEndpoints(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusEndpoints", reflect.TypeOf((*MockMatchingServiceClient)(nil).ListNexusEndpoints), varargs...)
 }
 
 // ListTaskQueuePartitions mocks base method.
@@ -500,24 +540,24 @@ func (mr *MockMatchingServiceClientMockRecorder) RespondQueryTaskCompleted(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceClient)(nil).RespondQueryTaskCompleted), varargs...)
 }
 
-// UpdateNexusIncomingService mocks base method.
-func (m *MockMatchingServiceClient) UpdateNexusIncomingService(ctx context.Context, in *matchingservice.UpdateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
+// UpdateNexusEndpoint mocks base method.
+func (m *MockMatchingServiceClient) UpdateNexusEndpoint(ctx context.Context, in *matchingservice.UpdateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.UpdateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "UpdateNexusIncomingService", varargs...)
-	ret0, _ := ret[0].(*matchingservice.UpdateNexusIncomingServiceResponse)
+	ret := m.ctrl.Call(m, "UpdateNexusEndpoint", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateNexusEndpointResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateNexusIncomingService indicates an expected call of UpdateNexusIncomingService.
-func (mr *MockMatchingServiceClientMockRecorder) UpdateNexusIncomingService(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// UpdateNexusEndpoint indicates an expected call of UpdateNexusEndpoint.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateNexusEndpoint(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNexusIncomingService", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateNexusIncomingService), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNexusEndpoint", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateNexusEndpoint), varargs...)
 }
 
 // UpdateTaskQueueUserData mocks base method.
@@ -558,6 +598,26 @@ func (mr *MockMatchingServiceClientMockRecorder) UpdateWorkerBuildIdCompatibilit
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateWorkerBuildIdCompatibility), varargs...)
+}
+
+// UpdateWorkerVersioningRules mocks base method.
+func (m *MockMatchingServiceClient) UpdateWorkerVersioningRules(ctx context.Context, in *matchingservice.UpdateWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkerVersioningRules", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateWorkerVersioningRulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerVersioningRules indicates an expected call of UpdateWorkerVersioningRules.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateWorkerVersioningRules(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateWorkerVersioningRules), varargs...)
 }
 
 // MockMatchingServiceServer is a mock of MatchingServiceServer interface.
@@ -643,34 +703,34 @@ func (mr *MockMatchingServiceServerMockRecorder) CancelOutstandingPoll(arg0, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingPoll", reflect.TypeOf((*MockMatchingServiceServer)(nil).CancelOutstandingPoll), arg0, arg1)
 }
 
-// CreateNexusIncomingService mocks base method.
-func (m *MockMatchingServiceServer) CreateNexusIncomingService(arg0 context.Context, arg1 *matchingservice.CreateNexusIncomingServiceRequest) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
+// CreateNexusEndpoint mocks base method.
+func (m *MockMatchingServiceServer) CreateNexusEndpoint(arg0 context.Context, arg1 *matchingservice.CreateNexusEndpointRequest) (*matchingservice.CreateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateNexusIncomingService", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.CreateNexusIncomingServiceResponse)
+	ret := m.ctrl.Call(m, "CreateNexusEndpoint", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.CreateNexusEndpointResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateNexusIncomingService indicates an expected call of CreateNexusIncomingService.
-func (mr *MockMatchingServiceServerMockRecorder) CreateNexusIncomingService(arg0, arg1 interface{}) *gomock.Call {
+// CreateNexusEndpoint indicates an expected call of CreateNexusEndpoint.
+func (mr *MockMatchingServiceServerMockRecorder) CreateNexusEndpoint(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNexusIncomingService", reflect.TypeOf((*MockMatchingServiceServer)(nil).CreateNexusIncomingService), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNexusEndpoint", reflect.TypeOf((*MockMatchingServiceServer)(nil).CreateNexusEndpoint), arg0, arg1)
 }
 
-// DeleteNexusIncomingService mocks base method.
-func (m *MockMatchingServiceServer) DeleteNexusIncomingService(arg0 context.Context, arg1 *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
+// DeleteNexusEndpoint mocks base method.
+func (m *MockMatchingServiceServer) DeleteNexusEndpoint(arg0 context.Context, arg1 *matchingservice.DeleteNexusEndpointRequest) (*matchingservice.DeleteNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.DeleteNexusIncomingServiceResponse)
+	ret := m.ctrl.Call(m, "DeleteNexusEndpoint", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.DeleteNexusEndpointResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// DeleteNexusIncomingService indicates an expected call of DeleteNexusIncomingService.
-func (mr *MockMatchingServiceServerMockRecorder) DeleteNexusIncomingService(arg0, arg1 interface{}) *gomock.Call {
+// DeleteNexusEndpoint indicates an expected call of DeleteNexusEndpoint.
+func (mr *MockMatchingServiceServerMockRecorder) DeleteNexusEndpoint(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusIncomingService", reflect.TypeOf((*MockMatchingServiceServer)(nil).DeleteNexusIncomingService), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusEndpoint", reflect.TypeOf((*MockMatchingServiceServer)(nil).DeleteNexusEndpoint), arg0, arg1)
 }
 
 // DescribeTaskQueue mocks base method.
@@ -686,6 +746,21 @@ func (m *MockMatchingServiceServer) DescribeTaskQueue(arg0 context.Context, arg1
 func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueue(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueue), arg0, arg1)
+}
+
+// DescribeTaskQueuePartition mocks base method.
+func (m *MockMatchingServiceServer) DescribeTaskQueuePartition(arg0 context.Context, arg1 *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeTaskQueuePartition", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
+func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueuePartition), arg0, arg1)
 }
 
 // DispatchNexusTask mocks base method.
@@ -763,19 +838,34 @@ func (mr *MockMatchingServiceServerMockRecorder) GetWorkerBuildIdCompatibility(a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerBuildIdCompatibility), arg0, arg1)
 }
 
-// ListNexusIncomingServices mocks base method.
-func (m *MockMatchingServiceServer) ListNexusIncomingServices(arg0 context.Context, arg1 *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, error) {
+// GetWorkerVersioningRules mocks base method.
+func (m *MockMatchingServiceServer) GetWorkerVersioningRules(arg0 context.Context, arg1 *matchingservice.GetWorkerVersioningRulesRequest) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListNexusIncomingServices", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.ListNexusIncomingServicesResponse)
+	ret := m.ctrl.Call(m, "GetWorkerVersioningRules", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.GetWorkerVersioningRulesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ListNexusIncomingServices indicates an expected call of ListNexusIncomingServices.
-func (mr *MockMatchingServiceServerMockRecorder) ListNexusIncomingServices(arg0, arg1 interface{}) *gomock.Call {
+// GetWorkerVersioningRules indicates an expected call of GetWorkerVersioningRules.
+func (mr *MockMatchingServiceServerMockRecorder) GetWorkerVersioningRules(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusIncomingServices", reflect.TypeOf((*MockMatchingServiceServer)(nil).ListNexusIncomingServices), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerVersioningRules), arg0, arg1)
+}
+
+// ListNexusEndpoints mocks base method.
+func (m *MockMatchingServiceServer) ListNexusEndpoints(arg0 context.Context, arg1 *matchingservice.ListNexusEndpointsRequest) (*matchingservice.ListNexusEndpointsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListNexusEndpoints", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ListNexusEndpointsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNexusEndpoints indicates an expected call of ListNexusEndpoints.
+func (mr *MockMatchingServiceServerMockRecorder) ListNexusEndpoints(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusEndpoints", reflect.TypeOf((*MockMatchingServiceServer)(nil).ListNexusEndpoints), arg0, arg1)
 }
 
 // ListTaskQueuePartitions mocks base method.
@@ -913,19 +1003,19 @@ func (mr *MockMatchingServiceServerMockRecorder) RespondQueryTaskCompleted(arg0,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceServer)(nil).RespondQueryTaskCompleted), arg0, arg1)
 }
 
-// UpdateNexusIncomingService mocks base method.
-func (m *MockMatchingServiceServer) UpdateNexusIncomingService(arg0 context.Context, arg1 *matchingservice.UpdateNexusIncomingServiceRequest) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
+// UpdateNexusEndpoint mocks base method.
+func (m *MockMatchingServiceServer) UpdateNexusEndpoint(arg0 context.Context, arg1 *matchingservice.UpdateNexusEndpointRequest) (*matchingservice.UpdateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNexusIncomingService", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.UpdateNexusIncomingServiceResponse)
+	ret := m.ctrl.Call(m, "UpdateNexusEndpoint", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateNexusEndpointResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateNexusIncomingService indicates an expected call of UpdateNexusIncomingService.
-func (mr *MockMatchingServiceServerMockRecorder) UpdateNexusIncomingService(arg0, arg1 interface{}) *gomock.Call {
+// UpdateNexusEndpoint indicates an expected call of UpdateNexusEndpoint.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateNexusEndpoint(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNexusIncomingService", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateNexusIncomingService), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNexusEndpoint", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateNexusEndpoint), arg0, arg1)
 }
 
 // UpdateTaskQueueUserData mocks base method.
@@ -956,6 +1046,21 @@ func (m *MockMatchingServiceServer) UpdateWorkerBuildIdCompatibility(arg0 contex
 func (mr *MockMatchingServiceServerMockRecorder) UpdateWorkerBuildIdCompatibility(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateWorkerBuildIdCompatibility), arg0, arg1)
+}
+
+// UpdateWorkerVersioningRules mocks base method.
+func (m *MockMatchingServiceServer) UpdateWorkerVersioningRules(arg0 context.Context, arg1 *matchingservice.UpdateWorkerVersioningRulesRequest) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkerVersioningRules", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateWorkerVersioningRulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerVersioningRules indicates an expected call of UpdateWorkerVersioningRules.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateWorkerVersioningRules(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateWorkerVersioningRules), arg0, arg1)
 }
 
 // mustEmbedUnimplementedMatchingServiceServer mocks base method.

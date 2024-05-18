@@ -185,7 +185,6 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		Info:               resp.GetInfo(),
 		Config:             resp.GetConfig(),
 		ReplicationConfig:  resp.GetReplicationConfig(),
-		NexusOutgoingServices: resp.GetOutgoingServices(),
 		ConfigVersion:      resp.GetConfigVersion(),
 		FailoverVersion:    resp.GetFailoverVersion(),
 		FailoverHistory:    resp.GetFailoverHistory(),

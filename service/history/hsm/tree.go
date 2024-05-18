@@ -23,10 +23,17 @@
 package hsm
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // ErrStateMachineNotFound is returned when looking up a non-existing state machine in a [Node] or a [Collection].
@@ -77,7 +84,23 @@ type cachedMachine struct {
 	outputs []TransitionOutput
 }
 
-// Node is a node in a heirarchical state machine tree.
+// NodeBackend is a concrete implementation to support interacting with the underlying platform.
+// It currently has only a single implementation - workflow mutable state.
+type NodeBackend interface {
+	// AddHistoryEvent adds a history event to be committed at the end of the current transaction.
+	AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	// Load a history event by token generated via [GenerateEventLoadToken].
+	LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+}
+
+// EventIDFromToken gets the event ID associated with an event load token.
+func EventIDFromToken(token []byte) (int64, error) {
+	ref := &tokenspb.HistoryEventRef{}
+	err := proto.Unmarshal(token, ref)
+	return ref.EventId, err
+}
+
+// Node is a node in a hierarchical state machine tree.
 //
 // It holds a persistent representation of itself and maintains an in-memory cache of deserialized data and child nodes.
 // Node data should not be manipulated directly and should only be done using [MachineTransition] or
@@ -91,12 +114,13 @@ type Node struct {
 	cache       *cachedMachine
 	persistence *persistencespb.StateMachineNode
 	definition  StateMachineDefinition
+	backend     NodeBackend
 }
 
 // NewRoot creates a new root [Node].
 // Children may be provided from persistence to rehydrate the tree.
 // Returns [ErrNotRegistered] if the key's type is not registered in the given registry or serialization errors.
-func NewRoot(registry *Registry, t int32, data any, children map[int32]*persistencespb.StateMachineMap) (*Node, error) {
+func NewRoot(registry *Registry, t int32, data any, children map[int32]*persistencespb.StateMachineMap, backend NodeBackend) (*Node, error) {
 	def, ok := registry.Machine(t)
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, t)
@@ -117,6 +141,7 @@ func NewRoot(registry *Registry, t int32, data any, children map[int32]*persiste
 			data:       data,
 			children:   make(map[Key]*Node),
 		},
+		backend: backend,
 	}, nil
 }
 
@@ -197,6 +222,7 @@ func (n *Node) Child(path []Key) (*Node, error) {
 			children: make(map[Key]*Node),
 		},
 		persistence: machine,
+		backend:     n.backend,
 	}
 	n.cache.children[key] = child
 	return child.Child(rest)
@@ -236,15 +262,32 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 			data:       data,
 			children:   make(map[Key]*Node),
 		},
+		backend: n.backend,
 	}
 	n.cache.children[key] = node
 	children, ok := n.persistence.Children[key.Type]
 	if !ok {
 		children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
+		// Children may be nil if the map was empty and the proto message we serialized and deserialized.
+		if n.persistence.Children == nil {
+			n.persistence.Children = make(map[int32]*persistencespb.StateMachineMap, 1)
+		}
 		n.persistence.Children[key.Type] = children
 	}
 	children.MachinesById[key.ID] = node.persistence
 	return node, nil
+}
+
+// AddHistoryEvent adds a history event to be committed at the end of the current transaction.
+// Must be called within an [Environment.Access] function block with write access.
+func (n *Node) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	return n.backend.AddHistoryEvent(t, setAttributes)
+}
+
+// Load a history event by token generated via [GenerateEventLoadToken].
+// Must be called within an [Environment.Access] function block with either read or write access.
+func (n *Node) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	return n.backend.LoadHistoryEvent(ctx, token)
 }
 
 // MachineData deserializes the persistent state machine's data, casts it to type T, and returns it.
@@ -342,6 +385,15 @@ func (c Collection[T]) List() []*Node {
 	return nodes
 }
 
+// Size returns the number of machines in this collection.
+func (c Collection[T]) Size() int {
+	machines, ok := c.node.persistence.Children[c.Type]
+	if !ok {
+		return 0
+	}
+	return len(machines.MachinesById)
+}
+
 // Add adds a node to the collection as a child of the collection's underlying [Node].
 func (c Collection[T]) Add(stateMachineID string, data T) (*Node, error) {
 	return c.node.AddChild(Key{Type: c.Type, ID: stateMachineID}, data)
@@ -364,4 +416,35 @@ func (c Collection[T]) Transition(stateMachineID string, transitionFn func(T) (T
 		return err
 	}
 	return MachineTransition(node, transitionFn)
+}
+
+// GenerateEventLoadToken generates a token for loading a history event from an [Environment].
+// Events should typically be immutable making this function safe to call outside of an [Environment.Access] call.
+func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	attrs := reflect.ValueOf(event.Attributes).Elem()
+
+	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
+	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("got an invalid event structure: %v", event.EventType))
+	}
+
+	f := attrs.Field(0).Interface()
+
+	var eventBatchID int64
+	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
+		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
+		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
+	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
+		// WFEStarted is always stored in the first batch of events.
+		eventBatchID = 1
+	} else {
+		// By default events aren't referenceable as they may end up buffered.
+		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
+		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
+	}
+	ref := &tokenspb.HistoryEventRef{
+		EventId:      event.EventId,
+		EventBatchId: eventBatchID,
+	}
+	return proto.Marshal(ref)
 }

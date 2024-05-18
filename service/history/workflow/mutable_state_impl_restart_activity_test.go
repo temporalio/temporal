@@ -354,6 +354,8 @@ func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencesp
 		activityInfo.ScheduledEventId,
 		uuid.New(),
 		"worker-identity",
+		nil,
+		nil,
 	)
 	s.NoError(err)
 

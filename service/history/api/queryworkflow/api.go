@@ -118,15 +118,15 @@ func Invoke(
 	}
 
 	mutableState := workflowLease.GetMutableState()
+	if !mutableState.IsWorkflowExecutionRunning() && !mutableState.HasCompletedAnyWorkflowTask() {
+		// Workflow was closed before WorkflowTaskStarted event. In this case query will fail.
+		return nil, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted
+	}
+
 	if !mutableState.HadOrHasWorkflowTask() {
 		// workflow has no workflow task ever scheduled, this usually is due to firstWorkflowTaskBackoff (cron / retry)
 		// in this case, don't buffer the query, because it is almost certain the query will time out.
 		return nil, consts.ErrWorkflowTaskNotScheduled
-	}
-
-	if !mutableState.IsWorkflowExecutionRunning() && mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
-		// Workflow was closed before WorkflowTaskStarted event. In this case query will fail.
-		return nil, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted
 	}
 
 	if mutableState.GetExecutionInfo().WorkflowTaskAttempt >= failQueryWorkflowTaskAttemptCount {
@@ -147,7 +147,7 @@ func Invoke(
 	// is used to determine if a query can be safely dispatched directly through matching or must be dispatched on a workflow task.
 	//
 	// Precondition to dispatch query directly to matching is workflow has at least one WorkflowTaskStarted event. Otherwise, sdk would panic.
-	if mutableState.GetLastWorkflowTaskStartedEventID() != common.EmptyEventID {
+	if mutableState.HasCompletedAnyWorkflowTask() {
 		// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
 		// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 		// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
@@ -259,8 +259,10 @@ func queryDirectlyThroughMatching(
 	}()
 
 	directive := worker_versioning.MakeDirectiveForWorkflowTask(
-		msResp.GetWorkerVersionStamp(),
-		msResp.GetPreviousStartedEventId(),
+		msResp.GetInheritedBuildId(),
+		msResp.GetAssignedBuildId(),
+		msResp.GetMostRecentWorkerVersionStamp(),
+		msResp.GetPreviousStartedEventId() != common.EmptyEventID,
 	)
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&

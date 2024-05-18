@@ -169,7 +169,7 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		Ephemeral:  true,
 		Logger:     log.NewNoopLogger(),
 		DynamicConfig: dynamicconfig.StaticClient{
-			dynamicconfig.ForceSearchAttributesCacheRefreshOnRead: []dynamicconfig.ConstrainedValue{{Value: true}},
+			dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): []dynamicconfig.ConstrainedValue{{Value: true}},
 		},
 		// Disable "accept incoming network connections?" prompt on macOS
 		FrontendIP: "127.0.0.1",

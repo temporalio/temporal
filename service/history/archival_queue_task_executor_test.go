@@ -160,10 +160,8 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 		{
 			Name: "wrong task type",
 			Configure: func(p *params) {
-				version := p.Task.GetVersion()
 				p.Task = &tasks.DeleteExecutionTask{
 					WorkflowKey: p.WorkflowKey,
-					Version:     version,
 				}
 				p.ExpectArchive = false
 				p.ExpectAddTask = false
@@ -215,6 +213,15 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			Configure: func(p *params) {
 				p.GetWorkflowCloseTimeError = errors.New("get workflow close time error")
 				p.ExpectedErrorSubstrings = []string{"get workflow close time error"}
+				p.ExpectArchive = false
+				p.ExpectAddTask = false
+			},
+		},
+		{
+			Name: "get workflow execution duration error",
+			Configure: func(p *params) {
+				p.GetWorkflowExecutionDurationError = errors.New("get workflow execution duration error")
+				p.ExpectedErrorSubstrings = []string{"get workflow execution duration error"}
 				p.ExpectArchive = false
 				p.ExpectAddTask = false
 			},
@@ -317,6 +324,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			p.StartTime = time.Unix(0, 0).UTC()
 			p.ExecutionTime = time.Unix(0, 0).UTC()
 			p.CloseTime = time.Unix(0, 0).UTC().Add(time.Minute * 2)
+			p.ExecutionDuration = p.CloseTime.Sub(p.ExecutionTime)
 			p.Retention = durationpb.New(time.Hour)
 			// delete time = close time + retention
 			// delete time = 2 minutes + 1 hour = 1 hour 2 minutes
@@ -415,6 +423,10 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					p.CloseTime,
 					p.GetWorkflowCloseTimeError,
 				).AnyTimes()
+				mutableState.EXPECT().GetWorkflowExecutionDuration(gomock.Any()).Return(
+					p.ExecutionDuration,
+					p.GetWorkflowExecutionDurationError,
+				).AnyTimes()
 				executionInfo := &persistence.WorkflowExecutionInfo{
 					NamespaceId:                  tests.NamespaceID.String(),
 					StartTime:                    timestamppb.New(p.StartTime),
@@ -485,6 +497,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					assert.Equal(t, p.StartTime, request.StartTime.AsTime())
 					assert.Equal(t, p.ExecutionTime, request.ExecutionTime.AsTime())
 					assert.Equal(t, p.CloseTime, request.CloseTime.AsTime())
+					assert.Equal(t, p.ExecutionDuration, request.ExecutionDuration.AsDuration())
 					assert.ElementsMatch(t, p.ExpectedTargets, request.Targets)
 
 					return &archival.Response{}, p.ArchiveError
@@ -561,6 +574,7 @@ type params struct {
 	StartTime                              time.Time
 	ExecutionTime                          time.Time
 	CloseTime                              time.Time
+	ExecutionDuration                      time.Duration
 	GetNamespaceByIDError                  error
 	HistoryURI                             string
 	VisibilityURI                          string
@@ -568,6 +582,7 @@ type params struct {
 	MutableStateExists                     bool
 	ArchiveError                           error
 	GetWorkflowCloseTimeError              error
+	GetWorkflowExecutionDurationError      error
 	GetCurrentBranchTokenError             error
 	CloseVisibilityTaskCompleted           bool
 	ExpectGetWorkflowExecution             bool

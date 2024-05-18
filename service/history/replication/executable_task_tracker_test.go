@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/server/common/log"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -67,7 +68,7 @@ func (s *executableTaskTrackerSuite) TearDownSuite() {
 func (s *executableTaskTrackerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
-	s.taskTracker = NewExecutableTaskTracker(log.NewTestLogger())
+	s.taskTracker = NewExecutableTaskTracker(log.NewTestLogger(), metrics.NoopMetricsHandler)
 }
 
 func (s *executableTaskTrackerSuite) TearDownTest() {

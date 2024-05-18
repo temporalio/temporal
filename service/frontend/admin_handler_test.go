@@ -40,7 +40,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -72,7 +71,6 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
 )
@@ -1109,13 +1107,6 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 				},
 			},
 			FailoverNotificationVersion: 0,
-			OutgoingServices: []*persistencespb.NexusOutgoingService{
-				{
-					Version: 1,
-					Name:    "svc",
-					Spec:    &nexuspb.OutgoingServiceSpec{},
-				},
-			},
 		},
 	}
 	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
@@ -1128,7 +1119,6 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
-	protorequire.ProtoSliceEqual(s.T(), nsResponse.Namespace.OutgoingServices, resp.OutgoingServices)
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
@@ -1475,7 +1465,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{
-				JobToken: string(jobTokenBytes),
+				JobToken: jobTokenBytes,
 			})
 			if tc.err != nil {
 				s.ErrorIs(err, tc.err)
@@ -1489,7 +1479,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 }
 
 func (s *adminHandlerSuite) TestDescribeDLQJob_InvalidJobToken() {
-	_, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{JobToken: "invalid_token"})
+	_, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{JobToken: []byte("invalid_token")})
 	s.Error(err)
 	s.ErrorContains(err, "Invalid DLQ job token")
 
@@ -1581,7 +1571,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{
-				JobToken: string(jobTokenBytes),
+				JobToken: jobTokenBytes,
 				Reason:   "test-reason",
 			})
 			if tc.describeErr != nil {
@@ -1600,7 +1590,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 }
 
 func (s *adminHandlerSuite) TestCancelDLQJob_InvalidJobToken() {
-	_, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{JobToken: "invalid_token", Reason: "test-reason"})
+	_, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{JobToken: []byte("invalid_token"), Reason: "test-reason"})
 	s.Error(err)
 	s.ErrorContains(err, "Invalid DLQ job token")
 }

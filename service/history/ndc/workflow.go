@@ -52,7 +52,6 @@ type (
 		GetMutableState() workflow.MutableState
 		GetReleaseFn() wcache.ReleaseCacheFunc
 		GetVectorClock() (int64, int64, error)
-		LastWriteByLocalCluster() (bool, error)
 
 		HappensAfter(that Workflow) (bool, error)
 		Revive() error
@@ -106,16 +105,6 @@ func (r *WorkflowImpl) GetVectorClock() (int64, int64, error) {
 
 	lastEventTaskID := r.mutableState.GetExecutionInfo().LastEventTaskId
 	return lastWriteVersion, lastEventTaskID, nil
-}
-
-func (r *WorkflowImpl) LastWriteByLocalCluster() (bool, error) {
-	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
-	if err != nil {
-		return false, err
-	}
-	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
-	currentCluster := r.clusterMetadata.GetCurrentClusterName()
-	return lastWriteCluster == currentCluster, nil
 }
 
 func (r *WorkflowImpl) HappensAfter(
@@ -259,6 +248,7 @@ func (r *WorkflowImpl) failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",
@@ -299,6 +289,12 @@ func (r *WorkflowImpl) terminateWorkflow(
 		WorkflowTerminationIdentity,
 		false,
 	)
+
+	// Don't abort updates here for a few reasons:
+	//   1. There probably no update waiters for Wf which is about to be terminated,
+	//   2. MS is not persisted yet, and updates should be aborted after MS is persisted, which is not trivial in this case,
+	//   3. New replication version will force update registry reload and waiters will get errors.
+	// r.GetContext().UpdateRegistry(context.Background(), nil).Abort(update.AbortReasonWorkflowTerminated)
 
 	return err
 }

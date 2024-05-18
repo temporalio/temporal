@@ -192,9 +192,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			if err := taskGenerator.GenerateWorkflowStartTasks(
+			var err error
+			executionInfo.WorkflowExecutionTimerTaskStatus, err = taskGenerator.GenerateWorkflowStartTasks(
 				event,
-			); err != nil {
+			)
+			if err != nil {
 				return nil, err
 			}
 
@@ -251,6 +253,8 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				timestamp.TimeValue(event.GetEventTime()),
 				attributes.GetSuggestContinueAsNew(),
 				attributes.GetHistorySizeBytes(),
+				attributes.GetWorkerVersion(),
+				attributes.GetBuildIdRedirectCounter(),
 			)
 			if err != nil {
 				return nil, err
@@ -324,7 +328,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateActivityTasks(
-				event,
+				event.GetEventId(),
 			); err != nil {
 				return nil, err
 			}
@@ -653,6 +657,10 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				return nil, err
 			}
 
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+			if err := b.mutableState.ApplyWorkflowExecutionUpdateAdmittedEvent(event, firstEvent.GetEventId()); err != nil {
+				return nil, err
+			}
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			if err := b.mutableState.ApplyWorkflowExecutionUpdateAcceptedEvent(event); err != nil {
@@ -699,15 +707,38 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 	newRunHistory []*historypb.HistoryEvent,
 ) (MutableState, error) {
 
-	newRunMutableState := NewMutableState(
-		b.shard,
-		b.shard.GetEventsCache(),
-		b.logger,
-		b.mutableState.GetNamespaceEntry(),
-		newExecution.WorkflowId,
-		newExecution.RunId,
-		timestamp.TimeValue(newRunHistory[0].GetEventTime()),
-	)
+	// TODO: replication task should contain enough information to determine whether the new run is part of the same chain
+	// and not relying on a specific event type to make that decision
+	sameWorkflowChain := false
+	newRunFirstEvent := newRunHistory[0]
+	if newRunFirstEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		newRunFirstRunID := newRunFirstEvent.GetWorkflowExecutionStartedEventAttributes().FirstExecutionRunId
+		sameWorkflowChain = newRunFirstRunID == b.mutableState.GetExecutionInfo().FirstExecutionRunId
+	}
+
+	var newRunMutableState MutableState
+	if sameWorkflowChain {
+		newRunMutableState = NewMutableStateInChain(
+			b.shard,
+			b.shard.GetEventsCache(),
+			b.logger,
+			b.mutableState.GetNamespaceEntry(),
+			newExecution.WorkflowId,
+			newExecution.RunId,
+			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
+			b.mutableState,
+		)
+	} else {
+		newRunMutableState = NewMutableState(
+			b.shard,
+			b.shard.GetEventsCache(),
+			b.logger,
+			b.mutableState.GetNamespaceEntry(),
+			newExecution.WorkflowId,
+			newExecution.RunId,
+			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
+		)
+	}
 
 	newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
 

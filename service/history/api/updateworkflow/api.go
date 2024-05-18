@@ -26,7 +26,6 @@ package updateworkflow
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -34,6 +33,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -110,23 +110,28 @@ func (u *Updater) Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		wfKey,
-		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) { return u.Apply(ctx, lease) },
+		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			ms := lease.GetMutableState()
+			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			return u.ApplyRequest(ctx, updateReg, ms)
+		},
 		nil,
 		u.shardCtx,
 		u.workflowConsistencyChecker,
 	)
 
 	if err != nil {
-		return u.OnError(err)
+		return nil, err
 	}
+
 	return u.OnSuccess(ctx)
 }
 
-func (u *Updater) Apply(
+func (u *Updater) ApplyRequest(
 	ctx context.Context,
-	workflowLease api.WorkflowLease,
+	updateReg update.Registry,
+	ms workflow.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
-	ms := workflowLease.GetMutableState()
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
 	}
@@ -149,8 +154,19 @@ func (u *Updater) Apply(
 		return nil, serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 	}
 
+	// If workflow attempted to close itself on previous WFT completion,
+	// and has another WFT running, which most likely will try to complete workflow again,
+	// then don't admit new updates.
+	if ms.IsWorkflowCloseAttempted() && ms.HasStartedWorkflowTask() {
+		u.shardCtx.GetLogger().Info("Fail update because workflow is closing.",
+			tag.WorkflowNamespace(u.req.Request.Namespace),
+			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
+			tag.WorkflowID(u.wfKey.WorkflowID),
+			tag.WorkflowRunID(u.wfKey.RunID))
+		return nil, consts.ErrWorkflowClosing
+	}
+
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
-	updateReg := workflowLease.GetContext().UpdateRegistry(ctx)
 	var (
 		alreadyExisted bool
 		err            error
@@ -158,7 +174,7 @@ func (u *Updater) Apply(
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}
-	if err = u.upd.Request(ctx, u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+	if err = u.upd.Admit(ctx, u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
 	}
 
@@ -180,7 +196,7 @@ func (u *Updater) Apply(
 	//   --> NextEventID points here
 	// In this case difference between NextEventID and LastWorkflowTaskStartedEventID is 2.
 	// If there are other events after WTCompleted event, then difference is > 2 and speculative WT can't be created.
-	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetLastWorkflowTaskStartedEventID()+2
+	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetStartedEventIdOfLastCompletedWorkflowTask()+2
 	if !canCreateSpeculativeWT {
 		return &api.UpdateWorkflowAction{
 			Noop:               false,
@@ -194,8 +210,9 @@ func (u *Updater) Apply(
 		return nil, err
 	}
 	if newWorkflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// This should never happen because WT is created as normal (despite speculative is requested)
-		// only if there were buffered events and because there were no pending WT, there can't be buffered events.
+		// This means that a normal WFT was created despite a speculative WFT having been requested. It implies that
+		// there were buffered events. But because there was no pending WFT, there can't be buffered events. Therefore
+		// this should never happen.
 		return nil, consts.ErrWorkflowTaskStateInconsistent
 	}
 
@@ -207,8 +224,10 @@ func (u *Updater) Apply(
 	u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
 	u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 	u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
-		ms.GetWorkerVersionStamp(),
-		ms.GetLastWorkflowTaskStartedEventID(),
+		ms.GetInheritedBuildId(),
+		ms.GetAssignedBuildId(),
+		ms.GetMostRecentWorkerVersionStamp(),
+		ms.HasCompletedAnyWorkflowTask(),
 	)
 
 	return &api.UpdateWorkflowAction{
@@ -217,29 +236,16 @@ func (u *Updater) Apply(
 	}, nil
 }
 
-func (u *Updater) OnError(
-	err error,
-) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	// Special handling for consts.ErrWorkflowCompleted here is needed for consistency with the case when update is received while WFT is running and this WFT completes workflow. In this case update is rejected (see update.CancelIncomplete).
-	if errors.Is(err, consts.ErrWorkflowCompleted) {
-		rejectionResp := u.createResponse(
-			u.wfKey,
-			&updatepb.Outcome{
-				Value: &updatepb.Outcome_Failure{Failure: update.CancelReasonWorkflowCompleted.RejectionFailure()},
-			},
-			enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED)
-		return rejectionResp, err
-	}
-	return nil, err
-}
-
 func (u *Updater) OnSuccess(
 	ctx context.Context,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	// Speculative WT was created and needs to be added directly to matching w/o transfer task.
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
-	if u.scheduledEventID != common.EmptyEventID {
+	usesSpeculativeWFT := u.scheduledEventID != common.EmptyEventID
+	if usesSpeculativeWFT {
+		metrics.WorkflowExecutionUpdateSpeculativeWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
+
 		err := u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
@@ -267,6 +273,8 @@ func (u *Updater) OnSuccess(
 			// If subsequent attempt succeeds within current context timeout, caller of this API will get a valid response.
 			err = nil
 		}
+	} else {
+		metrics.WorkflowExecutionUpdateNormalWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
 	}
 
 	namespaceID := namespace.ID(u.req.GetNamespaceId())

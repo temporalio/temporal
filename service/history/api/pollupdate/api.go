@@ -29,7 +29,6 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -52,7 +51,7 @@ func Invoke(
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
-	wfKey, upd, ok, err := func() (*definition.WorkflowKey, *update.Update, bool, error) {
+	wfKey, upd, err := func() (*definition.WorkflowKey, *update.Update, error) {
 		workflowLease, err := ctxLookup.GetWorkflowLease(
 			ctx,
 			nil,
@@ -65,45 +64,35 @@ func Invoke(
 			workflow.LockPriorityHigh,
 		)
 		if err != nil {
-			return nil, nil, false, err
+			return nil, nil, err
 		}
 		release := workflowLease.GetReleaseFn()
 		defer release(nil)
 		wfCtx := workflowLease.GetContext()
-		upd, found := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
+		upd := wfCtx.UpdateRegistry(ctx, nil).Find(ctx, updateRef.UpdateId)
 		wfKey := wfCtx.GetWorkflowKey()
-		return &wfKey, upd, found, nil
+		return &wfKey, upd, nil
 	}()
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	if upd == nil {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
 	}
 
-	var status update.UpdateStatus
-
-	switch waitStage {
-	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED:
-		status, err = upd.Status()
-		if err != nil {
-			return nil, err
-		}
-	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
-		namespaceID := namespace.ID(req.GetNamespaceId())
-		ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-		if err != nil {
-			return nil, err
-		}
-		serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(ns.Name().String())
-		// If the long-poll times out due to serverTimeout then return a non-error empty response.
-		status, err = upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("support for LifecycleStage=%v is not implemented", waitStage))
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
 	}
+	softTimeout := shardContext.GetConfig().LongPollExpirationInterval(ns.Name().String())
+	// If the long-poll times out due to softTimeout
+	// then return a non-error empty response with actual reached stage.
+	status, err := upd.WaitLifecycleStage(ctx, waitStage, softTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &historyservice.PollWorkflowExecutionUpdateResponse{
 		Response: &workflowservice.PollWorkflowExecutionUpdateResponse{
 			Outcome: status.Outcome,

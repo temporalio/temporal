@@ -54,7 +54,7 @@ func (mdb *db) InsertIntoMessages(
 	ctx context.Context,
 	row []sqlplugin.QueueMessageRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		templateEnqueueMessageQuery,
 		row,
 	)
@@ -65,7 +65,7 @@ func (mdb *db) SelectFromMessages(
 	filter sqlplugin.QueueMessagesFilter,
 ) ([]sqlplugin.QueueMessageRow, error) {
 	var rows []sqlplugin.QueueMessageRow
-	err := mdb.conn.SelectContext(ctx,
+	err := mdb.SelectContext(ctx,
 		&rows,
 		templateGetMessageQuery,
 		filter.QueueType,
@@ -79,7 +79,7 @@ func (mdb *db) RangeSelectFromMessages(
 	filter sqlplugin.QueueMessagesRangeFilter,
 ) ([]sqlplugin.QueueMessageRow, error) {
 	var rows []sqlplugin.QueueMessageRow
-	err := mdb.conn.SelectContext(ctx,
+	err := mdb.SelectContext(ctx,
 		&rows,
 		templateGetMessagesQuery,
 		filter.QueueType,
@@ -95,7 +95,7 @@ func (mdb *db) DeleteFromMessages(
 	ctx context.Context,
 	filter sqlplugin.QueueMessagesFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		templateDeleteMessageQuery,
 		filter.QueueType,
 		filter.MessageID,
@@ -107,7 +107,7 @@ func (mdb *db) RangeDeleteFromMessages(
 	ctx context.Context,
 	filter sqlplugin.QueueMessagesRangeFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		templateRangeDeleteMessagesQuery,
 		filter.QueueType,
 		filter.MinMessageID,
@@ -121,7 +121,7 @@ func (mdb *db) GetLastEnqueuedMessageIDForUpdate(
 	queueType persistence.QueueType,
 ) (int64, error) {
 	var lastMessageID *int64
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&lastMessageID,
 		templateGetLastMessageIDQuery,
 		queueType,
@@ -139,7 +139,7 @@ func (mdb *db) InsertIntoQueueMetadata(
 	ctx context.Context,
 	row *sqlplugin.QueueMetadataRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		templateCreateQueueMetadataQuery,
 		row,
 	)
@@ -149,7 +149,7 @@ func (mdb *db) UpdateQueueMetadata(
 	ctx context.Context,
 	row *sqlplugin.QueueMetadataRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		templateUpdateQueueMetadataQuery,
 		row,
 	)
@@ -160,7 +160,7 @@ func (mdb *db) SelectFromQueueMetadata(
 	filter sqlplugin.QueueMetadataFilter,
 ) (*sqlplugin.QueueMetadataRow, error) {
 	var row sqlplugin.QueueMetadataRow
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&row,
 		templateGetQueueMetadataQuery,
 		filter.QueueType,
@@ -176,7 +176,7 @@ func (mdb *db) LockQueueMetadata(
 	filter sqlplugin.QueueMetadataFilter,
 ) (*sqlplugin.QueueMetadataRow, error) {
 	var row sqlplugin.QueueMetadataRow
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&row,
 		templateLockQueueMetadataQuery,
 		filter.QueueType,

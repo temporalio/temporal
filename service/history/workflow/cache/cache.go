@@ -58,6 +58,14 @@ type (
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
+		Put(
+			shardContext shard.Context,
+			namespaceID namespace.ID,
+			execution *commonpb.WorkflowExecution,
+			workflowCtx workflow.Context,
+			handler metrics.Handler,
+		) (workflow.Context, error)
+
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
 			shardContext shard.Context,
@@ -200,7 +208,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
-	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution); err != nil {
+	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution, lockPriority); err != nil {
 		return nil, nil, err
 	}
 
@@ -228,6 +236,23 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	return weCtx, weReleaseFunc, err
 }
 
+func (c *CacheImpl) Put(
+	shardContext shard.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	workflowCtx workflow.Context,
+	handler metrics.Handler,
+) (workflow.Context, error) {
+	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
+	existing, err := c.PutIfNotExist(cacheKey, workflowCtx)
+	if err != nil {
+		metrics.CacheFailures.With(handler).Record(1)
+		return nil, err
+	}
+	//nolint:revive
+	return existing.(workflow.Context), nil
+}
+
 func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	shardContext shard.Context,
@@ -237,23 +262,25 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
-
-	cacheKey := Key{
-		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
-		ShardUUID:   shardContext.GetOwner(),
-	}
+	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
 	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
 	if !cacheHit {
 		metrics.CacheMissCounter.With(handler).Record(1)
-		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, shardContext.GetLogger(), shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
-		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
+		workflowCtx = workflow.NewContext(
+			shardContext.GetConfig(),
+			cacheKey.WorkflowKey,
+			shardContext.GetLogger(),
+			shardContext.GetThrottledLogger(),
+			shardContext.GetMetricsHandler(),
+		)
+
+		var err error
+		workflowCtx, err = c.Put(shardContext, namespaceID, execution, workflowCtx, handler)
 		if err != nil {
-			metrics.CacheFailures.With(handler).Record(1)
 			return nil, nil, err
 		}
-		workflowCtx = elem.(workflow.Context)
 	}
+
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, lockPriority)
@@ -348,6 +375,7 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	lockPriority workflow.LockPriority,
 ) error {
 
 	if err := c.validateWorkflowID(execution.GetWorkflowId()); err != nil {
@@ -356,17 +384,21 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
-		response, err := shardContext.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     shardContext.GetShardID(),
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  execution.GetWorkflowId(),
-		})
-
+		shardOwnershipAsserted := false
+		runID, err := GetCurrentRunID(
+			ctx,
+			shardContext,
+			c,
+			&shardOwnershipAsserted,
+			namespaceID.String(),
+			execution.GetWorkflowId(),
+			lockPriority,
+		)
 		if err != nil {
 			return err
 		}
 
-		execution.RunId = response.RunID
+		execution.RunId = runID
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
@@ -386,4 +418,61 @@ func (c *CacheImpl) validateWorkflowID(
 	}
 
 	return nil
+}
+
+func GetCurrentRunID(
+	ctx context.Context,
+	shardContext shard.Context,
+	workflowCache Cache,
+	shardOwnershipAsserted *bool,
+	namespaceID string,
+	workflowID string,
+	lockPriority workflow.LockPriority,
+) (runID string, retErr error) {
+	currentRelease, err := workflowCache.GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		shardContext,
+		namespace.ID(namespaceID),
+		workflowID,
+		lockPriority,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer func() { currentRelease(retErr) }()
+
+	resp, err := shardContext.GetCurrentExecution(
+		ctx,
+		&persistence.GetCurrentExecutionRequest{
+			ShardID:     shardContext.GetShardID(),
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+		},
+	)
+	switch err.(type) {
+	case nil:
+		return resp.RunID, nil
+	case *serviceerror.NotFound:
+		if err := shard.AssertShardOwnership(
+			ctx,
+			shardContext,
+			shardOwnershipAsserted,
+		); err != nil {
+			return "", err
+		}
+		return "", err
+	default:
+		return "", err
+	}
+}
+
+func makeCacheKey(
+	shardContext shard.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+) Key {
+	return Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		ShardUUID:   shardContext.GetOwner(),
+	}
 }

@@ -35,6 +35,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -167,8 +168,10 @@ func (s *TaskSerializer) serializeTimerTask(
 		timerTask = s.timerActivityRetryTaskToProto(task)
 	case *tasks.UserTimerTask:
 		timerTask = s.timerUserTaskToProto(task)
-	case *tasks.WorkflowTimeoutTask:
+	case *tasks.WorkflowRunTimeoutTask:
 		timerTask = s.timerWorkflowRunToProto(task)
+	case *tasks.WorkflowExecutionTimeoutTask:
+		timerTask = s.timerWorkflowExecutionToProto(task)
 	case *tasks.DeleteHistoryEventTask:
 		timerTask = s.timerWorkflowCleanupTaskToProto(task)
 	case *tasks.StateMachineTimerTask:
@@ -201,6 +204,8 @@ func (s *TaskSerializer) deserializeTimerTasks(
 		timer = s.timerUserTaskFromProto(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		timer = s.timerWorkflowRunFromProto(timerTask)
+	case enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT:
+		timer = s.timerWorkflowExecutionFromProto(timerTask)
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		timer = s.timerWorkflowCleanupTaskFromProto(timerTask)
 	case enumsspb.TASK_TYPE_STATE_MACHINE_TIMER:
@@ -609,7 +614,6 @@ func (s *TaskSerializer) transferDeleteExecutionTaskToProto(
 		WorkflowId:     deleteExecutionTask.WorkflowKey.WorkflowID,
 		RunId:          deleteExecutionTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
-		Version:        deleteExecutionTask.Version,
 		TaskId:         deleteExecutionTask.TaskID,
 		VisibilityTime: timestamppb.New(deleteExecutionTask.VisibilityTimestamp),
 	}
@@ -626,7 +630,6 @@ func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
 		),
 		VisibilityTimestamp: deleteExecutionTask.VisibilityTime.AsTime(),
 		TaskID:              deleteExecutionTask.TaskId,
-		Version:             deleteExecutionTask.Version,
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		ProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -712,7 +715,6 @@ func (s *TaskSerializer) timerActivityTaskToProto(
 		TaskType:            enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 		TimeoutType:         activityTimer.TimeoutType,
 		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED,
-		Version:             activityTimer.Version,
 		ScheduleAttempt:     activityTimer.Attempt,
 		EventId:             activityTimer.EventID,
 		TaskId:              activityTimer.TaskID,
@@ -734,7 +736,6 @@ func (s *TaskSerializer) timerActivityTaskFromProto(
 		EventID:             activityTimer.EventId,
 		Attempt:             activityTimer.ScheduleAttempt,
 		TimeoutType:         activityTimer.TimeoutType,
-		Version:             activityTimer.Version,
 	}
 }
 
@@ -783,7 +784,6 @@ func (s *TaskSerializer) timerUserTaskToProto(
 		TaskType:            enumsspb.TASK_TYPE_USER_TIMER,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_UNSPECIFIED,
 		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED,
-		Version:             userTimer.Version,
 		ScheduleAttempt:     0,
 		EventId:             userTimer.EventID,
 		TaskId:              userTimer.TaskID,
@@ -803,40 +803,70 @@ func (s *TaskSerializer) timerUserTaskFromProto(
 		VisibilityTimestamp: userTimer.VisibilityTime.AsTime(),
 		TaskID:              userTimer.TaskId,
 		EventID:             userTimer.EventId,
-		Version:             userTimer.Version,
 	}
 }
 
 func (s *TaskSerializer) timerWorkflowRunToProto(
-	workflowTimer *tasks.WorkflowTimeoutTask,
+	workflowRunTimer *tasks.WorkflowRunTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:         workflowTimer.WorkflowKey.NamespaceID,
-		WorkflowId:          workflowTimer.WorkflowKey.WorkflowID,
-		RunId:               workflowTimer.WorkflowKey.RunID,
+		NamespaceId:         workflowRunTimer.WorkflowKey.NamespaceID,
+		WorkflowId:          workflowRunTimer.WorkflowKey.WorkflowID,
+		RunId:               workflowRunTimer.WorkflowKey.RunID,
 		TaskType:            enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_UNSPECIFIED,
 		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED,
-		Version:             workflowTimer.Version,
+		Version:             workflowRunTimer.Version,
 		ScheduleAttempt:     0,
 		EventId:             0,
-		TaskId:              workflowTimer.TaskID,
-		VisibilityTime:      timestamppb.New(workflowTimer.VisibilityTimestamp),
+		TaskId:              workflowRunTimer.TaskID,
+		VisibilityTime:      timestamppb.New(workflowRunTimer.VisibilityTimestamp),
+	}
+}
+
+func (s *TaskSerializer) timerWorkflowExecutionToProto(
+	workflowExecutionTimer *tasks.WorkflowExecutionTimeoutTask,
+) *persistencespb.TimerTaskInfo {
+	return &persistencespb.TimerTaskInfo{
+		NamespaceId:         workflowExecutionTimer.GetNamespaceID(),
+		WorkflowId:          workflowExecutionTimer.GetWorkflowID(),
+		RunId:               workflowExecutionTimer.GetRunID(),
+		FirstRunId:          workflowExecutionTimer.FirstRunID,
+		TaskType:            enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_UNSPECIFIED,
+		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED,
+		Version:             common.EmptyVersion,
+		ScheduleAttempt:     0,
+		EventId:             0,
+		TaskId:              workflowExecutionTimer.TaskID,
+		VisibilityTime:      timestamppb.New(workflowExecutionTimer.VisibilityTimestamp),
 	}
 }
 
 func (s *TaskSerializer) timerWorkflowRunFromProto(
-	workflowTimer *persistencespb.TimerTaskInfo,
-) *tasks.WorkflowTimeoutTask {
-	return &tasks.WorkflowTimeoutTask{
+	workflowRunTimer *persistencespb.TimerTaskInfo,
+) *tasks.WorkflowRunTimeoutTask {
+	return &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			workflowTimer.NamespaceId,
-			workflowTimer.WorkflowId,
-			workflowTimer.RunId,
+			workflowRunTimer.NamespaceId,
+			workflowRunTimer.WorkflowId,
+			workflowRunTimer.RunId,
 		),
-		VisibilityTimestamp: workflowTimer.VisibilityTime.AsTime(),
-		TaskID:              workflowTimer.TaskId,
-		Version:             workflowTimer.Version,
+		VisibilityTimestamp: workflowRunTimer.VisibilityTime.AsTime(),
+		TaskID:              workflowRunTimer.TaskId,
+		Version:             workflowRunTimer.Version,
+	}
+}
+
+func (s *TaskSerializer) timerWorkflowExecutionFromProto(
+	workflowExecutionTimer *persistencespb.TimerTaskInfo,
+) *tasks.WorkflowExecutionTimeoutTask {
+	return &tasks.WorkflowExecutionTimeoutTask{
+		NamespaceID:         workflowExecutionTimer.NamespaceId,
+		WorkflowID:          workflowExecutionTimer.WorkflowId,
+		FirstRunID:          workflowExecutionTimer.FirstRunId,
+		VisibilityTimestamp: workflowExecutionTimer.VisibilityTime.AsTime(),
+		TaskID:              workflowExecutionTimer.TaskId,
 	}
 }
 
@@ -867,7 +897,6 @@ func (s *TaskSerializer) stateMachineTimerTaskToProto(task *tasks.StateMachineTi
 		NamespaceId:      task.NamespaceID,
 		WorkflowId:       task.WorkflowID,
 		RunId:            task.RunID,
-		Version:          task.GetVersion(),
 		TaskId:           task.TaskID,
 		VisibilityTime:   timestamppb.New(task.VisibilityTimestamp),
 		StateMachineInfo: task.Info,
@@ -945,7 +974,6 @@ func (s *TaskSerializer) visibilityUpsertTaskToProto(
 		WorkflowId:     upsertVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:          upsertVisibilityTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
-		Version:        upsertVisibilityTask.Version,
 		TaskId:         upsertVisibilityTask.TaskID,
 		VisibilityTime: timestamppb.New(upsertVisibilityTask.VisibilityTimestamp),
 	}
@@ -962,7 +990,6 @@ func (s *TaskSerializer) visibilityUpsertTaskFromProto(
 		),
 		VisibilityTimestamp: upsertVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:              upsertVisibilityTask.TaskId,
-		Version:             upsertVisibilityTask.Version,
 	}
 }
 
@@ -1003,7 +1030,6 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		WorkflowId:            deleteVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:                 deleteVisibilityTask.WorkflowKey.RunID,
 		TaskType:              enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
-		Version:               deleteVisibilityTask.Version,
 		TaskId:                deleteVisibilityTask.TaskID,
 		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
@@ -1021,7 +1047,6 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		),
 		VisibilityTimestamp:            deleteVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:                         deleteVisibilityTask.TaskId,
-		Version:                        deleteVisibilityTask.Version,
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 	}
 }
@@ -1153,6 +1178,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
 		TaskId:         syncWorkflowStateTask.TaskID,
 		Version:        syncWorkflowStateTask.Version,
 		VisibilityTime: timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
+		Priority:       syncWorkflowStateTask.Priority,
 	}
 }
 
@@ -1172,6 +1198,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 		VisibilityTimestamp: visibilityTimestamp,
 		Version:             syncWorkflowStateTask.Version,
 		TaskID:              syncWorkflowStateTask.TaskId,
+		Priority:            syncWorkflowStateTask.Priority,
 	}
 }
 

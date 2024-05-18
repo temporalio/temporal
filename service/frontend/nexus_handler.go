@@ -34,6 +34,8 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -43,8 +45,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // Generic Nexus context that is not bound to a specific operation.
@@ -54,6 +54,7 @@ type nexusContext struct {
 	apiName                              string
 	namespaceName                        string
 	taskQueue                            string
+	endpointName                         string
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
@@ -114,12 +115,12 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 	})
 	if err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unauthorized"))
-		return adaptAuthorizeError(err)
+		return commonnexus.AdaptAuthorizeError(err)
 	}
 
 	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("invalid_namespace_state"))
-		return convertGRPCError(err, false)
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// TODO: Redirect if current cluster is passive for this namespace.
 
@@ -127,17 +128,17 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 	c.cleanupFunctions = append(c.cleanupFunctions, cleanup)
 	if err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_concurrency_limited"))
-		return convertGRPCError(err, false)
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 
 	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_rate_limited"))
-		return convertGRPCError(err, true)
+		return commonnexus.ConvertGRPCError(err, true)
 	}
 
 	if err := c.rateLimitInterceptor.Allow(c.apiName, header); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("global_rate_limited"))
-		return convertGRPCError(err, true)
+		return commonnexus.ConvertGRPCError(err, true)
 	}
 
 	// TODO: Apply other relevant interceptors.
@@ -167,9 +168,13 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 	}
 	oc := operationContext{nexusContext: nc, auth: h.auth, cleanupFunctions: make([]func(), 0)}
 
-	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(metrics.OperationTag(nc.apiName), metrics.NamespaceTag(nc.namespaceName))
+	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
+		metrics.OperationTag(nc.apiName),
+		metrics.NamespaceTag(nc.namespaceName),
+	)
 	oc.metricsHandler = h.metricsHandler.WithTags(
 		metrics.NamespaceTag(nc.namespaceName),
+		metrics.NexusEndpointTag(nc.endpointName),
 		metrics.NexusMethodTag(method),
 		// default to internal error unless overridden by handler
 		metrics.NexusOutcomeTag("internal_error"),
@@ -182,14 +187,18 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 			metrics.NexusOutcomeTag("namespace_not_found"),
 		)
 
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace not found: %q", nc.namespaceName)
+		var nfe *serviceerror.NamespaceNotFound
+		if errors.As(err, &nfe) {
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace not found: %q", nc.namespaceName)
+		}
+		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	oc.logger = log.With(h.logger, tag.Operation(method), tag.WorkflowNamespace(nc.namespaceName))
 	return &oc, nil
 }
 
 // StartOperation implements the nexus.Handler interface.
-func (h *nexusHandler) StartOperation(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (result nexus.HandlerStartOperationResult[any], retErr error) {
+func (h *nexusHandler) StartOperation(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (result nexus.HandlerStartOperationResult[any], retErr error) {
 	oc, err := h.getOperationContext(ctx, "StartOperation")
 	if err != nil {
 		return nil, err
@@ -197,12 +206,15 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 	defer oc.capturePanicAndRecordMetrics(&retErr)
 
 	startOperationRequest := nexuspb.StartOperationRequest{
-		Operation: operation,
-		Callback:  options.CallbackURL,
-		RequestId: options.RequestID,
+		Service:        service,
+		Operation:      operation,
+		Callback:       options.CallbackURL,
+		CallbackHeader: options.CallbackHeader,
+		RequestId:      options.RequestID,
 	}
 	request := oc.matchingRequest(&nexuspb.Request{
-		Header: options.Header,
+		ScheduledTime: timestamppb.New(oc.requestStartTime),
+		Header:        options.Header,
 		Variant: &nexuspb.Request_StartOperation{
 			StartOperation: &startOperationRequest,
 		},
@@ -216,6 +228,8 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 		oc.logger.Warn("invalid input", tag.Error(err))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
+	// TODO(bergundy): Limit payload size.
+
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
 	// RPC.
@@ -257,7 +271,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 	}
 	return nil, fmt.Errorf("unhandled response outcome: %T", response.GetOutcome()) //nolint:goerr113
 }
-func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
+func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
 	oc, err := h.getOperationContext(ctx, "CancelOperation")
 	if err != nil {
 		return err
@@ -265,9 +279,11 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string
 	defer oc.capturePanicAndRecordMetrics(&retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
-		Header: options.Header,
+		Header:        options.Header,
+		ScheduledTime: timestamppb.New(oc.requestStartTime),
 		Variant: &nexuspb.Request_CancelOperation{
 			CancelOperation: &nexuspb.CancelOperationRequest{
+				Service:     service,
 				Operation:   operation,
 				OperationId: id,
 			},
@@ -308,59 +324,11 @@ func convertNexusHandlerError(t nexus.HandlerErrorType) nexus.HandlerErrorType {
 	switch t {
 	case nexus.HandlerErrorTypeDownstreamTimeout,
 		nexus.HandlerErrorTypeUnauthenticated,
-		nexus.HandlerErrorTypeForbidden,
+		nexus.HandlerErrorTypeUnauthorized,
 		nexus.HandlerErrorTypeBadRequest,
 		nexus.HandlerErrorTypeNotFound,
 		nexus.HandlerErrorTypeNotImplemented:
 		return t
 	}
 	return nexus.HandlerErrorTypeDownstreamError
-}
-
-func adaptAuthorizeError(err error) error {
-	// Authorize err is either an explicitly set reason, or a generic "Request unauthorized." message.
-	var permissionDeniedError *serviceerror.PermissionDenied
-	if errors.As(err, &permissionDeniedError) && permissionDeniedError.Reason != "" {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied: %s", permissionDeniedError.Reason)
-	}
-	return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied")
-}
-
-type grpcStatusGetter interface {
-	Status() *status.Status
-}
-
-// Roughly taken from https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
-// and
-// https://github.com/grpc-ecosystem/grpc-gateway/blob/a7cf811e6ffabeaddcfb4ff65602c12671ff326e/runtime/errors.go#L56.
-func convertGRPCError(err error, exposeDetails bool) error {
-	st, ok := err.(grpcStatusGetter)
-	if !ok {
-		return err
-	}
-
-	errMessage := "Internal error"
-	if exposeDetails {
-		errMessage = err.Error()
-	}
-
-	switch st.Status().Code() {
-	case codes.AlreadyExists, codes.Canceled, codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, errMessage)
-	case codes.Aborted, codes.Unavailable:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, errMessage)
-	case codes.DataLoss, codes.Internal, codes.Unknown:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, errMessage)
-	case codes.Unauthenticated:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, errMessage)
-	case codes.PermissionDenied:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, errMessage)
-	case codes.NotFound:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, errMessage)
-	case codes.ResourceExhausted:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, errMessage)
-	case codes.Unimplemented:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotImplemented, errMessage)
-	}
-	return err
 }

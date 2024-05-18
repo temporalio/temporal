@@ -34,10 +34,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -45,6 +45,7 @@ type (
 		ReapplyEvents(
 			ctx context.Context,
 			ms workflow.MutableState,
+			updateRegistry update.Registry,
 			historyEvents []*historypb.HistoryEvent,
 			runID string,
 		) ([]*historypb.HistoryEvent, error)
@@ -70,47 +71,31 @@ func NewEventsReapplier(
 func (r *EventsReapplierImpl) ReapplyEvents(
 	ctx context.Context,
 	ms workflow.MutableState,
+	updateRegistry update.Registry,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
 ) ([]*historypb.HistoryEvent, error) {
-
-	var reappliedEvents []*historypb.HistoryEvent
-	for _, event := range historyEvents {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-			if ms.IsResourceDuplicated(dedupResource) {
-				// skip already applied event
-				continue
-			}
-			reappliedEvents = append(reappliedEvents, event)
-		}
-	}
-
-	if len(reappliedEvents) == 0 {
-		return nil, nil
-	}
-
 	// sanity check workflow still running
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
+	reappliedEvents, err := reapplyEvents(ms, updateRegistry, historyEvents, nil, runID)
+	if err != nil {
+		return nil, err
+	}
+	if len(reappliedEvents) == 0 {
+		return nil, nil
+	}
 
 	shouldScheduleWorkflowTask := false
 	for _, event := range reappliedEvents {
-		signal := event.GetWorkflowExecutionSignaledEventAttributes()
-		shouldScheduleWorkflowTask = shouldScheduleWorkflowTask || !signal.GetSkipGenerateWorkflowTask()
-		if _, err := ms.AddWorkflowExecutionSignaled(
-			signal.GetSignalName(),
-			signal.GetInput(),
-			signal.GetIdentity(),
-			signal.GetHeader(),
-			signal.GetSkipGenerateWorkflowTask(),
-		); err != nil {
-			return nil, err
+		switch event.GetEventType() { //nolint:exhaustive
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			signal := event.GetWorkflowExecutionSignaledEventAttributes()
+			shouldScheduleWorkflowTask = shouldScheduleWorkflowTask || !signal.GetSkipGenerateWorkflowTask()
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			shouldScheduleWorkflowTask = true
 		}
-		deDupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-		ms.UpdateDuplicatedResource(deDupResource)
 	}
 
 	// After reapply event, checking if we should schedule a workflow task

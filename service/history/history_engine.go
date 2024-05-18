@@ -32,16 +32,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
-	"go.temporal.io/server/service/history/api/listtasks"
-
 	historyspb "go.temporal.io/server/api/history/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/service/history/api/addtasks"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -61,20 +56,25 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/addtasks"
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistory"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistoryreverse"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
 	"go.temporal.io/server/service/history/api/isactivitytaskvalid"
 	"go.temporal.io/server/service/history/api/isworkflowtaskvalid"
+	"go.temporal.io/server/service/history/api/listtasks"
+	"go.temporal.io/server/service/history/api/multioperation"
 	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
+	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"go.temporal.io/server/service/history/api/refreshworkflow"
 	"go.temporal.io/server/service/history/api/removesignalmutablestate"
 	replicationapi "go.temporal.io/server/service/history/api/replication"
@@ -85,26 +85,28 @@ import (
 	"go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
+	"go.temporal.io/server/service/history/api/respondworkflowtaskcompleted"
+	"go.temporal.io/server/service/history/api/respondworkflowtaskfailed"
+	"go.temporal.io/server/service/history/api/scheduleworkflowtask"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
+	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-)
-
-const (
-	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
 )
 
 type (
@@ -113,7 +115,6 @@ type (
 		currentClusterName         string
 		shardContext               shard.Context
 		timeSource                 clock.TimeSource
-		workflowTaskHandler        workflowTaskHandlerCallbacks
 		clusterMetadata            cluster.Metadata
 		executionManager           persistence.ExecutionManager
 		queueProcessors            map[tasks.Category]queues.Queue
@@ -144,6 +145,8 @@ type (
 		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
+		commandHandlerRegistry     *workflow.CommandHandlerRegistry
+		stateMachineEnvironment    *stateMachineEnvironment
 	}
 )
 
@@ -167,6 +170,7 @@ func NewEngineWithShardContext(
 	eventBlobCache persistence.XDCCache,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	dlqWriter replication.DLQWriter,
+	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -204,6 +208,13 @@ func NewEngineWithShardContext(
 		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 		taskCategoryRegistry:       taskCategoryRegistry,
+		commandHandlerRegistry:     commandHandlerRegistry,
+		stateMachineEnvironment: &stateMachineEnvironment{
+			shardContext:   shard,
+			cache:          workflowCache,
+			metricsHandler: shard.GetMetricsHandler(),
+			logger:         logger,
+		},
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -272,7 +283,6 @@ func NewEngineWithShardContext(
 		config.SuppressErrorSetSystemSearchAttribute,
 	)
 
-	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(
 		shard,
 		workflowDeleteManager,
@@ -377,7 +387,22 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	return starter.Invoke(ctx, nil)
+	return starter.Invoke(ctx, startworkflow.BeforeCreateHookNoop)
+}
+
+func (e *historyEngineImpl) ExecuteMultiOperation(
+	ctx context.Context,
+	request *historyservice.ExecuteMultiOperationRequest,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
+	return multioperation.Invoke(
+		ctx,
+		request,
+		e.shardContext,
+		e.workflowConsistencyChecker,
+		e.tokenSerializer,
+		e.persistenceVisibilityMgr,
+		e.matchingClient,
+	)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
@@ -480,14 +505,14 @@ func (e *historyEngineImpl) ScheduleWorkflowTask(
 	ctx context.Context,
 	req *historyservice.ScheduleWorkflowTaskRequest,
 ) error {
-	return e.workflowTaskHandler.handleWorkflowTaskScheduled(ctx, req)
+	return scheduleworkflowtask.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 	ctx context.Context,
 	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 ) (retError error) {
-	return e.workflowTaskHandler.verifyFirstWorkflowTaskScheduled(ctx, request)
+	return verifyfirstworkflowtaskscheduled.Invoke(ctx, request, e.workflowConsistencyChecker)
 }
 
 // RecordWorkflowTaskStarted starts a workflow task
@@ -495,7 +520,15 @@ func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	return e.workflowTaskHandler.handleWorkflowTaskStarted(ctx, request)
+	return recordworkflowtaskstarted.Invoke(
+		ctx,
+		request,
+		e.shardContext,
+		e.config,
+		e.eventNotifier,
+		e.persistenceVisibilityMgr,
+		e.workflowConsistencyChecker,
+	)
 }
 
 // RespondWorkflowTaskCompleted completes a workflow task
@@ -503,7 +536,16 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
-	return e.workflowTaskHandler.handleWorkflowTaskCompleted(ctx, req)
+	h := respondworkflowtaskcompleted.NewWorkflowTaskCompletedHandler(
+		e.shardContext,
+		e.tokenSerializer,
+		e.eventNotifier,
+		e.commandHandlerRegistry,
+		e.searchAttributesValidator,
+		e.persistenceVisibilityMgr,
+		e.workflowConsistencyChecker,
+	)
+	return h.Invoke(ctx, req)
 }
 
 // RespondWorkflowTaskFailed fails a workflow task
@@ -511,7 +553,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskFailed(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskFailedRequest,
 ) error {
-	return e.workflowTaskHandler.handleWorkflowTaskFailed(ctx, req)
+	return respondworkflowtaskfailed.Invoke(ctx, req, e.shardContext, e.tokenSerializer, e.workflowConsistencyChecker)
 }
 
 // RespondActivityTaskCompleted completes an activity task.
@@ -643,7 +685,7 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
@@ -944,4 +986,9 @@ func (e *historyEngineImpl) ListTasks(
 		e.executionManager,
 		request,
 	)
+}
+
+// StateMachineEnvironment implements shard.Engine.
+func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
+	return e.stateMachineEnvironment
 }

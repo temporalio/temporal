@@ -30,20 +30,25 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -331,8 +336,10 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	reg := hsm.NewRegistry()
 	require.NoError(t, RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
-	require.NoError(t, callbacks.RegisterTaskSerializer(reg))
-	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType)
+	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
+	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
+	require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
+	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType, nil)
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 
@@ -366,7 +373,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 
 	mutableState := NewMockMutableState(ctrl)
-	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node })
+	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node }).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: []*persistencespb.VersionedTransition{
 			{
@@ -374,8 +381,8 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 				MaxTransitionCount:       2,
 			},
 		},
-	})
-	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).Times(2)
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
 	cfg := &configs.Config{}
 	archivalMetadata := archiver.NewMockArchivalMetadata(ctrl)
@@ -432,4 +439,232 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		Type: callbacks.TaskTypeBackoff.ID,
 		Data: nil,
 	}, backoffTask.Info)
+
+	// Reset and test a concurrent task (nexusoperations.TimeoutTask)
+	node.ClearTransactionState()
+	genTasks = nil
+	opNode, err := nexusoperations.AddChild(node, "ID", &historypb.HistoryEvent{
+		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Service:                "some-service",
+				Operation:              "some-op",
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
+			},
+		},
+	}, []byte("token"), false)
+	require.NoError(t, err)
+	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(genTasks))
+	timeoutTask, ok := genTasks[0].(*tasks.StateMachineTimerTask) // nolint:revive
+	if !ok {
+		timeoutTask = genTasks[1].(*tasks.StateMachineTimerTask) // nolint:revive
+	}
+
+	require.Equal(t, tests.WorkflowKey, timeoutTask.WorkflowKey)
+	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: opNode.Key.Type,
+					Id:   opNode.Key.ID,
+				},
+			},
+			MutableStateNamespaceFailoverVersion: 3,
+			MutableStateTransitionCount:          2,
+			MachineTransitionCount:               0, // concurrent tasks don't store the machine transition count.
+		},
+		Type: nexusoperations.TaskTypeTimeout.ID,
+		Data: nil,
+	}, timeoutTask.Info)
+}
+
+func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
+	testCases := []struct {
+		name string
+
+		executionTimerEnabled bool
+
+		isFirstRun                   bool
+		existingExecutionTimerStatus int32
+		executionExpirationTime      time.Time
+		runExpirationTime            time.Time
+
+		expectedExecutionTimerStatus int32
+		expectedTaskTypes            []enumsspb.TaskType
+	}{
+		{
+			name:                         "execution timer disabled, no run expiration",
+			executionTimerEnabled:        false,
+			isFirstRun:                   false,
+			existingExecutionTimerStatus: TimerTaskStatusCreated,
+			executionExpirationTime:      time.Time{},
+			runExpirationTime:            time.Time{},
+			expectedExecutionTimerStatus: TimerTaskStatusNone, // reset flag when execution timer is disabled
+			expectedTaskTypes:            []enumsspb.TaskType{},
+		},
+		{
+			name:                         "execution timer disabled, has run expiration",
+			executionTimerEnabled:        false,
+			isFirstRun:                   false,
+			existingExecutionTimerStatus: TimerTaskStatusCreated,
+			executionExpirationTime:      time.Time{},
+			runExpirationTime:            time.Now().Add(time.Minute),
+			expectedExecutionTimerStatus: TimerTaskStatusNone,
+			expectedTaskTypes:            []enumsspb.TaskType{enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT},
+		},
+		{
+			name:                         "execution timer enabled and carried over, run expiration capped",
+			executionTimerEnabled:        true,
+			isFirstRun:                   false,
+			existingExecutionTimerStatus: TimerTaskStatusCreated,
+			executionExpirationTime:      time.Now().Add(time.Minute),
+			runExpirationTime:            time.Now().Add(time.Minute), // run expiration capped to execution expiration
+			expectedExecutionTimerStatus: TimerTaskStatusCreated,
+			expectedTaskTypes:            []enumsspb.TaskType{},
+		},
+		{
+			name:                         "execution timer enabled and carried over, run expiration not capped",
+			executionTimerEnabled:        true,
+			isFirstRun:                   false,
+			existingExecutionTimerStatus: TimerTaskStatusCreated,
+			executionExpirationTime:      time.Now().Add(time.Minute),
+			runExpirationTime:            time.Now().Add(time.Second),
+			expectedExecutionTimerStatus: TimerTaskStatusCreated,
+			expectedTaskTypes:            []enumsspb.TaskType{enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT},
+		},
+		{
+			name:                         "execution timer enabled but not carried over, run expiration capped",
+			executionTimerEnabled:        true,
+			isFirstRun:                   false,
+			existingExecutionTimerStatus: TimerTaskStatusNone,
+			executionExpirationTime:      time.Now().Add(time.Minute),
+			runExpirationTime:            time.Now().Add(time.Minute),
+			expectedExecutionTimerStatus: TimerTaskStatusCreated,
+			expectedTaskTypes:            []enumsspb.TaskType{enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT},
+		},
+		{
+			name:                         "execution timer enabled but not carried over, run expiration not capped",
+			executionTimerEnabled:        true,
+			isFirstRun:                   false,
+			existingExecutionTimerStatus: TimerTaskStatusNone,
+			executionExpirationTime:      time.Now().Add(time.Minute),
+			runExpirationTime:            time.Now().Add(time.Second),
+			expectedExecutionTimerStatus: TimerTaskStatusCreated,
+			expectedTaskTypes: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT,
+				enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+			},
+		},
+		{
+			name:                         "execution timer enabled, first run, run expiration capped",
+			executionTimerEnabled:        true,
+			isFirstRun:                   true,
+			existingExecutionTimerStatus: TimerTaskStatusNone,
+			executionExpirationTime:      time.Now().Add(time.Minute),
+			runExpirationTime:            time.Now().Add(time.Minute),
+			expectedExecutionTimerStatus: TimerTaskStatusNone,
+			expectedTaskTypes: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+			},
+		},
+		{
+			name:                         "execution timer enabled, first run, run expiration not capped",
+			executionTimerEnabled:        true,
+			isFirstRun:                   true,
+			existingExecutionTimerStatus: TimerTaskStatusNone,
+			executionExpirationTime:      time.Now().Add(time.Minute),
+			runExpirationTime:            time.Now().Add(time.Second),
+			expectedExecutionTimerStatus: TimerTaskStatusNone,
+			expectedTaskTypes: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+			},
+		},
+		{
+			name:                         "execution timer enabled, no execution expiration",
+			executionTimerEnabled:        true,
+			isFirstRun:                   true,
+			existingExecutionTimerStatus: TimerTaskStatusNone,
+			executionExpirationTime:      time.Time{},
+			runExpirationTime:            time.Now().Add(time.Second),
+			expectedExecutionTimerStatus: TimerTaskStatusNone,
+			expectedTaskTypes: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+
+			config := tests.NewDynamicConfig()
+			if !tc.executionTimerEnabled {
+				config.EnableWorkflowExecutionTimeoutTimer = dynamicconfig.GetBoolPropertyFn(false)
+			}
+
+			mockShard := shard.NewTestContext(
+				controller,
+				&persistencespb.ShardInfo{
+					ShardId: 1,
+					RangeId: 1,
+				},
+				config,
+			)
+
+			mockMutableState := NewMockMutableState(controller)
+			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+
+			firstRunID := uuid.New()
+			currentRunID := firstRunID
+			if !tc.isFirstRun {
+				currentRunID = uuid.New()
+			}
+
+			workflowKey := tests.WorkflowKey
+			mockMutableState.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
+			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                      workflowKey.NamespaceID,
+				WorkflowId:                       workflowKey.WorkflowID,
+				WorkflowExecutionTimerTaskStatus: tc.existingExecutionTimerStatus,
+				WorkflowExecutionExpirationTime:  timestamppb.New(tc.executionExpirationTime),
+				WorkflowRunExpirationTime:        timestamppb.New(tc.runExpirationTime),
+				FirstExecutionRunId:              firstRunID,
+			}).AnyTimes()
+			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+				RunId: currentRunID,
+			}).AnyTimes()
+
+			var generatedTaskTypes []enumsspb.TaskType
+			mockMutableState.EXPECT().AddTasks(gomock.Any()).Do(func(newTasks ...tasks.Task) {
+				for _, newTask := range newTasks {
+					generatedTaskTypes = append(generatedTaskTypes, newTask.GetType())
+				}
+			}).AnyTimes()
+
+			taskGenerator := NewTaskGenerator(
+				mockShard.GetNamespaceRegistry(),
+				mockMutableState,
+				mockShard.GetConfig(),
+				mockShard.GetArchivalMetadata(),
+			)
+
+			actualExecutionTimerTaskStatus, err := taskGenerator.GenerateWorkflowStartTasks(&historypb.HistoryEvent{
+				EventId:   1,
+				EventTime: timestamppb.Now(),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Version:   1,
+				TaskId:    123,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						WorkflowExecutionExpirationTime: timestamppb.New(tc.executionExpirationTime),
+					},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedExecutionTimerStatus, actualExecutionTimerTaskStatus)
+			require.ElementsMatch(t, tc.expectedTaskTypes, generatedTaskTypes)
+		})
+	}
 }

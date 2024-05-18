@@ -36,7 +36,6 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -179,6 +178,11 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 		s.NotZero(execution.StartTime)
 		s.NotZero(execution.ExecutionTime)
 		s.NotZero(execution.CloseTime)
+		s.NotZero(execution.ExecutionDuration)
+		s.Equal(
+			execution.CloseTime.AsTime().Sub(execution.ExecutionTime.AsTime()),
+			execution.ExecutionDuration.AsDuration(),
+		)
 	}
 }
 
@@ -338,18 +342,12 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	expectedActivityID := int32(1)
 	runCounter := 1
 
-	wtHandler := func(
-		execution *commonpb.WorkflowExecution,
-		wt *commonpb.WorkflowType,
-		previousStartedEventID int64,
-		startedEventID int64,
-		history *historypb.History,
-	) ([]*commandpb.Command, error) {
-		branchToken, err := s.getBranchToken(namespace, execution)
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		branchToken, err := s.getBranchToken(namespace, task.WorkflowExecution)
 		s.NoError(err)
 
 		workflowInfos[runCounter-1] = archivalWorkflowInfo{
-			execution:   execution,
+			execution:   task.WorkflowExecution,
 			branchToken: branchToken,
 		}
 
@@ -397,18 +395,12 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		}}, nil
 	}
 
-	atHandler := func(
-		execution *commonpb.WorkflowExecution,
-		activityType *commonpb.ActivityType,
-		activityID string,
-		input *commonpb.Payloads,
-		taskToken []byte,
-	) (*commonpb.Payloads, bool, error) {
-		protoassert.ProtoEqual(s.T(), workflowInfos[runCounter-1].execution, execution)
-		s.Equal(activityName, activityType.Name)
-		currentActivityId, _ := strconv.Atoi(activityID)
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		protoassert.ProtoEqual(s.T(), workflowInfos[runCounter-1].execution, task.WorkflowExecution)
+		s.Equal(activityName, task.ActivityType.Name)
+		currentActivityId, _ := strconv.Atoi(task.ActivityId)
 		s.Equal(int(expectedActivityID), currentActivityId)
-		s.Equal(expectedActivityID, s.decodePayloadsByteSliceInt32(input))
+		s.Equal(expectedActivityID, s.decodePayloadsByteSliceInt32(task.Input))
 		expectedActivityID++
 		return payloads.EncodeString("Activity Result"), false, nil
 	}

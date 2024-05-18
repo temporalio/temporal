@@ -109,7 +109,6 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 	var err error
 
 	cassandraConfig := cfg.toCassandraConfig()
-	cassandraConfig.ConnectTimeout = time.Duration(cfg.Timeout) * time.Second
 
 	logger.Info("Validating connection to cassandra cluster.")
 	session, err := commongocql.NewSession(
@@ -151,6 +150,7 @@ func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 			},
 		},
 		AddressTranslator: cfg.AddressTranslator,
+		ConnectTimeout:    time.Duration(cfg.Timeout) * time.Second,
 	}
 
 	return &cassandraConfig

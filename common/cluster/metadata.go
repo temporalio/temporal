@@ -219,7 +219,7 @@ func NewMetadataFromConfig(
 		config.CurrentClusterName,
 		config.ClusterInformation,
 		clusterMetadataStore,
-		dynamicCollection.GetDurationProperty(dynamicconfig.ClusterMetadataRefreshInterval, refreshInterval),
+		dynamicconfig.ClusterMetadataRefreshInterval.Get(dynamicCollection),
 		logger,
 	)
 }

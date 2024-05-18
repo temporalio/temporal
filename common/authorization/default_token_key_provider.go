@@ -36,7 +36,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/multierr"
-	"gopkg.in/square/go-jose.v2"
+	"gopkg.in/go-jose/go-jose.v2"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"

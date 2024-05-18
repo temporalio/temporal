@@ -140,8 +140,9 @@ func (b *HistoryBuilder) IsDirty() bool {
 }
 
 // AddWorkflowExecutionStartedEvent
-// firstInChainRunID is the very first runID along the chain of ContinueAsNew and Reset
-// originalRunID is the runID when the WorkflowExecutionStarted event is written
+// firstInChainRunID is the runID of the first run in a workflow chain (continueAsNew, cron & workflow retry)
+// originalRunID is the base workflow's runID upon workflow reset. If the current run is the base (i.e. no reset),
+// then originalRunID is current run's runID.
 func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 	startTime time.Time,
 	request *historyservice.StartWorkflowExecutionRequest,
@@ -180,6 +181,8 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	startTime time.Time,
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
+	versioningStamp *commonpb.WorkerVersionStamp,
+	buildIdRedirectCounter int64,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskStartedEvent(
 		scheduledEventID,
@@ -188,6 +191,8 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 		startTime,
 		suggestContinueAsNew,
 		historySizeBytes,
+		versioningStamp,
+		buildIdRedirectCounter,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
@@ -266,8 +271,10 @@ func (b *HistoryBuilder) AddActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	lastFailure *failurepb.Failure,
+	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectCounter int64,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateActivityTaskStartedEvent(scheduledEventID, attempt, requestID, identity, lastFailure)
+	event := b.EventFactory.CreateActivityTaskStartedEvent(scheduledEventID, attempt, requestID, identity, lastFailure, versioningStamp, redirectCounter)
 	event, _ = b.EventStore.add(event)
 	return event
 }
@@ -388,6 +395,11 @@ func (b *HistoryBuilder) AddWorkflowExecutionUpdateCompletedEvent(
 	updResp *updatepb.Response,
 ) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateWorkflowExecutionUpdateCompletedEvent(acceptedEventID, updResp)
+	return b.EventStore.add(event)
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, int64) {
+	event := b.EventFactory.CreateWorkflowExecutionUpdateAdmittedEvent(request, origin)
 	return b.EventStore.add(event)
 }
 
@@ -803,6 +815,16 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTimedOutEvent(
 		workflowType,
 		retryState,
 	)
+	event, _ = b.EventStore.add(event)
+	return event
+}
+
+func (b *HistoryBuilder) AddHistoryEvent(
+	eventType enumspb.EventType,
+	setAttributes func(*historypb.HistoryEvent),
+) *historypb.HistoryEvent {
+	event := b.EventFactory.createHistoryEvent(eventType, b.EventFactory.timeSource.Now())
+	setAttributes(event)
 	event, _ = b.EventStore.add(event)
 	return event
 }

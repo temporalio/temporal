@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/update/v1"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -142,6 +143,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 			},
 		},
 	}, nil).AnyTimes()
+	mockStreamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 
 	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
@@ -1443,8 +1445,19 @@ func (s *NDCFunctionalTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.verifyEventHistorySize(workflowID, runID, historySize)
 }
 
-func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch() {
+func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch_Signal() {
+	s.testEventsReapplyNonCurrentBranch(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
+}
 
+func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch_UpdateAdmitted() {
+	s.testEventsReapplyNonCurrentBranch(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED)
+}
+
+func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch_UpdateAccepted() {
+	s.testEventsReapplyNonCurrentBranch(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
+}
+
+func (s *NDCFunctionalTestSuite) testEventsReapplyNonCurrentBranch(staleEventType enumspb.EventType) {
 	workflowID := "ndc-events-reapply-non-current-test" + uuid.New()
 	runID := uuid.New()
 	historySize := int64(0)
@@ -1533,18 +1546,29 @@ func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   baseBranchLastEvent.GetEventId() + 1,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					EventType: staleEventType,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   baseBranchLastEvent.GetVersion(), // dummy event from other cluster
 					TaskId:    taskID,
-					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-						SignalName: "signal",
-						Input:      payloads.EncodeBytes([]byte{}),
-						Identity:   "ndc_functional_test",
-					}},
 				},
 			},
 		},
+	}
+	if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+			SignalName: "signal",
+			Input:      payloads.EncodeBytes([]byte{}),
+			Identity:   "ndc_functional_test",
+		}}
+	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED {
+		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+			Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
+			Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
+		}}
+	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED {
+		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+			AcceptedRequest: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
+		}}
 	}
 	staleVersionHistory := s.eventBatchesToVersionHistory(versionhistory.CopyVersionHistory(versionHistory), staleBranch)
 	s.applyEvents(

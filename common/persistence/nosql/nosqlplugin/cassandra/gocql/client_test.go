@@ -29,7 +29,9 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
@@ -40,8 +42,9 @@ import (
 
 func TestNewCassandraCluster(t *testing.T) {
 	tests := map[string]struct {
-		cfg config.Cassandra
-		err error
+		cfg    config.Cassandra
+		err    error
+		verify func(*testing.T, *gocql.ClusterConfig)
 	}{
 		"emptyConfig": {
 			cfg: config.Cassandra{},
@@ -128,15 +131,62 @@ func TestNewCassandraCluster(t *testing.T) {
 			},
 			err: errors.New("only one of caData or caFile properties should be specified"),
 		},
+		"connect_timeout": {
+			cfg: config.Cassandra{
+				ConnectTimeout: time.Duration(123),
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				assert.Equal(t, time.Duration(123), cluster.ConnectTimeout)
+				assert.Equal(t, time.Duration(123), cluster.Timeout)
+				assert.Equal(t, time.Duration(123), cluster.WriteTimeout)
+			},
+		},
+		"connect_timeout_and_timeout": {
+			cfg: config.Cassandra{
+				ConnectTimeout: time.Duration(123),
+				Timeout:        time.Duration(456),
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				assert.Equal(t, time.Duration(123), cluster.ConnectTimeout)
+				assert.Equal(t, time.Duration(456), cluster.Timeout)
+				assert.Equal(t, time.Duration(456), cluster.WriteTimeout)
+			},
+		},
+		"connect_timeout_and_write_timeout": {
+			cfg: config.Cassandra{
+				ConnectTimeout: time.Duration(123),
+				WriteTimeout:   time.Duration(456),
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				assert.Equal(t, time.Duration(123), cluster.ConnectTimeout)
+				assert.Equal(t, time.Duration(123), cluster.Timeout)
+				assert.Equal(t, time.Duration(456), cluster.WriteTimeout)
+			},
+		},
+		"all_timeouts": {
+			cfg: config.Cassandra{
+				ConnectTimeout: time.Duration(123),
+				Timeout:        time.Duration(456),
+				WriteTimeout:   time.Duration(789),
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				assert.Equal(t, time.Duration(123), cluster.ConnectTimeout)
+				assert.Equal(t, time.Duration(456), cluster.Timeout)
+				assert.Equal(t, time.Duration(789), cluster.WriteTimeout)
+			},
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			r := resolver.NewMockServiceResolver(ctrl)
-			_, err := NewCassandraCluster(tc.cfg, r)
+			cluster, err := NewCassandraCluster(tc.cfg, r)
 			if !errors.Is(err, tc.err) {
 				assert.Equal(t, tc.err, err)
+			}
+			if tc.verify != nil {
+				tc.verify(t, cluster)
 			}
 			ctrl.Finish()
 		})
