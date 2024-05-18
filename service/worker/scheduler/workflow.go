@@ -26,6 +26,7 @@ package scheduler
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"time"
@@ -1330,7 +1331,7 @@ func (s *scheduler) startWorkflow(
 
 		if !start.Manual {
 			// record metric only for _scheduled_ actions, not trigger/backfill, otherwise it's not meaningful
-			desiredTime := util.Coalesce(start.DesiredTime, start.ActualTime)
+			desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
 			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(desiredTime.AsTime()))
 		}
 
