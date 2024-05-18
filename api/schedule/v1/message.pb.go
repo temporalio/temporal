@@ -57,8 +57,9 @@ type BufferedStart struct {
 	// Nominal (pre-jitter) and Actual (post-jitter) time of action
 	NominalTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=nominal_time,json=nominalTime,proto3" json:"nominal_time,omitempty"`
 	ActualTime  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=actual_time,json=actualTime,proto3" json:"actual_time,omitempty"`
-	// Desired time is usually actual time, but for starts that are blocked behind another action,
-	// is set to the close time of the previous action for more meaningful metrics.
+	// Desired time is usually nil, which should be interpreted as == actual time, but for starts
+	// that are blocked behind another action, it is set to the close time of the previous action
+	// for more meaningful metrics.
 	DesiredTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=desired_time,json=desiredTime,proto3" json:"desired_time,omitempty"`
 	// Overridden overlap policy
 	OverlapPolicy v1.ScheduleOverlapPolicy `protobuf:"varint,3,opt,name=overlap_policy,json=overlapPolicy,proto3,enum=temporal.api.enums.v1.ScheduleOverlapPolicy" json:"overlap_policy,omitempty"`
