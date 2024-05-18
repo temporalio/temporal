@@ -803,7 +803,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	var res schedspb.WatchWorkflowResponse
 	err := f.Get(s.ctx, &res)
 	if err != nil {
-		s.logger.Error("error from workflow watcher future", "workflow", id, "error", err)
+		s.logger.Error("error from workflow watcher future", "workflow", id, "error", err, "long", long)
 		return
 	}
 
@@ -823,7 +823,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 		// This could happen if the watcher activity gets interrupted and is retried after the
 		// heartbeat timeout, but in the meantime we have done a refresh through a local activity.
 		// This often happens when the worker is restarted.
-		s.logger.Warn("closed workflow not found in running list", "workflow", id)
+		s.logger.Warn("just-closed workflow not found in running list", "workflow", id, "long", long)
 	}
 
 	// handle pause-on-failure
@@ -858,7 +858,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 		s.State.BufferedStarts[0].DesiredTime = res.CloseTime
 	}
 
-	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure)
+	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure, "long", long)
 }
 
 func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
