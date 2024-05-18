@@ -37,6 +37,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	filterpb "go.temporal.io/api/filter/v1"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -3939,7 +3940,10 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	// 2. Wait for A to show up as running in visibility db
 	s.Eventually(func() bool {
 		listResp, err := s.engine.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
+			Namespace: s.namespace,
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: run.GetID(),
+			}},
 			MaximumPageSize: 10,
 		})
 		s.Nil(err)
@@ -4006,7 +4010,10 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	// wait for visibility to show A as started
 	s.Eventually(func() bool {
 		listResp, err := s.engine.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
+			Namespace: s.namespace,
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: run.GetID(),
+			}},
 			MaximumPageSize: 10,
 		})
 		s.Nil(err)
