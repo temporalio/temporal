@@ -114,7 +114,9 @@ func Invoke(
 				_, err := mutableState.AddActivityTaskStartedEvent(ai, scheduledEventID,
 					"",
 					req.GetCompleteRequest().GetIdentity(),
-					nil)
+					nil,
+					nil,
+				)
 				if err != nil {
 					return nil, err
 				}
