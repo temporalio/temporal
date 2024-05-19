@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,6 +51,20 @@ type (
 		client   Client
 		logger   log.Logger
 		errCount int64
+
+		cancelClientSubscription func()
+
+		subscriptionLock sync.Mutex
+		subscriptions    map[GenericSetting]map[int]any // final "any" is *subscription[T]
+		subscriptionIdx  int
+
+		callbackCh chan func()
+	}
+
+	subscription[T any] struct {
+		prec []Constraints // constant
+		f    func(T)       // constant
+		prev T             // protected by subscriptionLock in Collection
 	}
 
 	// These function types follow a similar pattern:
@@ -81,10 +96,76 @@ var (
 
 // NewCollection creates a new collection
 func NewCollection(client Client, logger log.Logger) *Collection {
-	return &Collection{
-		client:   client,
-		logger:   logger,
-		errCount: -1,
+	c := &Collection{
+		client:        client,
+		logger:        logger,
+		errCount:      -1,
+		subscriptions: make(map[GenericSetting]map[int]any),
+		callbackCh:    make(chan func()),
+	}
+	if subcli, ok := client.(SubscribableClient); ok {
+		c.cancelClientSubscription = subcli.Subscribe(c.keysChanged)
+	} else {
+		// FIXME: start goroutine to fake subscriptions
+	}
+	// FIXME: 10?
+	for i := 0; i < 10; i++ {
+		go c.callCallbacks()
+	}
+	return c
+}
+
+func (c *Collection) Stop() {
+	if c.cancelClientSubscription != nil {
+		c.cancelClientSubscription()
+	}
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	close(c.callbackCh)
+}
+
+func (c *Collection) callCallbacks() {
+	for f := range c.callbackCh {
+		f()
+	}
+}
+
+func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+
+	for key, cvs := range changed {
+		setting := queryRegistry(key)
+		if setting == nil {
+			continue
+		}
+
+		for _, sub := range c.subscriptions[setting] {
+			setting.dispatchUpdate(c, sub, cvs)
+		}
+	}
+}
+
+func (c *Collection) subscribe(s GenericSetting, sub any) ([]ConstrainedValue, func()) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+
+	c.subscriptionIdx++
+	id := c.subscriptionIdx
+
+	if c.subscriptions[s] == nil {
+		c.subscriptions[s] = make(map[int]any)
+	}
+	c.subscriptions[s][id] = sub
+
+	// get and return one value immediately (note that subscriptionLock is held here so we
+	// can't race with an update)
+	cvs := c.client.GetValue(s.Key())
+
+	return cvs, func() {
+		c.subscriptionLock.Lock()
+		defer c.subscriptionLock.Unlock()
+		delete(c.subscriptions[s], id)
 	}
 }
 
@@ -94,11 +175,6 @@ func (c *Collection) throttleLog() bool {
 	errCount := atomic.AddInt64(&c.errCount, 1)
 	// log only the first x errors and then one every x after that to reduce log noise
 	return errCount < errCountLogThreshold || errCount%errCountLogThreshold == 0
-}
-
-func (c *Collection) HasKey(key Key) bool {
-	cvs := c.client.GetValue(key)
-	return len(cvs) > 0
 }
 
 func findMatch[T any](cvs []ConstrainedValue, defaultCVs []TypedConstrainedValue[T], precedence []Constraints) (any, error) {
@@ -132,7 +208,18 @@ func matchAndConvert[T any](
 	precedence []Constraints,
 ) T {
 	cvs := c.client.GetValue(key)
+	return matchAndConvertCvs(c, key, def, cdef, convert, precedence, cvs)
+}
 
+func matchAndConvertCvs[T any](
+	c *Collection,
+	key Key,
+	def T,
+	cdef []TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	precedence []Constraints,
+	cvs []ConstrainedValue,
+) T {
 	defaultCVs := cdef
 	if defaultCVs == nil {
 		defaultCVs = []TypedConstrainedValue[T]{{Value: def}}
@@ -162,6 +249,27 @@ func matchAndConvert[T any](
 		// Return typedVal anyway since we have to return something.
 	}
 	return typedVal
+}
+
+// called with subscriptionLock
+func dispatchUpdate[T any](
+	c *Collection,
+	key Key,
+	def T,
+	cdef []TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	sub *subscription[T],
+	cvs []ConstrainedValue,
+) {
+	newVal := matchAndConvertCvs(c, key, def, cdef, convert, sub.prec, cvs)
+	// Unfortunately we have to use reflect.DeepEqual instead of just == because T is not comparable.
+	// We can't make T comparable because maps and slices are not comparable, and we want to support
+	// those directly. We could have two versions of this, one for comparable types and one for
+	// non-comparable, but it's not worth it.
+	if !reflect.DeepEqual(sub.prev, newVal) {
+		sub.prev = newVal
+		c.callbackCh <- func() { sub.f(newVal) }
+	}
 }
 
 func precedenceGlobal() []Constraints {

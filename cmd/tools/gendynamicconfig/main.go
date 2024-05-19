@@ -211,6 +211,37 @@ func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFnWith{{.P.N
 }
 
 {{if eq .P.Name "Global" -}}
+type TypedSubscribable[T any] func(callback func(T)) (v T, cancel func())
+{{- else -}}
+type TypedSubscribableWith{{.P.Name}}Filter[T any] func({{.P.GoArgs}}, callback func(T)) (v T, cancel func())
+{{- end}}
+
+{{if eq .P.Name "Global" -}}
+func (s {{.P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
+	return func(callback func(T)) (T, func()) {
+{{- else -}}
+func (s {{.P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWith{{.P.Name}}Filter[T] {
+	return func({{.P.GoArgs}}, callback func(T)) (T, func()) {
+{{- end}}
+		prec := precedence{{.P.Name}}({{.P.GoArgNames}})
+		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
+		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+	}
+}
+
+func (s {{.P.Name}}TypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.def,
+		s.cdef,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
+}
+
+{{if eq .P.Name "Global" -}}
 func GetTypedPropertyFn[T any](value T) TypedPropertyFn[T] {
 {{- else -}}
 func GetTypedPropertyFnFilteredBy{{.P.Name}}[T any](value T) TypedPropertyFnWith{{.P.Name}}Filter[T] {

@@ -51,6 +51,16 @@ type (
 		GetValue(key Key) []ConstrainedValue
 	}
 
+	// FIXME: doc
+	SubscribableClient interface {
+		// FIXME: doc
+		Subscribe(update ClientUpdateFunc) (cancel func())
+	}
+
+	// Called with modified keys on any change to the current value set.
+	// Deleted keys/constraints will get a nil value.
+	ClientUpdateFunc func(map[Key][]ConstrainedValue)
+
 	// Key is a key/property stored in dynamic config. For convenience, it is recommended that
 	// you treat keys as case-insensitive.
 	Key string

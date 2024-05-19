@@ -52,5 +52,8 @@ type (
 		Key() Key
 		Precedence() Precedence
 		Validate(v any) error
+
+		// for internal use:
+		dispatchUpdate(*Collection, any, []ConstrainedValue)
 	}
 )
