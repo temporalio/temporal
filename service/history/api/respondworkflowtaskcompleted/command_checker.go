@@ -58,8 +58,8 @@ type (
 		config                          *configs.Config
 		maxIDLengthLimit                int
 		searchAttributesValidator       *searchattribute.Validator
-		getDefaultActivityRetrySettings func(string) retrypolicy.DefaultRetrySettings
-		getDefaultWorkflowRetrySettings func(string) retrypolicy.DefaultRetrySettings
+		getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+		getDefaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 		enableCrossNamespaceCommands    dynamicconfig.BoolPropertyFn
 	}
 

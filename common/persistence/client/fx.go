@@ -51,7 +51,7 @@ type (
 	OperatorRPSRatio                   dynamicconfig.FloatPropertyFn
 	PersistenceBurstRatio              dynamicconfig.FloatPropertyFn
 
-	DynamicRateLimitingParams func() dynamicconfig.DynamicRateLimitingParams
+	DynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 
 	ClusterName string
 

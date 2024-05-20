@@ -96,7 +96,7 @@ type (
 		PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistenceDynamicRateLimitingParams func() dynamicconfig.DynamicRateLimitingParams
+		PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		EnableBatcher                        dynamicconfig.BoolPropertyFn
@@ -104,7 +104,7 @@ type (
 		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount              dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PerNamespaceWorkerOptions            func(string) sdkworker.Options
+		PerNamespaceWorkerOptions            dynamicconfig.TypedPropertyFnWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
 
 		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn

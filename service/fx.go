@@ -107,7 +107,7 @@ func NewPersistenceRateLimitingParams(
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	burstRatio dynamicconfig.FloatPropertyFn,
-	dynamicRateLimitingParams func() dynamicconfig.DynamicRateLimitingParams,
+	dynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams],
 	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
 	logger log.Logger,
 ) PersistenceRateLimitingParams {

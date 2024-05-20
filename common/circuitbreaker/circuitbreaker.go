@@ -45,7 +45,7 @@ type (
 	// breaker if there is a change in the settings object. Note that in this case, the previous
 	// state of the circuit breaker is lost.
 	TwoStepCircuitBreakerWithDynamicSettings struct {
-		settingsFn           func() dynamicconfig.CircuitBreakerSettings
+		settingsFn           dynamicconfig.TypedPropertyFn[dynamicconfig.CircuitBreakerSettings]
 		settingsEvalInterval time.Duration
 		settingsLastCheck    atomic.Pointer[time.Time]
 
@@ -60,7 +60,7 @@ type (
 
 	Settings struct {
 		// Function to get the dynamic settings.
-		SettingsFn func() dynamicconfig.CircuitBreakerSettings
+		SettingsFn dynamicconfig.TypedPropertyFn[dynamicconfig.CircuitBreakerSettings]
 		// Min interval time between calls to SettingsFn. If not set or zero, then it defaults
 		// to 1 minute.
 		SettingsEvalInterval time.Duration
