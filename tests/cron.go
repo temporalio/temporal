@@ -36,7 +36,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
-	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -85,8 +84,7 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 
 	respondFailed := false
 	seeRetry := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if !respondFailed {
 			respondFailed = true
@@ -101,7 +99,7 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 				}}, nil
 		}
 
-		startEvent := history.Events[0]
+		startEvent := task.History.Events[0]
 		seeRetry = startEvent.GetWorkflowExecutionStartedEventAttributes().Initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
 		return []*commandpb.Command{
 			{
@@ -184,10 +182,9 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 
 	var executions []*commonpb.WorkflowExecution
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		if previousStartedEventID == common.EmptyEventID {
-			startedEvent := history.Events[0]
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if task.PreviousStartedEventId == common.EmptyEventID {
+			startedEvent := task.History.Events[0]
 			if startedEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 				return []*commandpb.Command{
 					{
@@ -202,7 +199,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 			s.decodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
 		}
 
-		executions = append(executions, execution)
+		executions = append(executions, task.WorkflowExecution)
 		if len(executions) >= 3 {
 			return []*commandpb.Command{
 				{

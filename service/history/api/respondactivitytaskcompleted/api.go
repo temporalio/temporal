@@ -63,6 +63,7 @@ func Invoke(
 	var activityStartedTime time.Time
 	var taskQueue string
 	var workflowTypeName string
+	var fabricateStartedEvent bool
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -78,8 +79,11 @@ func Invoke(
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
+
 			scheduledEventID := token.GetScheduledEventId()
+			isCompletedByID := false
 			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
+				isCompletedByID = true
 				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
@@ -97,13 +101,29 @@ func Invoke(
 			}
 
 			if !isRunning ||
-				ai.StartedEventId == common.EmptyEventID ||
+				(!isCompletedByID && ai.StartedEventId == common.EmptyEventID) ||
 				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
 				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
-			if _, err := mutableState.AddActivityTaskCompletedEvent(scheduledEventID, ai.StartedEventId, request); err != nil {
+			// We fabricate a started event only when the activity is not started yet and
+			// we need to force complete an activity
+			fabricateStartedEvent = ai.StartedEventId == common.EmptyEventID
+			if fabricateStartedEvent {
+				_, err := mutableState.AddActivityTaskStartedEvent(ai, scheduledEventID,
+					"",
+					req.GetCompleteRequest().GetIdentity(),
+					nil,
+					nil,
+				)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			ai, _ = mutableState.GetActivityInfo(scheduledEventID)
+			if _, err = mutableState.AddActivityTaskCompletedEvent(scheduledEventID, ai.StartedEventId, request); err != nil {
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, err
 			}
@@ -119,7 +139,7 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 
-	if err == nil && !activityStartedTime.IsZero() {
+	if err == nil && !activityStartedTime.IsZero() && !fabricateStartedEvent {
 		metrics.ActivityE2ELatency.With(shard.GetMetricsHandler()).Record(
 			time.Since(activityStartedTime),
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),

@@ -173,55 +173,6 @@ func (v *VisibilityManagerDual) DeleteWorkflowExecution(
 	return nil
 }
 
-func (v *VisibilityManagerDual) ListOpenWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutions(ctx, request)
-}
-
-func (v *VisibilityManagerDual) ListClosedWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutions(ctx, request)
-}
-
-func (v *VisibilityManagerDual) ListOpenWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByType(ctx, request)
-}
-
-func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByType(ctx, request)
-}
-
-func (v *VisibilityManagerDual) ListOpenWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
-}
-
-func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
-}
-
-func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByStatus(
-	ctx context.Context,
-	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByStatus(ctx, request)
-}
-
 func (v *VisibilityManagerDual) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,

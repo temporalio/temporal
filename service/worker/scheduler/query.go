@@ -53,8 +53,8 @@ func newFieldNameAggInterceptor() *fieldNameAggInterceptor {
 	}
 }
 
-func ValidateVisibilityQuery(queryString string) error {
-	fields, err := getQueryFields(queryString)
+func ValidateVisibilityQuery(queryString string, saNameType searchattribute.NameTypeMap) error {
+	fields, err := getQueryFields(queryString, saNameType)
 	if err != nil {
 		return err
 	}
@@ -68,9 +68,9 @@ func ValidateVisibilityQuery(queryString string) error {
 	return nil
 }
 
-func getQueryFields(queryString string) ([]string, error) {
+func getQueryFields(queryString string, saNameType searchattribute.NameTypeMap) ([]string, error) {
 	fnInterceptor := newFieldNameAggInterceptor()
-	queryConverter := elasticsearch.NewQueryConverter(fnInterceptor, nil)
+	queryConverter := elasticsearch.NewQueryConverter(fnInterceptor, nil, saNameType)
 	_, err := queryConverter.ConvertWhereOrderBy(queryString)
 	if err != nil {
 		var converterErr *query.ConverterError

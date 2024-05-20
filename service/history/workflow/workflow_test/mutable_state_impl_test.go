@@ -102,7 +102,6 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 			expectFlush:       true,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, tc.Run)
 	}
 }
@@ -153,7 +152,7 @@ func (c *mutationTestCase) startWFT(
 		t.Fatal(err)
 	}
 
-	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "", nil)
+	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -445,7 +444,6 @@ func TestGetNexusCompletion(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			nsEntry := tests.LocalNamespaceEntry
 			ms, events := createMutableState(t, nsEntry, tests.NewDynamicConfig())
@@ -457,6 +455,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				"---",
 				&taskqueuepb.TaskQueue{Name: "irrelevant"},
 				"---",
+				nil,
 				nil,
 			)
 			require.NoError(t, err)

@@ -47,7 +47,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -66,6 +68,7 @@ type (
 		executableTask          *MockExecutableTask
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 		mockExecutionManager    *persistence.MockExecutionManager
+		config                  *configs.Config
 
 		replicationTask   *replicationspb.SyncWorkflowStateTaskAttributes
 		sourceClusterName string
@@ -112,6 +115,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
+	s.config = tests.NewDynamicConfig()
 
 	s.taskID = rand.Int63()
 	s.task = NewExecutableWorkflowStateTask(
@@ -125,6 +129,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 			DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:                  s.config,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),

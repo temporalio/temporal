@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -138,7 +139,7 @@ func (s *TestCluster) CreateDatabase() {
 	var err error
 	err = backoff.ThrottleRetry(
 		func() error {
-			db, err = NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver())
+			db, err = NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 			return err
 		},
 		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
@@ -176,7 +177,7 @@ func (s *TestCluster) DropDatabase() {
 
 	// NOTE need to connect with empty name to drop the database
 	cfg2.DatabaseName = ""
-	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver())
+	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		panic(err)
 	}
@@ -203,7 +204,7 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 	var db sqlplugin.AdminDB
 	err = backoff.ThrottleRetry(
 		func() error {
-			db, err = NewSQLAdminDB(sqlplugin.DbKindUnknown, &s.cfg, resolver.NewNoopResolver())
+			db, err = NewSQLAdminDB(sqlplugin.DbKindUnknown, &s.cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 			return err
 		},
 		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),

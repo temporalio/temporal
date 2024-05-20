@@ -33,6 +33,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 )
@@ -237,6 +238,9 @@ func (m HistoryTaskQueueManagerImpl) ListQueues(
 		Queues:        resp.Queues,
 		NextPageToken: resp.NextPageToken,
 	}, nil
+}
+
+func (m HistoryTaskQueueManagerImpl) Close() {
 }
 
 // combineUnique combines the given strings into a single string by hashing the length of each string and the string

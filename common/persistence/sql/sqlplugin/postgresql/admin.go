@@ -71,6 +71,16 @@ const (
 	dropTableQuery = "DROP TABLE %v"
 )
 
+// Exec executes a sql statement
+func (pdb *db) Exec(stmt string, args ...any) error {
+	db, err := pdb.handle.DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(stmt, args...)
+	return pdb.handle.ConvertError(err)
+}
+
 // CreateSchemaVersionTables sets up the schema version tables
 func (pdb *db) CreateSchemaVersionTables() error {
 	if err := pdb.Exec(createSchemaVersionTableQuery); err != nil {
@@ -82,8 +92,12 @@ func (pdb *db) CreateSchemaVersionTables() error {
 // ReadSchemaVersion returns the current schema version for the keyspace
 func (pdb *db) ReadSchemaVersion(database string) (string, error) {
 	var version string
-	err := pdb.db.Get(&version, readSchemaVersionQuery, database)
-	return version, err
+	db, err := pdb.handle.DB()
+	if err != nil {
+		return "", err
+	}
+	err = db.Get(&version, readSchemaVersionQuery, database)
+	return version, pdb.handle.ConvertError(err)
 }
 
 // UpdateSchemaVersion updates the schema version for the keyspace
@@ -94,20 +108,15 @@ func (pdb *db) UpdateSchemaVersion(database string, newVersion string, minCompat
 // WriteSchemaUpdateLog adds an entry to the schema update history table
 func (pdb *db) WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error {
 	now := time.Now().UTC()
-	return pdb.Exec(writeSchemaUpdateHistoryQuery, now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, desc)
-}
-
-// Exec executes a sql statement
-func (pdb *db) Exec(stmt string, args ...interface{}) error {
-	_, err := pdb.db.Exec(stmt, args...)
-	return err
+	err := pdb.Exec(writeSchemaUpdateHistoryQuery, now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, desc)
+	return pdb.handle.ConvertError(err)
 }
 
 // ListTables returns a list of tables in this database
 func (pdb *db) ListTables(database string) ([]string, error) {
 	var tables []string
-	err := pdb.db.Select(&tables, listTablesQuery)
-	return tables, err
+	err := pdb.Select(&tables, listTablesQuery)
+	return tables, pdb.handle.ConvertError(err)
 }
 
 // DropTable drops a given table from the database

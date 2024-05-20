@@ -28,14 +28,13 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/worker_versioning"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -113,9 +112,10 @@ func Invoke(
 				return nil, serviceerrors.NewTaskAlreadyStarted("Activity")
 			}
 
+			versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
 			if _, err := mutableState.AddActivityTaskStartedEvent(
 				ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
-				worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities),
+				versioningStamp, request.GetBuildIdRedirectInfo(),
 			); err != nil {
 				return nil, err
 			}

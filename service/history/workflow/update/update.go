@@ -35,12 +35,12 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
 )
@@ -87,9 +87,21 @@ type (
 	// (OnMessage calls) must be done while holding the workflow lock.
 	Update struct {
 		// accessed only while holding workflow lock
-		id              string
-		state           state
-		request         *anypb.Any // of type *updatepb.Request, nil when not in stateAdmitted or stateSent.
+		id    string
+		state state
+		// The `request` field holds the update payload submitted with the original request. It is stored in the
+		// registry in order to be sent to the worker and then written to history in an UpdateAccepted event.
+		// Therefore, it is nil when the update in the registry is in stateAccepted, stateCompleted etc, since then the
+		// request has already been written to an UpdateAccepted event.
+		// In addition, it is nil when the update in the registry is in stateAdmitted AND it was created from an
+		// UpdateInfo.AdmissionInfo entry in MutableState. In this case, the reason it is nil is the following:
+		// 1. The presence of the AdmissionInfo entry in MutableState implies that there is an UpdateAdmitted event in
+		//    history. This event always contains the original request payload.
+		// 2. Therefore, it is not necessary to write a second copy of the request payload to an UpdateAccepted event,
+		//    so we don't *need* to load the request into the registry.
+		// 3. Furthermore, it is possible that many UpdateAdmitted events were created after a Reset or during conflict
+		//    resolution. In that situation we *must not* attempt to load all the payloads into the registry.
+		request         *anypb.Any // of type *updatepb.Request
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
@@ -153,6 +165,7 @@ func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateAccepted,
+		request:         nil,
 		acceptedEventID: acceptedEventID,
 		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
@@ -296,7 +309,7 @@ func (u *Update) abort(reason AbortReason) {
 // is in stateCreated then it builds a protocolpb.Message that will be sent
 // when Send is called.
 func (u *Update) Admit(
-	ctx context.Context,
+	_ context.Context,
 	req *updatepb.Request,
 	eventStore EventStore, // Will be useful for durable admitted.
 ) error {
@@ -316,11 +329,11 @@ func (u *Update) Admit(
 	u.instrumentation.countRequestMsg()
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
 	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
-		return invalidArgf("unable to marshal request: %v", err)
+		return invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 	reqAny, err := anypb.New(req)
 	if err != nil {
-		return invalidArgf("unable to marshal request: %v", err)
+		return invalidArgf("unable to unmarshal request: %v", err)
 	}
 	u.request = reqAny
 	prevState := u.setState(stateProvisionallyAdmitted)
@@ -358,11 +371,11 @@ func (u *Update) OnProtocolMessage(
 	eventStore EventStore,
 ) error {
 	if protocolMsg == nil {
-		return invalidArgf("Update %q received nil message", u.id)
+		return invalidArgf("Update %s received nil message", u.id)
 	}
 
 	if protocolMsg.Body == nil {
-		return invalidArgf("Update %q received message with nil body", u.id)
+		return invalidArgf("Update %s received message with nil body", u.id)
 	}
 
 	body, err := protocolMsg.Body.UnmarshalNew()
@@ -371,7 +384,7 @@ func (u *Update) OnProtocolMessage(
 	}
 	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
 	if err != nil {
-		return invalidArgf("unable to unmarshal request: %v", err)
+		return invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 
 	// If no new events can be added to the event store (e.g. workflow is completed),
@@ -456,11 +469,17 @@ func (u *Update) outgoingMessageID() string {
 // and on commit the accepted future is completed and the Update transitions to
 // stateAccepted.
 func (u *Update) onAcceptanceMsg(
-	ctx context.Context,
+	_ context.Context,
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
 ) error {
-	if err := u.checkState(acpt, stateSent); err != nil {
+	// Normally update goes from stateAdmitted to stateSent and then to stateAccepted,
+	// therefore the only valid state here is stateSent.
+	// But if update registry is cleared after update was sent to the worker,
+	// it will be recreated by retries in stateAdmitted, and then worker can accept previous (cleared) update
+	// with the same UpdateId. Because it is, in fact, the same update, server should process this accept message w/o error.
+	// Therefore, stateAdmitted is also a valid state.
+	if err := u.checkStateSet(acpt, stateSet(stateSent|stateAdmitted)); err != nil {
 		return err
 	}
 	if err := validateAcceptanceMsg(acpt); err != nil {
@@ -468,13 +487,6 @@ func (u *Update) onAcceptanceMsg(
 	}
 	u.instrumentation.countAcceptanceMsg()
 
-	// The accepted request payload is not sent back by the worker to the server. Instead, the server stores it in the
-	// update registry and it is written to the event here. It could make sense to obtain it from the worker, in order
-	// to support scenarios in which the registry has been lost, but we still want to process an update acceptance
-	// message. (If we were to do that, SDKs would have to guarantee that the payload has not been altered by the
-	// validator, since we may use it to create reapplied updates on a new history branch, which will be submitted to
-	// the validator again).
-	//
 	// If the in-registry update lacks a request payload, this implies that there is an UpdateAdmitted event in
 	// history. In this case we write the UpdateAccepted event without a request payload, since the UpdateAdmitted
 	// event has it.
@@ -495,7 +507,7 @@ func (u *Update) onAcceptanceMsg(
 	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
 		u.id,
 		u.outgoingMessageID(),
-		acpt.AcceptedRequestSequencingEventId, // Only AcceptedRequestSequencingEventId from Acceptance message is used.
+		acpt.AcceptedRequestSequencingEventId,
 		acceptedRequest)
 	if err != nil {
 		return err
@@ -530,7 +542,8 @@ func (u *Update) onRejectionMsg(
 	rej *updatepb.Rejection,
 	effects effect.Controller,
 ) error {
-	if err := u.checkState(rej, stateSent); err != nil {
+	// See comment in onAcceptanceMsg about stateAdmitted.
+	if err := u.checkStateSet(rej, stateSet(stateSent|stateAdmitted)); err != nil {
 		return err
 	}
 	if err := validateRejectionMsg(rej); err != nil {
@@ -623,7 +636,7 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 	}
 	u.instrumentation.invalidStateTransition(u.id, msg, u.state)
 	return invalidArgf("invalid state transition attempted for Update %s: "+
-		"received %T message while in state %q", u.id, msg, u.state)
+		"received %T message while in state %s", u.id, msg, u.state)
 }
 
 // setState assigns the current state to a new value returning the original value.

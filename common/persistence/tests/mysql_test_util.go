@@ -35,6 +35,8 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -65,6 +67,7 @@ type (
 		Cfg     *config.SQL
 		Factory *sql.Factory
 		Logger  log.Logger
+		Metrics *metricstest.Capture
 	}
 )
 
@@ -72,6 +75,8 @@ func setUpMySQLTest(t *testing.T) (MySQLTestData, func()) {
 	var testData MySQLTestData
 	testData.Cfg = NewMySQLConfig()
 	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
+	mh := metricstest.NewCaptureHandler()
+	testData.Metrics = mh.StartCapture()
 	SetupMySQLDatabase(testData.Cfg)
 	SetupMySQLSchema(testData.Cfg)
 
@@ -80,10 +85,12 @@ func setUpMySQLTest(t *testing.T) (MySQLTestData, func()) {
 		resolver.NewNoopResolver(),
 		testMySQLClusterName,
 		testData.Logger,
+		mh,
 	)
 
 	tearDown := func() {
 		testData.Factory.Close()
+		mh.StopCapture(testData.Metrics)
 		TearDownMySQLDatabase(testData.Cfg)
 	}
 
@@ -110,7 +117,7 @@ func SetupMySQLDatabase(cfg *config.SQL) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
 	}
@@ -123,7 +130,7 @@ func SetupMySQLDatabase(cfg *config.SQL) {
 }
 
 func SetupMySQLSchema(cfg *config.SQL) {
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
 	}
@@ -167,7 +174,7 @@ func TearDownMySQLDatabase(cfg *config.SQL) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
 	}

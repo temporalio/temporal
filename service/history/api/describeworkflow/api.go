@@ -331,6 +331,7 @@ func Invoke(
 			}
 		}
 		result.PendingNexusOperations = append(result.PendingNexusOperations, &workflowpb.PendingNexusOperationInfo{
+			Endpoint:                op.Endpoint,
 			Service:                 op.Service,
 			Operation:               op.Operation,
 			OperationId:             op.OperationId,

@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -41,7 +42,9 @@ import (
 	"go.temporal.io/server/service/history/consts"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -92,8 +95,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 
@@ -125,15 +127,14 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
 			_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				Namespace: s.namespace,
-				TaskToken: taskToken,
+				TaskToken: task.TaskToken,
 				Details:   payloads.EncodeString("details"),
 			})
 			s.NoError(err)
@@ -222,8 +223,7 @@ func (s *FunctionalSuite) TestActivityRetry() {
 	activitiesScheduled := false
 	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *historypb.HistoryEvent
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
@@ -260,8 +260,8 @@ func (s *FunctionalSuite) TestActivityRetry() {
 						HeartbeatTimeout:       durationpb.New(0 * time.Second),
 					}}},
 			}, nil
-		} else if previousStartedEventID > 0 {
-			for _, event := range history.Events[previousStartedEventID:] {
+		} else if task.PreviousStartedEventId > 0 {
+			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				switch event.GetEventType() {
 				case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 					switch event.GetActivityTaskScheduledEventAttributes().GetActivityId() {
@@ -299,10 +299,9 @@ func (s *FunctionalSuite) TestActivityRetry() {
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 		var err error
 		if activityExecutedCount == 0 {
 			err = errors.New("bad-luck-please-retry")
@@ -432,8 +431,7 @@ func (s *FunctionalSuite) TestActivityRetry_Infinite() {
 	workflowComplete := false
 	activitiesScheduled := false
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
@@ -467,10 +465,9 @@ func (s *FunctionalSuite) TestActivityRetry_Infinite() {
 
 	activityExecutedCount := 0
 	activityExecutedLimit := 4
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 
 		var err error
 		if activityExecutedCount < activityExecutedLimit {
@@ -538,8 +535,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		s.Logger.Info("Calling WorkflowTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
@@ -573,10 +569,9 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 		// Timing out more than HB time.
 		time.Sleep(2 * time.Second)
 		activityExecutedCount++
@@ -643,14 +638,13 @@ func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 	requestCancellation := false
 	activityScheduledID := int64(0)
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			activityScheduledID = startedEventID + 2
+			activityScheduledID = task.StartedEventId + 2
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -686,16 +680,15 @@ func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 	}
 
 	activityCanceled := false
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(activityName, activityType.GetName())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
 		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
 			response, err := s.engine.RecordActivityTaskHeartbeat(NewContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
 					Namespace: s.namespace,
-					TaskToken: taskToken,
+					TaskToken: task.TaskToken,
 					Details:   payloads.EncodeString("details"),
 				})
 			if response != nil && response.CancelRequested {
@@ -788,14 +781,13 @@ func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 	requestCancellation := false
 	activityScheduledID := int64(0)
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity")
-			activityScheduledID = startedEventID + 2
+			activityScheduledID = task.StartedEventId + 2
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -831,8 +823,7 @@ func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 	}
 
 	// dummy activity handler
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Fail("activity should not run")
 		return nil, false, nil
 	}
@@ -1022,9 +1013,7 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 
 	workflowComplete := false
 	workflowNextCmd := enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK
-	wtHandler := func(
-		execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History,
-	) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		switch workflowNextCmd {
 		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 			workflowNextCmd = enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION
@@ -1057,14 +1046,12 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 	activityStartedSignal := make(chan bool) // Used by activity channel to signal the start so that the test can verify empty identity.
 	heartbeatSignalChan := make(chan bool)   // Activity task sends heartbeat when signaled on this chan. It also signals back on the same chan after sending the heartbeat.
 	endActivityTask := make(chan bool)       // Activity task completes when signaled on this chan. This is to force the task to be in pending state.
-	atHandler := func(
-		execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType, activityID string, input *commonpb.Payloads, taskToken []byte,
-	) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		activityStartedSignal <- true // signal the start of activity task.
 		<-heartbeatSignalChan         // wait for signal before sending heartbeat.
 		_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: s.namespace,
-			TaskToken: taskToken,
+			TaskToken: task.TaskToken,
 			Details:   payloads.EncodeString("details"),
 			Identity:  workerIdentity, // explicitly set the worker identity in the heartbeat request
 		})
@@ -1127,4 +1114,107 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
+}
+
+func (s *FunctionalSuite) TestActivityTaskCompleteForceCompletion() {
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
+		Namespace: s.namespace,
+	})
+	s.NoError(err)
+
+	activityInfo := make(chan activity.Info, 1)
+	taskQueue := s.randomizeStr(s.T().Name())
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	ctx := NewContext()
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        uuid.New(),
+		TaskQueue: taskQueue,
+	}
+	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	s.NoError(err)
+	ai := <-activityInfo
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(description.PendingActivities))
+		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+	},
+		10*time.Second,
+		500*time.Millisecond)
+
+	err = sdkClient.CompleteActivityByID(ctx, s.namespace, run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
+	s.NoError(err)
+
+	// Ensure the activity is completed and the workflow is unblcked.
+	s.NoError(run.Get(ctx, nil))
+}
+
+func (s *FunctionalSuite) TestActivityTaskCompleteRejectCompletion() {
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
+		Namespace: s.namespace,
+	})
+	s.NoError(err)
+
+	activityInfo := make(chan activity.Info, 1)
+	taskQueue := s.randomizeStr(s.T().Name())
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	ctx := NewContext()
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        uuid.New(),
+		TaskQueue: taskQueue,
+	}
+	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	s.NoError(err)
+	ai := <-activityInfo
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(description.PendingActivities))
+		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+	},
+		10*time.Second,
+		500*time.Millisecond)
+
+	err = sdkClient.CompleteActivity(ctx, ai.TaskToken, nil, nil)
+	var svcErr *serviceerror.NotFound
+	s.ErrorAs(err, &svcErr, "invalid activityID or activity already timed out or invoking workflow is completed")
+}
+
+func (s *FunctionalSuite) mockWorkflowWithErrorActivity(activityInfo chan<- activity.Info, sdkClient sdkclient.Client, taskQueue string) (worker.Worker, func(ctx workflow.Context) error) {
+	mockErrorActivity := func(ctx context.Context) error {
+		ai := activity.GetInfo(ctx)
+		activityInfo <- ai
+		return errors.New("mock error of an activity")
+	}
+	wf := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 3 * time.Minute,
+			RetryPolicy: &temporal.RetryPolicy{
+				// Add long initial interval to make sure the next attempt is not scheduled
+				// before the test gets a chance to complete the activity via API call.
+				InitialInterval: 2 * time.Minute,
+			},
+		}
+		ctx2 := workflow.WithActivityOptions(ctx, ao)
+		var mockErrorResult error
+		err := workflow.ExecuteActivity(ctx2, mockErrorActivity).Get(ctx2, &mockErrorResult)
+		if err != nil {
+			return err
+		}
+		return mockErrorResult
+	}
+
+	workflowType := "test"
+	w := worker.New(sdkClient, taskQueue, worker.Options{})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	w.RegisterActivity(mockErrorActivity)
+	return w, wf
 }
