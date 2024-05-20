@@ -40,7 +40,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -103,9 +102,7 @@ type (
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		// Describe returns information about the physical task queue
-		Describe() *taskqueuespb.PhysicalTaskQueueInfo
-		GetBacklogInfo() *taskqueuepb.BacklogInfo
+		GetBacklogInfo(ctx context.Context) (*taskqueuepb.BacklogInfo, error)
 		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
@@ -415,20 +412,17 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
-	return &taskqueuespb.PhysicalTaskQueueInfo{
-		Pollers:     c.GetAllPollerInfo(),
-		BacklogInfo: c.GetBacklogInfo(),
+func (c *physicalTaskQueueManagerImpl) GetBacklogInfo(ctx context.Context) (*taskqueuepb.BacklogInfo, error) {
+	approximateBacklogCount, err := c.backlogMgr.getApproximateBacklogCount(ctx)
+	if err != nil {
+		return nil, err
 	}
-}
-
-func (c *physicalTaskQueueManagerImpl) GetBacklogInfo() *taskqueuepb.BacklogInfo {
 	return &taskqueuepb.BacklogInfo{
-		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
+		ApproximateBacklogCount: approximateBacklogCount,
 		ApproximateBacklogAge:   nil,        // TODO: Shivam - add this feature
 		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
 		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature
-	}
+	}, nil
 }
 
 func (c *physicalTaskQueueManagerImpl) String() string {

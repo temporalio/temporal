@@ -702,6 +702,21 @@ func (mr *MockTaskManagerMockRecorder) CountTaskQueuesByBuildId(ctx, request int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountTaskQueuesByBuildId", reflect.TypeOf((*MockTaskManager)(nil).CountTaskQueuesByBuildId), ctx, request)
 }
 
+// CountTasksExact mocks base method.
+func (m *MockTaskManager) CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountTasksExact", ctx, request)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountTasksExact indicates an expected call of CountTasksExact.
+func (mr *MockTaskManagerMockRecorder) CountTasksExact(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountTasksExact", reflect.TypeOf((*MockTaskManager)(nil).CountTasksExact), ctx, request)
+}
+
 // CreateTaskQueue mocks base method.
 func (m *MockTaskManager) CreateTaskQueue(ctx context.Context, request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
 	m.ctrl.T.Helper()

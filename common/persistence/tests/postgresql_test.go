@@ -135,6 +135,19 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueSuite() {
 	suite.Run(p.T(), s)
 }
 
+func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueBacklogCounterSuite() {
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+
+	s := NewTaskQueueBacklogCounterSuite(p.T(), taskQueueStore, testData.Logger, true)
+	suite.Run(p.T(), s)
+}
+
 func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueTaskSuite() {
 	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
 	defer tearDown()

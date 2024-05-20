@@ -581,6 +581,19 @@ func (m *sqlTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *
 	return m.Db.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
+func (m *sqlTaskManager) CountTasksExact(ctx context.Context, request *persistence.CountTasksExactRequest) (int, error) {
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return 0, serviceerror.NewUnavailable(err.Error())
+	}
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
+
+	return m.Db.CountTasksFromTaskQueue(ctx, sqlplugin.TaskQueuesFilter{
+		RangeHash:   tqHash,
+		TaskQueueID: tqId,
+	})
+}
+
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
 func (m *sqlTaskManager) taskQueueIdAndHash(
 	namespaceID primitives.UUID,

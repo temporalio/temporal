@@ -559,6 +559,12 @@ type (
 		BuildID     string
 	}
 
+	CountTasksExactRequest struct {
+		NamespaceID string
+		TaskQueue   string
+		TaskType    enumspb.TaskQueueType
+	}
+
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
 	ListTaskQueueRequest struct {
 		PageSize  int
@@ -1159,6 +1165,7 @@ type (
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
+		CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities

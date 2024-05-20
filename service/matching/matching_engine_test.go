@@ -3660,6 +3660,12 @@ func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.C
 	return 0, nil
 }
 
+// CountTasksFromTaskQueue implements persistence.TaskManager
+func (*testTaskManager) CountTasksExact(context.Context, *persistence.CountTasksExactRequest) (int, error) {
+	// No need to implement this for unit tests
+	return 0, serviceerror.NewUnimplemented("CountTasksExact not implemented")
+}
+
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 	currentTime := time.Now().UTC()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())

@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
+
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -297,4 +299,33 @@ func (c *backlogManagerImpl) newIOContext() (context.Context, context.CancelFunc
 
 func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()
+}
+
+// getApproximateBacklogCount returns an estimate for the number of tasks in the backlog. It returns an exact count for SQL
+// databases while an approximate value for Cassandra. The approximate value is susceptible to under-counting and over-counting in the following scenarios:
+//
+// 1. Under-counting: The latest ackLevel is not persisted with task creation. Consider a case where we add 10 tasks and complete 9 of them, moving the ackLevel
+// to 9, and then add 1 more task. This shall make the backlog counter read 2 which also gets persisted. On the event that `UpdateState` does not get called, the node crashes,
+// and `skipFinalUpdate` is set to true, the latest value of ackLevel does not get persisted. On restarting the node, the backlog counter would be an under-count since
+// there are 11 tasks in the backlog, according to the ackLevel read (0), but our counter reads 2.
+//
+// 2. Under-counting: If there is an ownership transfer and the old owner writes more tasks to backlog between the `GetTaskQueue` and `UpdateTaskQueue`
+// calls of the new owner lease takeover.
+//
+// 3. Over-counting: Cassandra randomly TTL'es out tasks which can lead to the counter being an overestimate.
+func (c *backlogManagerImpl) getApproximateBacklogCount(ctx context.Context) (int64, error) {
+	exactTasks, err := c.db.store.CountTasksExact(ctx, &persistence.CountTasksExactRequest{
+		NamespaceID: c.db.queue.NamespaceId().String(),
+		TaskQueue:   c.db.queue.PersistenceName(),
+		TaskType:    c.db.queue.TaskType(),
+	})
+
+	// preventing a negative valued backlog count
+	if _, ok := err.(*serviceerror.Unimplemented); ok {
+		return max(0, c.db.getApproximateBacklogCount()), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return int64(exactTasks), nil
 }

@@ -78,6 +78,9 @@ type (
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*InternalListTaskQueueUserDataEntriesResponse, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
+		// CountTasksExact is an optional method which, if implemented, will be used to populate `BacklogInfo.ApproximateBacklogCount` in `DescribeTaskQueue` response.
+		// If this is method returns a `serviceerror.Unimplemented` error, we'll use an approximate value tracked by server to return in `BacklogInfo`.
+		CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error)
 	}
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore interface {

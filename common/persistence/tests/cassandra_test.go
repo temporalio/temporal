@@ -237,6 +237,19 @@ func TestCassandraTaskQueueSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestCassandraTaskQueueBacklogCounterSuite(t *testing.T) {
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+
+	s := NewTaskQueueBacklogCounterSuite(t, taskQueueStore, testData.Logger, false)
+	suite.Run(t, s)
+}
+
 func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()

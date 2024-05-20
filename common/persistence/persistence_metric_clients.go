@@ -696,6 +696,16 @@ func (p *taskPersistenceClient) CountTaskQueuesByBuildId(ctx context.Context, re
 	return p.persistence.CountTaskQueuesByBuildId(ctx, request)
 }
 
+func (p *taskPersistenceClient) CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (_ int, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceCountTasksExactScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.CountTasksExact(ctx, request)
+}
+
 func (p *taskPersistenceClient) Close() {
 	p.persistence.Close()
 }

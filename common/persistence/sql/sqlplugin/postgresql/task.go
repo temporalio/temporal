@@ -108,6 +108,7 @@ task_queue_id = :task_queue_id
 	removeBuildIdToTaskQueueMappingQry = `DELETE FROM build_id_to_task_queue WHERE namespace_id = $1 AND task_queue_name = $2 AND build_id IN (`
 	listTaskQueuesByBuildIdQry         = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
 	countTaskQueuesByBuildIdQry        = `SELECT COUNT(*) FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
+	countTasksByTaskQueueQry           = `SELECT COUNT(*) FROM tasks WHERE range_hash = $1 AND task_queue_id = $2`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -389,5 +390,15 @@ func (pdb *db) GetTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.Ge
 func (pdb *db) CountTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.CountTaskQueuesByBuildIdRequest) (int, error) {
 	var count int
 	err := pdb.conn.GetContext(ctx, &count, countTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
+	return count, err
+}
+
+// CountTasksFromTaskQueue counts the number of tasks in a task queue
+func (pdb *db) CountTasksFromTaskQueue(
+	ctx context.Context,
+	filter sqlplugin.TaskQueuesFilter,
+) (int, error) {
+	var count int
+	err := pdb.conn.GetContext(ctx, &count, countTasksByTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
 	return count, err
 }

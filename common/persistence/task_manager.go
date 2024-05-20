@@ -139,6 +139,7 @@ func (m *taskManagerImpl) GetTaskQueue(
 	if err != nil {
 		return nil, err
 	}
+
 	return &GetTaskQueueResponse{
 		TaskQueueInfo: taskQueueInfo,
 		RangeID:       response.RangeID,
@@ -303,4 +304,8 @@ func (m *taskManagerImpl) GetTaskQueuesByBuildId(ctx context.Context, request *G
 
 func (m *taskManagerImpl) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
 	return m.taskStore.CountTaskQueuesByBuildId(ctx, request)
+}
+
+func (m *taskManagerImpl) CountTasksExact(ctx context.Context, request *CountTasksExactRequest) (int, error) {
+	return m.taskStore.CountTasksExact(ctx, request)
 }

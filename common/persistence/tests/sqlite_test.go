@@ -380,6 +380,31 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteTaskQueueBacklogCounterSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueBacklogCounterSuite(t, taskQueueStore, logger, true)
+	suite.Run(t, s)
+}
+
 // TODO: Merge persistence-tests into the tests directory.
 
 func TestSQLiteVisibilityPersistenceSuite(t *testing.T) {
