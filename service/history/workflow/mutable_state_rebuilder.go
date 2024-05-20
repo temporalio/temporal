@@ -328,7 +328,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateActivityTasks(
-				event,
+				event.GetEventId(),
 			); err != nil {
 				return nil, err
 			}

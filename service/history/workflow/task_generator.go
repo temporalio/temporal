@@ -74,7 +74,7 @@ type (
 			workflowTaskScheduledEventID int64,
 		) error
 		GenerateActivityTasks(
-			event *historypb.HistoryEvent,
+			activityScheduledEventID int64,
 		) error
 		GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error
 		GenerateChildWorkflowTasks(
@@ -558,10 +558,8 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateActivityTasks(
-	event *historypb.HistoryEvent,
+	activityScheduledEventID int64,
 ) error {
-
-	activityScheduledEventID := event.GetEventId()
 	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduledEventID)
 	if !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID))

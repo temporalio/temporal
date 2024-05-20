@@ -102,6 +102,7 @@ message WorkflowReplicationMessages {
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
     int64 exclusive_high_watermark = 2;
     google.protobuf.Timestamp  exclusive_high_watermark_time = 3;
+    temporal.server.api.enums.v1.TaskPriority priority = 4;
 }
 
 message ReplicationTaskInfo {
@@ -150,6 +151,10 @@ message SyncActivityTaskAttributes {
     string last_worker_identity = 13;
     temporal.server.api.history.v1.VersionHistory version_history = 14;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 15;
+    // build ID of the worker who received this activity last time
+    string last_started_build_id = 16;
+    // workflows redirect_counter value when this activity started last time
+    int64 last_started_redirect_counter = 17;
 }
 
 message HistoryTaskAttributes {

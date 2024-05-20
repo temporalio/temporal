@@ -472,6 +472,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			// Passing nil versioning stamp means we want to skip versioning considerations because this task
 			// is not actually dispatched but will fail immediately.
 			nil,
+			nil,
 		)
 		if err != nil {
 			return err

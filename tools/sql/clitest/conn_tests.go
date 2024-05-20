@@ -117,5 +117,5 @@ func newTestConn(
 		Password:     testPassword,
 		PluginName:   pluginName,
 		DatabaseName: database,
-	})
+	}, log.NewTestLogger())
 }

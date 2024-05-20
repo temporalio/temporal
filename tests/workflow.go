@@ -301,8 +301,7 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -448,13 +447,12 @@ func (s *FunctionalSuite) TestSequentialWorkflow() {
 	}
 
 	expectedActivity := int32(1)
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.EqualValues(id, execution.WorkflowId)
-		s.Equal(activityName, activityType.Name)
-		id, _ := strconv.Atoi(activityID)
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.EqualValues(id, task.WorkflowExecution.WorkflowId)
+		s.Equal(activityName, task.ActivityType.Name)
+		id, _ := strconv.Atoi(task.ActivityId)
 		s.Equal(int(expectedActivity), id)
-		s.Equal(expectedActivity, s.decodePayloadsByteSliceInt32(input))
+		s.Equal(expectedActivity, s.decodePayloadsByteSliceInt32(task.Input))
 		expectedActivity++
 
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -619,11 +617,10 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.EqualValues(id, execution.WorkflowId)
-		s.Equal(activityName, activityType.Name)
-		s.Logger.Info("Activity ID", tag.WorkflowActivityID(activityID))
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.EqualValues(id, task.WorkflowExecution.WorkflowId)
+		s.Equal(activityName, task.ActivityType.Name)
+		s.Logger.Info("Activity ID", tag.WorkflowActivityID(task.ActivityId))
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 

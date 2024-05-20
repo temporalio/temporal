@@ -35,7 +35,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
@@ -50,7 +49,7 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
 
-// AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build id
+// AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
 func AssignedBuildIdSearchAttribute(buildId string) string {
 	return buildIdSearchAttributePrefixAssigned + BuildIdSearchAttributeDelimiter + buildId
 }
@@ -61,12 +60,12 @@ func IsUnversionedOrAssignedBuildIdSearchAttribute(buildId string) bool {
 		strings.HasPrefix(buildId, buildIdSearchAttributePrefixAssigned+BuildIdSearchAttributeDelimiter)
 }
 
-// VersionedBuildIdSearchAttribute returns the search attribute value for a versioned build id
+// VersionedBuildIdSearchAttribute returns the search attribute value for a versioned build ID
 func VersionedBuildIdSearchAttribute(buildId string) string {
 	return buildIdSearchAttributePrefixVersioned + BuildIdSearchAttributeDelimiter + buildId
 }
 
-// UnversionedBuildIdSearchAttribute returns the search attribute value for an unversioned build id
+// UnversionedBuildIdSearchAttribute returns the search attribute value for an unversioned build ID
 func UnversionedBuildIdSearchAttribute(buildId string) string {
 	return buildIdSearchAttributePrefixUnversioned + BuildIdSearchAttributeDelimiter + buildId
 }
@@ -82,7 +81,7 @@ func VersionStampToBuildIdSearchAttribute(stamp *commonpb.WorkerVersionStamp) st
 	return UnversionedBuildIdSearchAttribute(stamp.BuildId)
 }
 
-// FindBuildId finds a build id in the version data's sets, returning (set index, index within that set).
+// FindBuildId finds a build ID in the version data's sets, returning (set index, index within that set).
 // Returns -1, -1 if not found.
 func FindBuildId(versioningData *persistencespb.VersioningData, buildId string) (setIndex, indexInSet int) {
 	versionSets := versioningData.GetVersionSets()
@@ -132,16 +131,16 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
 // - inheritedBuildId: build ID inherited from a past/previous wf execution (for Child WF or CaN)
-// - assignedBuildId: the build id to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
+// - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
 // - stamp: the latest versioning stamp of the execution (only needed for old versioning)
-// - lastWorkflowTaskStartedEventID: to determine if this is the first WFT
-func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, lastWorkflowTaskStartedEventID int64) *taskqueuespb.TaskVersionDirective {
+// - hasCompletedWorkflowTask: if the wf has completed any WFT
+func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, hasCompletedWorkflowTask bool) *taskqueuespb.TaskVersionDirective {
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return MakeBuildIdDirective(id)
-	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID && inheritedBuildId == "" {
-		// first workflow task and build ID not inherited. if this is retry we reassign build ID
-		// if WF has an inherited build id, we do not allow usage of assignment rules
+	} else if !hasCompletedWorkflowTask && inheritedBuildId == "" {
+		// first workflow task (or a retry of) and build ID not inherited. if this is retry we reassign build ID
+		// if WF has an inherited build ID, we do not allow usage of assignment rules
 		return MakeUseAssignmentRulesDirective()
 	} else if assignedBuildId != "" {
 		return MakeBuildIdDirective(assignedBuildId)

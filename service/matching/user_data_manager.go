@@ -428,7 +428,7 @@ func (m *userDataManagerImpl) updateUserData(
 				return nil, false, err
 			}
 			if numTaskQueues >= taskQueueLimitPerBuildId {
-				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build id: %d", taskQueueLimitPerBuildId))
+				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build ID: %d", taskQueueLimitPerBuildId))
 			}
 		}
 	}

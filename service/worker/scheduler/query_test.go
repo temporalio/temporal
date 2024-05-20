@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 func TestFieldNameAggInterceptor(t *testing.T) {
@@ -109,7 +110,7 @@ func TestGetQueryFields(t *testing.T) {
 			tc.name,
 			func(t *testing.T) {
 				s := require.New(t)
-				fields, err := getQueryFields(tc.input)
+				fields, err := getQueryFields(tc.input, searchattribute.TestNameTypeMap)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
 					s.Equal(len(tc.expectedFields), len(fields))
@@ -179,7 +180,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 			tc.name,
 			func(t *testing.T) {
 				s := require.New(t)
-				err := ValidateVisibilityQuery(tc.input)
+				err := ValidateVisibilityQuery(tc.input, searchattribute.TestNameTypeMap)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
 				} else {

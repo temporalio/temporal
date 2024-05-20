@@ -36,6 +36,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
@@ -56,7 +58,7 @@ var (
 //
 // Note: this function may receive breaking changes or be removed in the future.
 func SetupSchema(cfg *config.SQL) error {
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		return fmt.Errorf("unable to create SQLite admin DB: %w", err)
 	}
@@ -113,7 +115,7 @@ type NamespaceConfig struct {
 //
 // Note: this function may receive breaking changes or be removed in the future.
 func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
-	db, err := sql.NewSQLDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		return fmt.Errorf("unable to create SQLite admin DB: %w", err)
 	}

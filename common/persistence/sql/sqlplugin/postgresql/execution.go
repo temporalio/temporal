@@ -190,7 +190,7 @@ func (pdb *db) InsertIntoExecutions(
 	ctx context.Context,
 	row *sqlplugin.ExecutionsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createExecutionQuery,
 		row,
 	)
@@ -201,7 +201,7 @@ func (pdb *db) UpdateExecutions(
 	ctx context.Context,
 	row *sqlplugin.ExecutionsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		updateExecutionQuery,
 		row,
 	)
@@ -213,7 +213,7 @@ func (pdb *db) SelectFromExecutions(
 	filter sqlplugin.ExecutionsFilter,
 ) (*sqlplugin.ExecutionsRow, error) {
 	var row sqlplugin.ExecutionsRow
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&row,
 		getExecutionQuery,
 		filter.ShardID,
@@ -232,7 +232,7 @@ func (pdb *db) DeleteFromExecutions(
 	ctx context.Context,
 	filter sqlplugin.ExecutionsFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteExecutionQuery,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -247,7 +247,7 @@ func (pdb *db) ReadLockExecutions(
 	filter sqlplugin.ExecutionsFilter,
 ) (int64, int64, error) {
 	var executionVersion sqlplugin.ExecutionVersion
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&executionVersion,
 		readLockExecutionQuery,
 		filter.ShardID,
@@ -264,7 +264,7 @@ func (pdb *db) WriteLockExecutions(
 	filter sqlplugin.ExecutionsFilter,
 ) (int64, int64, error) {
 	var executionVersion sqlplugin.ExecutionVersion
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&executionVersion,
 		writeLockExecutionQuery,
 		filter.ShardID,
@@ -280,7 +280,7 @@ func (pdb *db) InsertIntoCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createCurrentExecutionQuery,
 		row,
 	)
@@ -291,7 +291,7 @@ func (pdb *db) UpdateCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		updateCurrentExecutionsQuery,
 		row,
 	)
@@ -303,7 +303,7 @@ func (pdb *db) SelectFromCurrentExecutions(
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&row,
 		getCurrentExecutionQuery,
 		filter.ShardID,
@@ -318,7 +318,7 @@ func (pdb *db) DeleteFromCurrentExecutions(
 	ctx context.Context,
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteCurrentExecutionQuery,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -333,7 +333,7 @@ func (pdb *db) LockCurrentExecutions(
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&row,
 		lockCurrentExecutionQuery,
 		filter.ShardID,
@@ -350,7 +350,7 @@ func (pdb *db) LockCurrentExecutionsJoinExecutions(
 	filter sqlplugin.CurrentExecutionsFilter,
 ) ([]sqlplugin.CurrentExecutionsRow, error) {
 	var rows []sqlplugin.CurrentExecutionsRow
-	err := pdb.conn.SelectContext(ctx,
+	err := pdb.SelectContext(ctx,
 		&rows,
 		lockCurrentExecutionJoinExecutionsQuery,
 		filter.ShardID,
@@ -365,7 +365,7 @@ func (pdb *db) InsertIntoHistoryImmediateTasks(
 	ctx context.Context,
 	rows []sqlplugin.HistoryImmediateTasksRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createHistoryImmediateTasksQuery,
 		rows,
 	)
@@ -377,7 +377,7 @@ func (pdb *db) RangeSelectFromHistoryImmediateTasks(
 	filter sqlplugin.HistoryImmediateTasksRangeFilter,
 ) ([]sqlplugin.HistoryImmediateTasksRow, error) {
 	var rows []sqlplugin.HistoryImmediateTasksRow
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows,
 		getHistoryImmediateTasksQuery,
 		filter.ShardID,
@@ -396,7 +396,7 @@ func (pdb *db) DeleteFromHistoryImmediateTasks(
 	ctx context.Context,
 	filter sqlplugin.HistoryImmediateTasksFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteHistoryImmediateTaskQuery,
 		filter.ShardID,
 		filter.CategoryID,
@@ -409,7 +409,7 @@ func (pdb *db) RangeDeleteFromHistoryImmediateTasks(
 	ctx context.Context,
 	filter sqlplugin.HistoryImmediateTasksRangeFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		rangeDeleteHistoryImmediateTasksQuery,
 		filter.ShardID,
 		filter.CategoryID,
@@ -426,7 +426,7 @@ func (pdb *db) InsertIntoHistoryScheduledTasks(
 	for i := range rows {
 		rows[i].VisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(rows[i].VisibilityTimestamp)
 	}
-	return pdb.conn.NamedExecContext(
+	return pdb.NamedExecContext(
 		ctx,
 		createHistoryScheduledTasksQuery,
 		rows,
@@ -441,7 +441,7 @@ func (pdb *db) RangeSelectFromHistoryScheduledTasks(
 	var rows []sqlplugin.HistoryScheduledTasksRow
 	filter.InclusiveMinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.InclusiveMinVisibilityTimestamp)
 	filter.ExclusiveMaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.ExclusiveMaxVisibilityTimestamp)
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows,
 		getHistoryScheduledTasksQuery,
 		filter.ShardID,
@@ -466,7 +466,7 @@ func (pdb *db) DeleteFromHistoryScheduledTasks(
 	filter sqlplugin.HistoryScheduledTasksFilter,
 ) (sql.Result, error) {
 	filter.VisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.VisibilityTimestamp)
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteHistoryScheduledTaskQuery,
 		filter.ShardID,
 		filter.CategoryID,
@@ -482,7 +482,7 @@ func (pdb *db) RangeDeleteFromHistoryScheduledTasks(
 ) (sql.Result, error) {
 	filter.InclusiveMinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.InclusiveMinVisibilityTimestamp)
 	filter.ExclusiveMaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.ExclusiveMaxVisibilityTimestamp)
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		rangeDeleteHistoryScheduledTasksQuery,
 		filter.ShardID,
 		filter.CategoryID,
@@ -496,7 +496,7 @@ func (pdb *db) InsertIntoTransferTasks(
 	ctx context.Context,
 	rows []sqlplugin.TransferTasksRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createTransferTasksQuery,
 		rows,
 	)
@@ -508,7 +508,7 @@ func (pdb *db) RangeSelectFromTransferTasks(
 	filter sqlplugin.TransferTasksRangeFilter,
 ) ([]sqlplugin.TransferTasksRow, error) {
 	var rows []sqlplugin.TransferTasksRow
-	err := pdb.conn.SelectContext(ctx,
+	err := pdb.SelectContext(ctx,
 		&rows,
 		getTransferTasksQuery,
 		filter.ShardID,
@@ -527,7 +527,7 @@ func (pdb *db) DeleteFromTransferTasks(
 	ctx context.Context,
 	filter sqlplugin.TransferTasksFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteTransferTaskQuery,
 		filter.ShardID,
 		filter.TaskID,
@@ -539,7 +539,7 @@ func (pdb *db) RangeDeleteFromTransferTasks(
 	ctx context.Context,
 	filter sqlplugin.TransferTasksRangeFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		rangeDeleteTransferTaskQuery,
 		filter.ShardID,
 		filter.InclusiveMinTaskID,
@@ -555,7 +555,7 @@ func (pdb *db) InsertIntoTimerTasks(
 	for i := range rows {
 		rows[i].VisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(rows[i].VisibilityTimestamp)
 	}
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createTimerTasksQuery,
 		rows,
 	)
@@ -569,7 +569,7 @@ func (pdb *db) RangeSelectFromTimerTasks(
 	var rows []sqlplugin.TimerTasksRow
 	filter.InclusiveMinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.InclusiveMinVisibilityTimestamp)
 	filter.ExclusiveMaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.ExclusiveMaxVisibilityTimestamp)
-	err := pdb.conn.SelectContext(ctx,
+	err := pdb.SelectContext(ctx,
 		&rows,
 		getTimerTasksQuery,
 		filter.ShardID,
@@ -594,7 +594,7 @@ func (pdb *db) DeleteFromTimerTasks(
 	filter sqlplugin.TimerTasksFilter,
 ) (sql.Result, error) {
 	filter.VisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.VisibilityTimestamp)
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteTimerTaskQuery,
 		filter.ShardID,
 		filter.VisibilityTimestamp,
@@ -609,7 +609,7 @@ func (pdb *db) RangeDeleteFromTimerTasks(
 ) (sql.Result, error) {
 	filter.InclusiveMinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.InclusiveMinVisibilityTimestamp)
 	filter.ExclusiveMaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.ExclusiveMaxVisibilityTimestamp)
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		rangeDeleteTimerTaskQuery,
 		filter.ShardID,
 		filter.InclusiveMinVisibilityTimestamp,
@@ -622,7 +622,7 @@ func (pdb *db) InsertIntoBufferedEvents(
 	ctx context.Context,
 	rows []sqlplugin.BufferedEventsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createBufferedEventsQuery,
 		rows,
 	)
@@ -634,7 +634,7 @@ func (pdb *db) SelectFromBufferedEvents(
 	filter sqlplugin.BufferedEventsFilter,
 ) ([]sqlplugin.BufferedEventsRow, error) {
 	var rows []sqlplugin.BufferedEventsRow
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows,
 		getBufferedEventsQuery,
 		filter.ShardID,
@@ -658,7 +658,7 @@ func (pdb *db) DeleteFromBufferedEvents(
 	ctx context.Context,
 	filter sqlplugin.BufferedEventsFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteBufferedEventsQuery,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -672,7 +672,7 @@ func (pdb *db) InsertIntoReplicationTasks(
 	ctx context.Context,
 	rows []sqlplugin.ReplicationTasksRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createReplicationTasksQuery,
 		rows,
 	)
@@ -684,7 +684,7 @@ func (pdb *db) RangeSelectFromReplicationTasks(
 	filter sqlplugin.ReplicationTasksRangeFilter,
 ) ([]sqlplugin.ReplicationTasksRow, error) {
 	var rows []sqlplugin.ReplicationTasksRow
-	err := pdb.conn.SelectContext(ctx,
+	err := pdb.SelectContext(ctx,
 		&rows,
 		getReplicationTasksQuery,
 		filter.ShardID,
@@ -700,7 +700,7 @@ func (pdb *db) DeleteFromReplicationTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationTasksFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteReplicationTaskQuery,
 		filter.ShardID,
 		filter.TaskID,
@@ -712,7 +712,7 @@ func (pdb *db) RangeDeleteFromReplicationTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationTasksRangeFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		rangeDeleteReplicationTaskQuery,
 		filter.ShardID,
 		filter.InclusiveMinTaskID,
@@ -725,7 +725,7 @@ func (pdb *db) InsertIntoReplicationDLQTasks(
 	ctx context.Context,
 	rows []sqlplugin.ReplicationDLQTasksRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		insertReplicationTaskDLQQuery,
 		rows,
 	)
@@ -737,7 +737,7 @@ func (pdb *db) RangeSelectFromReplicationDLQTasks(
 	filter sqlplugin.ReplicationDLQTasksRangeFilter,
 ) ([]sqlplugin.ReplicationDLQTasksRow, error) {
 	var rows []sqlplugin.ReplicationDLQTasksRow
-	err := pdb.conn.SelectContext(ctx,
+	err := pdb.SelectContext(ctx,
 		&rows, getReplicationTasksDLQQuery,
 		filter.SourceClusterName,
 		filter.ShardID,
@@ -754,7 +754,7 @@ func (pdb *db) DeleteFromReplicationDLQTasks(
 	filter sqlplugin.ReplicationDLQTasksFilter,
 ) (sql.Result, error) {
 
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteReplicationTaskFromDLQQuery,
 		filter.SourceClusterName,
 		filter.ShardID,
@@ -768,7 +768,7 @@ func (pdb *db) RangeDeleteFromReplicationDLQTasks(
 	filter sqlplugin.ReplicationDLQTasksRangeFilter,
 ) (sql.Result, error) {
 
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		rangeDeleteReplicationTaskFromDLQQuery,
 		filter.SourceClusterName,
 		filter.ShardID,
@@ -782,7 +782,7 @@ func (pdb *db) InsertIntoVisibilityTasks(
 	ctx context.Context,
 	rows []sqlplugin.VisibilityTasksRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createVisibilityTasksQuery,
 		rows,
 	)
@@ -794,7 +794,7 @@ func (pdb *db) RangeSelectFromVisibilityTasks(
 	filter sqlplugin.VisibilityTasksRangeFilter,
 ) ([]sqlplugin.VisibilityTasksRow, error) {
 	var rows []sqlplugin.VisibilityTasksRow
-	err := pdb.conn.SelectContext(ctx,
+	err := pdb.SelectContext(ctx,
 		&rows,
 		getVisibilityTasksQuery,
 		filter.ShardID,
@@ -813,7 +813,7 @@ func (pdb *db) DeleteFromVisibilityTasks(
 	ctx context.Context,
 	filter sqlplugin.VisibilityTasksFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteVisibilityTaskQuery,
 		filter.ShardID,
 		filter.TaskID,
@@ -825,7 +825,7 @@ func (pdb *db) RangeDeleteFromVisibilityTasks(
 	ctx context.Context,
 	filter sqlplugin.VisibilityTasksRangeFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		rangeDeleteVisibilityTaskQuery,
 		filter.ShardID,
 		filter.InclusiveMinTaskID,

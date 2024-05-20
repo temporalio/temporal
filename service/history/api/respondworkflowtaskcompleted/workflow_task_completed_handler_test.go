@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package respondworkflowtaskcompleted
 
 import (
 	"context"
@@ -62,7 +62,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	type testconf struct {
 		ms      *workflow.MockMutableState
 		updates update.Registry
-		handler *workflowTaskHandlerImpl
+		handler *workflowTaskCompletedHandler
 		conf    map[dynamicconfig.Key]any
 	}
 
@@ -103,7 +103,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			metricsHandler,
 			logger,
 		)
-		out.handler = newWorkflowTaskHandler( // 😲
+		out.handler = newWorkflowTaskCompletedHandler( // 😲
 			t.Name(), // identity
 			123,      // workflowTaskCompletedID
 			out.ms,

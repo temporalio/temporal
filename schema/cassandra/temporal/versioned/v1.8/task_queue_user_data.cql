@@ -1,10 +1,10 @@
 -- Stores task queue information such as user provided versioning data
 -- OR
--- Used as a mapping from build id to task queue
+-- Used as a mapping from build ID to task queue
 CREATE TABLE task_queue_user_data (
   namespace_id     uuid,
   task_queue_name  text,
-  build_id         text,   -- If this row is used as a mapping of build id to task queue, this will not be empty
+  build_id         text,   -- If this row is used as a mapping of build ID to task queue, this will not be empty
   data             blob,   -- temporal.server.api.persistence.v1.TaskQueueUserData
   data_encoding    text,   -- Encoding type used for serialization, in practice this should always be proto3
   version          bigint, -- Version of this row, used for optimistic concurrency

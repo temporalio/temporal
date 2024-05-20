@@ -29,6 +29,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -341,15 +343,15 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
 
-	// recent versioned poller on wrong build id --> failure
+	// recent versioned poller on wrong build ID --> failure
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "3", true)
 	s.commitBuildId(ctx, tq, "2", false, cT, false)
 
-	// recent unversioned poller on build id 2 --> failure
+	// recent unversioned poller on build ID 2 --> failure
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "2", false)
 	s.commitBuildId(ctx, tq, "2", false, cT, false)
 
-	// recent versioned poller on build id 2 --> success
+	// recent versioned poller on build ID 2 --> success
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "2", true)
 	s.commitBuildId(ctx, tq, "2", false, cT, true)
 	res = s.getVersioningRules(ctx, tq)
@@ -461,7 +463,7 @@ func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
 func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	ctx := NewContext()
 	buildId := fmt.Sprintf("b-%s", s.T().Name())
-	// Map a 3 task queues to this build id and verify success
+	// Map a 3 task queues to this build ID and verify success
 	for i := 1; i <= 3; i++ {
 		taskQueue := fmt.Sprintf("q-%s-%d", s.T().Name(), i)
 		_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -474,7 +476,7 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 		s.NoError(err)
 	}
 
-	// Map a fourth task queue to this build id and verify it errors
+	// Map a fourth task queue to this build ID and verify it errors
 	taskQueue := fmt.Sprintf("q-%s-%d", s.T().Name(), 4)
 	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -485,7 +487,7 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	})
 	var failedPreconditionError *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPreconditionError)
-	s.Equal("Exceeded max task queues allowed to be mapped to a single build id: 3", failedPreconditionError.Message)
+	s.Equal("Exceeded max task queues allowed to be mapped to a single build ID: 3", failedPreconditionError.Message)
 }
 
 func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
@@ -567,7 +569,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
 	if newVersioning {
 		s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{v1}, "")
 	} else {
@@ -613,7 +615,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	defer w2.Stop()
 
 	counter := make(map[string]int)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 50; i++ {
 		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 		var out string
@@ -624,7 +626,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	// both builds should've got executions
 	s.Greater(counter["done v1!"], 0)
 	s.Greater(counter["done v2!"], 0)
-	s.Equal(10, counter["done v1!"]+counter["done v2!"])
+	s.Equal(50, counter["done v1!"]+counter["done v2!"])
 }
 
 func (s *VersioningIntegSuite) TestWorkflowStaysInBuildId() {
@@ -690,7 +692,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	s.NoError(err)
 
 	s.waitForChan(ctx, act1Done)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
 
 	// update rules with v2 as the default build
 	rule = s.addAssignmentRule(ctx, tq, v2)
@@ -705,7 +707,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
 	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{v1, v1, v1, v1, v1}, "")
 }
 
@@ -766,7 +768,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	s.NoError(err)
 
 	s.waitForChan(ctx, act1Done)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", true, "binary-checksum", "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), "", true, "binary-checksum", "", nil)
 
 	// update rules with v1 as the default build
 	rule := s.addAssignmentRule(ctx, tq, v1)
@@ -781,7 +783,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", true, "binary-checksum", "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), "", true, "binary-checksum", "", nil)
 	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{"", "", "", "", ""}, "")
 }
 
@@ -809,10 +811,9 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	}, "wf")
 	s.NoError(err)
 
-	time.Sleep(100 * time.Millisecond)
-
 	// MS should have the correct build ID
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
+	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
 
 	// update latest build to v2
 	rule = s.addAssignmentRule(ctx, tq, v2)
@@ -835,10 +836,10 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	defer w1.Stop()
 
 	s.waitForChan(ctx, failedTask)
-	time.Sleep(100 * time.Millisecond)
 
 	// After scheduling the second time, now MS should be assigned to v2
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, "", "", []string{v1})
+	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v2, true, "", "", []string{v1})
 
 	// update latest build to v3
 	rule = s.addAssignmentRule(ctx, tq, v3)
@@ -863,10 +864,10 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	defer w2.Stop()
 
 	s.waitForChan(ctx, timedoutTask)
-	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the third time, now MS should be assigned to v3
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, "", "", []string{v1, v2})
+	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v3, true, "", "", []string{v1, v2})
 
 	wf3 := func(ctx workflow.Context) (string, error) {
 		return "done on v3!", nil
@@ -885,7 +886,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done on v3!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, v3, "", []string{v1, v2})
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v3, true, v3, "", []string{v1, v2})
 	s.validateWorkflowEventsVersionStamps(
 		ctx, run.GetID(), run.GetRunID(), []string{
 			v1, // failed wf tasks
@@ -937,10 +938,10 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	// wait for two failures to make sure more attempts does not generate more history tasks
 	s.waitForChan(ctx, failedTask)
 	s.waitForChan(ctx, failedTask)
-	time.Sleep(100 * time.Millisecond)
 
 	// MS should have the correct build ID
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
+	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
 
 	// v2 times out the task
 	timedoutTask := make(chan struct{})
@@ -966,12 +967,12 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// wait for multiple timeouts to make sure more attempts do not generate more history events
-	time.Sleep(3100 * time.Millisecond)
+	s.waitForChan(ctx, timedoutTask)
+	s.waitForChan(ctx, timedoutTask)
+	s.waitForChan(ctx, timedoutTask)
 
 	// After scheduling the second time, now MS should be assigned to v2
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, "", "", []string{v1})
-
-	s.waitForChan(ctx, timedoutTask)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v2, true, "", "", []string{v1})
 
 	// v3 can process the task
 	wf3 := func(ctx workflow.Context) (string, error) {
@@ -995,7 +996,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done on v3!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, v3, "", []string{v1, v2})
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v3, true, v3, "", []string{v1, v2})
 	s.validateWorkflowEventsVersionStamps(
 		ctx, run.GetID(), run.GetRunID(), []string{
 			v1, // failed wf tasks
@@ -1064,20 +1065,26 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	}, wf)
 	s.NoError(err)
 
-	time.Sleep(500 * time.Millisecond)
-
-	// MS should have the correct build ID
-	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	if versionedWf {
-		s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
-		s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
-	} else {
-		s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
-		s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
-	}
-	s.Equal(1, len(dw.GetPendingActivities()))
-	s.Equal(v1, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId())
+	// MS should have the correct build ID after finishing the first WFT
+	s.Eventually(
+		func() bool {
+			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			s.NoError(err)
+			if len(dw.GetPendingActivities()) == 0 {
+				return false
+			}
+			if versionedWf {
+				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
+			} else {
+				s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
+			}
+			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+		},
+		10*time.Second,
+		50*time.Millisecond,
+	)
 
 	// update latest build to v2
 	rule = s.addAssignmentRule(ctx, actTq, v2)
@@ -1100,13 +1107,18 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	defer w1.Stop()
 
 	s.waitForChan(ctx, failedTask)
-	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the second time, now pending activity should be assigned to v2
-	dw, err = s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
-	s.Equal(v2, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId())
+	s.Eventually(
+		func() bool {
+			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			s.NoError(err)
+			s.Equal(1, len(dw.GetPendingActivities()))
+			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+		},
+		10*time.Second,
+		50*time.Millisecond,
+	)
 
 	// update latest build to v3
 	rule = s.addAssignmentRule(ctx, actTq, v3)
@@ -1131,13 +1143,18 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	defer w2.Stop()
 
 	s.waitForChan(ctx, timedoutTask)
-	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the third time, now pending activity should be assigned to v3
-	dw, err = s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
-	s.Equal(v3, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId())
+	s.Eventually(
+		func() bool {
+			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			s.NoError(err)
+			s.Equal(1, len(dw.GetPendingActivities()))
+			return v3 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+		},
+		10*time.Second,
+		50*time.Millisecond,
+	)
 
 	act3 := func() (string, error) {
 		return "done in v3!", nil
@@ -1317,7 +1334,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	if versionedWf {
 		wfBuild = wfV1
 	}
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), wfBuild, true, wfV1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), wfBuild, true, wfV1, "", nil)
 	s.validateWorkflowEventsVersionStamps(
 		ctx, run.GetID(), run.GetRunID(), []string{
 			wfBuild,
@@ -1341,7 +1358,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	v11 := s.prefixed("v1.1")
 	v12 := s.prefixed("v1.2")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3000*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	rule := s.addAssignmentRule(ctx, tq, v1)
@@ -1390,14 +1407,14 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	s.waitForChan(ctx, failedTask)
 	s.waitForChan(ctx, failedTask)
 	s.waitForChan(ctx, failedTask)
-	time.Sleep(100 * time.Millisecond)
 
 	expectedStampBuildId := ""
 	if !firstTask {
 		expectedStampBuildId = v1
 	}
 	// MS should have the correct build ID
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, expectedStampBuildId, "", nil)
+	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, expectedStampBuildId, "", nil)
 
 	// v11 times out the task
 	timedoutTask := make(chan struct{})
@@ -1430,12 +1447,11 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	s.waitForRedirectRulePropagation(ctx, tq, rule2)
 
 	// wait for multiple timeouts to make sure more attempts does not generate more history tasks
-	time.Sleep(3100 * time.Millisecond)
-
-	// After scheduling the second time, now MS should be assigned to v2
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, true, expectedStampBuildId, "", []string{v1})
-
 	s.waitForChan(ctx, timedoutTask)
+	s.waitForChan(ctx, timedoutTask)
+	s.waitForChan(ctx, timedoutTask)
+	// After scheduling the second time, now MS should be assigned to v2
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, expectedStampBuildId, "", []string{v1})
 
 	// v12 can process the task
 	wf12 := func(ctx workflow.Context) (string, error) {
@@ -1449,8 +1465,17 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		return "done on v1.2!", nil
 	}
 
+	// creating a new client because we do not want to share client with the previous the v11 worker as it keeps
+	// the workflow locked for a long time. WF cache is shared across all workers of the same client in Go SDK.
+	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.hostPort,
+		Namespace: s.namespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
 	// run worker on v12 so it can complete the wf
-	w12 := worker.New(s.sdkClient, tq, worker.Options{
+	w12 := worker.New(sdkClient2, tq, worker.Options{
 		BuildID:                          v12,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1466,7 +1491,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done on v1.2!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v12, true, v12, "", []string{v1, v11})
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v12, true, v12, "", []string{v1, v11})
 	expectedStamps := []string{
 		v1,  // failed wf task
 		v11, // timed out wf task show up in history because a redirect happened after them
@@ -1478,7 +1503,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 			v1,  // activity task
 			v1,  // failed wf task on sticky queue
 			v1,  // failed wf task on normal queue
-			v11, // timed out wf task show up in history because they happened on a different build id
+			v11, // timed out wf task show up in history because they happened on a different build ID
 			v12, // succeeded wf task
 		}
 	}
@@ -1538,7 +1563,7 @@ func (s *VersioningIntegSuite) dispatchNotUsingVersioning(newVersioning bool) {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done with versioning!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchNewWorkflowStartWorkerFirst() {
@@ -1578,7 +1603,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, false, v1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, false, v1, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
@@ -1589,7 +1614,7 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	started := make(chan struct{}, 1)
@@ -1601,7 +1626,7 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	}
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		// no build id
+		// no build ID
 	})
 	w1.RegisterWorkflow(wf)
 	s.NoError(w1.Start())
@@ -1621,7 +1646,7 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", false, "binary-checksum", "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), "", false, "binary-checksum", "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeStopOldOld() {
@@ -1723,7 +1748,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done from 1.1!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, newVersioning, v11, "", []string{v1})
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, newVersioning, v11, "", []string{v1})
 }
 
 type activityFailMode int
@@ -1918,7 +1943,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		s.Equal("v1v2", out)
 	}
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
@@ -2033,8 +2058,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	proceedWf <- struct{}{}
 
 	s.waitForChan(ctx, started11)
-	// wf assigned build id should be updated by activity redirect
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, true, v1, "", []string{v1})
+	// wf assigned build ID should be updated by activity redirect
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, v1, "", []string{v1})
 	// let activity finish
 	proceed11 <- struct{}{}
 
@@ -2048,8 +2073,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	proceedWf <- struct{}{}
 
 	s.waitForChan(ctx, started12)
-	// wf assigned build id should not be updated by independent activity redirect
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, true, v11, "", []string{v1})
+	// wf assigned build ID should not be updated by independent activity redirect
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, v11, "", []string{v1})
 	// let activity finish
 	proceed12 <- struct{}{}
 
@@ -2063,7 +2088,232 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v1.1v1.2", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v12, true, v12, "", []string{v1, v11})
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v12, true, v12, "", []string{v1, v11})
+}
+
+func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
+	// Testing that wf never "goes back" to older build ID in presence of concurrent activities and random failures.
+	//
+	// SETUP:
+	// 1- Run workers with build IDs v1.0 to v1.9.
+	// 2- Workflows runs a nested loop of 10 * `activityRuns`. First loop is per build ID, second is to run parallel
+	//    activities for each build ID.
+	// 3- Activities fail by `activityErrorRate` probability. Otherwise, they return success after a random wait.
+	// 4- The first activity seeing a build ID (i.e. being run by that build ID) removes the redirect rule targeting
+	//    that build ID to test the workflow behaves correctly in absence of the applied redirect rule.
+	// 5- One activity in each batch is responsible to add redirect rule to the next build ID. since, there is random
+	//    delay in activities, more activities of the same batch likely start both before and after this activity.
+	// 6- Workflow waits for completion of all activities in a batch before going to the next one.
+	//
+	// VERIFYING:
+	// 1- After each activity is completed, in workflow we verify that it is not completed by a build ID newer of that
+	//    of the workflow worker.
+	// 2- Workflow finishes. I.e. no task is dropped without rescheduling due to build ID mismatch.
+	// 3- At the end of the test we verify that the wf and activity started event build IDs are compatible with
+	//        workflows output (which contains the build ID of each completed activity)
+	// 4- Redirect counter of all started events is valid
+	// 5- Redirect rules were applied at least to one activity.
+	// 6- At least one activity was retried.
+	// 7- Some history events are unordered based on event timestamp (due to parallel activity random delay)
+
+	// Reduce user data long poll time for faster propagation of the versioning data. This is needed because of the
+	// exponential minWaitTime logic in userDataManagerImpl that gets triggered because rules change very fast in
+	// this test.
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingGetUserDataLongPollTimeout, 2*time.Second)
+
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1.0")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	rule := s.addAssignmentRule(ctx, tq, v1)
+	s.waitForAssignmentRulePropagation(ctx, tq, rule)
+
+	versions := []string{v1}
+	for v := 1; v <= 9; v++ {
+		versions = append(versions, s.prefixed("v1."+strconv.Itoa(v)))
+	}
+
+	activityErrorRate := .2   // chance of each activity attempt fail
+	activityRuns := int32(10) // run the activity ~10 times on each version
+
+	activityCounter := atomic.Int32{}
+	triggerRedirectAtActivityRun := atomic.Int32{}
+	triggerRedirectAtActivityRun.Store(1)
+
+	lastRedirectTarget := atomic.Value{}
+	lastRedirectTarget.Store(versions[0] + " redirect cleaned")
+	var workers []worker.Worker
+
+	act := func(version string, runId int32) (string, error) {
+		runs := activityCounter.Add(1)
+		s.T().Logf("Starting activity %d on %s at %d\n", runId, version, runs)
+		if lastRedirectTarget.CompareAndSwap(version, version+" observed") && version != versions[0] {
+			// The last redirect rule is applied and observed by an activity, now delete it to make sure wf keeps using
+			// the right build ID after applying the redirect rule, even when the rule is not present anymore.
+			index, err := strconv.Atoi(version[len(version)-1:]) // get the last char of version is the index in the versions array
+			s.NoError(err)
+			s.T().Logf("Removing redirect from %s to %s \n", versions[index-1], version)
+			s.removeRedirectRule(ctx, tq, versions[index-1])
+			lastRedirectTarget.CompareAndSwap(version+" observed", version+" redirect cleaned")
+		}
+		if rand.Float64() < activityErrorRate {
+			return "", errors.New("intentionally failing activity")
+		}
+		if triggerRedirectAtActivityRun.Load() == runId {
+			// When enough activities are run using the current version, add redirect rule to the next version.
+			v := runId / activityRuns
+			if int(v+1) < len(versions) {
+				// wait for last redirect rule to be cleaned up
+				for !lastRedirectTarget.CompareAndSwap(versions[v]+" redirect cleaned", versions[v+1]) {
+				}
+				s.T().Logf("Adding redirect from %s to %s at %d\n", versions[v], versions[v+1], runs)
+				s.addRedirectRule(ctx, tq, versions[v], versions[v+1])
+				// Intentionally do not wait for propagation of the rules to partitions. Waiting will linger this
+				// activity and allows all the other concurrent activities to finish, leaving only the WFT task to
+				// see the redirect rule for the first time.
+				triggerRedirectAtActivityRun.CompareAndSwap(runId, runId+activityRuns)
+			}
+		}
+
+		// Add random sleep to simulate network delay
+		//nolint:forbidigo
+		time.Sleep(time.Duration(int64(rand.Intn(50)) * int64(time.Millisecond)))
+		s.T().Logf("Completing activity %d on %s at %d\n", runId, version, runs)
+		return version, nil
+	}
+
+	wf := func(wfCtx workflow.Context, wfVersion string) (string, error) {
+		var res []string
+		// because of rule propagation delay we run for more than 10 cycles to make sure all versions are seen
+		for i := 0; i <= 12; i++ {
+			var futures []workflow.Future
+			for j := 0; j < int(activityRuns); j++ {
+				f := workflow.ExecuteActivity(workflow.WithActivityOptions(
+					wfCtx, workflow.ActivityOptions{
+						DisableEagerExecution: true,
+						VersioningIntent:      temporal.VersioningIntentCompatible,
+						StartToCloseTimeout:   200 * time.Millisecond,
+						RetryPolicy: &temporal.RetryPolicy{
+							InitialInterval:    10 * time.Millisecond,
+							BackoffCoefficient: 1,
+						},
+					}), "act", i*int(activityRuns)+j)
+				futures = append(futures, f)
+			}
+
+			for _, f := range futures {
+				var activityVersion string
+				err := f.Get(wfCtx, &activityVersion)
+				s.NoError(err)
+				res = append(res, activityVersion)
+				// The output of a newer build ID should never be sent to a wf worker of an older build ID
+				s.Assert().GreaterOrEqual(wfVersion, activityVersion)
+				// TODO: uncomment this check once workflow.GetInfo(wfCtx).GetCurrentBuildID() returns correct value
+				// based on last started task build ID, not last completed task build ID.
+				// s.Assert().GreaterOrEqual(workflow.GetInfo(wfCtx).GetCurrentBuildID(), activityVersion)
+			}
+		}
+
+		return strings.Join(res, " "), nil
+	}
+
+	// run all workers
+	for i := 0; i <= 9; i++ {
+		v := versions[i]
+		w := worker.New(s.sdkClient, tq, worker.Options{
+			BuildID:                          v,
+			UseBuildIDForVersioning:          true,
+			MaxConcurrentWorkflowTaskPollers: numPollers,
+			MaxConcurrentActivityTaskPollers: 2,
+			// Limit the number of concurrent activities so not all scheduled activities are immediately started.
+			MaxConcurrentActivityExecutionSize: 2,
+		})
+		w.RegisterWorkflowWithOptions(
+			func(ctx workflow.Context) (string, error) {
+				return wf(ctx, v)
+			},
+			workflow.RegisterOptions{Name: "wf"})
+		w.RegisterActivityWithOptions(
+			func(runId int32) (string, error) {
+				return act(v, runId)
+			},
+			activity.RegisterOptions{Name: "act"})
+		s.NoError(w.Start())
+		workers = append(workers, w)
+	}
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+
+	// Workflow should finish, otherwise it may mean we dropped some task without rescheduling them in the new build ID
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), versions[9], true, versions[9], "", versions[:9])
+
+	activityPerVersion := make(map[string]int)
+	for _, v := range strings.Split(out, " ") {
+		activityPerVersion[v]++
+	}
+
+	wh := s.sdkClient.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	redirectAppliedToActivityTask := false
+	activityRetried := false
+	sawUnorderedEvents := false
+	var maxBuildId string
+	var maxStartedTimestamp time.Time
+	for wh.HasNext() {
+		he, err := wh.Next()
+		s.Nil(err)
+		var taskStartedStamp *commonpb.WorkerVersionStamp
+		var taskRedirectCounter int64
+		var buildId string
+		if activityStarted := he.GetActivityTaskStartedEventAttributes(); activityStarted != nil {
+			taskStartedStamp = activityStarted.GetWorkerVersion()
+			buildId = taskStartedStamp.GetBuildId()
+			if buildId > maxBuildId {
+				redirectAppliedToActivityTask = true
+			}
+			if activityStarted.Attempt > 1 {
+				activityRetried = true
+			}
+			s.True(taskStartedStamp.GetUseVersioning())
+			taskRedirectCounter = activityStarted.GetBuildIdRedirectCounter()
+			activityPerVersion[buildId]--
+		} else if wfStarted := he.GetWorkflowTaskStartedEventAttributes(); wfStarted != nil {
+			taskStartedStamp = wfStarted.GetWorkerVersion()
+			s.True(taskStartedStamp.GetUseVersioning())
+			buildId = taskStartedStamp.GetBuildId()
+			taskRedirectCounter = wfStarted.GetBuildIdRedirectCounter()
+		}
+		if he.EventTime.AsTime().Before(maxStartedTimestamp) {
+			sawUnorderedEvents = true
+		} else {
+			maxStartedTimestamp = he.EventTime.AsTime()
+		}
+		if buildId > maxBuildId {
+			maxBuildId = buildId
+		}
+		if taskStartedStamp != nil {
+			// the last char of version is the index in the versions array which is the expected redirect counter for
+			// a task started event
+			expectedRedirectCounter, err := strconv.Atoi(buildId[len(buildId)-1:])
+			s.NoError(err)
+			s.Equal(expectedRedirectCounter, int(taskRedirectCounter))
+		}
+	}
+	for v, c := range activityPerVersion {
+		s.Equal(0, c, "activity count mismatch for build ID "+v)
+	}
+	// Following validations are more to make sure the test stays correct, rather than testing server's functionality
+	s.True(activityRetried, "no activity retried")
+	s.True(sawUnorderedEvents)
+	s.True(redirectAppliedToActivityTask, "no redirect rule applied to an activity task, is this test broken?")
+
+	for _, w := range workers {
+		w.Stop()
+	}
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCompatible() {
@@ -2139,7 +2389,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v1.1", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, v11, "", []string{v1})
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, false, v11, "", []string{v1})
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityEager() {
@@ -2308,7 +2558,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 		if !newVersioning && expectedBuildId == v1 {
 			expectedStampBuildId = expectedBuildId
 		}
-		s.validateWorkflowBuildId(
+		s.validateWorkflowBuildIds(
 			ctx,
 			exec.ID,
 			exec.RunID,
@@ -2441,7 +2691,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 		s.Equal("v1v2", out)
 	}
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowUpgradeOld() {
@@ -2472,7 +2722,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 		if newVersioning {
 			expectedStampBuildId = ""
 		}
-		s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v1, newVersioning, expectedStampBuildId, inheritedBuildId, nil)
+		s.validateWorkflowBuildIds(ctx, exec.ID, exec.RunID, v1, newVersioning, expectedStampBuildId, inheritedBuildId, nil)
 		return "v1", nil
 	}
 	child11 := func(cctx workflow.Context) (string, error) {
@@ -2481,7 +2731,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 		if newVersioning {
 			expectedStampBuildId = ""
 		}
-		s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v11, newVersioning, expectedStampBuildId, inheritedBuildId, nil)
+		s.validateWorkflowBuildIds(ctx, exec.ID, exec.RunID, v11, newVersioning, expectedStampBuildId, inheritedBuildId, nil)
 		return "v1.1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -2557,7 +2807,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v1.1", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, newVersioning, v11, "", []string{v1})
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, newVersioning, v11, "", []string{v1})
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
@@ -2774,7 +3024,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 			if newVersioning {
 				expectedStampBuildId = ""
 			}
-			s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v1, newVersioning, expectedStampBuildId, inheritedBuildId, nil)
+			s.validateWorkflowBuildIds(ctx, exec.ID, exec.RunID, v1, newVersioning, expectedStampBuildId, inheritedBuildId, nil)
 			if newVersioning {
 				s.validateWorkflowEventsVersionStamps(ctx, exec.ID, exec.RunID, []string{v1}, inheritedBuildId)
 			}
@@ -2798,7 +3048,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	wf2 := func(wctx workflow.Context, attempt int) (string, error) {
 		if attempt == 2 {
 			exec := workflow.GetInfo(wctx).WorkflowExecution
-			s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v2, newVersioning, "", "", nil)
+			s.validateWorkflowBuildIds(ctx, exec.ID, exec.RunID, v2, newVersioning, "", "", nil)
 			if crossTq {
 				s.Equal(canxTq, workflow.GetInfo(wctx).TaskQueueName)
 			} else {
@@ -2854,7 +3104,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	// add another 100ms to make sure it got to sticky queues also
 	time.Sleep(100 * time.Millisecond)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
 
 	// start workers for v2
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
@@ -2885,7 +3135,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), "", v2, newVersioning, v2, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), "", v2, newVersioning, v2, "", nil)
 	if newVersioning {
 		s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), "", []string{v2}, "")
 	}
@@ -3013,14 +3263,14 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	s.waitForChan(ctx, started11)
 
 	// initial run
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, newVersioning, v11, "", []string{v1})
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, newVersioning, v11, "", []string{v1})
 
 	inheritedBuildId := ""
 	if newVersioning {
 		inheritedBuildId = v11
 	}
 	// first CaN
-	s.validateWorkflowBuildId(ctx, run.GetID(), "", v11, newVersioning, v11, inheritedBuildId, nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), "", v11, newVersioning, v11, inheritedBuildId, nil)
 
 	// unblock the second run. it should continue on v11 then continue-as-new onto v2, then
 	// complete.
@@ -3030,7 +3280,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), "", v2, newVersioning, v2, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), "", v2, newVersioning, v2, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetryOld() {
@@ -3145,7 +3395,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, v11, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, false, v11, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetry() {
@@ -3236,7 +3486,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, v2, "", nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v2, true, v2, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchCronOld() {
@@ -3343,10 +3593,10 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	s.GreaterOrEqual(runs2.Load(), int32(3))
 
 	for _, runid := range runIds1 {
-		s.validateWorkflowBuildId(ctx, run.GetID(), runid, v1, newVersioning, v1, "", nil)
+		s.validateWorkflowBuildIds(ctx, run.GetID(), runid, v1, newVersioning, v1, "", nil)
 	}
 	for _, runid := range runIds2 {
-		s.validateWorkflowBuildId(ctx, run.GetID(), runid, v2, newVersioning, v2, "", nil)
+		s.validateWorkflowBuildIds(ctx, run.GetID(), runid, v2, newVersioning, v2, "", nil)
 	}
 }
 
@@ -3611,7 +3861,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	tq := dw.GetWorkflowExecutionInfo().GetTaskQueue()
 	inheritedBuildId := dw.GetWorkflowExecutionInfo().GetInheritedBuildId()
 	s.Equal(expectedInherit, inheritedBuildId != "")
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, v1, inheritedBuildId, nil)
+	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, v1, inheritedBuildId, nil)
 
 	// update rules with v2 as the default build
 	rule := s.addAssignmentRule(ctx, tq, v2)
@@ -3636,7 +3886,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	run2 := s.sdkClient.GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
 	s.NoError(run2.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run2.GetID(), run2.GetRunID(), expectedBuildId, true, expectedBuildId, inheritedBuildId, nil)
+	s.validateWorkflowBuildIds(ctx, run2.GetID(), run2.GetRunID(), expectedBuildId, true, expectedBuildId, inheritedBuildId, nil)
 	s.validateWorkflowEventsVersionStamps(ctx, run2.GetID(), run2.GetRunID(), []string{expectedBuildId, expectedBuildId, expectedBuildId}, inheritedBuildId)
 
 	// now reset the original wf to second wf task and make sure it remains in v1
@@ -3653,7 +3903,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	run3 := s.sdkClient.GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
 	s.NoError(run3.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run3.GetID(), run3.GetRunID(), v1, true, v1, inheritedBuildId, nil)
+	s.validateWorkflowBuildIds(ctx, run3.GetID(), run3.GetRunID(), v1, true, v1, inheritedBuildId, nil)
 	s.validateWorkflowEventsVersionStamps(ctx, run3.GetID(), run3.GetRunID(), []string{v1, v1, v1}, inheritedBuildId)
 }
 
@@ -3763,7 +4013,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 		return len(listResp.GetExecutions()) > 0
 	}, 3*time.Second, 50*time.Millisecond)
 
-	// commit a different build id --> A should now only be reachable via visibility query, B reachable as default
+	// commit a different build ID --> A should now only be reachable via visibility query, B reachable as default
 	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
 	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
 		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
@@ -3979,7 +4229,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	// wait for it to start on v1
 	s.waitForChan(ctx, started1)
 
-	// describe and check build id
+	// describe and check build ID
 	s.Eventually(func() bool {
 		resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
 		s.NoError(err)
@@ -4021,7 +4271,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.Equal("ok", out)
 }
 
-// Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build id
+// Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build ID
 func (s *VersioningIntegSuite) prefixed(buildId string) string {
 	return fmt.Sprintf("t%x:%s", 0xffff&farm.Hash32([]byte(s.T().Name())), buildId)
 }
@@ -4373,7 +4623,7 @@ func (s *VersioningIntegSuite) checkBuildIdReachability(
 	return true
 }
 
-// addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
+// addNewDefaultBuildId updates build ID info on a task queue with a new build ID in a new default set.
 func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -4443,7 +4693,23 @@ func (s *VersioningIntegSuite) addRedirectRule(ctx context.Context, tq, source s
 	return rule
 }
 
-// addCompatibleBuildId updates build id info on a task queue with a new compatible build id.
+func (s *VersioningIntegSuite) removeRedirectRule(ctx context.Context, tq, source string) {
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
+	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: cT,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule{
+			DeleteCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule{
+				SourceBuildId: source,
+			},
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res)
+}
+
+// addCompatibleBuildId updates build ID info on a task queue with a new compatible build ID.
 func (s *VersioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, newBuildId, existing string, makeSetDefault bool) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -4462,7 +4728,7 @@ func (s *VersioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, new
 
 // waitForVersionSetPropagation waits for all partitions of tq to mention newBuildId in their versioning data (in any position).
 func (s *VersioningIntegSuite) waitForVersionSetPropagation(ctx context.Context, taskQueue, newBuildId string) {
-	s.waitForPropagation(ctx, taskQueue, func(vd *persistencespb.VersioningData) bool {
+	s.waitForPropagation(ctx, taskQueue, 0, func(vd *persistencespb.VersioningData) bool {
 		for _, set := range vd.GetVersionSets() {
 			for _, id := range set.BuildIds {
 				if id.Id == newBuildId {
@@ -4476,7 +4742,7 @@ func (s *VersioningIntegSuite) waitForVersionSetPropagation(ctx context.Context,
 
 // waitForAssignmentRulePropagation waits for all partitions of tq to have the given assignment rule in their versioning data
 func (s *VersioningIntegSuite) waitForAssignmentRulePropagation(ctx context.Context, taskQueue string, rule *taskqueuepb.BuildIdAssignmentRule) {
-	s.waitForPropagation(ctx, taskQueue, func(vd *persistencespb.VersioningData) bool {
+	s.waitForPropagation(ctx, taskQueue, 0, func(vd *persistencespb.VersioningData) bool {
 		for _, r := range vd.GetAssignmentRules() {
 			if r.GetRule().Equal(rule) {
 				return true
@@ -4488,7 +4754,25 @@ func (s *VersioningIntegSuite) waitForAssignmentRulePropagation(ctx context.Cont
 
 // waitForRedirectRulePropagation waits for all partitions of tq to have the given redirect rule in their versioning data
 func (s *VersioningIntegSuite) waitForRedirectRulePropagation(ctx context.Context, taskQueue string, rule *taskqueuepb.CompatibleBuildIdRedirectRule) {
-	s.waitForPropagation(ctx, taskQueue, func(vd *persistencespb.VersioningData) bool {
+	s.waitForPropagation(ctx, taskQueue, 0, func(vd *persistencespb.VersioningData) bool {
+		for _, r := range vd.GetRedirectRules() {
+			if r.GetRule().Equal(rule) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// waitForRedirectRulePropagationUpToPartition waits for partitions of tq, up to a certain partition ID, to have the
+// given redirect rule in their versioning data
+func (s *VersioningIntegSuite) waitForRedirectRulePropagationUpToPartition(
+	ctx context.Context,
+	taskQueue string,
+	rule *taskqueuepb.CompatibleBuildIdRedirectRule,
+	upToPartition int,
+) {
+	s.waitForPropagation(ctx, taskQueue, upToPartition+1, func(vd *persistencespb.VersioningData) bool {
 		for _, r := range vd.GetRedirectRules() {
 			if r.GetRule().Equal(rule) {
 				return true
@@ -4499,22 +4783,26 @@ func (s *VersioningIntegSuite) waitForRedirectRulePropagation(ctx context.Contex
 }
 
 // waitForPropagation waits for all partitions of tq to mention newBuildId in their versioning data (in any position).
+// Pass 0 for partitionCount to make it load from MatchingNumTaskqueueReadPartitions config.
 func (s *VersioningIntegSuite) waitForPropagation(
 	ctx context.Context,
 	taskQueue string,
+	partitionCount int,
 	condition func(data *persistencespb.VersioningData) bool,
 ) {
-	v, ok := s.testCluster.host.dcClient.getRawValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
-	s.True(ok, "versioning tests require setting explicit number of partitions")
-	partCount, ok := v.(int)
-	s.True(ok, "partition count is not an int")
+	if partitionCount <= 0 {
+		v, ok := s.testCluster.host.dcClient.getRawValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
+		s.True(ok, "versioning tests require setting explicit number of partitions")
+		partitionCount, ok = v.(int)
+		s.True(ok, "partition count is not an int")
+	}
 
 	type partAndType struct {
 		part int
 		tp   enumspb.TaskQueueType
 	}
 	remaining := make(map[partAndType]struct{})
-	for i := 0; i < partCount; i++ {
+	for i := 0; i < partitionCount; i++ {
 		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_ACTIVITY}] = struct{}{}
 		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_WORKFLOW}] = struct{}{}
 	}
@@ -4577,7 +4865,27 @@ func getCurrentDefault(res *workflowservice.GetWorkerBuildIdCompatibilityRespons
 	return curMajorSet.GetBuildIds()[len(curMajorSet.GetBuildIds())-1]
 }
 
-func (s *VersioningIntegSuite) validateWorkflowBuildId(
+// Periodically checks a WF and unblocks when it is assigned to the given build ID
+func (s *VersioningIntegSuite) waitForWorkflowBuildId(
+	ctx context.Context,
+	wfId string,
+	runId string,
+	buildId string,
+) {
+	s.Eventually(
+		func() bool {
+			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, wfId, runId)
+			if err != nil {
+				return false
+			}
+			return dw.GetWorkflowExecutionInfo().GetAssignedBuildId() == buildId
+		},
+		10*time.Second,
+		100*time.Millisecond,
+	)
+}
+
+func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 	ctx context.Context,
 	wfId string,
 	runId string,

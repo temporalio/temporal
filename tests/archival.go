@@ -395,18 +395,12 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		}}, nil
 	}
 
-	atHandler := func(
-		execution *commonpb.WorkflowExecution,
-		activityType *commonpb.ActivityType,
-		activityID string,
-		input *commonpb.Payloads,
-		taskToken []byte,
-	) (*commonpb.Payloads, bool, error) {
-		protoassert.ProtoEqual(s.T(), workflowInfos[runCounter-1].execution, execution)
-		s.Equal(activityName, activityType.Name)
-		currentActivityId, _ := strconv.Atoi(activityID)
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		protoassert.ProtoEqual(s.T(), workflowInfos[runCounter-1].execution, task.WorkflowExecution)
+		s.Equal(activityName, task.ActivityType.Name)
+		currentActivityId, _ := strconv.Atoi(task.ActivityId)
 		s.Equal(int(expectedActivityID), currentActivityId)
-		s.Equal(expectedActivityID, s.decodePayloadsByteSliceInt32(input))
+		s.Equal(expectedActivityID, s.decodePayloadsByteSliceInt32(task.Input))
 		expectedActivityID++
 		return payloads.EncodeString("Activity Result"), false, nil
 	}

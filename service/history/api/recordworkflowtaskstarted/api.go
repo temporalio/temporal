@@ -32,6 +32,8 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -50,7 +52,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 //nolint:revive // cyclomatic complexity
@@ -150,6 +151,7 @@ func Invoke(
 				req.PollRequest.TaskQueue,
 				req.PollRequest.Identity,
 				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
+				req.GetBuildIdRedirectInfo(),
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
@@ -195,7 +197,7 @@ func Invoke(
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(config.FrontendAccessHistoryFraction, shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryHandleWorkflowTaskStartedTag))) {
+	if dynamicconfig.AccessHistory(config.FrontendAccessHistoryFraction, shardContext.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceEntry.Name().String()), metrics.OperationTag(metrics.HistoryHandleWorkflowTaskStartedTag))) {
 		maxHistoryPageSize := int32(config.HistoryMaxPageSize(namespaceEntry.Name().String()))
 		err = setHistoryForRecordWfTaskStartedResp(
 			ctx,

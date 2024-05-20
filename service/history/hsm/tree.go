@@ -268,6 +268,10 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	children, ok := n.persistence.Children[key.Type]
 	if !ok {
 		children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
+		// Children may be nil if the map was empty and the proto message we serialized and deserialized.
+		if n.persistence.Children == nil {
+			n.persistence.Children = make(map[int32]*persistencespb.StateMachineMap, 1)
+		}
 		n.persistence.Children[key.Type] = children
 	}
 	children.MachinesById[key.ID] = node.persistence

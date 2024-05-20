@@ -22,14 +22,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package respondworkflowtaskcompleted
 
 import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -69,16 +70,7 @@ import (
 )
 
 type (
-	// workflow task business logic handler
-	workflowTaskHandlerCallbacks interface {
-		handleWorkflowTaskCompleted(context.Context,
-			*historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error)
-		verifyFirstWorkflowTaskScheduled(context.Context, *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error
-		// TODO also include the handle of workflow task timeout here
-	}
-
-	workflowTaskHandlerCallbacksImpl struct {
-		currentClusterName             string
+	WorkflowTaskCompletedHandler struct {
 		config                         *configs.Config
 		shardContext                   shard.Context
 		workflowConsistencyChecker     api.WorkflowConsistencyChecker
@@ -97,32 +89,40 @@ type (
 	}
 )
 
-func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowTaskHandlerCallbacksImpl {
-	return &workflowTaskHandlerCallbacksImpl{
-		currentClusterName:         historyEngine.currentClusterName,
-		config:                     historyEngine.config,
-		shardContext:               historyEngine.shardContext,
-		workflowConsistencyChecker: historyEngine.workflowConsistencyChecker,
-		timeSource:                 historyEngine.shardContext.GetTimeSource(),
-		namespaceRegistry:          historyEngine.shardContext.GetNamespaceRegistry(),
-		eventNotifier:              historyEngine.eventNotifier,
-		tokenSerializer:            historyEngine.tokenSerializer,
-		metricsHandler:             historyEngine.metricsHandler,
-		logger:                     historyEngine.logger,
-		throttledLogger:            historyEngine.throttledLogger,
+func NewWorkflowTaskCompletedHandler(
+	shardContext shard.Context,
+	tokenSerializer common.TaskTokenSerializer,
+	eventNotifier events.Notifier,
+	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	searchAttributesValidator *searchattribute.Validator,
+	visibilityManager manager.VisibilityManager,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+) *WorkflowTaskCompletedHandler {
+	return &WorkflowTaskCompletedHandler{
+		config:                     shardContext.GetConfig(),
+		shardContext:               shardContext,
+		workflowConsistencyChecker: workflowConsistencyChecker,
+		timeSource:                 shardContext.GetTimeSource(),
+		namespaceRegistry:          shardContext.GetNamespaceRegistry(),
+		eventNotifier:              eventNotifier,
+		tokenSerializer:            tokenSerializer,
+		metricsHandler:             shardContext.GetMetricsHandler(),
+		logger:                     shardContext.GetLogger(),
+		throttledLogger:            shardContext.GetThrottledLogger(),
 		commandAttrValidator: newCommandAttrValidator(
-			historyEngine.shardContext.GetNamespaceRegistry(),
-			historyEngine.config,
-			historyEngine.searchAttributesValidator,
+			shardContext.GetNamespaceRegistry(),
+			shardContext.GetConfig(),
+			searchAttributesValidator,
 		),
-		searchAttributesMapperProvider: historyEngine.shardContext.GetSearchAttributesMapperProvider(),
-		searchAttributesValidator:      historyEngine.searchAttributesValidator,
-		persistenceVisibilityMgr:       historyEngine.persistenceVisibilityMgr,
-		commandHandlerRegistry:         historyEngine.commandHandlerRegistry,
+		searchAttributesMapperProvider: shardContext.GetSearchAttributesMapperProvider(),
+		searchAttributesValidator:      searchAttributesValidator,
+		persistenceVisibilityMgr:       visibilityManager,
+		commandHandlerRegistry:         commandHandlerRegistry,
 	}
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
+//nolint:revive // cyclomatic complexity
+func (handler *WorkflowTaskCompletedHandler) Invoke(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
@@ -325,7 +325,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.throttledLogger,
 		)
 
-		workflowTaskHandler := newWorkflowTaskHandler(
+		workflowTaskHandler := newWorkflowTaskCompletedHandler(
 			request.GetIdentity(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
@@ -455,6 +455,22 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	var newWorkflowTask *workflow.WorkflowTaskInfo
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
+		versioningStamp := request.WorkerVersionStamp
+		if versioningStamp.GetUseVersioning() {
+			if ms.GetAssignedBuildId() == "" {
+				// old versioning is used. making sure the versioning stamp does not go through otherwise the
+				// workflow will start using new versioning which may surprise users.
+				// TODO: remove this block when deleting old wv [cleanup-old-wv]
+				versioningStamp = nil
+			} else {
+				// new versioning is used. do not return new wft to worker if stamp build ID does not match wf build ID
+				// let the task go through matching and get dispatched to the right worker
+				if versioningStamp.GetBuildId() != ms.GetAssignedBuildId() {
+					bypassTaskGeneration = false
+				}
+			}
+		}
+
 		var newWTErr error
 		// If we checked WT heartbeat timeout before and WT wasn't timed out,
 		// then OriginalScheduledTime needs to be carried over to the new WT.
@@ -473,13 +489,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		// skip transfer task for workflow task if request asking to return new workflow task
 		if bypassTaskGeneration {
-			versioningStamp := request.WorkerVersionStamp
-			if versioningStamp.GetUseVersioning() && ms.GetAssignedBuildId() == "" {
-				// old versioning is used. making sure the versioning stamp does not go through otherwise the
-				// workflow will start using new versioning which may surprise users.
-				// TODO: remove this block when deleting old wv [cleanup-old-wv]
-				versioningStamp = nil
-			}
 			// start the new workflow task if request asked to do so
 			// TODO: replace the poll request
 			_, newWorkflowTask, err = ms.AddWorkflowTaskStartedEvent(
@@ -488,6 +497,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				newWorkflowTask.TaskQueue,
 				request.Identity,
 				versioningStamp,
+				nil,
 			)
 			if err != nil {
 				return nil, err
@@ -596,6 +606,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newWorkflowTask.TaskQueue,
 			request.Identity,
 			versioningStamp,
+			nil,
 		)
 		if err != nil {
 			return nil, err
@@ -619,7 +630,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	//nolint:staticcheck
-	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
+	if newWorkflowTask != nil && bypassTaskGeneration {
 		resp.StartedResponse, err = recordworkflowtaskstarted.CreateRecordWorkflowTaskStartedResponse(
 			ctx,
 			ms,
@@ -657,45 +668,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	return resp, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskScheduled(
-	ctx context.Context,
-	req *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
-) (retError error) {
-	namespaceID := namespace.ID(req.GetNamespaceId())
-	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
-		return err
-	}
-
-	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLease(
-		ctx,
-		req.Clock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.WorkflowExecution.WorkflowId,
-			req.WorkflowExecution.RunId,
-		),
-		workflow.LockPriorityLow,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
-
-	mutableState := workflowLease.GetMutableState()
-	if !mutableState.IsWorkflowExecutionRunning() &&
-		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return nil
-	}
-
-	if !mutableState.HadOrHasWorkflowTask() {
-		return consts.ErrWorkflowNotReady
-	}
-
-	return nil
-}
-
-func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResponse(
+func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
@@ -803,7 +776,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResp
 	return resp, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) withNewWorkflowTask(
+func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 	ctx context.Context,
 	namespaceName namespace.Name,
 	request *historyservice.RespondWorkflowTaskCompletedRequest,
@@ -844,7 +817,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) withNewWorkflowTask(
 	)
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace) {
+func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
+	ms workflow.MutableState,
+	queryResults map[string]*querypb.WorkflowQueryResult,
+	createNewWorkflowTask bool,
+	namespaceEntry *namespace.Namespace,
+) {
 	queryRegistry := ms.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
 		return
@@ -955,7 +933,7 @@ func failWorkflowTask(
 	wtFailedEvent, err := mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		wtFailedCause.failedCause,
-		failure.NewServerFailure(wtFailedCause.Message(), true),
+		failure.NewServerFailure(wtFailedCause.Message(), false),
 		request.GetIdentity(),
 		nil,
 		request.GetBinaryChecksum(),

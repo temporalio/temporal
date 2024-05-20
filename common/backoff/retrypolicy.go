@@ -28,6 +28,8 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 )
 
 const (
@@ -61,11 +63,6 @@ type (
 		Reset()
 	}
 
-	// Clock used by ExponentialRetryPolicy implementation to get the current time.  Mainly used for unit testing
-	Clock interface {
-		Now() time.Time
-	}
-
 	// ExponentialRetryPolicy provides the implementation for retry policy using a coefficient to compute the next delay.
 	// Formula used to compute the next delay is:
 	// 	min(initialInterval * pow(backoffCoefficient, currentAttempt), maximumInterval)
@@ -77,28 +74,15 @@ type (
 		maximumAttempts    int
 	}
 
-	// TwoPhaseRetryPolicy implements a policy that first use one policy to get next delay,
-	// and once expired use the second policy for the following retry.
-	// It can achieve fast retries in first phase then slowly retires in second phase.
-	TwoPhaseRetryPolicy struct {
-		firstPolicy  RetryPolicy
-		secondPolicy RetryPolicy
-	}
-
 	disabledRetryPolicyImpl struct{}
-
-	systemClock struct{}
 
 	retrierImpl struct {
 		policy         RetryPolicy
-		clock          Clock
+		timeSource     clock.TimeSource
 		currentAttempt int
 		startTime      time.Time
 	}
 )
-
-// SystemClock implements Clock interface that uses time.Now().UTC().
-var SystemClock = systemClock{}
 
 // NewExponentialRetryPolicy returns an instance of ExponentialRetryPolicy using the provided initialInterval
 func NewExponentialRetryPolicy(initialInterval time.Duration) *ExponentialRetryPolicy {
@@ -114,11 +98,11 @@ func NewExponentialRetryPolicy(initialInterval time.Duration) *ExponentialRetryP
 }
 
 // NewRetrier is used for creating a new instance of Retrier
-func NewRetrier(policy RetryPolicy, clock Clock) Retrier {
+func NewRetrier(policy RetryPolicy, timeSource clock.TimeSource) Retrier {
 	return &retrierImpl{
 		policy:         policy,
-		clock:          clock,
-		startTime:      clock.Now(),
+		timeSource:     timeSource,
+		startTime:      timeSource.Now(),
 		currentAttempt: 1,
 	}
 }
@@ -203,27 +187,13 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	return time.Duration(nextInterval)
 }
 
-// ComputeNextDelay returns the next delay interval.
-func (tp *TwoPhaseRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration {
-	nextInterval := tp.firstPolicy.ComputeNextDelay(elapsedTime, numAttempts)
-	if nextInterval == done {
-		nextInterval = tp.secondPolicy.ComputeNextDelay(elapsedTime, numAttempts-defaultFirstPhaseMaximumAttempts)
-	}
-	return nextInterval
-}
-
 func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int) time.Duration {
 	return done
 }
 
-// Now returns the current time using the system clock
-func (t systemClock) Now() time.Time {
-	return time.Now().UTC()
-}
-
 // Reset will set the Retrier into initial state
 func (r *retrierImpl) Reset() {
-	r.startTime = r.clock.Now()
+	r.startTime = r.timeSource.Now()
 	r.currentAttempt = 1
 }
 
@@ -237,5 +207,5 @@ func (r *retrierImpl) NextBackOff() time.Duration {
 }
 
 func (r *retrierImpl) getElapsedTime() time.Duration {
-	return r.clock.Now().Sub(r.startTime)
+	return r.timeSource.Now().Sub(r.startTime)
 }

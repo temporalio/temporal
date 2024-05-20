@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package respondworkflowtaskcompleted
 
 import (
 	"context"
@@ -65,10 +65,14 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+const (
+	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
+)
+
 type (
 	commandAttrValidationFn func() (enumspb.WorkflowTaskFailedCause, error)
 
-	workflowTaskHandlerImpl struct {
+	workflowTaskCompletedHandler struct {
 		identity                string
 		workflowTaskCompletedID int64
 
@@ -117,7 +121,7 @@ type (
 	}
 )
 
-func newWorkflowTaskHandler(
+func newWorkflowTaskCompletedHandler(
 	identity string,
 	workflowTaskCompletedID int64,
 	mutableState workflow.MutableState,
@@ -133,8 +137,8 @@ func newWorkflowTaskHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
-) *workflowTaskHandlerImpl {
-	return &workflowTaskHandlerImpl{
+) *workflowTaskCompletedHandler {
+	return &workflowTaskCompletedHandler{
 		identity:                identity,
 		workflowTaskCompletedID: workflowTaskCompletedID,
 
@@ -167,7 +171,7 @@ func newWorkflowTaskHandler(
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommands(
+func (handler *workflowTaskCompletedHandler) handleCommands(
 	ctx context.Context,
 	commands []*commandpb.Command,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
@@ -221,7 +225,7 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	return mutations, nil
 }
 
-func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
+func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 	ctx context.Context,
 	workflowTaskScheduledEventID int64,
 	wtHeartbeat bool,
@@ -274,7 +278,7 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 }
 
 //revive:disable:cyclomatic grandfathered
-func (handler *workflowTaskHandlerImpl) handleCommand(
+func (handler *workflowTaskCompletedHandler) handleCommand(
 	ctx context.Context,
 	command *commandpb.Command,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
@@ -347,7 +351,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleMessage(
+func (handler *workflowTaskCompletedHandler) handleMessage(
 	ctx context.Context,
 	message *protocolpb.Message,
 ) error {
@@ -368,9 +372,17 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 	case update.ProtocolV1:
 		upd := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
 		if upd == nil {
+			upd, err = handler.updateRegistry.TryResurrect(ctx, message)
+			if err != nil {
+				return handler.failWorkflowTaskOnInvalidArgument(
+					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
+			}
+		}
+		if upd == nil {
+			// Update was not found in the registry and can't be resurrected.
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFound(fmt.Sprintf("update %s not found", message.ProtocolInstanceId)))
+				serviceerror.NewNotFound(fmt.Sprintf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId)))
 		}
 
 		if err := upd.OnProtocolMessage(
@@ -389,7 +401,7 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
+func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 	ctx context.Context,
 	attr *commandpb.ProtocolMessageCommandAttributes,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
@@ -420,7 +432,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
 	)
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
+func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*handleCommandResponse, error) {
@@ -497,7 +509,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	}, nil
 }
 
-func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
+func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(
 	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (workflowTaskResponseMutation, error) {
@@ -525,6 +537,7 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		uuid.New(),
 		handler.identity,
 		stamp,
+		nil,
 	); err != nil {
 		return nil, err
 	}
@@ -587,7 +600,7 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 	}, nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
+func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 	_ context.Context,
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
@@ -633,7 +646,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
+func (handler *workflowTaskCompletedHandler) handleCommandStartTimer(
 	_ context.Context,
 	attr *commandpb.StartTimerCommandAttributes,
 ) error {
@@ -654,7 +667,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
+func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
@@ -711,7 +724,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
+func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 	ctx context.Context,
 	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
@@ -783,7 +796,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
+func (handler *workflowTaskCompletedHandler) handleCommandCancelTimer(
 	_ context.Context,
 	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
@@ -811,7 +824,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
+func (handler *workflowTaskCompletedHandler) handleCommandCancelWorkflow(
 	ctx context.Context,
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
@@ -844,7 +857,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkflow(
+func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalWorkflow(
 	_ context.Context,
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
@@ -885,7 +898,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
+func (handler *workflowTaskCompletedHandler) handleCommandRecordMarker(
 	_ context.Context,
 	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
@@ -911,7 +924,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
+func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	ctx context.Context,
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
@@ -1020,7 +1033,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
+func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 	_ context.Context,
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
@@ -1131,7 +1144,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
+func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow(
 	_ context.Context,
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
@@ -1178,7 +1191,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttributes(
+func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAttributes(
 	_ context.Context,
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
@@ -1249,7 +1262,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
+func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperties(
 	_ context.Context,
 	attr *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) error {
@@ -1310,7 +1323,7 @@ func payloadsMapSize(fields map[string]*commonpb.Payload) int {
 	return result
 }
 
-func (handler *workflowTaskHandlerImpl) handleRetry(
+func (handler *workflowTaskCompletedHandler) handleRetry(
 	ctx context.Context,
 	backoffInterval time.Duration,
 	failure *failurepb.Failure,
@@ -1361,7 +1374,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCron(
+func (handler *workflowTaskCompletedHandler) handleCron(
 	ctx context.Context,
 	backoffInterval time.Duration,
 	lastCompletionResult *commonpb.Payloads,
@@ -1417,14 +1430,14 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) validateCommandAttr(
+func (handler *workflowTaskCompletedHandler) validateCommandAttr(
 	validationFn commandAttrValidationFn,
 ) error {
 
 	return handler.failWorkflowTaskOnInvalidArgument(validationFn())
 }
 
-func (handler *workflowTaskHandlerImpl) failWorkflowTaskOnInvalidArgument(
+func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
@@ -1437,7 +1450,7 @@ func (handler *workflowTaskHandlerImpl) failWorkflowTaskOnInvalidArgument(
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) failWorkflowTask(
+func (handler *workflowTaskCompletedHandler) failWorkflowTask(
 	failedCause enumspb.WorkflowTaskFailedCause,
 	causeErr error,
 ) error {
@@ -1453,7 +1466,7 @@ func (handler *workflowTaskHandlerImpl) failWorkflowTask(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) failWorkflow(
+func (handler *workflowTaskCompletedHandler) failWorkflow(
 	failedCause enumspb.WorkflowTaskFailedCause,
 	causeErr error,
 ) error {
