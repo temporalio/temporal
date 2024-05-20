@@ -193,6 +193,7 @@ func (n *Node) ClearTransactionState() {
 }
 
 // Walk applies the given function to all nodes rooted at the current node.
+// Returns after successfully applying the function to all nodes or first error.
 func (n *Node) Walk(fn func(*Node) error) error {
 	if n == nil {
 		return nil

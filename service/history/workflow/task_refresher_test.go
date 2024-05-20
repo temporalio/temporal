@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -97,8 +98,8 @@ func (s *taskRefresherSuite) SetupTest() {
 
 func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 
-	stateMachineDef := hsm.NewTestDefinition(10)
-	err := s.stateMachineRegistry.RegisterTaskSerializer(hsm.TestTaskTypeID, hsm.TestTaskSerializer{})
+	stateMachineDef := hsmtest.NewDefinition(10)
+	err := s.stateMachineRegistry.RegisterTaskSerializer(hsmtest.TaskTypeID, hsmtest.TaskSerializer{})
 	s.NoError(err)
 	err = s.stateMachineRegistry.RegisterMachine(stateMachineDef)
 	s.NoError(err)
@@ -109,11 +110,11 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	}
 
 	hsmRoot := s.mutableState.HSM()
-	child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_1"}, hsm.NewTestData(hsm.TestState1))
+	child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
 	s.NoError(err)
-	_, err = child1.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_1_1"}, hsm.NewTestData(hsm.TestState2))
+	_, err = child1.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_1_1"}, hsmtest.NewData(hsmtest.State2))
 	s.NoError(err)
-	_, err = hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_2"}, hsm.NewTestData(hsm.TestState3))
+	_, err = hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_2"}, hsmtest.NewData(hsmtest.State3))
 	s.NoError(err)
 
 	err = s.taskRefresher.refreshTasksForSubStateMachines(s.mutableState)
