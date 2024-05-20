@@ -25,7 +25,6 @@
 package client
 
 import (
-	"reflect"
 	"time"
 
 	"go.uber.org/fx"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -207,8 +207,7 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 			var nilT T
 			return nilT, err
 		}
-		v := reflect.ValueOf(manager)
-		if !v.IsNil() {
+		if !util.IsGenericNil(manager) {
 			lc.Append(fx.StopHook(manager.Close))
 		}
 		return manager, nil

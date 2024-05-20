@@ -27,6 +27,7 @@
 package util
 
 import (
+	"reflect"
 	"sort"
 	"time"
 
@@ -171,4 +172,15 @@ func RepeatSlice[T any](xs []T, n int) []T {
 // Ptr returns a pointer to a copy of v.
 func Ptr[T any](v T) *T {
 	return &v
+}
+
+func IsGenericNil[T any](val T) bool {
+	v := reflect.ValueOf(val)
+	return (v.Kind() == reflect.Ptr &&
+		v.Kind() == reflect.Interface ||
+		v.Kind() == reflect.Slice ||
+		v.Kind() == reflect.Map ||
+		v.Kind() == reflect.Chan ||
+		v.Kind() == reflect.Func) &&
+		v.IsNil()
 }
