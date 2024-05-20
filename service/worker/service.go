@@ -112,6 +112,9 @@ type (
 		VisibilityEnableShadowReadMode    dynamicconfig.BoolPropertyFn
 		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+		// FIXME: change this
+		col *dynamicconfig.Collection
 	}
 )
 
@@ -232,6 +235,8 @@ func NewConfig(
 		VisibilityEnableShadowReadMode:    dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		VisibilityDisableOrderByClause:    dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:  dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+
+		col: dc, // FIXME
 	}
 	return config
 }
