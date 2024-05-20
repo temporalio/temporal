@@ -5184,7 +5184,7 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 
 	ms.executionInfo.StateTransitionCount += 1
 
-	if ms.config.EnableMutableStateTransitionHistory() {
+	if ms.config.EnableNexus() {
 		ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
 			ms.executionInfo.TransitionHistory,
 			ms.currentTransactionNamespaceFailoverVersion,

@@ -124,12 +124,13 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
 	maps.Copy(clusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryScannerEnabled.Key():                        false,
-		dynamicconfig.TaskQueueScannerEnabled.Key():                      false,
-		dynamicconfig.ExecutionsScannerEnabled.Key():                     false,
-		dynamicconfig.BuildIdScavengerEnabled.Key():                      false,
-		dynamicconfig.FrontendEnableNexusAPIs.Key():                      true,
-		dynamicconfig.EnableNexusEndpointRegistryBackgroundRefresh.Key(): true,
+		dynamicconfig.HistoryScannerEnabled.Key():    false,
+		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
+		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
+		dynamicconfig.BuildIdScavengerEnabled.Key():  false,
+		dynamicconfig.EnableNexus.Key():              true,
+		// Better to read through in tests than add artificial sleeps (which is what we previously had).
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
 	})
 	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
 	clusterConfig.ServiceFxOptions = params.ServiceOptions
@@ -169,10 +170,6 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
-
-	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
-	// TODO: remove after https://github.com/temporalio/temporal/issues/4017 is resolved
-	time.Sleep(2 * NamespaceCacheRefreshInterval)
 }
 
 func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
