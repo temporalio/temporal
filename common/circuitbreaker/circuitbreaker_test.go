@@ -29,6 +29,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 type TSCBWithDynamicSettingsTestSuite struct {
@@ -45,8 +47,8 @@ func TestBasic(t *testing.T) {
 	name := "test-tscb"
 	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(
 		Settings{
-			SettingsFn: func() map[string]any {
-				return map[string]any{}
+			SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
+				return dynamicconfig.CircuitBreakerSettings{}
 			},
 			Name: name,
 		},
@@ -64,16 +66,16 @@ func TestDynamicSettings(t *testing.T) {
 	settingsCallCount := 0
 	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(
 		Settings{
-			SettingsFn: func() map[string]any {
+			SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
 				settingsCallCount += 1
 				if settingsCallCount > 2 {
-					return map[string]any{
-						maxRequestsKey: 2,
-						intervalKey:    3600,
-						timeoutKey:     30,
+					return dynamicconfig.CircuitBreakerSettings{
+						MaxRequests: 2,
+						Interval:    3600 * time.Second,
+						Timeout:     30 * time.Second,
 					}
 				}
-				return map[string]any{}
+				return dynamicconfig.CircuitBreakerSettings{}
 			},
 		},
 	)
@@ -82,20 +84,13 @@ func TestDynamicSettings(t *testing.T) {
 	// settingsCallCount = 2
 	ds := tscb.settingsFn()
 	s.Equal(2, settingsCallCount)
-	s.Equal(
-		dynamicSettings{
-			MaxRequests: defaultMaxRequests,
-			Interval:    defaultInterval,
-			Timeout:     defaultTimeout,
-		},
-		ds,
-	)
+	s.Equal(dynamicconfig.CircuitBreakerSettings{}, ds)
 
 	// settingsCallCount = 3
 	ds = tscb.settingsFn()
 	s.Equal(3, settingsCallCount)
 	s.Equal(
-		dynamicSettings{
+		dynamicconfig.CircuitBreakerSettings{
 			MaxRequests: 2,
 			Interval:    1 * time.Hour,
 			Timeout:     30 * time.Second,
@@ -110,16 +105,16 @@ func TestGetInternalCircuitBreaker(t *testing.T) {
 	settingsCallCount := 0
 	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(
 		Settings{
-			SettingsFn: func() map[string]any {
+			SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
 				settingsCallCount += 1
 				if settingsCallCount > 2 {
-					return map[string]any{
-						maxRequestsKey: 2,
-						intervalKey:    3600,
-						timeoutKey:     30,
+					return dynamicconfig.CircuitBreakerSettings{
+						MaxRequests: 2,
+						Interval:    3600 * time.Second,
+						Timeout:     30 * time.Second,
 					}
 				}
-				return map[string]any{}
+				return dynamicconfig.CircuitBreakerSettings{}
 			},
 			SettingsEvalInterval: 2 * time.Second,
 		},

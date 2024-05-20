@@ -130,21 +130,6 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 	}
 }
 
-func Test_FromConfigToRetryPolicy(t *testing.T) {
-	options := map[string]interface{}{
-		initialIntervalInSecondsConfigKey:   2,
-		maximumIntervalCoefficientConfigKey: 100.0,
-		backoffCoefficientConfigKey:         4.0,
-		maximumAttemptsConfigKey:            5,
-	}
-
-	defaultSettings := FromConfigToDefault(options)
-	assert.Equal(t, 2*time.Second, defaultSettings.InitialInterval)
-	assert.Equal(t, 100.0, defaultSettings.MaximumIntervalCoefficient)
-	assert.Equal(t, 4.0, defaultSettings.BackoffCoefficient)
-	assert.Equal(t, int32(5), defaultSettings.MaximumAttempts)
-}
-
 func TestValidateRetryPolicy(t *testing.T) {
 	testCases := []struct {
 		name          string
