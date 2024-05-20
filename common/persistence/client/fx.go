@@ -206,7 +206,9 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 			var nilT T
 			return nilT, err
 		}
-		lc.Append(fx.StopHook(manager.Close))
+		if manager != nil {
+			lc.Append(fx.StopHook(manager.Close))
+		}
 		return manager, nil
 	}
 }
