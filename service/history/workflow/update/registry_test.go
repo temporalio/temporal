@@ -166,14 +166,14 @@ func TestFindOrCreate(t *testing.T) {
 		storeData = map[string]*persistencespb.UpdateInfo{
 			acceptedUpdateID: {
 				Value: &persistencespb.UpdateInfo_Acceptance{
-					Acceptance: &persistencespb.AcceptanceInfo{
+					Acceptance: &persistencespb.UpdateAcceptanceInfo{
 						EventId: 120,
 					},
 				},
 			},
 			completedUpdateID: {
 				Value: &persistencespb.UpdateInfo_Completion{
-					Completion: &persistencespb.CompletionInfo{
+					Completion: &persistencespb.UpdateCompletionInfo{
 						EventId: 123,
 					},
 				},
@@ -244,7 +244,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 				storedAcceptedUpdateInfo := &persistencespb.UpdateInfo{
 					Value: &persistencespb.UpdateInfo_Acceptance{
-						Acceptance: &persistencespb.AcceptanceInfo{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{
 							EventId: 120,
 						},
 					},
@@ -285,7 +285,7 @@ func TestUpdateAccepted_WorkflowCompleted(t *testing.T) {
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 				storedAcceptedUpdateInfo := &persistencespb.UpdateInfo{
 					Value: &persistencespb.UpdateInfo_Acceptance{
-						Acceptance: &persistencespb.AcceptanceInfo{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{
 							EventId: 22,
 						},
 					},
@@ -558,7 +558,7 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 				completedUpdateInfo := &persistencespb.UpdateInfo{
 					Value: &persistencespb.UpdateInfo_Completion{
-						Completion: &persistencespb.CompletionInfo{EventId: 123},
+						Completion: &persistencespb.UpdateCompletionInfo{EventId: 123},
 					},
 				}
 				visitor(completedUpdateID, completedUpdateInfo)

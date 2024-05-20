@@ -3915,9 +3915,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	}
 	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
 	admission := &persistencespb.UpdateInfo_Admission{
-		Admission: &persistencespb.AdmissionInfo{
-			Location: &persistencespb.AdmissionInfo_HistoryPointer_{
-				HistoryPointer: &persistencespb.AdmissionInfo_HistoryPointer{
+		Admission: &persistencespb.UpdateAdmissionInfo{
+			Location: &persistencespb.UpdateAdmissionInfo_HistoryPointer_{
+				HistoryPointer: &persistencespb.UpdateAdmissionInfo_HistoryPointer{
 					EventId:      event.EventId,
 					EventBatchId: batchId,
 				},
@@ -3967,13 +3967,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Size()
 		ui.Value = &persistencespb.UpdateInfo_Acceptance{
-			Acceptance: &persistencespb.AcceptanceInfo{EventId: event.EventId},
+			Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
 		ui := persistencespb.UpdateInfo{
 			Value: &persistencespb.UpdateInfo_Acceptance{
-				Acceptance: &persistencespb.AcceptanceInfo{EventId: event.EventId},
+				Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 			},
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
@@ -4015,7 +4015,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Size()
 		ui.Value = &persistencespb.UpdateInfo_Completion{
-			Completion: &persistencespb.CompletionInfo{
+			Completion: &persistencespb.UpdateCompletionInfo{
 				EventId:      event.EventId,
 				EventBatchId: batchID,
 			},
@@ -4027,7 +4027,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 		// Better to return error here!
 		ui := persistencespb.UpdateInfo{
 			Value: &persistencespb.UpdateInfo_Completion{
-				Completion: &persistencespb.CompletionInfo{EventId: event.EventId},
+				Completion: &persistencespb.UpdateCompletionInfo{EventId: event.EventId},
 			},
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui

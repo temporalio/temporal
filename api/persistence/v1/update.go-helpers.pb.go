@@ -29,35 +29,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type AdmissionInfo to the protobuf v3 wire format
-func (val *AdmissionInfo) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateAdmissionInfo to the protobuf v3 wire format
+func (val *UpdateAdmissionInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type AdmissionInfo from the protobuf v3 wire format
-func (val *AdmissionInfo) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateAdmissionInfo from the protobuf v3 wire format
+func (val *UpdateAdmissionInfo) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *AdmissionInfo) Size() int {
+func (val *UpdateAdmissionInfo) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two AdmissionInfo values are equivalent by recursively
+// Equal returns whether two UpdateAdmissionInfo values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *AdmissionInfo) Equal(that interface{}) bool {
+func (this *UpdateAdmissionInfo) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *AdmissionInfo
+	var that1 *UpdateAdmissionInfo
 	switch t := that.(type) {
-	case *AdmissionInfo:
+	case *UpdateAdmissionInfo:
 		that1 = t
-	case AdmissionInfo:
+	case UpdateAdmissionInfo:
 		that1 = &t
 	default:
 		return false
@@ -66,35 +66,35 @@ func (this *AdmissionInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type AcceptanceInfo to the protobuf v3 wire format
-func (val *AcceptanceInfo) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateAcceptanceInfo to the protobuf v3 wire format
+func (val *UpdateAcceptanceInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type AcceptanceInfo from the protobuf v3 wire format
-func (val *AcceptanceInfo) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateAcceptanceInfo from the protobuf v3 wire format
+func (val *UpdateAcceptanceInfo) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *AcceptanceInfo) Size() int {
+func (val *UpdateAcceptanceInfo) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two AcceptanceInfo values are equivalent by recursively
+// Equal returns whether two UpdateAcceptanceInfo values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *AcceptanceInfo) Equal(that interface{}) bool {
+func (this *UpdateAcceptanceInfo) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *AcceptanceInfo
+	var that1 *UpdateAcceptanceInfo
 	switch t := that.(type) {
-	case *AcceptanceInfo:
+	case *UpdateAcceptanceInfo:
 		that1 = t
-	case AcceptanceInfo:
+	case UpdateAcceptanceInfo:
 		that1 = &t
 	default:
 		return false
@@ -103,35 +103,35 @@ func (this *AcceptanceInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type CompletionInfo to the protobuf v3 wire format
-func (val *CompletionInfo) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateCompletionInfo to the protobuf v3 wire format
+func (val *UpdateCompletionInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type CompletionInfo from the protobuf v3 wire format
-func (val *CompletionInfo) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateCompletionInfo from the protobuf v3 wire format
+func (val *UpdateCompletionInfo) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *CompletionInfo) Size() int {
+func (val *UpdateCompletionInfo) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two CompletionInfo values are equivalent by recursively
+// Equal returns whether two UpdateCompletionInfo values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *CompletionInfo) Equal(that interface{}) bool {
+func (this *UpdateCompletionInfo) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *CompletionInfo
+	var that1 *UpdateCompletionInfo
 	switch t := that.(type) {
-	case *CompletionInfo:
+	case *UpdateCompletionInfo:
 		that1 = t
-	case CompletionInfo:
+	case UpdateCompletionInfo:
 		that1 = &t
 	default:
 		return false

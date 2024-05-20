@@ -25,12 +25,12 @@ syntax = "proto3";
 package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
-// AdmissionInfo contains information about a durably admitted update. Note that updates in Admitted state are typically
+// UpdateAdmissionInfo contains information about a durably admitted update. Note that updates in Admitted state are typically
 // non-durable (i.e. do not have a corresponding event in history). Durably admitted updates arise as a result of
 // workflow reset or history event replication conflict: in these cases a WorkflowExecutionUpdateAdmittedEvent event is
 // created when an accepted update (on one branch of workflow history) is converted into an admitted update (on another
 // branch).
-message AdmissionInfo {
+message UpdateAdmissionInfo {
     message HistoryPointer {
         // the event ID of the WorkflowExecutionUpdateAdmittedEvent
         int64 event_id = 1;
@@ -43,14 +43,14 @@ message AdmissionInfo {
     }
 }
 
-// AcceptanceInfo contains information about an accepted update
-message AcceptanceInfo {
+// UpdateAcceptanceInfo contains information about an accepted update
+message UpdateAcceptanceInfo {
     // the event ID of the WorkflowExecutionUpdateAcceptedEvent
     int64 event_id = 1;
 }
 
-// CompletionInfo contains information about a completed update
-message CompletionInfo {
+// UpdateCompletionInfo contains information about a completed update
+message UpdateCompletionInfo {
     // the event ID of the WorkflowExecutionUpdateCompletedEvent
     int64 event_id = 1;
 
@@ -62,10 +62,10 @@ message CompletionInfo {
 message UpdateInfo {
     oneof value {
         // update has been accepted and this is the acceptance metadata
-        AcceptanceInfo acceptance = 1;
+        UpdateAcceptanceInfo acceptance = 1;
         // update has been completed and this is the completion metadata
-        CompletionInfo completion = 2;
+        UpdateCompletionInfo completion = 2;
         // update has been admitted and this is the admission metadata
-        AdmissionInfo admission = 3;
+        UpdateAdmissionInfo admission = 3;
     }
 }
