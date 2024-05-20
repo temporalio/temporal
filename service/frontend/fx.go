@@ -105,7 +105,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
-	fx.Provide(MaskInternalErrorsInterceptorProvider),
+	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -223,7 +223,7 @@ func GrpcServerOptionsProvider(
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
-	maskInternalErrorsInterceptor *interceptor.MaskInternalErrorsInterceptor,
+	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	utf8Validator *utf8validator.Validator,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
@@ -256,7 +256,7 @@ func GrpcServerOptionsProvider(
 		// Order or interceptors is important
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
-		maskInternalErrorsInterceptor.Intercept,
+		maskInternalErrorDetailsInterceptor.Intercept,
 		rpc.ServiceErrorInterceptor,
 		rpc.NewFrontendServiceErrorInterceptor(logger),
 		utf8Validator.Intercept,
@@ -399,12 +399,12 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-func MaskInternalErrorsInterceptorProvider(
+func MaskInternalErrorDetailsInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
-) *interceptor.MaskInternalErrorsInterceptor {
-	return interceptor.NewMaskInternalErrorsInterceptor(
-		serviceConfig.MaskInternalOrUnknownErrors, namespaceRegistry,
+) *interceptor.MaskInternalErrorDetailsInterceptor {
+	return interceptor.NewMaskInternalErrorDetailsInterceptor(
+		serviceConfig.MaskInternalErrorDetails, namespaceRegistry,
 	)
 }
 

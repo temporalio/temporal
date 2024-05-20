@@ -71,11 +71,11 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelp
 	}
 }
 
-func TestMaskUnknownOrInternalErrorsInterceptor(t *testing.T) {
+func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
 
 	mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
 	dc := dynamicconfig.NewNoopCollection()
-	errorMask := NewMaskInternalErrorsInterceptor(dynamicconfig.FrontendMaskInternalOrUnknownErrors.Get(dc), mockRegistry)
+	errorMask := NewMaskInternalErrorDetailsInterceptor(dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry)
 
 	test_namespace := "test-namespace"
 	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: test_namespace}

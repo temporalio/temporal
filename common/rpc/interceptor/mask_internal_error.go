@@ -41,23 +41,23 @@ import (
 
 var errorFrontendMasked = "something went wrong, please retry"
 
-type MaskInternalErrorsInterceptor struct {
+type MaskInternalErrorDetailsInterceptor struct {
 	maskInternalError dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	namespaceRegistry namespace.Registry
 }
 
-func NewMaskInternalErrorsInterceptor(
+func NewMaskInternalErrorDetailsInterceptor(
 	maskErrorSetting dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
-) *MaskInternalErrorsInterceptor {
+) *MaskInternalErrorDetailsInterceptor {
 
-	return &MaskInternalErrorsInterceptor{
+	return &MaskInternalErrorDetailsInterceptor{
 		maskInternalError: maskErrorSetting,
 		namespaceRegistry: namespaceRegistry,
 	}
 }
 
-func (i *MaskInternalErrorsInterceptor) Intercept(
+func (i *MaskInternalErrorDetailsInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	_ *grpc.UnaryServerInfo,
@@ -72,7 +72,7 @@ func (i *MaskInternalErrorsInterceptor) Intercept(
 	return resp, err
 }
 
-func (i *MaskInternalErrorsInterceptor) shouldMaskErrors(req any) bool {
+func (i *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
 	ns := MustGetNamespaceName(i.namespaceRegistry, req)
 	if ns.IsEmpty() {
 		return false
