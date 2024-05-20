@@ -152,7 +152,6 @@ func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*Workf
 	//   1. Attempt will be set to 1, so we still use default workflow task timeout.
 	//   2. ApplyWorkflowTaskScheduledEvent will overwrite everything including WorkflowTaskTimeout.
 	workflowTask := &WorkflowTaskInfo{
-		// workflow must be running here
 		Version:             m.ms.GetCurrentVersion(),
 		ScheduledEventID:    m.ms.GetNextEventID(),
 		StartedEventID:      common.EmptyEventID,
@@ -348,7 +347,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 
 		// If failover happened during transient workflow task,
 		// then reset the attempt to 1, and not use transient workflow task.
-		// workflow must be running here
 		if m.ms.GetCurrentVersion() != lastWriteVersion {
 			m.ms.executionInfo.WorkflowTaskAttempt = 1
 			workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
@@ -380,7 +378,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	}
 
 	workflowTask, err := m.ApplyWorkflowTaskScheduledEvent(
-		// workflow must be running here
 		m.ms.GetCurrentVersion(),
 		scheduledEventID,
 		taskQueue,
@@ -496,7 +493,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 	// If new events came since transient/speculative WT was scheduled or failover happened during lifetime of transient/speculative WT,
 	// transient/speculative WT needs to be converted to normal WT, i.e. WorkflowTaskScheduledEvent needs to be created now.
-	// workflow must be running here
 	if !workflowTaskScheduledEventCreated &&
 		(workflowTask.ScheduledEventID != m.ms.GetNextEventID() || workflowTask.Version != m.ms.GetCurrentVersion()) {
 
@@ -535,7 +531,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 	workflowTask, err = m.ApplyWorkflowTaskStartedEvent(
 		workflowTask,
-		// workflow must be running here
 		m.ms.GetCurrentVersion(),
 		scheduledEventID,
 		startedEventID,

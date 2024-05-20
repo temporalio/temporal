@@ -147,7 +147,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		); err != nil {
 			return err
 		}
-		// currentMutableState is running, check on L141
 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
 
 		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
@@ -284,7 +283,6 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
 
-	// resetMutableState is for the workflow after reset, it must be open
 	if resetMutableState.GetCurrentVersion() > resetWorkflowVersion {
 		return nil, serviceerror.NewInternal("WorkflowResetter encountered version mismatch.")
 	}
@@ -340,7 +338,6 @@ func (r *workflowResetterImpl) persistToDB(
 		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
-			// currentWorkflow must be running when currentWorkflowMutation is not nil see L150 above
 			currentWorkflow.GetMutableState().GetCurrentVersion(),
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,

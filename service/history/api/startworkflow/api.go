@@ -350,7 +350,6 @@ func (s *Starter) verifyNamespaceActive(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) error {
-	// we are validating the version for the new workflow we are about to create, it must be running
 	if creationParams.workflowLease.GetMutableState().GetCurrentVersion() < currentWorkflowConditionFailed.LastWriteVersion {
 		clusterMetadata := s.shardContext.GetClusterMetadata()
 		clusterName := clusterMetadata.ClusterNameForFailoverVersion(s.namespace.IsGlobalNamespace(), currentWorkflowConditionFailed.LastWriteVersion)

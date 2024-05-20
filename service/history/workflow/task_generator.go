@@ -588,9 +588,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
-		WorkflowKey: r.mutableState.GetWorkflowKey(),
-		// this is only called in RetryActivity when workflow is still running
-		// but ideally should use activity version explicitly
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		Version:             r.mutableState.GetCurrentVersion(),
 		VisibilityTimestamp: visibilityTimestamp,
 		EventID:             eventID,
@@ -708,8 +706,6 @@ func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask() error {
 
 func (r *TaskGeneratorImpl) GenerateWorkflowResetTasks() error {
 
-	// this is only called in closeTransactionHandleWorkflowReset
-	// where workfow is still running
 	currentVersion := r.mutableState.GetCurrentVersion()
 
 	r.mutableState.AddTasks(&tasks.ResetWorkflowTask{

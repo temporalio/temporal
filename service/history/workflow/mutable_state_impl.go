@@ -713,8 +713,6 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.currentVersion = version
 	}
 
-	// after workflow is closed, no new events will be generated,
-	// so the version won't be used
 	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
@@ -1474,7 +1472,6 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	if prev, existed := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; existed {
 		ms.approximateSize -= prev.Size()
 	}
-	// workflow must be running
 	ai.Version = ms.GetCurrentVersion()
 	ai.LastHeartbeatDetails = request.Details
 	now := ms.timeSource.Now()
@@ -2823,7 +2820,6 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 
 	// we might need to retry, so do not append started event just yet,
 	// instead update mutable state and will record started event when activity task is closed
-	// workflow must be running
 	ai.Version = ms.GetCurrentVersion()
 	ai.StartedEventId = common.TransientEventID
 	ai.RequestId = requestID
@@ -4736,7 +4732,6 @@ func (ms *MutableStateImpl) RetryActivity(
 	}
 	ai = activityVisitor.UpdateActivityInfo(
 		ai,
-		// workflow must be running
 		ms.GetCurrentVersion(),
 		nextAttempt,
 		ms.truncateRetryableActivityFailure(failure),
@@ -5193,8 +5188,6 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
-		// after workflow is closed, no new events will be generated,
-		// so the version won't be used
 		ms.GetCurrentVersion(),
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
@@ -5414,7 +5407,7 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 	// * flush buffered events as if namespace is still local
 	// * use updated namespace for actual call
 
-	lastWriteVersion, err := ms.GetLastWriteVersion() // real last write version
+	lastWriteVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return nil, err
 	}
@@ -5441,20 +5434,18 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 
 	// Handling mutable state turn from standby to active, while having a workflow task on the fly
 	workflowTask := ms.GetStartedWorkflowTask()
-	// workflow must be running, checked at the beginning of the func
 	if workflowTask == nil || workflowTask.Version >= ms.GetCurrentVersion() {
 		// no pending workflow tasks, no buffered events
 		// or workflow task has higher / equal version
 		return false, nil
 	}
 
-	// workflow must be running, checked at the beginning of the func
 	currentVersion := ms.GetCurrentVersion()
-	lastWriteVersion, err := ms.GetLastWriteVersion() // should use last event version for now, because replication is not alway clearing buffer event
+	lastWriteVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return false, err
 	}
-	if lastWriteVersion != workflowTask.Version { // this check needs to use last event version
+	if lastWriteVersion != workflowTask.Version {
 		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
 	}
 
@@ -5523,8 +5514,6 @@ func (ms *MutableStateImpl) closeTransactionWithPolicyCheck(
 		// Cannot use ms.namespaceEntry.ActiveClusterName() because currentVersion may be updated during this transaction in
 		// passive cluster. For example: if passive cluster sees conflict and decided to terminate this workflow. The
 		// currentVersion on mutable state would be updated to point to last write version which is current (passive) cluster.
-		// activeness check should be based on the actual version used in this transaction even after workflow is closed
-		// today after workflow is closed, we only closeTransaction by calling SetWorkflowExecution, which uses passivePolicy, so basically no change here.
 		activeCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), ms.GetCurrentVersion())
 		currentCluster := ms.clusterMetadata.GetCurrentClusterName()
 

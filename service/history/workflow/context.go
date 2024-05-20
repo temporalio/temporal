@@ -362,7 +362,6 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	_, err := createWorkflowExecution(
 		ctx,
 		shardContext,
-		// this version is just for metric purpose
 		newMutableState.GetCurrentVersion(),
 		createRequest,
 	)
@@ -457,7 +456,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	if _, _, _, err := NewTransaction(shardContext).ConflictResolveWorkflowExecution(
 		ctx,
 		conflictResolveMode,
-		// this version is just for metric purpose
 		resetMutableState.GetCurrentVersion(),
 		resetWorkflow,
 		resetWorkflowEventsSeq,
@@ -644,7 +642,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
 		ctx,
 		updateMode,
-		// this version is just for metric purpose
+
 		c.MutableState.GetCurrentVersion(),
 		updateWorkflow,
 		updateWorkflowEventsSeq,
@@ -1150,7 +1148,6 @@ func emitStateTransitionCount(
 	namespaceEntry := mutableState.GetNamespaceEntry()
 	handler := metricsHandler.WithTags(
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
-		// this version is just for metric purpose
 		metrics.NamespaceStateTag(namespaceState(clusterMetadata, util.Ptr(mutableState.GetCurrentVersion()))),
 	)
 	metrics.StateTransitionCount.With(handler).Record(
@@ -1199,6 +1196,5 @@ func MutableStateFailoverVersion(
 	if mutableState == nil {
 		return nil
 	}
-	// this version is just for metric purpose
 	return util.Ptr(mutableState.GetCurrentVersion())
 }
