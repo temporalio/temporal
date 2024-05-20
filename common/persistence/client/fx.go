@@ -25,6 +25,7 @@
 package client
 
 import (
+	"reflect"
 	"time"
 
 	"go.uber.org/fx"
@@ -206,7 +207,8 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 			var nilT T
 			return nilT, err
 		}
-		if manager != nil {
+		v := reflect.ValueOf(manager)
+		if !v.IsNil() {
 			lc.Append(fx.StopHook(manager.Close))
 		}
 		return manager, nil
