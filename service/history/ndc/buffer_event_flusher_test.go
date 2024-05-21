@@ -108,7 +108,6 @@ func (s *bufferEventFlusherSuite) TearDownTest() {
 
 func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 
-	lastWriteVersion := int64(300)
 	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(10, 0),
 		versionhistory.NewVersionHistoryItem(50, 100),
@@ -124,7 +123,6 @@ func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()

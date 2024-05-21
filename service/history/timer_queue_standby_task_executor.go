@@ -217,11 +217,6 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// NOTE: this is the only place in the standby logic where mutable state can be updated
 
 		// need to clear the activity heartbeat timer task marks
-		lastWriteVersion, err := mutableState.GetLastWriteVersion()
-		if err != nil {
-			return nil, err
-		}
-
 		// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
 		// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
@@ -247,9 +242,17 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, nil
 		}
 
+		// TODO: why do we need to update the current version here?
+		// Neither UpdateActivity nor CreateNextActivityTimer uses the current version.
+		// Current version also not used when closing the transaction as passive
+		//
 		// we need to handcraft some of the variables
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
+		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		if err != nil {
+			return nil, err
+		}
 		if err := mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
 			return nil, err
 		}
