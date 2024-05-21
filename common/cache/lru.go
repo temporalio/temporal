@@ -151,7 +151,13 @@ func (entry *entryImpl) CreateTime() time.Time {
 }
 
 // New creates a new cache with the given options
-func New(maxSize int, opts *Options, handler metrics.Handler) Cache {
+func New(maxSize int, opts *Options) Cache {
+	return NewWithMetrics(maxSize, opts, metrics.NoopMetricsHandler)
+}
+
+// NewWithMetrics creates a new cache that will emit capacity and ttl metrics.
+// handler should be tagged with metrics.CacheTypeTag.
+func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Cache {
 	if opts == nil {
 		opts = &Options{}
 	}
@@ -177,7 +183,7 @@ func New(maxSize int, opts *Options, handler metrics.Handler) Cache {
 // NewLRU creates a new LRU cache of the given size, setting initial capacity
 // to the max size
 func NewLRU(maxSize int, handler metrics.Handler) Cache {
-	return New(maxSize, nil, handler)
+	return New(maxSize, nil)
 }
 
 // Get retrieves the value stored under the given key

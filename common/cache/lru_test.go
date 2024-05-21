@@ -57,7 +57,7 @@ func TestLRU(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 
-	cache := NewLRU(4, metricsHandler)
+	cache := NewWithMetrics(4, nil, metricsHandler)
 
 	cache.Put("A", "Foo")
 	assert.Equal(t, "Foo", cache.Get("A"))
@@ -142,7 +142,7 @@ func TestLRUWithTTL(t *testing.T) {
 	timeSource := clock.NewEventTimeSource()
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
-	cache := New(5,
+	cache := NewWithMetrics(5,
 		&Options{
 			TTL:        time.Millisecond * 100,
 			TimeSource: timeSource,
@@ -229,7 +229,6 @@ func TestTTL(t *testing.T) {
 			TTL:        time.Millisecond * 50,
 			TimeSource: timeSource,
 		},
-		metrics.NoopMetricsHandler,
 	)
 
 	cache.Put("A", t)
@@ -243,7 +242,7 @@ func TestTTLWithPin(t *testing.T) {
 
 	timeSource := clock.NewEventTimeSource()
 	metricsHandler := metricstest.NewCaptureHandler()
-	cache := New(5,
+	cache := NewWithMetrics(5,
 		&Options{
 			TTL:        time.Millisecond * 50,
 			Pin:        true,
@@ -287,7 +286,6 @@ func TestMaxSizeWithPin_MidItem(t *testing.T) {
 			Pin:        true,
 			TimeSource: timeSource,
 		},
-		metrics.NoopMetricsHandler,
 	)
 
 	_, err := cache.PutIfNotExist("A", t)
@@ -336,7 +334,6 @@ func TestMaxSizeWithPin_LastItem(t *testing.T) {
 			Pin:        true,
 			TimeSource: timeSource,
 		},
-		metrics.NoopMetricsHandler,
 	)
 
 	_, err := cache.PutIfNotExist("A", t)
@@ -627,7 +624,7 @@ func TestCache_PutIfNotExistWithNewKeys_Pin(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := New(maxTotalBytes, &Options{Pin: true}, metrics.NoopMetricsHandler)
+	cache := New(maxTotalBytes, &Options{Pin: true})
 
 	val, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{15})
 	assert.Equal(t, ErrCacheItemTooLarge, err)
@@ -654,7 +651,7 @@ func TestCache_PutIfNotExistWithSameKeys_Pin(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := New(maxTotalBytes, &Options{Pin: true}, metrics.NoopMetricsHandler)
+	cache := New(maxTotalBytes, &Options{Pin: true})
 
 	key := uuid.New()
 	val, err := cache.PutIfNotExist(key, &testEntryWithCacheSize{15})
@@ -683,7 +680,6 @@ func TestCache_ItemSizeChangeBeforeRelease(t *testing.T) {
 			Pin:        true,
 			TimeSource: nil,
 		},
-		metrics.NoopMetricsHandler,
 	)
 
 	entry1 := &testEntryWithCacheSize{
