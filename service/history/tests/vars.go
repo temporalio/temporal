@@ -193,6 +193,5 @@ func NewDynamicConfig() *configs.Config {
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
 	config.ShardOwnershipAssertionEnabled = dynamicconfig.GetBoolPropertyFn(true)
 	config.EnableWorkflowExecutionTimeoutTimer = dynamicconfig.GetBoolPropertyFn(true)
-	config.EnableMutableStateTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
 	return config
 }
