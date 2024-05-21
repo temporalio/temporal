@@ -5491,9 +5491,6 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 	// * flush buffered events as if namespace is still local
 	// * use updated namespace for actual call
 
-	// - we want to catch if namespace promotion happens, which applies to both
-	// events and state only changes
-	// - also ms only has started workflow task when it's still running
 	lastWriteVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return nil, err

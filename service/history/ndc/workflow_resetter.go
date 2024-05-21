@@ -362,8 +362,6 @@ func (r *workflowResetterImpl) persistToDB(
 		r.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
-		// we stop updating last write version in the current record after workflow is closed
-		// so workflow close version is the last write version for the current record
 		currentCloseVersion,
 		resetWorkflow.GetMutableState(),
 		resetWorkflowSnapshot,

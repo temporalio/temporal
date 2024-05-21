@@ -249,11 +249,6 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// we need to handcraft some of the variables
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
-		//
-		// change is safe here because
-		// 1. workflow is still running
-		// 2. state only change has no difference compared to change with new events from the activity POV
-		//    both versions could be anything.
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err

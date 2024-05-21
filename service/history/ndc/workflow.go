@@ -214,7 +214,7 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 		return nil
 	}
 
-	// Same as the reasoning in mutableState.startTransactionHandleWorkflowTaskFailover()
+	// TODO: Same as the reasoning in mutableState.startTransactionHandleWorkflowTaskFailover()
 	// LastWriteVersion is only correct when replication task processing logic flush buffered
 	// events for state only changes as well.
 	// Transition history is not enabled today so LastWriteVersion == LastEventVersion
