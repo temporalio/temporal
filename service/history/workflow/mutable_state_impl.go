@@ -5003,51 +5003,9 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	transactionPolicy TransactionPolicy,
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 
-	if err := ms.closeTransactionWithPolicyCheck(
-		transactionPolicy,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	if err := ms.closeTransactionHandleWorkflowTask(
-		transactionPolicy,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	result, err := ms.closeTransaction(transactionPolicy)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	if err := ms.closeTransactionUpdateTransitionHistory(
-		transactionPolicy,
-		workflowEventsSeq,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	if err := ms.closeTransactionPrepareTasks(
-		transactionPolicy,
-		workflowEventsSeq,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	ms.executionInfo.StateTransitionCount += 1
-	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.shard.GetTimeSource().Now())
-
-	// We generate checksum here based on the assumption that the returned
-	// snapshot object is considered immutable. As of this writing, the only
-	// code that modifies the returned object lives inside Context.resetWorkflowExecution.
-	// Currently, the updates done inside Context.resetWorkflowExecution don't
-	// impact the checksum calculation.
-	checksum := ms.generateChecksum()
-
-	if ms.dbRecordVersion == 0 {
-		// noop, existing behavior
-	} else {
-		ms.dbRecordVersion += 1
 	}
 
 	workflowMutation := &persistence.WorkflowMutation{
@@ -5067,77 +5025,35 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		DeleteSignalInfos:         ms.deleteSignalInfos,
 		UpsertSignalRequestedIDs:  ms.updateSignalRequestedIDs,
 		DeleteSignalRequestedIDs:  ms.deleteSignalRequestedIDs,
-		NewBufferedEvents:         bufferEvents,
-		ClearBufferedEvents:       clearBuffer,
+		NewBufferedEvents:         result.bufferEvents,
+		ClearBufferedEvents:       result.clearBuffer,
 
 		Tasks: ms.InsertTasks,
 
 		Condition:       ms.nextEventIDInDB,
 		DBRecordVersion: ms.dbRecordVersion,
-		Checksum:        checksum,
+		Checksum:        result.checksum,
 	}
 
-	ms.checksum = checksum
+	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(transactionPolicy); err != nil {
 		return nil, nil, err
 	}
-	return workflowMutation, workflowEventsSeq, nil
+	return workflowMutation, result.workflowEventsSeq, nil
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	transactionPolicy TransactionPolicy,
 ) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
 
-	if err := ms.closeTransactionWithPolicyCheck(
-		transactionPolicy,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	if err := ms.closeTransactionHandleWorkflowTask(
-		transactionPolicy,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	workflowEventsSeq, bufferEvents, _, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	result, err := ms.closeTransaction(transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if len(bufferEvents) > 0 {
+	if len(result.bufferEvents) > 0 {
 		// TODO do we need the functionality to generate snapshot with buffered events?
 		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with buffered events")
-	}
-
-	if err := ms.closeTransactionUpdateTransitionHistory(
-		transactionPolicy,
-		workflowEventsSeq,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	if err := ms.closeTransactionPrepareTasks(
-		transactionPolicy,
-		workflowEventsSeq,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	ms.executionInfo.StateTransitionCount += 1
-	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.shard.GetTimeSource().Now())
-
-	// We generate checksum here based on the assumption that the returned
-	// snapshot object is considered immutable. As of this writing, the only
-	// code that modifies the returned object lives inside Context.resetWorkflowExecution.
-	// Currently, the updates done inside Context.resetWorkflowExecution don't
-	// impact the checksum calculation.
-	checksum := ms.generateChecksum()
-
-	if ms.dbRecordVersion == 0 {
-		// noop, existing behavior
-	} else {
-		ms.dbRecordVersion += 1
 	}
 
 	workflowSnapshot := &persistence.WorkflowSnapshot{
@@ -5156,14 +5072,14 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 
 		Condition:       ms.nextEventIDInDB,
 		DBRecordVersion: ms.dbRecordVersion,
-		Checksum:        checksum,
+		Checksum:        result.checksum,
 	}
 
-	ms.checksum = checksum
+	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(transactionPolicy); err != nil {
 		return nil, nil, err
 	}
-	return workflowSnapshot, workflowEventsSeq, nil
+	return workflowSnapshot, result.workflowEventsSeq, nil
 }
 
 func (ms *MutableStateImpl) IsResourceDuplicated(
@@ -5183,6 +5099,71 @@ func (ms *MutableStateImpl) UpdateDuplicatedResource(
 
 func (ms *MutableStateImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
 	return ms.taskGenerator.GenerateMigrationTasks()
+}
+
+type closeTransactionResult struct {
+	workflowEventsSeq []*persistence.WorkflowEvents
+	bufferEvents      []*historypb.HistoryEvent
+	clearBuffer       bool
+	checksum          *persistencespb.Checksum
+}
+
+func (ms *MutableStateImpl) closeTransaction(
+	transactionPolicy TransactionPolicy,
+) (closeTransactionResult, error) {
+	if err := ms.closeTransactionWithPolicyCheck(
+		transactionPolicy,
+	); err != nil {
+		return closeTransactionResult{}, err
+	}
+
+	if err := ms.closeTransactionHandleWorkflowTask(
+		transactionPolicy,
+	); err != nil {
+		return closeTransactionResult{}, err
+	}
+
+	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	if err != nil {
+		return closeTransactionResult{}, err
+	}
+
+	if err := ms.closeTransactionUpdateTransitionHistory(
+		transactionPolicy,
+		workflowEventsSeq,
+	); err != nil {
+		return closeTransactionResult{}, err
+	}
+
+	if err := ms.closeTransactionPrepareTasks(
+		transactionPolicy,
+		workflowEventsSeq,
+	); err != nil {
+		return closeTransactionResult{}, err
+	}
+
+	ms.executionInfo.StateTransitionCount += 1
+	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.shard.GetTimeSource().Now())
+
+	// We generate checksum here based on the assumption that the returned
+	// snapshot object is considered immutable. As of this writing, the only
+	// code that modifies the returned object lives inside Context.resetWorkflowExecution.
+	// Currently, the updates done inside Context.resetWorkflowExecution don't
+	// impact the checksum calculation.
+	checksum := ms.generateChecksum()
+
+	if ms.dbRecordVersion == 0 {
+		// noop, existing behavior
+	} else {
+		ms.dbRecordVersion += 1
+	}
+
+	return closeTransactionResult{
+		workflowEventsSeq: workflowEventsSeq,
+		bufferEvents:      bufferEvents,
+		clearBuffer:       clearBuffer,
+		checksum:          checksum,
+	}, nil
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
