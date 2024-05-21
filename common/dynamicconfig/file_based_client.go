@@ -122,7 +122,7 @@ func (fc *fileBasedClient) init() error {
 		return fmt.Errorf("unable to validate dynamic config: %w", err)
 	}
 
-	if err := fc.update(); err != nil {
+	if err := fc.Update(); err != nil {
 		return fmt.Errorf("unable to read dynamic config: %w", err)
 	}
 
@@ -131,7 +131,7 @@ func (fc *fileBasedClient) init() error {
 		for {
 			select {
 			case <-ticker.C:
-				err := fc.update()
+				err := fc.Update()
 				if err != nil {
 					fc.logger.Error("Unable to update dynamic config.", tag.Error(err))
 				}
@@ -145,7 +145,9 @@ func (fc *fileBasedClient) init() error {
 	return nil
 }
 
-func (fc *fileBasedClient) update() error {
+// This is public mainly for testing. The update loop will call this periodically, you don't
+// have to call it explicitly.
+func (fc *fileBasedClient) Update() error {
 	defer func() {
 		fc.lastUpdatedTime = time.Now().UTC()
 	}()

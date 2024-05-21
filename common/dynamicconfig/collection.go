@@ -273,8 +273,8 @@ func convertMap(val any) (map[string]any, error) {
 	return nil, errors.New("value type is not map")
 }
 
-// ConvertStructure can be used as a conversion function for New*TypedSetting. The value from
-// dynamic config will be converted to T, on top of the given default.
+// ConvertStructure can be used as a conversion function for New*TypedSettingWithConverter.
+// The value from dynamic config will be converted to T, on top of the given default.
 //
 // Note that any failure in conversion of _any_ field will result in the overall default being used,
 // ignoring the fields that successfully converted.

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package dynamicconfig
+package dynamicconfig_test
 
 import (
 	"maps"
@@ -31,7 +31,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 )
 
@@ -63,8 +65,8 @@ const (
 // provided from a file.
 type collectionSuite struct {
 	suite.Suite
-	client StaticClient
-	cln    *Collection
+	client dynamicconfig.StaticClient
+	cln    *dynamicconfig.Collection
 }
 
 func TestCollectionSuite(t *testing.T) {
@@ -73,13 +75,13 @@ func TestCollectionSuite(t *testing.T) {
 }
 
 func (s *collectionSuite) SetupSuite() {
-	s.client = make(StaticClient)
+	s.client = make(dynamicconfig.StaticClient)
 	logger := log.NewNoopLogger()
-	s.cln = NewCollection(s.client, logger)
+	s.cln = dynamicconfig.NewCollection(s.client, logger)
 }
 
 func (s *collectionSuite) TestGetIntProperty() {
-	setting := NewGlobalIntSetting(testGetIntPropertyKey, 10, "")
+	setting := dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 10, "")
 	value := setting.Get(s.cln)
 	s.Equal(10, value())
 	s.client[testGetIntPropertyKey] = 50
@@ -87,7 +89,7 @@ func (s *collectionSuite) TestGetIntProperty() {
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
-	setting := NewNamespaceIntSetting(testGetIntPropertyFilteredByNamespaceKey, 10, "")
+	setting := dynamicconfig.NewNamespaceIntSetting(testGetIntPropertyFilteredByNamespaceKey, 10, "")
 	namespace := "testNamespace"
 	value := setting.Get(s.cln)
 	s.Equal(10, value(namespace))
@@ -97,14 +99,15 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
 
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
 	namespace := "testNamespace"
-	value := DefaultEventEncoding.Get(s.cln)
-	s.Equal(DefaultEventEncoding.def, value(namespace))
-	s.client[DefaultEventEncoding.key] = "efg"
+	value := dynamicconfig.DefaultEventEncoding.Get(s.cln)
+	// copied default value, change this if it changes
+	s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), value(namespace))
+	s.client[dynamicconfig.DefaultEventEncoding.Key()] = "efg"
 	s.Equal("efg", value(namespace))
 }
 
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
-	setting := NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
+	setting := dynamicconfig.NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
 	namespaceID := "testNamespaceID"
 	value := setting.Get(s.cln)
 	s.Equal("abc", value(namespaceID))
@@ -113,7 +116,7 @@ func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByTaskQueueInfo() {
-	setting := NewTaskQueueIntSetting(testGetIntPropertyFilteredByTaskQueueInfoKey, 10, "")
+	setting := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyFilteredByTaskQueueInfoKey, 10, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
 	value := setting.Get(s.cln)
@@ -123,7 +126,7 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByTaskQueueInfo() {
 }
 
 func (s *collectionSuite) TestGetFloat64Property() {
-	setting := NewGlobalFloatSetting(testGetFloat64PropertyKey, 0.1, "")
+	setting := dynamicconfig.NewGlobalFloatSetting(testGetFloat64PropertyKey, 0.1, "")
 	value := setting.Get(s.cln)
 	s.Equal(0.1, value())
 	s.client[testGetFloat64PropertyKey] = 0.01
@@ -131,7 +134,7 @@ func (s *collectionSuite) TestGetFloat64Property() {
 }
 
 func (s *collectionSuite) TestGetBoolProperty() {
-	setting := NewGlobalBoolSetting(testGetBoolPropertyKey, true, "")
+	setting := dynamicconfig.NewGlobalBoolSetting(testGetBoolPropertyKey, true, "")
 	value := setting.Get(s.cln)
 	s.Equal(true, value())
 	s.client[testGetBoolPropertyKey] = false
@@ -139,7 +142,7 @@ func (s *collectionSuite) TestGetBoolProperty() {
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
-	setting := NewNamespaceIDBoolSetting(testGetBoolPropertyFilteredByNamespaceIDKey, true, "")
+	setting := dynamicconfig.NewNamespaceIDBoolSetting(testGetBoolPropertyFilteredByNamespaceIDKey, true, "")
 	namespaceID := "testNamespaceID"
 	value := setting.Get(s.cln)
 	s.Equal(true, value(namespaceID))
@@ -148,7 +151,7 @@ func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
-	setting := NewTaskQueueBoolSetting(testGetBoolPropertyFilteredByTaskQueueInfoKey, false, "")
+	setting := dynamicconfig.NewTaskQueueBoolSetting(testGetBoolPropertyFilteredByTaskQueueInfoKey, false, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
 	value := setting.Get(s.cln)
@@ -158,7 +161,7 @@ func (s *collectionSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
 }
 
 func (s *collectionSuite) TestGetDurationProperty() {
-	setting := NewGlobalDurationSetting(testGetDurationPropertyKey, 1*time.Second, "")
+	setting := dynamicconfig.NewGlobalDurationSetting(testGetDurationPropertyKey, 1*time.Second, "")
 	value := setting.Get(s.cln)
 	s.Equal(time.Second, value())
 	s.client[testGetDurationPropertyKey] = time.Minute
@@ -170,7 +173,7 @@ func (s *collectionSuite) TestGetDurationProperty() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {
-	setting := NewNamespaceDurationSetting(testGetDurationPropertyFilteredByNamespaceKey, time.Second, "")
+	setting := dynamicconfig.NewNamespaceDurationSetting(testGetDurationPropertyFilteredByNamespaceKey, time.Second, "")
 	namespace := "testNamespace"
 	value := setting.Get(s.cln)
 	s.Equal(time.Second, value(namespace))
@@ -179,7 +182,7 @@ func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
-	setting := NewTaskQueueDurationSetting(testGetDurationPropertyFilteredByTaskQueueInfoKey, time.Second, "")
+	setting := dynamicconfig.NewTaskQueueDurationSetting(testGetDurationPropertyFilteredByTaskQueueInfoKey, time.Second, "")
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
 	value := setting.Get(s.cln)
@@ -189,7 +192,7 @@ func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskType() {
-	setting := NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, time.Second, "")
+	setting := dynamicconfig.NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, time.Second, "")
 	taskType := enumsspb.TASK_TYPE_UNSPECIFIED
 	value := setting.Get(s.cln)
 	s.Equal(time.Second, value(taskType))
@@ -198,18 +201,18 @@ func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskType() {
 }
 
 func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
-	setting := NewTaskQueueDurationSettingWithConstrainedDefault(
+	setting := dynamicconfig.NewTaskQueueDurationSettingWithConstrainedDefault(
 		testGetDurationPropertyStructuredDefaults,
-		[]TypedConstrainedValue[time.Duration]{
+		[]dynamicconfig.TypedConstrainedValue[time.Duration]{
 			{
-				Constraints: Constraints{
+				Constraints: dynamicconfig.Constraints{
 					Namespace:     "ns2",
 					TaskQueueName: "tq2",
 				},
 				Value: 2 * time.Minute,
 			},
 			{
-				Constraints: Constraints{
+				Constraints: dynamicconfig.Constraints{
 					TaskQueueName: "tq2",
 				},
 				Value: 5 * time.Minute,
@@ -228,9 +231,9 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 
 	// user-set values should take precedence. defaults are included below in the interleaved
 	// precedence order to make the test easier to read
-	s.client[testGetDurationPropertyStructuredDefaults] = []ConstrainedValue{
+	s.client[testGetDurationPropertyStructuredDefaults] = []dynamicconfig.ConstrainedValue{
 		{
-			Constraints: Constraints{
+			Constraints: dynamicconfig.Constraints{
 				Namespace:     "ns2",
 				TaskQueueName: "tq2",
 			},
@@ -250,7 +253,7 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 		//   Value: 5 * time.Minute,
 		// },
 		{
-			Constraints: Constraints{
+			Constraints: dynamicconfig.Constraints{
 				Namespace: "ns1",
 			},
 			Value: 5 * time.Second,
@@ -270,14 +273,15 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 }
 
 func (s *collectionSuite) TestGetMapProperty() {
-	setting := NewGlobalMapSetting(
+	def := map[string]interface{}{"testKey": 123}
+	setting := dynamicconfig.NewGlobalMapSetting(
 		testGetMapPropertyKey,
-		map[string]interface{}{"testKey": 123},
+		def,
 		"",
 	)
 	value := setting.Get(s.cln)
-	s.Equal(setting.def, value())
-	val := maps.Clone(setting.def)
+	s.Equal(def, value())
+	val := maps.Clone(def)
 	val["testKey"] = "321"
 	s.client[testGetMapPropertyKey] = val
 	s.Equal(val, value())
@@ -289,16 +293,17 @@ func (s *collectionSuite) TestGetTyped() {
 		Number int
 		Names  []string
 	}
-	setting := NewGlobalTypedSettingWithConverter(
+	def := myFancyType{28, []string{"global", "typed", "setting"}}
+	setting := dynamicconfig.NewGlobalTypedSettingWithConverter(
 		testGetTypedPropertyKey,
-		ConvertStructure(myFancyType{-3, nil}), // used if convert is called
-		myFancyType{28, []string{"global", "typed", "setting"}},
+		dynamicconfig.ConvertStructure(myFancyType{-3, nil}), // used if convert is called
+		def,
 		"",
 	)
 	get := setting.Get(s.cln)
 
 	s.Run("Default", func() {
-		s.Equal(setting.def, get())
+		s.Equal(def, get())
 	})
 
 	s.Run("Basic", func() {
@@ -323,21 +328,22 @@ func (s *collectionSuite) TestGetTyped() {
 
 	s.Run("WrongType", func() {
 		s.client[testGetTypedPropertyKey] = 200
-		s.Equal(setting.def, get())
+		s.Equal(def, get())
 	})
 }
 
 func (s *collectionSuite) TestGetTypedSimpleList() {
-	setting := NewGlobalTypedSettingWithConverter(
+	def := []float64{1.5, 1.1, 2.6, 3.7, 6.3}
+	setting := dynamicconfig.NewGlobalTypedSettingWithConverter(
 		testGetTypedPropertyKey,
-		ConvertStructure([]float64(nil)),
-		[]float64{1.5, 1.1, 2.6, 3.7, 6.3},
+		dynamicconfig.ConvertStructure([]float64(nil)),
+		def,
 		"",
 	)
 	get := setting.Get(s.cln)
 
 	s.Run("Default", func() {
-		s.Equal(setting.def, get())
+		s.Equal(def, get())
 	})
 
 	s.Run("Basic", func() {
@@ -347,22 +353,23 @@ func (s *collectionSuite) TestGetTypedSimpleList() {
 
 	s.Run("WrongType", func() {
 		s.client[testGetTypedPropertyKey] = []any{88.8, false, -5, "oops"}
-		s.Equal(setting.def, get())
+		s.Equal(def, get())
 	})
 }
 
 func (s *collectionSuite) TestGetTypedListOfStruct() {
 	type simple struct{ A, B int }
-	setting := NewGlobalTypedSettingWithConverter(
+	def := []simple{{1, 5}, {2, 9}}
+	setting := dynamicconfig.NewGlobalTypedSettingWithConverter(
 		testGetTypedPropertyKey,
-		ConvertStructure([]simple(nil)),
-		[]simple{{1, 5}, {2, 9}},
+		dynamicconfig.ConvertStructure([]simple(nil)),
+		def,
 		"",
 	)
 	get := setting.Get(s.cln)
 
 	s.Run("Default", func() {
-		s.Equal(setting.def, get())
+		s.Equal(def, get())
 	})
 
 	s.Run("Basic", func() {
@@ -378,39 +385,39 @@ func (s *collectionSuite) TestGetTypedListOfStruct() {
 		s.client[testGetTypedPropertyKey] = []any{
 			map[string]any{"A": false, "B": true},
 		}
-		s.Equal(setting.def, get())
+		s.Equal(def, get())
 	})
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
-	setting := NewDestinationIntSetting(testGetIntPropertyFilteredByDestinationKey, 10, "")
+	setting := dynamicconfig.NewDestinationIntSetting(testGetIntPropertyFilteredByDestinationKey, 10, "")
 	namespaceName := "testNamespace"
 	destination1 := "testDestination1"
 	destination2 := "testDestination2"
 	value := setting.Get(s.cln)
 	s.Equal(10, value(namespaceName, destination1))
-	s.client[testGetIntPropertyFilteredByDestinationKey] = []ConstrainedValue{
+	s.client[testGetIntPropertyFilteredByDestinationKey] = []dynamicconfig.ConstrainedValue{
 		{
-			Constraints: Constraints{
+			Constraints: dynamicconfig.Constraints{
 				Namespace:   namespaceName,
 				Destination: destination1,
 			},
 			Value: 50,
 		},
 		{
-			Constraints: Constraints{
+			Constraints: dynamicconfig.Constraints{
 				Namespace: namespaceName,
 			},
 			Value: 75,
 		},
 		{
-			Constraints: Constraints{
+			Constraints: dynamicconfig.Constraints{
 				Destination: destination1,
 			},
 			Value: 90,
 		},
 		{
-			Constraints: Constraints{
+			Constraints: dynamicconfig.Constraints{
 				Destination: destination2,
 			},
 			Value: 100,
@@ -423,181 +430,81 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
 	s.Equal(10, value("testAnotherNamespace", "testAnotherDestination"))
 }
 
-func (s *collectionSuite) TestFindMatch() {
-	testCases := []struct {
-		v       []ConstrainedValue
-		filters []Constraints
-		matched bool
-	}{
-		{
-			v: []ConstrainedValue{
-				{Constraints: Constraints{}},
-			},
-			filters: []Constraints{
-				{Namespace: "some random namespace"},
-			},
-			matched: false,
-		},
-		{
-			v: []ConstrainedValue{
-				{Constraints: Constraints{Namespace: "samples-namespace"}},
-			},
-			filters: []Constraints{
-				{Namespace: "some random namespace"},
-			},
-			matched: false,
-		},
-		{
-			v: []ConstrainedValue{
-				{Constraints: Constraints{Namespace: "samples-namespace", TaskQueueName: "sample-task-queue"}},
-			},
-			filters: []Constraints{
-				{Namespace: "samples-namespace", TaskQueueName: "sample-task-queue"},
-			},
-			matched: true,
-		},
-		{
-			v: []ConstrainedValue{
-				{Constraints: Constraints{Namespace: "samples-namespace"}},
-			},
-			filters: []Constraints{
-				{TaskQueueName: "sample-task-queue"},
-			},
-			matched: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		_, err := findMatch[struct{}](tc.v, nil, tc.filters)
-		s.Equal(tc.matched, err == nil)
-	}
-}
-
-func (s *collectionSuite) TestFindMatchWithTyped() {
-	testCases := []struct {
-		tv      []TypedConstrainedValue[struct{}]
-		filters []Constraints
-		matched bool
-	}{
-		{
-			tv: []TypedConstrainedValue[struct{}]{
-				{Constraints: Constraints{}},
-			},
-			filters: []Constraints{
-				{Namespace: "some random namespace"},
-			},
-			matched: false,
-		},
-		{
-			tv: []TypedConstrainedValue[struct{}]{
-				{Constraints: Constraints{Namespace: "samples-namespace"}},
-			},
-			filters: []Constraints{
-				{Namespace: "some random namespace"},
-			},
-			matched: false,
-		},
-		{
-			tv: []TypedConstrainedValue[struct{}]{
-				{Constraints: Constraints{Namespace: "samples-namespace", TaskQueueName: "sample-task-queue"}},
-			},
-			filters: []Constraints{
-				{Namespace: "samples-namespace", TaskQueueName: "sample-task-queue"},
-			},
-			matched: true,
-		},
-		{
-			tv: []TypedConstrainedValue[struct{}]{
-				{Constraints: Constraints{Namespace: "samples-namespace"}},
-			},
-			filters: []Constraints{
-				{TaskQueueName: "sample-task-queue"},
-			},
-			matched: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		_, err := findMatch(nil, tc.tv, tc.filters)
-		s.Equal(tc.matched, err == nil)
-	}
-}
-
 func BenchmarkCollection(b *testing.B) {
 	// client with just one value
-	client1 := StaticClient(map[Key]any{
-		MatchingMaxTaskBatchSize.Key(): []ConstrainedValue{{Value: 12}},
-	})
-	cln1 := NewCollection(client1, log.NewNoopLogger())
+	client1 := dynamicconfig.StaticClient{
+		dynamicconfig.MatchingMaxTaskBatchSize.Key(): []dynamicconfig.ConstrainedValue{{Value: 12}},
+	}
+	cln1 := dynamicconfig.NewCollection(client1, log.NewNoopLogger())
 	b.Run("global int", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/2; i++ {
-			size := MatchingThrottledLogRPS.Get(cln1)
+			size := dynamicconfig.MatchingThrottledLogRPS.Get(cln1)
 			_ = size()
-			size = MatchingThrottledLogRPS.Get(cln1)
+			size = dynamicconfig.MatchingThrottledLogRPS.Get(cln1)
 			_ = size()
 		}
 	})
 	b.Run("namespace int", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/2; i++ {
-			size := HistoryMaxPageSize.Get(cln1)
+			size := dynamicconfig.HistoryMaxPageSize.Get(cln1)
 			_ = size("my-namespace")
-			size = WorkflowExecutionMaxInFlightUpdates.Get(cln1)
+			size = dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(cln1)
 			_ = size("my-namespace")
 		}
 	})
 	b.Run("taskqueue int", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/2; i++ {
-			size := MatchingMaxTaskBatchSize.Get(cln1)
+			size := dynamicconfig.MatchingMaxTaskBatchSize.Get(cln1)
 			_ = size("my-namespace", "my-task-queue", 1)
-			size = MatchingGetTasksBatchSize.Get(cln1)
+			size = dynamicconfig.MatchingGetTasksBatchSize.Get(cln1)
 			_ = size("my-namespace", "my-task-queue", 1)
 		}
 	})
 
 	// client with more constrained values
-	client2 := StaticClient(map[Key]any{
-		MatchingMaxTaskBatchSize.Key(): []ConstrainedValue{
+	client2 := dynamicconfig.StaticClient{
+		dynamicconfig.MatchingMaxTaskBatchSize.Key(): []dynamicconfig.ConstrainedValue{
 			{
-				Constraints: Constraints{
+				Constraints: dynamicconfig.Constraints{
 					TaskQueueName: "other-tq",
 				},
 				Value: 18,
 			},
 			{
-				Constraints: Constraints{
+				Constraints: dynamicconfig.Constraints{
 					Namespace: "other-ns",
 				},
 				Value: 15,
 			},
 		},
-	})
-	cln2 := NewCollection(client2, log.NewNoopLogger())
+	}
+	cln2 := dynamicconfig.NewCollection(client2, log.NewNoopLogger())
 	b.Run("single default", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/4; i++ {
-			size := MatchingMaxTaskBatchSize.Get(cln2)
+			size := dynamicconfig.MatchingMaxTaskBatchSize.Get(cln2)
 			_ = size("my-namespace", "my-task-queue", 1)
-			size = MatchingMaxTaskBatchSize.Get(cln2)
+			size = dynamicconfig.MatchingMaxTaskBatchSize.Get(cln2)
 			_ = size("my-namespace", "other-tq", 1)
-			size = MatchingMaxTaskBatchSize.Get(cln2)
+			size = dynamicconfig.MatchingMaxTaskBatchSize.Get(cln2)
 			_ = size("other-ns", "my-task-queue", 1)
-			size = MatchingMaxTaskBatchSize.Get(cln2)
+			size = dynamicconfig.MatchingMaxTaskBatchSize.Get(cln2)
 			_ = size("other-ns", "other-tq", 1)
 		}
 	})
 	b.Run("structured default", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N/4; i++ {
-			size := MatchingNumTaskqueueWritePartitions.Get(cln2)
+			size := dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(cln2)
 			_ = size("my-namespace", "my-task-queue", 1)
-			size = MatchingNumTaskqueueWritePartitions.Get(cln2)
+			size = dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(cln2)
 			_ = size("my-namespace", "other-tq", 1)
-			size = MatchingNumTaskqueueWritePartitions.Get(cln2)
+			size = dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(cln2)
 			_ = size("other-ns", "my-task-queue", 1)
-			size = MatchingNumTaskqueueWritePartitions.Get(cln2)
+			size = dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(cln2)
 			_ = size("other-ns", "other-tq", 1)
 		}
 	})
