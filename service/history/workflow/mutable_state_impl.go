@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -910,10 +909,10 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 // VisitUpdates visits mutable state update entries, ordered by the ID of the history event pointed to by the mutable
 // state entry. Thus, for example, updates entries in Admitted state will be visited in the order that their Admitted
 // events were added to history.
-func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 	type updateEvent struct {
 		updId   string
-		updInfo *updatespb.UpdateInfo
+		updInfo *persistencespb.UpdateInfo
 		eventId int64
 	}
 	var updateEvents []updateEvent
@@ -3996,13 +3995,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAdmittedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
-	admission := &updatespb.UpdateInfo_Admission{
-		Admission: &updatespb.AdmissionInfo{
-			Location: &updatespb.AdmissionInfo_HistoryPointer_{
-				HistoryPointer: &updatespb.AdmissionInfo_HistoryPointer{
+	admission := &persistencespb.UpdateInfo_Admission{
+		Admission: &persistencespb.UpdateAdmissionInfo{
+			Location: &persistencespb.UpdateAdmissionInfo_HistoryPointer_{
+				HistoryPointer: &persistencespb.UpdateAdmissionInfo_HistoryPointer{
 					EventId:      event.EventId,
 					EventBatchId: batchId,
 				},
@@ -4012,7 +4011,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
 	}
-	ui := updatespb.UpdateInfo{Value: admission}
+	ui := persistencespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -4045,20 +4044,20 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAcceptedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
 	var sizeDelta int
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Size()
-		ui.Value = &updatespb.UpdateInfo_Acceptance{
-			Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
+		ui.Value = &persistencespb.UpdateInfo_Acceptance{
+			Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
-		ui := updatespb.UpdateInfo{
-			Value: &updatespb.UpdateInfo_Acceptance{
-				Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
+		ui := persistencespb.UpdateInfo{
+			Value: &persistencespb.UpdateInfo_Acceptance{
+				Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 			},
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
@@ -4104,8 +4103,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 		return serviceerror.NewInvalidArgument("WorkflowExecutionUpdateCompletedEvent doesn't have preceding WorkflowExecutionUpdateAcceptedEvent")
 	}
 	sizeBefore := ui.Size()
-	ui.Value = &updatespb.UpdateInfo_Completion{
-		Completion: &updatespb.CompletionInfo{
+	ui.Value = &persistencespb.UpdateInfo_Completion{
+		Completion: &persistencespb.UpdateCompletionInfo{
 			EventId:      event.EventId,
 			EventBatchId: batchID,
 		},
