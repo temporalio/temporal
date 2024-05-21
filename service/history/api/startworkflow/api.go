@@ -191,7 +191,7 @@ func (s *Starter) Invoke(
 		return nil, err
 	}
 
-	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId())
+	creationParams, err := s.createNewMutableState(request.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
-func (s *Starter) createNewMutableState(ctx context.Context, workflowID string) (*creationParams, error) {
+func (s *Starter) createNewMutableState(workflowID string) (*creationParams, error) {
 	runID := uuid.NewString()
 	workflowLease, err := api.NewWorkflowWithSignal(
 		s.shardContext,

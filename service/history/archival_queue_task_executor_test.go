@@ -399,7 +399,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			if p.MutableStateExists {
 				mutableState := workflow.NewMockMutableState(p.Controller)
 				mutableState.EXPECT().IsWorkflowExecutionRunning().Return(p.IsWorkflowExecutionRunning).AnyTimes()
-				mutableState.EXPECT().GetCurrentVersion().Return(p.LastWriteVersionBeforeArchival).AnyTimes()
+				mutableState.EXPECT().GetCloseVersion().Return(p.LastWriteVersionBeforeArchival, nil).AnyTimes()
 				mutableState.EXPECT().GetWorkflowKey().Return(p.WorkflowKey).AnyTimes()
 				workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(
 					mutableState,
