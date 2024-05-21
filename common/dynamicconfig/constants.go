@@ -1358,6 +1358,11 @@ to this require a restart to take effect.`,
 		1,
 		`ShardIOConcurrency controls the concurrency of persistence operations in shard context`,
 	)
+	ShardIOTimeout = NewGlobalDurationSetting(
+		"history.shardIOTimeout",
+		5*time.Second,
+		`ShardIOTimeout sets the timeout for persistence operations in the shard context`,
+	)
 	StandbyClusterDelay = NewGlobalDurationSetting(
 		"history.standbyClusterDelay",
 		5*time.Minute,

@@ -89,7 +89,6 @@ const (
 )
 
 const (
-	shardIOTimeout = 1 * time.Minute
 	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
 	queueMetricUpdateInterval = 5 * time.Minute
 
@@ -249,7 +248,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			Name: s.String() + "-shard-lock",
 			// rwLock may be held for the duration of renewing shard rangeID, which are called with a
 			// timeout of shardIOTimeout. add a few more seconds for reliability.
-			Timeout: shardIOTimeout + 5*time.Second,
+			Timeout: s.config.ShardIOTimeout() + 5*time.Second,
 			Ping: func() []common.Pingable {
 				// call rwLock.Lock directly to bypass metrics since this isn't a real request
 				s.rwLock.Lock()
@@ -1910,7 +1909,7 @@ func (s *ContextImpl) getOrUpdateRemoteClusterInfoLocked(clusterName string) *re
 func (s *ContextImpl) acquireShard() {
 	// This is called in two contexts: initially acquiring the rangeid lock, and trying to
 	// re-acquire it after a persistence error. In both cases, we retry the acquire operation
-	// (renewRangeLocked) for 5 minutes. Each individual attempt uses shardIOTimeout (5s) as
+	// (renewRangeLocked) for 5 minutes. Each individual attempt uses shardIOTimeout (by default, 5s) as
 	// the timeout. This lets us handle a few minutes of persistence unavailability without
 	// dropping and reloading the whole shard context, which is relatively expensive (includes
 	// caches that would have to be refilled, etc.).
@@ -2220,7 +2219,7 @@ func (s *ContextImpl) newDetachedContext(
 }
 
 func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, s.config.ShardIOTimeout())
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return ctx, cancel
