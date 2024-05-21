@@ -27,10 +27,10 @@ import (
 	"net/http"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -60,6 +60,7 @@ var Module = fx.Module(
 func EndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	endpointManager persistence.NexusEndpointManager,
+	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
 ) *commonnexus.EndpointRegistry {
@@ -68,6 +69,7 @@ func EndpointRegistryProvider(
 		registryConfig,
 		matchingClient,
 		endpointManager,
+		namespaceRegistry,
 		logger,
 	)
 }
@@ -116,25 +118,25 @@ func ClientProviderFactory(
 		}, nil
 	})
 	return func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
-		endpoint, err := endpointRegistry.GetByName(ctx, key.Destination)
+		entry, err := endpointRegistry.GetByName(ctx, key.Destination)
 		if err != nil {
 			return nil, err
 		}
 		var url string
 		var httpClient *http.Client
-		switch variant := endpoint.Spec.Target.Variant.(type) {
-		case *nexuspb.EndpointTarget_External_:
+		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
+		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
 			httpClient, err = m.Get(clientProviderCacheKey{key, url})
 			if err != nil {
 				return nil, err
 			}
-		case *nexuspb.EndpointTarget_Worker_:
+		case *persistencespb.NexusEndpointTarget_Worker_:
 			cl, err := httpClientCache.Get(clusterMetadata.GetCurrentClusterName())
 			if err != nil {
 				return nil, err
 			}
-			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint.Id)
+			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")

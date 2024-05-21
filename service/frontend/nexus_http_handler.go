@@ -25,6 +25,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"path"
@@ -32,13 +33,13 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -57,6 +58,7 @@ type NexusHTTPHandler struct {
 	logger                               log.Logger
 	nexusHandler                         http.Handler
 	enpointRegistry                      *commonnexus.EndpointRegistry
+	namespaceRegistry                    namespace.Registry
 	preprocessErrorCounter               metrics.CounterFunc
 	auth                                 *authorization.Interceptor
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
@@ -85,6 +87,7 @@ func NewNexusHTTPHandler(
 	return &NexusHTTPHandler{
 		logger:                               logger,
 		enpointRegistry:                      endpointRegistry,
+		namespaceRegistry:                    namespaceRegistry,
 		auth:                                 authInterceptor,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
@@ -199,7 +202,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
-	endpointInfo, err := h.enpointRegistry.GetByID(r.Context(), endpointID)
+	endpointEntry, err := h.enpointRegistry.GetByID(r.Context(), endpointID)
 	if err != nil {
 		h.logger.Error("invalid Nexus endpoint ID", tag.Error(err))
 		s, ok := status.FromError(err)
@@ -217,9 +220,10 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		return
 	}
 
-	nc, ok := h.nexusContextFromEndpoint(endpointInfo)
+	nc, ok := h.nexusContextFromEndpoint(endpointEntry, w)
 	if !ok {
-		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
+		// nexusContextFromEndpoint already writes the failure response.
+		return
 	}
 
 	r, err = h.parseTlsAndAuthInfo(r, &nc)
@@ -254,15 +258,27 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
 // endpoint is valid for dispatching.
 // For security reasons, at the moment only worker target endpoints are considered valid, in the future external
 // endpoints may also be supported.
-func (h *NexusHTTPHandler) nexusContextFromEndpoint(endpoint *nexuspb.Endpoint) (nexusContext, bool) {
-	switch v := endpoint.Spec.GetTarget().GetVariant().(type) {
-	case *nexuspb.EndpointTarget_Worker_:
+func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter) (nexusContext, bool) {
+	switch v := entry.Endpoint.Spec.GetTarget().GetVariant().(type) {
+	case *persistencespb.NexusEndpointTarget_Worker_:
+		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
+		if err != nil {
+			h.logger.Error("failed to get namespace name by ID", tag.Error(err))
+			var notFoundErr *serviceerror.NotFound
+			if errors.As(err, &notFoundErr) {
+				h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
+			} else {
+				h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+			}
+			return nexusContext{}, false
+		}
 		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName)
-		nc.namespaceName = v.Worker.GetNamespace()
+		nc.namespaceName = nsName.String()
 		nc.taskQueue = v.Worker.GetTaskQueue()
-		nc.endpointName = endpoint.Spec.Name
+		nc.endpointName = entry.Endpoint.Spec.Name
 		return nc, true
 	default:
+		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
 		return nexusContext{}, false
 	}
 }

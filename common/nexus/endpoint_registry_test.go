@@ -24,6 +24,7 @@ package nexus
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -53,12 +55,12 @@ type testMocks struct {
 func TestGet(t *testing.T) {
 	t.Parallel()
 
-	testEndpoint := newEndpoint(t.Name())
+	testEntry := newEndpointEntry(t.Name())
 	mocks := newTestMocks(t)
 
 	// initial load
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
-		Endpoints:     []*nexus.Endpoint{testEndpoint},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEntry},
 		TableVersion:  1,
 		NextPageToken: nil,
 	}, nil)
@@ -73,17 +75,17 @@ func TestGet(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* namespace registry is unused in this test */, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
-	endpoint, err := reg.GetByID(context.Background(), testEndpoint.Id)
+	endpoint, err := reg.GetByID(context.Background(), testEntry.Id)
 	require.NoError(t, err)
-	protoassert.ProtoEqual(t, testEndpoint, endpoint)
+	protoassert.ProtoEqual(t, testEntry, endpoint)
 
-	endpoint, err = reg.GetByName(context.Background(), testEndpoint.Spec.Name)
+	endpoint, err = reg.GetByName(context.Background(), testEntry.Endpoint.Spec.Name)
 	require.NoError(t, err)
-	protoassert.ProtoEqual(t, testEndpoint, endpoint)
+	protoassert.ProtoEqual(t, testEntry, endpoint)
 
 	reg.dataLock.RLock()
 	defer reg.dataLock.RUnlock()
@@ -93,12 +95,12 @@ func TestGet(t *testing.T) {
 func TestGetNotFound(t *testing.T) {
 	t.Parallel()
 
-	testEndpoint := newEndpoint(t.Name())
+	testEntry := newEndpointEntry(t.Name())
 	mocks := newTestMocks(t)
 
 	// initial load
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
-		Endpoints:     []*nexus.Endpoint{testEndpoint},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEntry},
 		TableVersion:  1,
 		NextPageToken: nil,
 	}, nil)
@@ -113,7 +115,7 @@ func TestGetNotFound(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* namespace registry is unused in this test */, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -135,17 +137,17 @@ func TestGetNotFound(t *testing.T) {
 func TestInitializationFallback(t *testing.T) {
 	t.Parallel()
 
-	testEndpoint := newEndpoint(t.Name())
+	testEndpoint := newEndpointEntry(t.Name())
 	mocks := newTestMocks(t)
 
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("matching unavailable test error")).MinTimes(1)
 	mocks.persistence.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{
 		TableVersion:  int64(1),
 		NextPageToken: nil,
-		Entries:       []*persistencepb.NexusEndpointEntry{endpointToEntry(testEndpoint)},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEndpoint},
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* namespace registry is unused in this test */, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -161,8 +163,8 @@ func TestInitializationFallback(t *testing.T) {
 func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 	t.Parallel()
 
-	testEndpoint0 := newEndpoint(t.Name() + "-0")
-	testEndpoint1 := newEndpoint(t.Name() + "-1")
+	testEntry0 := newEndpointEntry(t.Name() + "-0")
+	testEntry1 := newEndpointEntry(t.Name() + "-1")
 
 	mocks := newTestMocks(t)
 	mocks.config.refreshPageSize = dynamicconfig.GetIntPropertyFn(1)
@@ -175,17 +177,17 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 		LastKnownTableVersion: int64(0),
 		Wait:                  false,
 	}).Return(&matchingservice.ListNexusEndpointsResponse{
-		Endpoints:     []*nexus.Endpoint{testEndpoint0},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEntry0},
 		TableVersion:  int64(2),
-		NextPageToken: []byte(testEndpoint0.Id),
+		NextPageToken: []byte(testEntry0.Id),
 	}, nil)
 	// persistence.ErrNexusTableVersionConflict error on second page
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
-		NextPageToken:         []byte(testEndpoint0.Id),
+		NextPageToken:         []byte(testEntry0.Id),
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(2),
 		Wait:                  false,
-	}).Return(&matchingservice.ListNexusEndpointsResponse{TableVersion: int64(3)}, persistence.ErrNexusTableVersionConflict)
+	}).Return(nil, serviceerror.NewFailedPrecondition(persistence.ErrNexusTableVersionConflict.Error()))
 	// request first page again
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
 		NextPageToken:         nil,
@@ -193,18 +195,18 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 		LastKnownTableVersion: int64(0),
 		Wait:                  false,
 	}).Return(&matchingservice.ListNexusEndpointsResponse{
-		Endpoints:     []*nexus.Endpoint{testEndpoint0},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEntry0},
 		TableVersion:  int64(3),
-		NextPageToken: []byte(testEndpoint0.Id),
+		NextPageToken: []byte(testEntry0.Id),
 	}, nil)
 	// successfully get second page
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
-		NextPageToken:         []byte(testEndpoint0.Id),
+		NextPageToken:         []byte(testEntry0.Id),
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(3),
 		Wait:                  false,
 	}).Return(&matchingservice.ListNexusEndpointsResponse{
-		Endpoints:     []*nexus.Endpoint{testEndpoint1},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEntry1},
 		TableVersion:  int64(3),
 		NextPageToken: nil,
 	}, nil)
@@ -219,17 +221,17 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* namespace registry is unused in this test */, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
-	endpoint, err := reg.GetByID(context.Background(), testEndpoint0.Id)
+	entry, err := reg.GetByID(context.Background(), testEntry0.Id)
 	require.NoError(t, err)
-	protoassert.ProtoEqual(t, testEndpoint0, endpoint)
+	protoassert.ProtoEqual(t, testEntry0, entry)
 
-	endpoint, err = reg.GetByID(context.Background(), testEndpoint1.Id)
+	entry, err = reg.GetByID(context.Background(), testEntry1.Id)
 	require.NoError(t, err)
-	protoassert.ProtoEqual(t, testEndpoint1, endpoint)
+	protoassert.ProtoEqual(t, testEntry1, entry)
 
 	reg.dataLock.RLock()
 	defer reg.dataLock.RUnlock()
@@ -239,8 +241,8 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 	t.Parallel()
 
-	testEndpoint0 := newEndpoint(t.Name() + "-0")
-	testEndpoint1 := newEndpoint(t.Name() + "-1")
+	testEntry0 := newEndpointEntry(t.Name() + "-0")
+	testEntry1 := newEndpointEntry(t.Name() + "-1")
 
 	mocks := newTestMocks(t)
 	mocks.config.refreshPageSize = dynamicconfig.GetIntPropertyFn(1)
@@ -255,13 +257,13 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 		PageSize:              1,
 		LastKnownTableVersion: int64(0),
 	}).Return(&persistence.ListNexusEndpointsResponse{
-		Entries:       []*persistencepb.NexusEndpointEntry{endpointToEntry(testEndpoint0)},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEntry0},
 		TableVersion:  int64(2),
-		NextPageToken: []byte(testEndpoint0.Id),
+		NextPageToken: []byte(testEntry0.Id),
 	}, nil)
 	// persistence.ErrNexusTableVersionConflict error on second page
 	mocks.persistence.EXPECT().ListNexusEndpoints(gomock.Any(), &persistence.ListNexusEndpointsRequest{
-		NextPageToken:         []byte(testEndpoint0.Id),
+		NextPageToken:         []byte(testEntry0.Id),
 		PageSize:              1,
 		LastKnownTableVersion: int64(2),
 	}).Return(&persistence.ListNexusEndpointsResponse{TableVersion: int64(3)}, persistence.ErrNexusTableVersionConflict)
@@ -271,32 +273,32 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 		PageSize:              1,
 		LastKnownTableVersion: int64(0),
 	}).Return(&persistence.ListNexusEndpointsResponse{
-		Entries:       []*persistencepb.NexusEndpointEntry{endpointToEntry(testEndpoint0)},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEntry0},
 		TableVersion:  int64(3),
-		NextPageToken: []byte(testEndpoint0.Id),
+		NextPageToken: []byte(testEntry0.Id),
 	}, nil)
 	// successfully get second page
 	mocks.persistence.EXPECT().ListNexusEndpoints(gomock.Any(), &persistence.ListNexusEndpointsRequest{
-		NextPageToken:         []byte(testEndpoint0.Id),
+		NextPageToken:         []byte(testEntry0.Id),
 		PageSize:              1,
 		LastKnownTableVersion: int64(3),
 	}).Return(&persistence.ListNexusEndpointsResponse{
-		Entries:       []*persistencepb.NexusEndpointEntry{endpointToEntry(testEndpoint1)},
+		Entries:       []*persistencepb.NexusEndpointEntry{testEntry1},
 		TableVersion:  int64(3),
 		NextPageToken: nil,
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* TODO */, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
-	endpoint, err := reg.GetByID(context.Background(), testEndpoint0.Id)
+	entry, err := reg.GetByID(context.Background(), testEntry0.Id)
 	require.NoError(t, err)
-	protoassert.ProtoEqual(t, testEndpoint0, endpoint)
+	protoassert.ProtoEqual(t, testEntry0, entry)
 
-	endpoint, err = reg.GetByID(context.Background(), testEndpoint1.Id)
+	entry, err = reg.GetByID(context.Background(), testEntry1.Id)
 	require.NoError(t, err)
-	protoassert.ProtoEqual(t, testEndpoint1, endpoint)
+	protoassert.ProtoEqual(t, testEntry1, entry)
 
 	reg.dataLock.RLock()
 	defer reg.dataLock.RUnlock()
@@ -314,20 +316,22 @@ func newTestMocks(t *testing.T) *testMocks {
 	}
 }
 
-func newEndpoint(name string) *nexus.Endpoint {
+func newEndpointEntry(name string) *persistencepb.NexusEndpointEntry {
 	id := uuid.NewString()
-	return &nexus.Endpoint{
-		Version:     1,
-		Id:          id,
-		CreatedTime: timestamppb.Now(),
-		UrlPrefix:   "/" + RouteDispatchNexusTaskByEndpoint.Path(id),
-		Spec: &nexus.EndpointSpec{
-			Name: name,
-			Target: &nexus.EndpointTarget{
-				Variant: &nexus.EndpointTarget_Worker_{
-					Worker: &nexus.EndpointTarget_Worker{
-						Namespace: name + "-namespace",
-						TaskQueue: name + "-task-queue",
+	return &persistencepb.NexusEndpointEntry{
+		Version: 1,
+		Id:      id,
+		Endpoint: &persistencepb.NexusEndpoint{
+			Clock:       hybrid_logical_clock.Zero(1),
+			CreatedTime: timestamppb.Now(),
+			Spec: &persistencepb.NexusEndpointSpec{
+				Name: name,
+				Target: &persistencepb.NexusEndpointTarget{
+					Variant: &persistencepb.NexusEndpointTarget_Worker_{
+						Worker: &persistencepb.NexusEndpointTarget_Worker{
+							NamespaceId: uuid.NewString(),
+							TaskQueue:   name + "-task-queue",
+						},
 					},
 				},
 			},
@@ -337,8 +341,38 @@ func newEndpoint(name string) *nexus.Endpoint {
 
 func endpointToEntry(endpoint *nexus.Endpoint) *persistencepb.NexusEndpointEntry {
 	return &persistencepb.NexusEndpointEntry{
-		Version:  endpoint.Version,
-		Id:       endpoint.Id,
-		Endpoint: &persistencepb.NexusEndpoint{Spec: endpoint.Spec, CreatedTime: endpoint.CreatedTime},
+		Version: endpoint.Version,
+		Id:      endpoint.Id,
+		Endpoint: &persistencepb.NexusEndpoint{
+			Spec: &persistencepb.NexusEndpointSpec{
+				Name:        endpoint.GetSpec().GetName(),
+				Description: endpoint.GetSpec().GetDescription(),
+				Target:      publicToInternalEndpointTarget(endpoint.GetSpec().GetTarget()),
+			},
+			CreatedTime: endpoint.CreatedTime,
+		},
 	}
+}
+
+func publicToInternalEndpointTarget(target *nexus.EndpointTarget) *persistencepb.NexusEndpointTarget {
+	switch v := target.Variant.(type) {
+	case *nexus.EndpointTarget_Worker_:
+		return &persistencepb.NexusEndpointTarget{
+			Variant: &persistencepb.NexusEndpointTarget_Worker_{
+				Worker: &persistencepb.NexusEndpointTarget_Worker{
+					NamespaceId: "TODO",
+					TaskQueue:   v.Worker.TaskQueue,
+				},
+			},
+		}
+	case *nexus.EndpointTarget_External_:
+		return &persistencepb.NexusEndpointTarget{
+			Variant: &persistencepb.NexusEndpointTarget_External_{
+				External: &persistencepb.NexusEndpointTarget_External{
+					Url: v.External.Url,
+				},
+			},
+		}
+	}
+	panic(fmt.Errorf("invalid target: %v", target))
 }
