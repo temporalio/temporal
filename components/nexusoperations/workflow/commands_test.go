@@ -62,7 +62,7 @@ type testContext struct {
 }
 
 var defaultConfig = &nexusoperations.Config{
-	Enabled:                 dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
 	MaxServiceNameLength:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
 	MaxOperationNameLength:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperations: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
@@ -115,7 +115,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 func TestHandleScheduleCommand(t *testing.T) {
 	t.Run("feature disabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperations.Config{
-			Enabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			Enabled: dynamicconfig.GetBoolPropertyFn(false),
 		})
 		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
 		var failWFTErr workflow.FailWorkflowTaskError
@@ -329,7 +329,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 func TestHandleCancelCommand(t *testing.T) {
 	t.Run("feature disabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperations.Config{
-			Enabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			Enabled: dynamicconfig.GetBoolPropertyFn(false),
 		})
 		err := tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
 		var failWFTErr workflow.FailWorkflowTaskError
