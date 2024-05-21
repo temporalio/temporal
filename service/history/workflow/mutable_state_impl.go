@@ -765,7 +765,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 		return lastEventVersion, nil
 	}
 
-	return ms.GetLastWriteVersion()
+	return ms.GetLastEventVersion()
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
