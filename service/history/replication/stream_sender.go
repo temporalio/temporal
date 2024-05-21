@@ -548,13 +548,13 @@ Loop:
 			return nil
 		}
 
-		TaskRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
+		retryPolicy := backoff.NewExponentialRetryPolicy(1 * time.Second).
 			WithBackoffCoefficient(1.2).
 			WithMaximumInterval(3 * time.Second).
 			WithMaximumAttempts(80).
 			WithExpirationInterval(3 * time.Minute)
 
-		if err := backoff.ThrottleRetry(operation, TaskRetryPolicy, IsRetryableError); err != nil {
+		if err := backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError); err != nil {
 			return err
 		}
 	}
