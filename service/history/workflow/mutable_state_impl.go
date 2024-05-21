@@ -5518,7 +5518,8 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 
 	// Handling mutable state turn from standby to active, while having a workflow task on the fly
 	workflowTask := ms.GetStartedWorkflowTask()
-	if workflowTask == nil || workflowTask.Version >= ms.GetCurrentVersion() {
+	currentVersion := ms.GetCurrentVersion()
+	if workflowTask == nil || workflowTask.Version >= currentVersion {
 		// no pending workflow tasks, no buffered events
 		// or workflow task has higher / equal version
 		return false, nil
@@ -5532,8 +5533,6 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last event version %v", workflowTask.Version, lastEventVersion))
 	}
 
-	// workflow must be running, checked at the beginning of the func
-	currentVersion := ms.GetCurrentVersion()
 	// NOTE: if lastEventVersion is used here then the version transition history could decrecase
 	//
 	// TODO: Today's replication task processing logic won't flush buffered events when applying state only changes.

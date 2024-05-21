@@ -227,7 +227,7 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if lastWriteCluster != currentCluster {
-		return serviceerror.NewInternal("Workflow encountered workflow with buffered events but last event not from current cluster")
+		return serviceerror.NewInternal("Workflow encountered workflow with buffered events but last write not from current cluster")
 	}
 
 	if _, err = r.failWorkflowTask(lastWriteVersion); err != nil {

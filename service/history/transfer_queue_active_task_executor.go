@@ -951,7 +951,9 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		return nil
 	}
 
-	currentStartVersion, err := currentMutableState.GetStartVersion() // why??? GenerateWorkflowResetTasks uses currentVersion
+	// TODO: why we are comparing task version to workflow start version here?
+	// GenerateWorkflowResetTasks uses currentVersion
+	currentStartVersion, err := currentMutableState.GetStartVersion()
 	if err != nil {
 		return err
 	}
