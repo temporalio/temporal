@@ -688,7 +688,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if ms.config.EnableMutableStateTransitionHistory() &&
+	if ms.config.EnableNexus() &&
 		len(ms.executionInfo.TransitionHistory) != 0 {
 
 		// this make sure current version >= last write version
@@ -769,7 +769,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
-	if ms.config.EnableMutableStateTransitionHistory() &&
+	if ms.config.EnableNexus() &&
 		len(ms.executionInfo.TransitionHistory) != 0 {
 
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
@@ -5202,7 +5202,7 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 
 	ms.executionInfo.StateTransitionCount += 1
 
-	if ms.config.EnableMutableStateTransitionHistory() {
+	if ms.config.EnableNexus() {
 		ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
 			ms.executionInfo.TransitionHistory,
 			ms.GetCurrentVersion(),
