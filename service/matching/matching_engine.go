@@ -463,9 +463,9 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		taskInfo:      taskInfo,
-		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedSource(),
+		taskInfo:    taskInfo,
+		directive:   addRequest.VersionDirective,
+		forwardInfo: addRequest.ForwardInfo,
 	})
 }
 
@@ -501,9 +501,9 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		taskInfo:      taskInfo,
-		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedSource(),
+		taskInfo:    taskInfo,
+		directive:   addRequest.VersionDirective,
+		forwardInfo: addRequest.ForwardInfo,
 	})
 }
 
@@ -601,7 +601,7 @@ pollLoop:
 
 		requestClone := request
 		if versionSetUsed {
-			// We remove build id from workerVersionCapabilities so History can differentiate between
+			// We remove build ID from workerVersionCapabilities so History can differentiate between
 			// old and new versioning in Record*TaskStart.
 			// TODO: remove this block after old versioning cleanup. [cleanup-old-wv]
 			requestClone = common.CloneProto(request)
@@ -616,7 +616,6 @@ pollLoop:
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
-					tag.WorkflowTaskQueueName(taskQueueName),
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
@@ -625,6 +624,18 @@ pollLoop:
 				task.finish(nil)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
+				task.finish(nil)
+			case *serviceerrors.ObsoleteDispatchBuildId:
+				// history should've scheduled another task on the right build ID. dropping this one.
+				e.logger.Info("dropping workflow task due to invalid build ID",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
+				)
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -735,7 +746,7 @@ pollLoop:
 		}
 		requestClone := request
 		if versionSetUsed {
-			// We remove build id from workerVersionCapabilities so History can differentiate between
+			// We remove build ID from workerVersionCapabilities so History can differentiate between
 			// old and new versioning in Record*TaskStart.
 			// TODO: remove this block after old versioning cleanup. [cleanup-old-wv]
 			requestClone = common.CloneProto(request)
@@ -758,6 +769,18 @@ pollLoop:
 				task.finish(nil)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
+				task.finish(nil)
+			case *serviceerrors.ObsoleteDispatchBuildId:
+				// history should've scheduled another task on the right build ID. dropping this one.
+				e.logger.Info("dropping activity task due to invalid build ID",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
+				)
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -991,7 +1014,7 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	if request.GetVersions() == nil {
-		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build id as a member of the BuildIds list")
+		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build ID as a member of the BuildIds list")
 	}
 	pm, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true)
 	if err != nil {
@@ -2072,12 +2095,13 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	defer cancel()
 
 	return e.historyClient.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       task.event.Data.GetNamespaceId(),
-		WorkflowExecution: task.workflowExecution(),
-		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
-		Clock:             task.event.Data.GetClock(),
-		RequestId:         uuid.New(),
-		PollRequest:       pollReq,
+		NamespaceId:         task.event.Data.GetNamespaceId(),
+		WorkflowExecution:   task.workflowExecution(),
+		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
+		Clock:               task.event.Data.GetClock(),
+		RequestId:           uuid.New(),
+		PollRequest:         pollReq,
+		BuildIdRedirectInfo: task.redirectInfo,
 	})
 }
 
@@ -2090,12 +2114,13 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	defer cancel()
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceId:       task.event.Data.GetNamespaceId(),
-		WorkflowExecution: task.workflowExecution(),
-		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
-		Clock:             task.event.Data.GetClock(),
-		RequestId:         uuid.New(),
-		PollRequest:       pollReq,
+		NamespaceId:         task.event.Data.GetNamespaceId(),
+		WorkflowExecution:   task.workflowExecution(),
+		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
+		Clock:               task.event.Data.GetClock(),
+		RequestId:           uuid.New(),
+		PollRequest:         pollReq,
+		BuildIdRedirectInfo: task.redirectInfo,
 	})
 }
 
@@ -2117,14 +2142,14 @@ func newRecordTaskStartedContext(
 	return context.WithTimeout(parentCtx, timeout)
 }
 
-// Revives a deleted build id updating its HLC timestamp.
-// Returns a new build id leaving the provided one untouched.
+// Revives a deleted build ID updating its HLC timestamp.
+// Returns a new build ID leaving the provided one untouched.
 func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue string, buildId *persistencespb.BuildId) *persistencespb.BuildId {
 	// Bump the stamp and ensure it's newer than the deletion stamp.
 	prevStamp := common.CloneProto(buildId.StateUpdateTimestamp)
 	stamp := hlc.Next(prevStamp, e.timeSource)
 	stamp.ClusterId = e.clusterMeta.GetClusterID()
-	e.logger.Info("Revived build id while applying replication event",
+	e.logger.Info("Revived build ID while applying replication event",
 		tag.WorkflowNamespace(ns.Name().String()),
 		tag.WorkflowTaskQueueName(taskQueue),
 		tag.BuildId(buildId.Id))

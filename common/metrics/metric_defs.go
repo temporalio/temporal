@@ -1172,6 +1172,8 @@ var (
 	VisibilityPersistenceLatency           = NewTimerDef("visibility_persistence_latency")
 	CassandraInitSessionLatency            = NewTimerDef("cassandra_init_session_latency")
 	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
+	PersistenceSessionRefreshFailures      = NewCounterDef("persistence_session_refresh_failures")
+	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
 
 	// Common service base metrics
 	RestartCount         = NewCounterDef("restarts")

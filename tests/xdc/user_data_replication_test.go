@@ -292,7 +292,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	}
 	activeAdminClient := s.cluster1.GetAdminClient()
 
-	// start build id scavenger workflow
+	// start build ID scavenger workflow
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
@@ -331,7 +331,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal("v2", attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].State)
 
-	// Add another build id to verify that tombstones were deleted after the first scavenger run
+	// Add another build ID to verify that tombstones were deleted after the first scavenger run
 	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
@@ -360,7 +360,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal("v3", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
 
-	// Add a new build id in standby cluster to verify it did not persist the replicated tombstones
+	// Add a new build ID in standby cluster to verify it did not persist the replicated tombstones
 	standbyFrontendClient := s.cluster2.GetFrontendClient()
 
 	s.Eventually(func() bool {

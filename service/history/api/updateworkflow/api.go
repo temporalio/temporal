@@ -196,7 +196,7 @@ func (u *Updater) ApplyRequest(
 	//   --> NextEventID points here
 	// In this case difference between NextEventID and LastWorkflowTaskStartedEventID is 2.
 	// If there are other events after WTCompleted event, then difference is > 2 and speculative WT can't be created.
-	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetLastWorkflowTaskStartedEventID()+2
+	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetStartedEventIdOfLastCompletedWorkflowTask()+2
 	if !canCreateSpeculativeWT {
 		return &api.UpdateWorkflowAction{
 			Noop:               false,
@@ -227,7 +227,7 @@ func (u *Updater) ApplyRequest(
 		ms.GetInheritedBuildId(),
 		ms.GetAssignedBuildId(),
 		ms.GetMostRecentWorkerVersionStamp(),
-		ms.GetLastWorkflowTaskStartedEventID(),
+		ms.HasCompletedAnyWorkflowTask(),
 	)
 
 	return &api.UpdateWorkflowAction{

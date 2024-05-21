@@ -237,7 +237,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			}
 			mutableState.EXPECT().GetExecutionState().Return(execState).AnyTimes()
 			mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
-			mutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+			mutableState.EXPECT().GetCloseVersion().Return(int64(0), nil).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
 				return &persistencespb.WorkflowExecutionInfo{
 					NamespaceId: namespaceEntry.ID().String(),

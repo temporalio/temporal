@@ -251,7 +251,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	wt, _ := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 
 	// Start WFT
-	workflowTasksStartEvent, _, _ := ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, tests.RunID, &taskqueuepb.TaskQueue{Name: "testTaskQueue"}, uuid.New(), nil)
+	workflowTasksStartEvent, _, _ := ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, tests.RunID, &taskqueuepb.TaskQueue{Name: "testTaskQueue"}, uuid.New(), nil, nil)
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 
 	// Complete WFT

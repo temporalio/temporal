@@ -43,7 +43,7 @@ import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
-import "temporal/server/api/update/v1/message.proto";
+import "temporal/server/api/persistence/v1/update.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
 // shard column
@@ -107,11 +107,11 @@ message WorkflowExecutionInfo {
     temporal.server.api.enums.v1.WorkflowTaskType workflow_task_type = 68;
     bool workflow_task_suggest_continue_as_new = 69;
     int64 workflow_task_history_size_bytes = 70;
-    // tracks the started build id for transient/speculative WFT. This info is used for two purposes:
+    // tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
     // - verify WFT completes by the same Build ID that started in the latest attempt
     // - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
     string workflow_task_build_id = 88;
-    // tracks the started build id redirect counter for transient/speculative WFT. This info is to
+    // tracks the started build ID redirect counter for transient/speculative WFT. This info is to
     // ensure the right redirect counter is used in the WFT started event created later
     // for a transient/speculative WFT.
     int64 workflow_task_build_id_redirect_counter = 89;
@@ -185,7 +185,7 @@ message WorkflowExecutionInfo {
     int64 build_id_redirect_counter = 87;
 
     // index of update IDs and pointers to associated history events.
-    map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
+    map<string, UpdateInfo> update_infos = 79;
     repeated VersionedTransition transition_history = 80;
     // Map of state machine type to map of machine by ID.
     // (-- api-linter: core::0140::prepositions=disabled

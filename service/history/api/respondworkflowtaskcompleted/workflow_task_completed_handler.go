@@ -372,9 +372,17 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 	case update.ProtocolV1:
 		upd := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
 		if upd == nil {
+			upd, err = handler.updateRegistry.TryResurrect(ctx, message)
+			if err != nil {
+				return handler.failWorkflowTaskOnInvalidArgument(
+					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
+			}
+		}
+		if upd == nil {
+			// Update was not found in the registry and can't be resurrected.
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFound(fmt.Sprintf("update %s not found", message.ProtocolInstanceId)))
+				serviceerror.NewNotFound(fmt.Sprintf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId)))
 		}
 
 		if err := upd.OnProtocolMessage(
@@ -529,6 +537,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		uuid.New(),
 		handler.identity,
 		stamp,
+		nil,
 	); err != nil {
 		return nil, err
 	}

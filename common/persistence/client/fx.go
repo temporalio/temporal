@@ -181,7 +181,7 @@ func DataStoreFactoryProvider(
 	case defaultStoreCfg.Cassandra != nil:
 		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler)
 	case defaultStoreCfg.SQL != nil:
-		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger)
+		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger, metricsHandler)
 	case defaultStoreCfg.CustomDataStoreConfig != nil:
 		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultStoreCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
 	default:

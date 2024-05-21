@@ -1969,6 +1969,11 @@ the number of children greater than or equal to this threshold`,
 		`MutableStateChecksumInvalidateBefore is the epoch timestamp before which all checksums are to be discarded`,
 	)
 
+	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
+		"history.ReplicationTaskApplyTimeout",
+		20*time.Second,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply`,
+	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",
 		4,
@@ -2114,6 +2119,11 @@ that task will be sent to DLQ.`,
 		"history.EnableReplicateLocalGeneratedEvents",
 		false,
 		`EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events`,
+	)
+	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
+		"history.EnableReplicationTaskTieredProcessing",
+		false,
+		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
 
 	// keys for worker

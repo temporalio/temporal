@@ -44,6 +44,8 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -55,7 +57,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -160,10 +161,6 @@ type (
 
 		// In-memory only attributes
 		currentVersion int64
-		// The namespace failover version at the time the current transaction started.
-		// Cached for consistency across a single transaction.
-		// This value can be used to mutate sub-statemachines after the workflow has already been closed.
-		currentTransactionNamespaceFailoverVersion int64
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
@@ -691,28 +688,26 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if state, _ := ms.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// always set current version to last write version when workflow is completed
-		lastWriteVersion, err := ms.GetLastWriteVersion()
-		if err != nil {
-			return err
-		}
-		ms.currentVersion = lastWriteVersion
-		return nil
-	}
+	if ms.config.EnableMutableStateTransitionHistory() &&
+		len(ms.executionInfo.TransitionHistory) != 0 {
 
-	versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
-	if err != nil {
-		return err
-	}
-
-	if !versionhistory.IsEmptyVersionHistory(versionHistory) {
 		// this make sure current version >= last write version
-		versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
+		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		ms.currentVersion = lastVersionedTransition.NamespaceFailoverVersion
+	} else {
+		versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
-		ms.currentVersion = versionHistoryItem.GetVersion()
+
+		if !versionhistory.IsEmptyVersionHistory(versionHistory) {
+			// this make sure current version >= last event version
+			versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
+			if err != nil {
+				return err
+			}
+			ms.currentVersion = versionHistoryItem.GetVersion()
+		}
 	}
 
 	if version > ms.currentVersion || forceUpdate {
@@ -757,8 +752,34 @@ func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
 	return common.EmptyVersion, nil
 }
 
-func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
+func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
+	if ms.IsWorkflowExecutionRunning() {
+		return common.EmptyVersion, serviceerror.NewInternal("GetCloseVersion: workflow is still running")
+	}
 
+	// here we assume that closing a workflow must generate an event
+
+	// if workflow is closing in the current transation,
+	// then the last event is closed event and the event version is the close version
+	if lastEventVersion, ok := ms.hBuilder.LastEventVersion(); ok {
+		return lastEventVersion, nil
+	}
+
+	return ms.GetLastEventVersion()
+}
+
+func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
+	if ms.config.EnableMutableStateTransitionHistory() &&
+		len(ms.executionInfo.TransitionHistory) != 0 {
+
+		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		return lastVersionedTransition.NamespaceFailoverVersion, nil
+	}
+
+	return ms.GetLastEventVersion()
+}
+
+func (ms *MutableStateImpl) GetLastEventVersion() (int64, error) {
 	if ms.executionInfo.VersionHistories != nil {
 		versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 		if err != nil {
@@ -908,10 +929,10 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 // VisitUpdates visits mutable state update entries, ordered by the ID of the history event pointed to by the mutable
 // state entry. Thus, for example, updates entries in Admitted state will be visited in the order that their Admitted
 // events were added to history.
-func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 	type updateEvent struct {
 		updId   string
-		updInfo *updatespb.UpdateInfo
+		updInfo *persistencespb.UpdateInfo
 		eventId int64
 	}
 	var updateEvents []updateEvent
@@ -1506,7 +1527,9 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
-	return nil
+
+	err := ms.applyActivityBuildIdRedirect(ai, incomingActivityInfo.GetLastStartedBuildId(), incomingActivityInfo.GetLastStartedRedirectCounter())
+	return err
 }
 
 // UpdateActivity updates an activity
@@ -1774,8 +1797,8 @@ func (ms *MutableStateImpl) GetNextEventID() int64 {
 	return ms.hBuilder.NextEventID()
 }
 
-// GetLastWorkflowTaskStartedEventID returns last started workflow task event ID
-func (ms *MutableStateImpl) GetLastWorkflowTaskStartedEventID() int64 {
+// GetStartedEventIdForLastCompletedWorkflowTask returns last started workflow task event ID
+func (ms *MutableStateImpl) GetStartedEventIdOfLastCompletedWorkflowTask() int64 {
 	return ms.executionInfo.LastWorkflowTaskStartedEventId
 }
 
@@ -2297,12 +2320,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
@@ -2386,8 +2410,48 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 	return true
 }
 
-// ApplyBuildIdRedirect used for applying redirects from History events when rebuilding MS
-func (ms *MutableStateImpl) ApplyBuildIdRedirect(buildId string, redirectCounter int64) error {
+// validateBuildIdRedirectInfo validates build ID for the task being dispatched and returned the redirect counter
+// that should be used in the task started event.
+// If the given versioning stamp and redirect info is not valid based on the WF's assigned build ID
+// ObsoleteDispatchBuildId error will be returned.
+func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
+	startedWorkerStamp *commonpb.WorkerVersionStamp,
+	redirectInfo *taskqueue.BuildIdRedirectInfo,
+) (int64, error) {
+	assignedBuildId := ms.GetAssignedBuildId()
+	redirectCounter := ms.GetExecutionInfo().GetBuildIdRedirectCounter()
+	if !startedWorkerStamp.GetUseVersioning() || startedWorkerStamp.GetBuildId() == assignedBuildId {
+		// dispatch build ID is the same as wf assigned build ID, hence noop.
+		return redirectCounter, nil
+	}
+
+	if ms.HasCompletedAnyWorkflowTask() &&
+		(redirectInfo == nil || redirectInfo.GetAssignedBuildId() != assignedBuildId) {
+		// Workflow hs already completed tasks but no redirect or a redirect based on a wrong assigned build ID is
+		// reported. This must be a task backlogged on an old build ID. rejecting this task, there should be another
+		// task scheduled on the right build ID.
+		return 0, serviceerrors.NewObsoleteDispatchBuildId()
+	}
+
+	if assignedBuildId == "" && !ms.HasCompletedAnyWorkflowTask() {
+		// If build ID is being set for the first time, and no progress is made by unversioned workers we don't
+		// increment redirect counter. This is to keep the redirect counter zero for verisoned WFs that
+		// do not experience any redirects, but only initial build ID assignment.
+		return redirectCounter, nil
+	}
+
+	// Valid redirect is happening.
+	return redirectCounter + 1, nil
+}
+
+// ApplyBuildIdRedirect applies possible redirect to mutable state based on versioning stamp of a starting task.
+// If a redirect is applicable, assigned build ID of the wf will be updated and all scheduled but not
+// started tasks will be rescheduled to be put on the matching queue of the right build ID.
+func (ms *MutableStateImpl) ApplyBuildIdRedirect(
+	startingTaskScheduledEventId int64,
+	buildId string,
+	redirectCounter int64,
+) error {
 	if ms.GetExecutionInfo().GetBuildIdRedirectCounter() >= redirectCounter {
 		// Existing redirect counter is more than the given one, so ignore this redirect because
 		// this or a more recent one has already been applied. This can happen when replaying
@@ -2399,8 +2463,41 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(buildId string, redirectCounter
 	if err != nil {
 		return err
 	}
-	// if this redirect is applicable, we need to set workflow's redirect counter to the given value
+
+	// We need to set workflow's redirect counter to the given value. This is needed for events applied in standby
+	// cluster and events applied by WF rebuilder.
 	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
+
+	// Re-scheduling pending WF and activity tasks which are not started yet.
+	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+		ms.GetPendingWorkflowTask().ScheduledEventID != startingTaskScheduledEventId &&
+		// TODO: something special may need to be done for speculative tasks as GenerateScheduleWorkflowTaskTasks
+		// does not support them.
+		ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// sticky queue should be cleared by UpdateBuildIdAssignment already, so the following call only generates
+		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+		err = ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.ScheduledEventId == startingTaskScheduledEventId ||
+			// activity already started
+			ai.StartedEventId != common.EmptyEventID ||
+			// activity does not depend on wf build ID
+			ai.GetUseWorkflowBuildIdInfo() == nil {
+			// TODO: skip task generation also when activity is in backoff period
+			continue
+		}
+		// we only need to resend the activities to matching, no need to update timer tasks.
+		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -2409,12 +2506,8 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	if ms.GetAssignedBuildId() == buildId {
 		return nil
 	}
-	if ms.GetAssignedBuildId() != "" {
-		// if build ID is being set for the first time, we don't increment redirect counter
-		ms.GetExecutionInfo().BuildIdRedirectCounter++
-	}
 	ms.executionInfo.AssignedBuildId = buildId
-	// because build id is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
+	// because build ID is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
 	ms.ClearStickyTaskQueue()
 	limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
 	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
@@ -2636,7 +2729,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
 		if err := ms.taskGenerator.GenerateActivityTasks(
-			event,
+			event.GetEventId(),
 		); err != nil {
 			return nil, nil, err
 		}
@@ -2763,30 +2856,26 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, error) {
-
 	opTag := tag.WorkflowActionActivityTaskStarted
-	if err := ms.checkMutability(opTag); err != nil {
+	err := ms.checkMutability(opTag)
+	if err != nil {
 		return nil, err
 	}
 
-	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
+	var redirectCounter int64
+	buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp)
+	if buildId != "" {
 		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
-		// does not pass build id for old versioning workers to Record*TaskStart.
+		// does not pass build ID for old versioning workers to Record*TaskStart.
 		// TODO: cleanup this comment [cleanup-old-wv]
 		if useWf := ai.GetUseWorkflowBuildIdInfo(); useWf != nil {
-			// when a dependent activity is redirected, we update workflow's assigned build ID as well
-			err := ms.UpdateBuildIdAssignment(buildId)
+			// When a dependent activity is redirected, we'll update workflow's assigned build ID as well. Therefore,
+			// need to validate redirect info and possibly increment WF's redirect counter.
+			redirectCounter, err = ms.validateBuildIdRedirectInfo(versioningStamp, redirectInfo)
 			if err != nil {
 				return nil, err
-			}
-			useWf.LastRedirectCounter = ms.GetExecutionInfo().GetBuildIdRedirectCounter()
-		} else if !ai.UseCompatibleVersion {
-			// this activity is using new versioning and is independently assigned to a build ID.
-			// Storing that in activity info. (normaly, LastIndependentlyAssignedBuildId should be present already,
-			// but setting it here again, in case the persistence call after AddTask was failed)
-			ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
-				LastIndependentlyAssignedBuildId: buildId,
 			}
 		}
 	}
@@ -2799,12 +2888,18 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 			identity,
 			ai.RetryLastFailure,
 			versioningStamp,
-			ms.GetExecutionInfo().GetBuildIdRedirectCounter(),
+			redirectCounter,
 		)
 		if err := ms.ApplyActivityTaskStartedEvent(event); err != nil {
 			return nil, err
 		}
 		return event, nil
+	}
+
+	// This is a transient start so no events is being created for it. But we still need to process possible build
+	// ID redirect.
+	if err := ms.applyActivityBuildIdRedirect(ai, buildId, redirectCounter); err != nil {
+		return nil, err
 	}
 
 	// we might need to retry, so do not append started event just yet,
@@ -2844,19 +2939,27 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 
-	if buildId := worker_versioning.BuildIdIfUsingVersioning(attributes.GetWorkerVersion()); buildId != "" {
-		if ai.GetUseWorkflowBuildIdInfo() != nil {
-			// when a dependent activity is redirected, we update workflow's assigned build ID as well
-			err := ms.ApplyBuildIdRedirect(buildId, attributes.GetBuildIdRedirectCounter())
-			if err != nil {
-				return err
-			}
-		} else {
-			// This activity is not attached to the wf build ID so we store its build ID in activity info.
-			ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
-		}
+	err := ms.applyActivityBuildIdRedirect(ai, worker_versioning.BuildIdIfUsingVersioning(attributes.GetWorkerVersion()), attributes.GetBuildIdRedirectCounter())
+	return err
+}
+
+func (ms *MutableStateImpl) applyActivityBuildIdRedirect(activityInfo *persistencespb.ActivityInfo, buildId string, redirectCounter int64) error {
+	if buildId == "" {
+		return nil // not versioned
 	}
 
+	if useWf := activityInfo.GetUseWorkflowBuildIdInfo(); useWf != nil {
+		// when a dependent activity is redirected, we update workflow's assigned build ID as well
+		err := ms.ApplyBuildIdRedirect(activityInfo.ScheduledEventId, buildId, redirectCounter)
+		if err != nil {
+			return err
+		}
+		useWf.LastRedirectCounter = redirectCounter
+		useWf.LastUsedBuildId = buildId
+	} else {
+		// This activity is not attached to the wf build ID so we store its build ID in activity info.
+		activityInfo.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
+	}
 	return nil
 }
 
@@ -3912,13 +4015,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAdmittedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
-	admission := &updatespb.UpdateInfo_Admission{
-		Admission: &updatespb.AdmissionInfo{
-			Location: &updatespb.AdmissionInfo_HistoryPointer_{
-				HistoryPointer: &updatespb.AdmissionInfo_HistoryPointer{
+	admission := &persistencespb.UpdateInfo_Admission{
+		Admission: &persistencespb.UpdateAdmissionInfo{
+			Location: &persistencespb.UpdateAdmissionInfo_HistoryPointer_{
+				HistoryPointer: &persistencespb.UpdateAdmissionInfo_HistoryPointer{
 					EventId:      event.EventId,
 					EventBatchId: batchId,
 				},
@@ -3928,7 +4031,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
 	}
-	ui := updatespb.UpdateInfo{Value: admission}
+	ui := persistencespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -3961,20 +4064,20 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAcceptedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
 	var sizeDelta int
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Size()
-		ui.Value = &updatespb.UpdateInfo_Acceptance{
-			Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
+		ui.Value = &persistencespb.UpdateInfo_Acceptance{
+			Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
-		ui := updatespb.UpdateInfo{
-			Value: &updatespb.UpdateInfo_Acceptance{
-				Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
+		ui := persistencespb.UpdateInfo{
+			Value: &persistencespb.UpdateInfo_Acceptance{
+				Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 			},
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
@@ -4009,32 +4112,24 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateCompletedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+		// UpdateInfo must be created by preceding UpdateAccepted event.
+		return serviceerror.NewInvalidArgument("WorkflowExecutionUpdateCompletedEvent doesn't have preceding WorkflowExecutionUpdateAcceptedEvent")
 	}
 	updateID := attrs.GetMeta().GetUpdateId()
 	var sizeDelta int
-	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		sizeBefore := ui.Size()
-		ui.Value = &updatespb.UpdateInfo_Completion{
-			Completion: &updatespb.CompletionInfo{
-				EventId:      event.EventId,
-				EventBatchId: batchID,
-			},
-		}
-		sizeDelta = ui.Size() - sizeBefore
-	} else {
-		// TODO (alex): this should never happened because UpdateInfo should always be created before
-		// with UpdateAccepted event which MUST preceded UpdateCompleted event.
-		// Better to return error here!
-		ui := updatespb.UpdateInfo{
-			Value: &updatespb.UpdateInfo_Completion{
-				Completion: &updatespb.CompletionInfo{EventId: event.EventId},
-			},
-		}
-		ms.executionInfo.UpdateInfos[updateID] = &ui
-		ms.executionInfo.UpdateCount++
-		sizeDelta = ui.Size() + len(updateID)
+	ui, uiExists := ms.executionInfo.UpdateInfos[updateID]
+	if !uiExists {
+		// UpdateInfo must be created by preceding UpdateAccepted event.
+		return serviceerror.NewInvalidArgument("WorkflowExecutionUpdateCompletedEvent doesn't have preceding WorkflowExecutionUpdateAcceptedEvent")
 	}
+	sizeBefore := ui.Size()
+	ui.Value = &persistencespb.UpdateInfo_Completion{
+		Completion: &persistencespb.UpdateCompletionInfo{
+			EventId:      event.EventId,
+			EventBatchId: batchID,
+		},
+	}
+	sizeDelta = ui.Size() - sizeBefore
 	ms.approximateSize += sizeDelta
 	ms.writeEventToCache(event)
 	return nil
@@ -4892,8 +4987,7 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 	ms.namespaceEntry = namespaceEntry
-	ms.currentTransactionNamespaceFailoverVersion = namespaceEntry.FailoverVersion()
-	if err := ms.UpdateCurrentVersion(ms.currentTransactionNamespaceFailoverVersion, false); err != nil {
+	if err := ms.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
 		return false, err
 	}
 
@@ -5111,7 +5205,7 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	if ms.config.EnableMutableStateTransitionHistory() {
 		ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
 			ms.executionInfo.TransitionHistory,
-			ms.currentTransactionNamespaceFailoverVersion,
+			ms.GetCurrentVersion(),
 			ms.executionInfo.StateTransitionCount,
 		)
 	}
@@ -5424,22 +5518,35 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 
 	// Handling mutable state turn from standby to active, while having a workflow task on the fly
 	workflowTask := ms.GetStartedWorkflowTask()
-	if workflowTask == nil || workflowTask.Version >= ms.GetCurrentVersion() {
+	currentVersion := ms.GetCurrentVersion()
+	if workflowTask == nil || workflowTask.Version >= currentVersion {
 		// no pending workflow tasks, no buffered events
 		// or workflow task has higher / equal version
 		return false, nil
 	}
 
-	currentVersion := ms.GetCurrentVersion()
+	lastEventVersion, err := ms.GetLastEventVersion()
+	if err != nil {
+		return false, err
+	}
+	if lastEventVersion != workflowTask.Version {
+		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last event version %v", workflowTask.Version, lastEventVersion))
+	}
+
+	// NOTE: if lastEventVersion is used here then the version transition history could decrecase
+	//
+	// TODO: Today's replication task processing logic won't flush buffered events when applying state only changes.
+	// As a result, when using lastWriteVersion, which takes state only change into account, here, we could still
+	// have buffered events, but lastWriteSourceCluster will no longer be current cluster and the be treated as case 4
+	// and fail on the sanity check.
+	// We need to change replication task processing logic to always flush buffered events on all replication task types.
+	// State transition history is not enabled today so we are safe and LastWriteVersion == LastEventVersion
 	lastWriteVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return false, err
 	}
-	if lastWriteVersion != workflowTask.Version {
-		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
-	}
 
-	lastWriteSourceCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
+	lastWriteCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
 	currentVersionCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), currentVersion)
 	currentCluster := ms.clusterMetadata.GetCurrentClusterName()
 
@@ -5453,7 +5560,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	// 4. passive -> passive => no buffered events, since always passive, nothing to be done
 
 	// handle case 4
-	if lastWriteSourceCluster != currentCluster && currentVersionCluster != currentCluster {
+	if lastWriteCluster != currentCluster && currentVersionCluster != currentCluster {
 		// do a sanity check on buffered events
 		if ms.HasBufferedEvents() {
 			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")
@@ -5465,7 +5572,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	var flushBufferVersion = lastWriteVersion
 
 	// handle case 3
-	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
+	if lastWriteCluster != currentCluster && currentVersionCluster == currentCluster {
 		// do a sanity check on buffered events
 		if ms.HasBufferedEvents() {
 			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")
@@ -5767,4 +5874,8 @@ func (ms *MutableStateImpl) logDataInconsistency() {
 		tag.WorkflowID(workflowID),
 		tag.WorkflowRunID(runID),
 	)
+}
+
+func (ms *MutableStateImpl) HasCompletedAnyWorkflowTask() bool {
+	return ms.GetStartedEventIdOfLastCompletedWorkflowTask() != common.EmptyEventID
 }
