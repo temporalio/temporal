@@ -265,6 +265,10 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 		tlm.backlogMgr.taskAckManager.addTask(startTaskID + i)
 	}
 
+	// Manually increasing the backlog counter since it does not get incremented by taskAckManager.addTask
+	// Only doing this for the purpose of this test
+	tlm.backlogMgr.db.updateApproximateBacklogCount(taskCount)
+
 	includeTaskStatus := false
 	descResp := tlm.LegacyDescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 0, len(descResp.DescResponse.GetPollers()))
@@ -301,7 +305,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	taskQueueStatus = descResp.DescResponse.GetTaskQueueStatus()
 	require.NotNil(t, taskQueueStatus)
 	require.Equal(t, taskCount, taskQueueStatus.GetAckLevel())
-	require.Zero(t, taskQueueStatus.GetBacklogCountHint())
+	require.Zero(t, taskQueueStatus.GetBacklogCountHint()) // should be 0 since AckManager.CompleteTask decrements the updated backlog counter
 }
 
 func TestCheckIdleTaskQueue(t *testing.T) {

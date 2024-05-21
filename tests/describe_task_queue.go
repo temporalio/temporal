@@ -57,19 +57,23 @@ func (s *DescribeTaskQueueSuite) SetupTest() {
 }
 
 func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateBacklogInfo() {
-	s.publishConsumeWorkflowTasksValidateBacklogInfo(4, 0)
+	s.publishConsumeWorkflowTasksValidateBacklogInfo(4, 0, true)
 }
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateBacklogInfo() {
-	s.publishConsumeWorkflowTasksValidateBacklogInfo(1, 1)
+	s.publishConsumeWorkflowTasksValidateBacklogInfo(1, 1, true)
 }
 
 func (s *DescribeTaskQueueSuite) TestAddMultipleTasksMultiplePartitions_ValidateBacklogInfo() {
-	s.publishConsumeWorkflowTasksValidateBacklogInfo(4, 100)
+	s.publishConsumeWorkflowTasksValidateBacklogInfo(4, 100, true)
 }
 
-func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(partitions int, workflows int) {
-	// Override the ReadPartitions and WritePartitions
+func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateBacklogInfoLegacyAPIMode() {
+	s.publishConsumeWorkflowTasksValidateBacklogInfo(1, 1, false)
+}
+
+func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(partitions int, workflows int, isEnhancedMode bool) {
+	// overriding the ReadPartitions and WritePartitions
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, partitions)
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, partitions)
@@ -104,7 +108,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 	}
 
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(workflows)
-	s.validateDescribeTaskQueue(tl, expectedBacklogCount)
+	s.validateDescribeTaskQueue(tl, expectedBacklogCount, isEnhancedMode)
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
@@ -122,42 +126,59 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 
 	// call describeTaskQueue to verify if the backlog decreased
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(0)
-	s.validateDescribeTaskQueue(tl, expectedBacklogCount)
+	s.validateDescribeTaskQueue(tl, expectedBacklogCount, isEnhancedMode)
 }
 
-func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBacklogCount map[enumspb.TaskQueueType]int64) {
+func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBacklogCount map[enumspb.TaskQueueType]int64,
+	isEnhancedMode bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	var resp *workflowservice.DescribeTaskQueueResponse
 	var err error
 
-	s.Eventually(func() bool {
-		resp, err = s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:              s.namespace,
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-			Versions:               nil, // default version, in this case unversioned queue
-			TaskQueueTypes:         nil, // both types
-			ReportPollers:          true,
-			ReportTaskReachability: true,
-			ReportStats:            true,
-		})
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
-		versionInfo := resp.GetVersionsInfo()[""]
-		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
-		types := versionInfo.GetTypesInfo()
-		s.Assert().Equal(len(types), len(expectedBacklogCount))
+	if isEnhancedMode {
+		s.Eventually(func() bool {
+			resp, err = s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+				Namespace:              s.namespace,
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+				Versions:               nil, // default version, in this case unversioned queue
+				TaskQueueTypes:         nil, // both types
+				ReportPollers:          true,
+				ReportTaskReachability: true,
+				ReportStats:            true,
+			})
+			s.NoError(err)
+			s.NotNil(resp)
+			s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+			versionInfo := resp.GetVersionsInfo()[""]
+			s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+			types := versionInfo.GetTypesInfo()
+			s.Assert().Equal(len(types), len(expectedBacklogCount))
 
-		validator := true
-		for qT, t := range types {
-			queueType := enumspb.TaskQueueType(qT)
-			if t.Stats.ApproximateBacklogCount != expectedBacklogCount[queueType] {
-				validator = false
+			validator := true
+			for qT, t := range types {
+				queueType := enumspb.TaskQueueType(qT)
+				if t.Stats.ApproximateBacklogCount != expectedBacklogCount[queueType] {
+					validator = false
+				}
 			}
-		}
-		return validator == true
-	}, 3*time.Second, 50*time.Millisecond)
+			return validator == true
+		}, 3*time.Second, 50*time.Millisecond)
+
+	} else {
+		// Querying the Legacy API
+		s.Eventually(func() bool {
+			resp, err = s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+				Namespace:              s.namespace,
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
+				IncludeTaskQueueStatus: true,
+			})
+			s.NoError(err)
+			s.NotNil(resp)
+			return resp.TaskQueueStatus.GetBacklogCountHint() == expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW]
+		}, 3*time.Second, 50*time.Millisecond)
+	}
 }
