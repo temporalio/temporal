@@ -979,8 +979,17 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 		return "done on v3!", nil
 	}
 
+	// creating a new client because we do not want to share client with the previous the v2 worker as it keeps
+	// the workflow locked for a long time. WF cache is shared across all workers of the same client in Go SDK.
+	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.hostPort,
+		Namespace: s.namespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
 	// run worker on v3 so it can complete the wf
-	w3 := worker.New(s.sdkClient, tq, worker.Options{
+	w3 := worker.New(sdkClient2, tq, worker.Options{
 		BuildID:                          v3,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1436,7 +1445,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
-		DeadlockDetectionTimeout:         3 * time.Second,
+		DeadlockDetectionTimeout:         2 * time.Second,
 	})
 	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
 	w11.RegisterActivity(act)
