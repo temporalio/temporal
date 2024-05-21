@@ -197,8 +197,14 @@ func AdaptAuthorizeError(err error) error {
 func HandlerErrorFromClientError(err error) error {
 	var unexpectedRespErr *nexus.UnexpectedResponseError
 	if errors.As(err, &unexpectedRespErr) {
+		failure := unexpectedRespErr.Failure
+		if unexpectedRespErr.Failure == nil {
+			failure = &nexus.Failure{
+				Message: unexpectedRespErr.Error(),
+			}
+		}
 		handlerErr := &nexus.HandlerError{
-			Failure: unexpectedRespErr.Failure,
+			Failure: failure,
 		}
 
 		switch unexpectedRespErr.Response.StatusCode {

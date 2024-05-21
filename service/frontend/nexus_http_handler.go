@@ -75,7 +75,7 @@ func NewNexusHTTPHandler(
 	namespaceRegistry namespace.Registry,
 	endpointRegistry *commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
-	redirectionInterceptor *RedirectionInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceConcurrencyLimitIntercptor *interceptor.ConcurrentRequestLimitInterceptor,

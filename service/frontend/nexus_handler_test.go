@@ -148,7 +148,7 @@ func newOperationContext(options contextOptions) *operationContext {
 
 	oc.clusterMetadata = clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, !options.namespacePassive))
 	oc.forwardingEnabledForNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.redirectAllow)
-	oc.redirectionInterceptor = NewRedirectionInterceptor(nil, nil, config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding}, oc.logger, nil, oc.metricsHandlerForInterceptors, clock.NewRealTimeSource(), oc.clusterMetadata)
+	oc.redirectionInterceptor = interceptor.NewRedirection(nil, nil, config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding}, oc.logger, nil, oc.metricsHandlerForInterceptors, clock.NewRealTimeSource(), oc.clusterMetadata)
 
 	return oc
 }

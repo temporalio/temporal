@@ -77,7 +77,7 @@ type operationContext struct {
 	metricsHandler                metrics.Handler
 	logger                        log.Logger
 	auth                          *authorization.Interceptor
-	redirectionInterceptor        *RedirectionInterceptor
+	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	cleanupFunctions              []func(error)
 }
@@ -136,14 +136,14 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarded"))
 			var forwardStartTime time.Time
-			c.metricsHandlerForInterceptors, forwardStartTime = c.redirectionInterceptor.beforeCall(c.apiName)
+			c.metricsHandlerForInterceptors, forwardStartTime = c.redirectionInterceptor.BeforeCall(c.apiName)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
-				c.redirectionInterceptor.afterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
+				c.redirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
 			return notActiveErr
 		}
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_inactive_forwarding_disabled"))
-		return commonnexus.ConvertGRPCError(notActiveErr, false)
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
 
 	cleanup, err := c.namespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), c.apiName, c.metricsHandlerForInterceptors, request)
@@ -172,13 +172,13 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 // redirection conditions can be checked at once. If either of those methods are updated, this should
 // be kept in sync.
 func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexus.Header) bool {
-	redirectHeader := header.Get(dcRedirectionContextHeaderName)
+	redirectHeader := header.Get(interceptor.DCRedirectionContextHeaderName)
 	redirectAllowed, err := strconv.ParseBool(redirectHeader)
 	if err != nil {
 		redirectAllowed = true
 	}
 	return redirectAllowed &&
-		c.redirectionInterceptor.redirectionAllowed(ctx) &&
+		c.redirectionInterceptor.RedirectionAllowed(ctx) &&
 		c.namespace.IsGlobalNamespace() &&
 		len(c.namespace.ClusterNames()) > 1 &&
 		c.forwardingEnabledForNamespace(c.namespaceName)
@@ -197,7 +197,7 @@ type nexusHandler struct {
 	namespaceRegistry             namespace.Registry
 	matchingClient                matchingservice.MatchingServiceClient
 	auth                          *authorization.Interceptor
-	redirectionInterceptor        *RedirectionInterceptor
+	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	forwardingClients             *cluster.FrontendHTTPClientCache
 }
@@ -337,7 +337,7 @@ func (h *nexusHandler) forwardStartOperation(
 	options nexus.StartOperationOptions,
 	oc *operationContext,
 ) (nexus.HandlerStartOperationResult[any], error) {
-	options.Header[dcRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {
@@ -418,7 +418,7 @@ func (h *nexusHandler) forwardCancelOperation(
 	options nexus.CancelOperationOptions,
 	oc *operationContext,
 ) error {
-	options.Header[dcRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {

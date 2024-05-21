@@ -715,7 +715,7 @@ func RegisterNexusHTTPHandler(
 	namespaceRegistry namespace.Registry,
 	endpointRegistry *nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
-	redirectionInterceptor *RedirectionInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,

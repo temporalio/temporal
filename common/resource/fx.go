@@ -122,7 +122,7 @@ var Module = fx.Options(
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
 	membership.GRPCResolverModule,
-	fx.Provide(ClusterHttpClientCacheProvider),
+	fx.Provide(FrontendHTTPClientCacheProvider),
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
@@ -409,7 +409,7 @@ func RPCFactoryProvider(
 	), nil
 }
 
-func ClusterHttpClientCacheProvider(
+func FrontendHTTPClientCacheProvider(
 	metadata cluster.Metadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
 ) *cluster.FrontendHTTPClientCache {
