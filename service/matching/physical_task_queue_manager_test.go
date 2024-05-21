@@ -312,6 +312,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	require.NotNil(t, taskQueueStatus)
 	require.Zero(t, taskQueueStatus.GetAckLevel())
 	require.Equal(t, taskCount, taskQueueStatus.GetReadLevel())
+	require.Equal(t, taskCount, taskQueueStatus.GetBacklogCountHint())
 	taskIDBlock := taskQueueStatus.GetTaskIdBlock()
 	require.Equal(t, int64(1), taskIDBlock.GetStartId())
 	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndId())
