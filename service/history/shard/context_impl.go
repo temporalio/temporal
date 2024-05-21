@@ -89,7 +89,7 @@ const (
 )
 
 const (
-	shardIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
+	shardIOTimeout = 1 * time.Minute
 	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
 	queueMetricUpdateInterval = 5 * time.Minute
 
