@@ -77,6 +77,23 @@ func (b *EventStore) NextEventID() int64 {
 	return b.nextEventID
 }
 
+func (b *EventStore) LastEventVersion() (int64, bool) {
+	if len(b.memLatestBatch) != 0 {
+		lastEvent := b.memLatestBatch[len(b.memLatestBatch)-1]
+		return lastEvent.GetVersion(), true
+	}
+
+	if len(b.memEventsBatches) != 0 {
+		lastBatch := b.memEventsBatches[len(b.memEventsBatches)-1]
+		lastEvent := lastBatch[len(lastBatch)-1]
+		return lastEvent.GetVersion(), true
+	}
+
+	// buffered events are not real events yet, so not taken into account here
+
+	return common.EmptyVersion, false
+}
+
 func (b *EventStore) add(
 	event *historypb.HistoryEvent,
 ) (*historypb.HistoryEvent, int64) {

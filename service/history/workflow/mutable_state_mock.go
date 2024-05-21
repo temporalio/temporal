@@ -50,8 +50,7 @@ import (
 	v111 "go.temporal.io/server/api/historyservice/v1"
 	v112 "go.temporal.io/server/api/persistence/v1"
 	v113 "go.temporal.io/server/api/taskqueue/v1"
-	v114 "go.temporal.io/server/api/update/v1"
-	v115 "go.temporal.io/server/api/workflow/v1"
+	v114 "go.temporal.io/server/api/workflow/v1"
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
@@ -1789,10 +1788,10 @@ func (mr *MockMutableStateMockRecorder) GetAssignedBuildId() *gomock.Call {
 }
 
 // GetBaseWorkflowInfo mocks base method.
-func (m *MockMutableState) GetBaseWorkflowInfo() *v115.BaseExecutionInfo {
+func (m *MockMutableState) GetBaseWorkflowInfo() *v114.BaseExecutionInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBaseWorkflowInfo")
-	ret0, _ := ret[0].(*v115.BaseExecutionInfo)
+	ret0, _ := ret[0].(*v114.BaseExecutionInfo)
 	return ret0
 }
 
@@ -1830,6 +1829,21 @@ func (m *MockMutableState) GetChildExecutionInitiatedEvent(arg0 context.Context,
 func (mr *MockMutableStateMockRecorder) GetChildExecutionInitiatedEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChildExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetChildExecutionInitiatedEvent), arg0, arg1)
+}
+
+// GetCloseVersion mocks base method.
+func (m *MockMutableState) GetCloseVersion() (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCloseVersion")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCloseVersion indicates an expected call of GetCloseVersion.
+func (mr *MockMutableStateMockRecorder) GetCloseVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloseVersion", reflect.TypeOf((*MockMutableState)(nil).GetCloseVersion))
 }
 
 // GetCompletionEvent mocks base method.
@@ -1959,6 +1973,21 @@ func (m *MockMutableState) GetInheritedBuildId() string {
 func (mr *MockMutableStateMockRecorder) GetInheritedBuildId() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInheritedBuildId", reflect.TypeOf((*MockMutableState)(nil).GetInheritedBuildId))
+}
+
+// GetLastEventVersion mocks base method.
+func (m *MockMutableState) GetLastEventVersion() (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLastEventVersion")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLastEventVersion indicates an expected call of GetLastEventVersion.
+func (mr *MockMutableStateMockRecorder) GetLastEventVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastEventVersion", reflect.TypeOf((*MockMutableState)(nil).GetLastEventVersion))
 }
 
 // GetLastFirstEventIDTxnID mocks base method.
@@ -3005,7 +3034,7 @@ func (mr *MockMutableStateMockRecorder) UpdateWorkflowStateStatus(state, status 
 }
 
 // VisitUpdates mocks base method.
-func (m *MockMutableState) VisitUpdates(visitor func(string, *v114.UpdateInfo)) {
+func (m *MockMutableState) VisitUpdates(visitor func(string, *v112.UpdateInfo)) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "VisitUpdates", visitor)
 }

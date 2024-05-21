@@ -341,14 +341,17 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
 	}
 	if m.ms.IsTransientWorkflowTask() {
-		lastWriteVersion, err := m.ms.GetLastWriteVersion()
+		// TODO: ideally this should be the version of the last started workflow task.
+		// but we are using the last event version here instead since there's no other
+		// events when there's a started workflow task.
+		lastEventVersion, err := m.ms.GetLastEventVersion()
 		if err != nil {
 			return nil, err
 		}
 
 		// If failover happened during transient workflow task,
 		// then reset the attempt to 1, and not use transient workflow task.
-		if m.ms.GetCurrentVersion() != lastWriteVersion {
+		if m.ms.GetCurrentVersion() != lastEventVersion {
 			m.ms.executionInfo.WorkflowTaskAttempt = 1
 			workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 			createWorkflowTaskScheduledEvent = true

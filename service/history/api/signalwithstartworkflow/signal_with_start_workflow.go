@@ -170,13 +170,15 @@ func createVersionedRunID(currentWorkflowLease api.WorkflowLease) (*api.Versione
 		return nil, nil
 	}
 	currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
-	currentLastWriteVersion, err := currentWorkflowLease.GetMutableState().GetLastWriteVersion()
+	currentCloseVersion, err := currentWorkflowLease.GetMutableState().GetCloseVersion()
 	if err != nil {
 		return nil, err
 	}
 	id := api.VersionedRunID{
-		RunID:            currentExecutionState.RunId,
-		LastWriteVersion: currentLastWriteVersion,
+		RunID: currentExecutionState.RunId,
+		// we stop updating last write version in the current record after workflow is closed
+		// so workflow close version is the last write version for the current record
+		LastWriteVersion: currentCloseVersion,
 	}
 	return &id, nil
 }

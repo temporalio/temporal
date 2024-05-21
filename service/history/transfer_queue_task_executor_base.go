@@ -279,11 +279,11 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	}
 
 	if taskVersion != common.EmptyVersion {
-		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		closeVersion, err := mutableState.GetCloseVersion()
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, taskVersion, task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, taskVersion, task)
 		if err != nil {
 			return err
 		}

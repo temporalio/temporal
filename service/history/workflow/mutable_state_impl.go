@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -162,10 +161,6 @@ type (
 
 		// In-memory only attributes
 		currentVersion int64
-		// The namespace failover version at the time the current transaction started.
-		// Cached for consistency across a single transaction.
-		// This value can be used to mutate sub-statemachines after the workflow has already been closed.
-		currentTransactionNamespaceFailoverVersion int64
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
@@ -693,28 +688,26 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if state, _ := ms.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// always set current version to last write version when workflow is completed
-		lastWriteVersion, err := ms.GetLastWriteVersion()
-		if err != nil {
-			return err
-		}
-		ms.currentVersion = lastWriteVersion
-		return nil
-	}
+	if ms.config.EnableMutableStateTransitionHistory() &&
+		len(ms.executionInfo.TransitionHistory) != 0 {
 
-	versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
-	if err != nil {
-		return err
-	}
-
-	if !versionhistory.IsEmptyVersionHistory(versionHistory) {
 		// this make sure current version >= last write version
-		versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
+		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		ms.currentVersion = lastVersionedTransition.NamespaceFailoverVersion
+	} else {
+		versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
-		ms.currentVersion = versionHistoryItem.GetVersion()
+
+		if !versionhistory.IsEmptyVersionHistory(versionHistory) {
+			// this make sure current version >= last event version
+			versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
+			if err != nil {
+				return err
+			}
+			ms.currentVersion = versionHistoryItem.GetVersion()
+		}
 	}
 
 	if version > ms.currentVersion || forceUpdate {
@@ -759,8 +752,34 @@ func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
 	return common.EmptyVersion, nil
 }
 
-func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
+func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
+	if ms.IsWorkflowExecutionRunning() {
+		return common.EmptyVersion, serviceerror.NewInternal("GetCloseVersion: workflow is still running")
+	}
 
+	// here we assume that closing a workflow must generate an event
+
+	// if workflow is closing in the current transation,
+	// then the last event is closed event and the event version is the close version
+	if lastEventVersion, ok := ms.hBuilder.LastEventVersion(); ok {
+		return lastEventVersion, nil
+	}
+
+	return ms.GetLastEventVersion()
+}
+
+func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
+	if ms.config.EnableMutableStateTransitionHistory() &&
+		len(ms.executionInfo.TransitionHistory) != 0 {
+
+		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		return lastVersionedTransition.NamespaceFailoverVersion, nil
+	}
+
+	return ms.GetLastEventVersion()
+}
+
+func (ms *MutableStateImpl) GetLastEventVersion() (int64, error) {
 	if ms.executionInfo.VersionHistories != nil {
 		versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 		if err != nil {
@@ -910,10 +929,10 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 // VisitUpdates visits mutable state update entries, ordered by the ID of the history event pointed to by the mutable
 // state entry. Thus, for example, updates entries in Admitted state will be visited in the order that their Admitted
 // events were added to history.
-func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 	type updateEvent struct {
 		updId   string
-		updInfo *updatespb.UpdateInfo
+		updInfo *persistencespb.UpdateInfo
 		eventId int64
 	}
 	var updateEvents []updateEvent
@@ -3996,13 +4015,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAdmittedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
-	admission := &updatespb.UpdateInfo_Admission{
-		Admission: &updatespb.AdmissionInfo{
-			Location: &updatespb.AdmissionInfo_HistoryPointer_{
-				HistoryPointer: &updatespb.AdmissionInfo_HistoryPointer{
+	admission := &persistencespb.UpdateInfo_Admission{
+		Admission: &persistencespb.UpdateAdmissionInfo{
+			Location: &persistencespb.UpdateAdmissionInfo_HistoryPointer_{
+				HistoryPointer: &persistencespb.UpdateAdmissionInfo_HistoryPointer{
 					EventId:      event.EventId,
 					EventBatchId: batchId,
 				},
@@ -4012,7 +4031,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
 	}
-	ui := updatespb.UpdateInfo{Value: admission}
+	ui := persistencespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -4045,20 +4064,20 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAcceptedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
 	var sizeDelta int
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Size()
-		ui.Value = &updatespb.UpdateInfo_Acceptance{
-			Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
+		ui.Value = &persistencespb.UpdateInfo_Acceptance{
+			Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
-		ui := updatespb.UpdateInfo{
-			Value: &updatespb.UpdateInfo_Acceptance{
-				Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
+		ui := persistencespb.UpdateInfo{
+			Value: &persistencespb.UpdateInfo_Acceptance{
+				Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 			},
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
@@ -4104,8 +4123,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 		return serviceerror.NewInvalidArgument("WorkflowExecutionUpdateCompletedEvent doesn't have preceding WorkflowExecutionUpdateAcceptedEvent")
 	}
 	sizeBefore := ui.Size()
-	ui.Value = &updatespb.UpdateInfo_Completion{
-		Completion: &updatespb.CompletionInfo{
+	ui.Value = &persistencespb.UpdateInfo_Completion{
+		Completion: &persistencespb.UpdateCompletionInfo{
 			EventId:      event.EventId,
 			EventBatchId: batchID,
 		},
@@ -4968,8 +4987,7 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 	ms.namespaceEntry = namespaceEntry
-	ms.currentTransactionNamespaceFailoverVersion = namespaceEntry.FailoverVersion()
-	if err := ms.UpdateCurrentVersion(ms.currentTransactionNamespaceFailoverVersion, false); err != nil {
+	if err := ms.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
 		return false, err
 	}
 
@@ -5187,7 +5205,7 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	if ms.config.EnableNexus() {
 		ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
 			ms.executionInfo.TransitionHistory,
-			ms.currentTransactionNamespaceFailoverVersion,
+			ms.GetCurrentVersion(),
 			ms.executionInfo.StateTransitionCount,
 		)
 	}
@@ -5500,22 +5518,35 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 
 	// Handling mutable state turn from standby to active, while having a workflow task on the fly
 	workflowTask := ms.GetStartedWorkflowTask()
-	if workflowTask == nil || workflowTask.Version >= ms.GetCurrentVersion() {
+	currentVersion := ms.GetCurrentVersion()
+	if workflowTask == nil || workflowTask.Version >= currentVersion {
 		// no pending workflow tasks, no buffered events
 		// or workflow task has higher / equal version
 		return false, nil
 	}
 
-	currentVersion := ms.GetCurrentVersion()
+	lastEventVersion, err := ms.GetLastEventVersion()
+	if err != nil {
+		return false, err
+	}
+	if lastEventVersion != workflowTask.Version {
+		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last event version %v", workflowTask.Version, lastEventVersion))
+	}
+
+	// NOTE: if lastEventVersion is used here then the version transition history could decrecase
+	//
+	// TODO: Today's replication task processing logic won't flush buffered events when applying state only changes.
+	// As a result, when using lastWriteVersion, which takes state only change into account, here, we could still
+	// have buffered events, but lastWriteSourceCluster will no longer be current cluster and the be treated as case 4
+	// and fail on the sanity check.
+	// We need to change replication task processing logic to always flush buffered events on all replication task types.
+	// State transition history is not enabled today so we are safe and LastWriteVersion == LastEventVersion
 	lastWriteVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return false, err
 	}
-	if lastWriteVersion != workflowTask.Version {
-		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
-	}
 
-	lastWriteSourceCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
+	lastWriteCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
 	currentVersionCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), currentVersion)
 	currentCluster := ms.clusterMetadata.GetCurrentClusterName()
 
@@ -5529,7 +5560,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	// 4. passive -> passive => no buffered events, since always passive, nothing to be done
 
 	// handle case 4
-	if lastWriteSourceCluster != currentCluster && currentVersionCluster != currentCluster {
+	if lastWriteCluster != currentCluster && currentVersionCluster != currentCluster {
 		// do a sanity check on buffered events
 		if ms.HasBufferedEvents() {
 			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")
@@ -5541,7 +5572,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	var flushBufferVersion = lastWriteVersion
 
 	// handle case 3
-	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
+	if lastWriteCluster != currentCluster && currentVersionCluster == currentCluster {
 		// do a sanity check on buffered events
 		if ms.HasBufferedEvents() {
 			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")

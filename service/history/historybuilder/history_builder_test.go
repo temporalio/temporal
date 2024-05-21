@@ -2289,7 +2289,7 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 	}
 
 	commandsWithEventsCount := 0
-	for ct, _ := range enumspb.CommandType_name {
+	for ct := range enumspb.CommandType_name {
 		commandType := enumspb.CommandType(ct)
 		// Unspecified is not counted.
 		// ProtocolMessage command doesn't have corresponding event.
@@ -2382,6 +2382,36 @@ func (s *historyBuilderSuite) TestBufferSize_DB() {
 	s.flush()
 	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
 	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+}
+
+func (s *historyBuilderSuite) TestLastEventVersion() {
+	_, ok := s.historyBuilder.LastEventVersion()
+	s.False(ok)
+
+	s.historyBuilder.AddWorkflowExecutionStartedEvent(
+		time.Now(),
+		&historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{},
+		},
+		nil,
+		"",
+		"",
+		"",
+	)
+	version, ok := s.historyBuilder.LastEventVersion()
+	s.True(ok)
+	s.Equal(s.version, version)
+
+	s.historyBuilder.FlushAndCreateNewBatch()
+	version, ok = s.historyBuilder.LastEventVersion()
+	s.True(ok)
+	s.Equal(s.version, version)
+
+	_, err := s.historyBuilder.Finish(true)
+	s.NoError(err)
+	_, ok = s.historyBuilder.LastEventVersion()
+	s.False(ok)
+
 }
 
 func (s *historyBuilderSuite) assertEventIDTaskID(
