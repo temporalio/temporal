@@ -327,11 +327,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// DeleteAfterClose is set to true when this close execution task was generated as part of delete open workflow execution procedure.
 	// Delete workflow execution is started by user API call and should be done regardless of current workflow version.
 	if !task.DeleteAfterClose {
-		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		closeVersion, err := mutableState.GetCloseVersion()
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task)
 		if err != nil {
 			return err
 		}
@@ -951,6 +951,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		return nil
 	}
 
+	// TODO: why we are comparing task version to workflow start version here?
+	// GenerateWorkflowResetTasks uses currentVersion
 	currentStartVersion, err := currentMutableState.GetStartVersion()
 	if err != nil {
 		return err

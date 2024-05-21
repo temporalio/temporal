@@ -28,41 +28,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 )
-
-type state string
-
-const (
-	state1 state = "state1"
-	state2 state = "state2"
-	state3 state = "state3"
-	state4 state = "state4"
-)
-
-type data struct {
-	state state
-}
 
 type event struct{ fail bool }
-
-func (d *data) State() state {
-	return d.state
-}
-
-func (d *data) SetState(s state) {
-	d.state = s
-}
-
-func (d *data) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
-	panic("not implemented")
-}
 
 var handlerErr = errors.New("test")
 
 var transition = hsm.NewTransition(
-	[]state{state1, state2},
-	state3,
-	func(d *data, e event) (hsm.TransitionOutput, error) {
+	[]hsmtest.State{hsmtest.State1, hsmtest.State2},
+	hsmtest.State3,
+	func(d *hsmtest.Data, e event) (hsm.TransitionOutput, error) {
 		if e.fail {
 			return hsm.TransitionOutput{}, handlerErr
 		}
@@ -71,32 +47,32 @@ var transition = hsm.NewTransition(
 )
 
 func TestTransition_Possible(t *testing.T) {
-	d := &data{state: state4}
+	d := hsmtest.NewData(hsmtest.State4)
 	require.False(t, transition.Possible(d))
-	d = &data{state: state3}
+	d = hsmtest.NewData(hsmtest.State3)
 	require.False(t, transition.Possible(d))
-	d = &data{state: state1}
+	d = hsmtest.NewData(hsmtest.State1)
 	require.True(t, transition.Possible(d))
-	d = &data{state: state2}
+	d = hsmtest.NewData(hsmtest.State2)
 	require.True(t, transition.Possible(d))
 }
 
 func TestTransition_ValidTransition(t *testing.T) {
-	d := &data{state: state1}
+	d := hsmtest.NewData(hsmtest.State1)
 	_, err := transition.Apply(d, event{})
 	require.NoError(t, err)
-	require.Equal(t, state3, d.state)
+	require.Equal(t, hsmtest.State3, d.State())
 }
 
 func TestTransition_InvalidTransition(t *testing.T) {
-	d := &data{state: state4}
+	d := hsmtest.NewData(hsmtest.State4)
 	_, err := transition.Apply(d, event{})
 	require.ErrorIs(t, err, hsm.ErrInvalidTransition)
-	require.Equal(t, state4, d.state)
+	require.Equal(t, hsmtest.State4, d.State())
 }
 
 func TestTransition_HandlerError(t *testing.T) {
-	d := &data{state: state1}
+	d := hsmtest.NewData(hsmtest.State1)
 	_, err := transition.Apply(d, event{fail: true})
 	require.ErrorIs(t, err, handlerErr)
 }

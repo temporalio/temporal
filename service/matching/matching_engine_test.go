@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/worker_versioning"
 
@@ -646,7 +647,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			}
 			if isForwarded {
-				addRequest.ForwardedSource = forwardedFrom
+				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
 			}
 			_, _, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		} else {
@@ -658,7 +659,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			}
 			if isForwarded {
-				addRequest.ForwardedSource = forwardedFrom
+				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
 			}
 			_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
 		}
@@ -3206,7 +3207,7 @@ func (*testTaskManager) GetTaskQueuesByBuildId(context.Context, *persistence.Get
 
 // CountTaskQueuesByBuildId implements persistence.TaskManager
 func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
-	// This is only used to validate that the build id to task queue mapping is enforced (at the time of writing), report 0.
+	// This is only used to validate that the build ID to task queue mapping is enforced (at the time of writing), report 0.
 	return 0, nil
 }
 

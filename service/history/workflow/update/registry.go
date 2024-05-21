@@ -36,12 +36,14 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	updatespb "go.temporal.io/server/api/update/v1"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
@@ -56,8 +58,14 @@ type (
 
 		// Find finds an existing update in this Registry but does not create a
 		// new update if no update is found.
-		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
-		// TODO: isn't the return `bool` always true when the *Update != nil?
+		Find(ctx context.Context, protocolInstanceID string) *Update
+
+		// TryResurrect tries to resurrect the update from the protocol message,
+		// whose body contains Acceptance or Rejection message.
+		// It returns an error if some unexpected error happened, but if there is not
+		// enough data in the message, it just returns a nil update.
+		// If the update was successfully resurrected it is added to the registry in stateAdmitted.
+		TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error)
 
 		// HasOutgoingMessages returns true if the registry has any Updates
 		// for which outgoing message can be generated.
@@ -95,7 +103,7 @@ type (
 
 	// Store represents the update package's requirements for reading updates from the store.
 	Store interface {
-		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		GetCurrentVersion() int64
 		IsWorkflowExecutionRunning() bool
@@ -171,7 +179,7 @@ func NewRegistry(
 		opt(r)
 	}
 
-	r.store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+	r.store.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
 			// An update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
@@ -181,10 +189,9 @@ func NewRegistry(
 			// UpdateAdmitted event in history; and when there is an UpdateAdmitted event in history, we will not
 			// attempt to write the request payload to the UpdateAccepted event, since the request payload is
 			// already present in the UpdateAdmitted event.
-			var request *anypb.Any
 			r.updates[updID] = newAdmitted(
 				updID,
-				request,
+				nil,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
@@ -209,7 +216,7 @@ func NewRegistry(
 }
 
 func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
-	if upd, found := r.Find(ctx, id); found {
+	if upd := r.Find(ctx, id); upd != nil {
 		return upd, true, nil
 	}
 	if err := r.checkLimits(ctx); err != nil {
@@ -218,6 +225,52 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
+}
+
+func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error) {
+	if acptOrRejMsg == nil || acptOrRejMsg.Body == nil {
+		return nil, nil
+	}
+
+	// Check only total limit here. This might add more than maxInFlight updates to registry,
+	// but provides better developer experience.
+	if err := r.checkTotalLimit(ctx); err != nil {
+		return nil, err
+	}
+
+	body, err := acptOrRejMsg.Body.UnmarshalNew()
+	if err != nil {
+		return nil, invalidArgf("unable to unmarshal request: %v", err)
+	}
+	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
+	if err != nil {
+		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
+	}
+	var reqMsg *updatepb.Request
+	switch updMsg := body.(type) {
+	case *updatepb.Acceptance:
+		reqMsg = updMsg.GetAcceptedRequest()
+	case *updatepb.Rejection:
+		reqMsg = updMsg.GetRejectedRequest()
+		// Ignore all other message types.
+	}
+	if reqMsg == nil {
+		return nil, nil
+	}
+	reqAny, err := anypb.New(reqMsg)
+	if err != nil {
+		return nil, invalidArgf("unable to unmarshal request body: %v", err)
+	}
+
+	updateID := acptOrRejMsg.ProtocolInstanceId
+	upd := newAdmitted(
+		updateID,
+		reqAny,
+		r.remover(updateID),
+		withInstrumentation(&r.instrumentation),
+	)
+	r.updates[updateID] = upd
+	return upd, nil
 }
 
 // Abort all incomplete updates in the registry.
@@ -325,7 +378,7 @@ func (r *registry) remover(id string) updateOpt {
 	)
 }
 
-func (r *registry) checkLimits(_ context.Context) error {
+func (r *registry) checkLimits(ctx context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
 		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
@@ -335,19 +388,22 @@ func (r *registry) checkLimits(_ context.Context) error {
 		}
 	}
 
+	return r.checkTotalLimit(ctx)
+}
+
+func (r *registry) checkTotalLimit(_ context.Context) error {
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
 	}
-
 	return nil
 }
 
-func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
+func (r *registry) Find(ctx context.Context, id string) *Update {
 	if upd, ok := r.updates[id]; ok {
-		return upd, true
+		return upd
 	}
 
 	// update not found in ephemeral state, but could have already completed so
@@ -357,7 +413,7 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 	// Swallow NotFound error because it means that update doesn't exist.
 	var notFound *serviceerror.NotFound
 	if errors.As(err, &notFound) {
-		return nil, false
+		return nil
 	}
 
 	// Other errors go to the future of completed update because it means, that update exists, was found,
@@ -370,7 +426,7 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 		id,
 		fut,
 		withInstrumentation(&r.instrumentation),
-	), true
+	)
 }
 
 // filter returns a slice of all updates in the registry for which the

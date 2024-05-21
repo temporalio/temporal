@@ -128,7 +128,9 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
 		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
 		dynamicconfig.BuildIdScavengerEnabled.Key():  false,
-		dynamicconfig.FrontendEnableNexusAPIs.Key():  true,
+		dynamicconfig.EnableNexus.Key():              true,
+		// Better to read through in tests than add artificial sleeps (which is what we previously had).
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
 	})
 	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
 	clusterConfig.ServiceFxOptions = params.ServiceOptions
@@ -168,10 +170,6 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
-
-	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
-	// TODO: remove after https://github.com/temporalio/temporal/issues/4017 is resolved
-	time.Sleep(2 * NamespaceCacheRefreshInterval)
 }
 
 func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
@@ -238,12 +236,27 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	// #nosec
 	confContent, err := os.ReadFile(configLocation)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read test cluster config file %v: %v", configLocation, err)
+		return nil, fmt.Errorf("failed to read test cluster config file %s: %w", configLocation, err)
 	}
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 	var options TestClusterConfig
 	if err := yaml.Unmarshal(confContent, &options); err != nil {
-		return nil, fmt.Errorf("failed to decode test cluster config %v", err)
+		return nil, fmt.Errorf("failed to decode test cluster config %s: %w", configLocation, err)
+	}
+
+	// If -FaultInjectionConfigFile is passed to the test runner,
+	// then fault injection config will be added to the test cluster config.
+	if TestFlags.FaultInjectionConfigFile != "" {
+		fiConfigContent, err := os.ReadFile(TestFlags.FaultInjectionConfigFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read test cluster fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err)
+		}
+
+		var fiOptions TestClusterConfig
+		if err := yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
+			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
+		}
+		options.FaultInjection = fiOptions.FaultInjection
 	}
 
 	options.FrontendAddress = TestFlags.FrontendAddr

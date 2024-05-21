@@ -192,6 +192,29 @@ func (n *Node) ClearTransactionState() {
 	}
 }
 
+// Walk applies the given function to all nodes rooted at the current node.
+// Returns after successfully applying the function to all nodes or first error.
+func (n *Node) Walk(fn func(*Node) error) error {
+	if n == nil {
+		return nil
+	}
+
+	if err := fn(n); err != nil {
+		return err
+	}
+
+	for childType := range n.persistence.Children {
+		childNodes := NewCollection[any](n, childType).List()
+		for _, child := range childNodes {
+			if err := child.Walk(fn); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // Child recursively gets a child for the given path.
 func (n *Node) Child(path []Key) (*Node, error) {
 	if len(path) == 0 {
@@ -268,6 +291,10 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	children, ok := n.persistence.Children[key.Type]
 	if !ok {
 		children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
+		// Children may be nil if the map was empty and the proto message we serialized and deserialized.
+		if n.persistence.Children == nil {
+			n.persistence.Children = make(map[int32]*persistencespb.StateMachineMap, 1)
+		}
 		n.persistence.Children[key.Type] = children
 	}
 	children.MachinesById[key.ID] = node.persistence

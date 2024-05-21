@@ -32,6 +32,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 )
@@ -49,7 +50,8 @@ type CanGetNexusCompletion interface {
 type HTTPCaller func(*http.Request) (*http.Response, error)
 
 type ActiveExecutorOptions struct {
-	CallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
+	NamespaceRegistry namespace.Registry
+	CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
 }
 
 func RegisterExecutor(
@@ -79,15 +81,29 @@ func (e activeExecutor) executeInvocationTask(
 	ref hsm.Ref,
 	task InvocationTask,
 ) error {
-	url, completion, err := e.loadUrlAndCallback(ctx, env, ref)
+	ns, err := e.options.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
+	if err != nil {
+		return fmt.Errorf("failed to get namespace by ID: %w", err)
+	}
+
+	args, err := e.loadInvocationArgs(ctx, env, ref)
 	if err != nil {
 		return err
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, e.config.RequestTimeout())
+	callCtx, cancel := context.WithTimeout(
+		ctx,
+		e.config.RequestTimeout(ns.Name().String(), task.Destination),
+	)
 	defer cancel()
 
-	request, err := nexus.NewCompletionHTTPRequest(callCtx, url, completion)
+	request, err := nexus.NewCompletionHTTPRequest(callCtx, args.url, args.completion)
+	if request.Header == nil {
+		request.Header = make(http.Header)
+	}
+	for k, v := range args.header {
+		request.Header.Set(k, v)
+	}
 	if err != nil {
 		return queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
@@ -121,14 +137,18 @@ func (e activeExecutor) executeInvocationTask(
 	return err
 }
 
-func (e activeExecutor) loadUrlAndCallback(
+type invocationArgs struct {
+	url        string
+	header     map[string]string
+	completion nexus.OperationCompletion
+}
+
+func (e activeExecutor) loadInvocationArgs(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-) (string, nexus.OperationCompletion, error) {
-	var url string
-	var completion nexus.OperationCompletion
-	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+) (args invocationArgs, err error) {
+	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		callback, err := hsm.MachineData[Callback](node)
 		if err != nil {
 			return err
@@ -139,8 +159,9 @@ func (e activeExecutor) loadUrlAndCallback(
 		}
 		switch variant := callback.PublicInfo.GetCallback().GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
-			url = variant.Nexus.GetUrl()
-			completion, err = target.GetNexusCompletion(ctx)
+			args.url = variant.Nexus.GetUrl()
+			args.header = variant.Nexus.GetHeader()
+			args.completion, err = target.GetNexusCompletion(ctx)
 			if err != nil {
 				return err
 			}
@@ -151,7 +172,7 @@ func (e activeExecutor) loadUrlAndCallback(
 		}
 		return nil
 	})
-	return url, completion, err
+	return
 }
 
 func (e activeExecutor) saveResult(

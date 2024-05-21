@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -109,8 +109,11 @@ func IsStreamError(err error) bool {
 }
 
 func IsRetryableError(err error) bool {
+	if shard.IsShardOwnershipLostError(err) {
+		return false
+	}
 	switch err.(type) {
-	case *StreamError, *persistence.ShardOwnershipLostError:
+	case *StreamError:
 		return false
 	default:
 		return true

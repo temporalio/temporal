@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package dynamicconfig
+package dynamicconfig_test
 
 import (
 	"os"
@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 )
 
@@ -44,8 +45,8 @@ import (
 type fileBasedClientSuite struct {
 	suite.Suite
 	*require.Assertions
-	client     Client
-	collection *Collection
+	client     dynamicconfig.Client
+	collection *dynamicconfig.Collection
 	doneCh     chan interface{}
 }
 
@@ -58,11 +59,11 @@ func (s *fileBasedClientSuite) SetupSuite() {
 	var err error
 	s.doneCh = make(chan interface{})
 	logger := log.NewNoopLogger()
-	s.client, err = NewFileBasedClient(&FileBasedClientConfig{
+	s.client, err = dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,
 	}, logger, s.doneCh)
-	s.collection = NewCollection(s.client, logger)
+	s.collection = dynamicconfig.NewCollection(s.client, logger)
 	s.Require().NoError(err)
 }
 
@@ -77,10 +78,10 @@ func (s *fileBasedClientSuite) SetupTest() {
 func (s *fileBasedClientSuite) TestGetValue() {
 	cvs := s.client.GetValue(testGetBoolPropertyKey)
 	s.Equal(3, len(cvs))
-	s.ElementsMatch([]ConstrainedValue{
-		{Constraints: Constraints{}, Value: false},
-		{Constraints: Constraints{Namespace: "global-samples-namespace"}, Value: true},
-		{Constraints: Constraints{Namespace: "samples-namespace"}, Value: true},
+	s.ElementsMatch([]dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{}, Value: false},
+		{Constraints: dynamicconfig.Constraints{Namespace: "global-samples-namespace"}, Value: true},
+		{Constraints: dynamicconfig.Constraints{Namespace: "samples-namespace"}, Value: true},
 	}, cvs)
 }
 
@@ -89,7 +90,7 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 	s.Nil(cvs)
 
 	defaultValue := true
-	v := GlobalBoolSetting{key: unknownKey, def: defaultValue}.Get(s.collection)()
+	v := dynamicconfig.NewGlobalBoolSetting(unknownKey, defaultValue, "").Get(s.collection)()
 	s.Equal(defaultValue, v)
 }
 
@@ -97,36 +98,36 @@ func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
 	cvs := s.client.GetValue(testCaseInsensitivePropertyKey)
 	s.Equal(1, len(cvs))
 
-	v := GlobalBoolSetting{key: testCaseInsensitivePropertyKey, def: false}.Get(s.collection)()
+	v := dynamicconfig.NewGlobalBoolSetting(testCaseInsensitivePropertyKey, false, "").Get(s.collection)()
 	s.Equal(true, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue() {
-	v := GlobalIntSetting{key: testGetIntPropertyKey, def: 1}.Get(s.collection)()
+	v := dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 1, "").Get(s.collection)()
 	s.Equal(1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
-	v := NamespaceIntSetting{key: testGetIntPropertyKey, def: 500}.Get(s.collection)("samples-namespace")
+	v := dynamicconfig.NewNamespaceIntSetting(testGetIntPropertyKey, 500, "").Get(s.collection)("samples-namespace")
 	s.Equal(1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
 	defaultValue := 2000
-	v := NamespaceIntSetting{key: testGetIntPropertyKey, def: defaultValue}.Get(s.collection)("global-samples-namespace")
+	v := dynamicconfig.NewNamespaceIntSetting(testGetIntPropertyKey, defaultValue, "").Get(s.collection)("global-samples-namespace")
 	s.Equal(defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo() {
 	expectedValue := 1001
-	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
+	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 	expectedValue := 1003
-	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
+	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		// this is contrived, but simulates something that doesn't match workflow or activity
 		"global-samples-namespace", "test-tq", enumspb.TaskQueueType(3),
 	)
@@ -135,40 +136,40 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo() {
 	expectedValue := 1002
-	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
+	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 	expectedValue := 1005
-	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
+	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"some-other-namespace", "other-test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
 	expectedValue := 1004
-	v := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
+	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"another-namespace", "test-tq", 0)
 	s.Equal(expectedValue, v)
 	expectedValue = 1005
-	v = TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
+	v = dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"another-namespace", "other-test-tq", 0)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
 	// should return 1001 as the most specific match
-	v1 := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 1001}.Get(s.collection)(
+	v1 := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 1001, "").Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	v2 := TaskQueueIntSetting{key: testGetIntPropertyKey, def: 0}.Get(s.collection)(
+	v2 := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(v1, v2)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByDestination() {
-	dc := DestinationIntSetting{key: testGetIntPropertyFilteredByDestinationKey, def: 5}.Get(s.collection)
+	dc := dynamicconfig.NewDestinationIntSetting(testGetIntPropertyFilteredByDestinationKey, 5, "").Get(s.collection)
 	s.Equal(10, dc("foo", "bar"))
 	s.Equal(20, dc("test-namespace", "test-destination-1"))
 	s.Equal(30, dc("test-namespace", "random-destination"))
@@ -177,29 +178,29 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByDestination() {
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue() {
-	v := GlobalFloatSetting{key: testGetFloat64PropertyKey, def: 1}.Get(s.collection)()
+	v := dynamicconfig.NewGlobalFloatSetting(testGetFloat64PropertyKey, 1, "").Get(s.collection)()
 	s.Equal(12.0, v)
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
 	defaultValue := 1.0
-	v := NamespaceFloatSetting{key: testGetFloat64PropertyKey, def: defaultValue}.Get(s.collection)("samples-namespace")
+	v := dynamicconfig.NewNamespaceFloatSetting(testGetFloat64PropertyKey, defaultValue, "").Get(s.collection)("samples-namespace")
 	s.Equal(defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetBoolValue() {
-	v := GlobalBoolSetting{key: testGetBoolPropertyKey, def: true}.Get(s.collection)()
+	v := dynamicconfig.NewGlobalBoolSetting(testGetBoolPropertyKey, true, "").Get(s.collection)()
 	s.Equal(false, v)
 }
 
 func (s *fileBasedClientSuite) TestGetStringValue() {
-	v := NamespaceStringSetting{key: testGetStringPropertyKey, def: "defaultString"}.Get(s.collection)("random-namespace")
+	v := dynamicconfig.NewNamespaceStringSetting(testGetStringPropertyKey, "defaultString", "").Get(s.collection)("random-namespace")
 	s.Equal("constrained-string", v)
 }
 
 func (s *fileBasedClientSuite) TestGetMapValue() {
 	var defaultVal map[string]interface{}
-	v := GlobalMapSetting{key: testGetMapPropertyKey, def: defaultVal}.Get(s.collection)()
+	v := dynamicconfig.NewGlobalMapSetting(testGetMapPropertyKey, defaultVal, "").Get(s.collection)()
 	expectedVal := map[string]interface{}{
 		"key1": "1",
 		"key2": 1,
@@ -214,52 +215,78 @@ func (s *fileBasedClientSuite) TestGetMapValue() {
 	s.Equal(expectedVal, v)
 }
 
+func (s *fileBasedClientSuite) TestGetTypedValue() {
+	type myStruct struct {
+		Number int
+		Days   time.Duration
+		Inner  struct {
+			Key1 float64
+			Key2 bool
+		}
+		UnsetInFile string
+	}
+	v := dynamicconfig.NewGlobalTypedSetting(testGetTypedPropertyKey, myStruct{UnsetInFile: "unset"}, "").Get(s.collection)()
+	expectedVal := myStruct{
+		Number: 23,
+		Days:   6 * 24 * time.Hour,
+		Inner: struct {
+			Key1 float64
+			Key2 bool
+		}{
+			Key1: 12345.0,
+			Key2: true,
+		},
+		UnsetInFile: "unset", // note this value comes from the default
+	}
+	s.Equal(expectedVal, v)
+}
+
 func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
 	var defaultVal map[string]interface{}
-	v := NamespaceMapSetting{key: testGetMapPropertyKey, def: defaultVal}.Get(s.collection)("random-namespace")
+	v := dynamicconfig.NewNamespaceMapSetting(testGetMapPropertyKey, defaultVal, "").Get(s.collection)("random-namespace")
 	s.Equal(defaultVal, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue() {
-	v := GlobalDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)()
+	v := dynamicconfig.NewGlobalDurationSetting(testGetDurationPropertyKey, time.Second, "").Get(s.collection)()
 	s.Equal(time.Minute, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_DefaultSeconds() {
-	v := NamespaceDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)("samples-namespace")
+	v := dynamicconfig.NewNamespaceDurationSetting(testGetDurationPropertyKey, time.Second, "").Get(s.collection)("samples-namespace")
 	s.Equal(2*time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
-	v := NamespaceDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)("broken-namespace")
+	v := dynamicconfig.NewNamespaceDurationSetting(testGetDurationPropertyKey, time.Second, "").Get(s.collection)("broken-namespace")
 	s.Equal(time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
-	v := TaskQueueDurationSetting{key: testGetDurationPropertyKey, def: time.Second}.Get(s.collection)(
+	v := dynamicconfig.NewTaskQueueDurationSetting(testGetDurationPropertyKey, time.Second, "").Get(s.collection)(
 		"samples-namespace", "longIdleTimeTaskqueue", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	expectedValue := time.Second * 10
-	v := TaskTypeDurationSetting{key: testGetDurationPropertyFilteredByTaskTypeKey, def: 0}.Get(s.collection)(
+	v := dynamicconfig.NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, 0, "").Get(s.collection)(
 		enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
 	)
 	s.Equal(expectedValue, v)
-	v = TaskTypeDurationSetting{key: testGetDurationPropertyFilteredByTaskTypeKey, def: 0}.Get(s.collection)(
+	v = dynamicconfig.NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, 0, "").Get(s.collection)(
 		enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 	)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ConfigNotExist() {
-	_, err := NewFileBasedClient(nil, nil, nil)
+	_, err := dynamicconfig.NewFileBasedClient(nil, nil, nil)
 	s.Error(err)
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
-	_, err := NewFileBasedClient(&FileBasedClientConfig{
+	_, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "file/not/exist.yaml",
 		PollInterval: time.Second * 10,
 	}, nil, nil)
@@ -267,7 +294,7 @@ func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
-	_, err := NewFileBasedClient(&FileBasedClientConfig{
+	_, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second,
 	}, nil, nil)
@@ -292,7 +319,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
 	defer ctrl.Finish()
 
 	doneCh := make(chan interface{})
-	reader := NewMockfileReader(ctrl)
+	reader := dynamicconfig.NewMockfileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
@@ -342,8 +369,8 @@ testGetBoolPropertyKey:
 	reader.EXPECT().ReadFile(gomock.Any()).Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(6)
-	client, err := NewFileBasedClientWithReader(reader,
-		&FileBasedClientConfig{
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
@@ -357,7 +384,7 @@ testGetBoolPropertyKey:
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {} value: false } newValue: { constraints: {} value: true }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {{Namespace:global-samples-namespace}} value: true } newValue: { constraints: {{Namespace:global-samples-namespace}} value: false }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	s.NoError(client.update())
+	s.NoError(client.Update())
 	s.NoError(err)
 	close(doneCh)
 }
@@ -367,7 +394,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedMapValue() {
 	defer ctrl.Finish()
 
 	doneCh := make(chan interface{})
-	reader := NewMockfileReader(ctrl)
+	reader := dynamicconfig.NewMockfileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
@@ -395,8 +422,8 @@ history.defaultActivityRetryPolicy:
 	reader.EXPECT().ReadFile(gomock.Any()).Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(2)
-	client, err := NewFileBasedClientWithReader(reader,
-		&FileBasedClientConfig{
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
@@ -407,7 +434,7 @@ history.defaultActivityRetryPolicy:
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: history.defaultactivityretrypolicy oldValue: { constraints: {} value: map[BackoffCoefficient:3 InitialIntervalInSeconds:1 MaximumAttempts:0 MaximumIntervalCoefficient:100] } newValue: { constraints: {} value: map[BackoffCoefficient:2 InitialIntervalInSeconds:3 MaximumAttempts:0 MaximumIntervalCoefficient:100] }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	s.NoError(client.update())
+	s.NoError(client.Update())
 	s.NoError(err)
 	close(doneCh)
 }
@@ -417,7 +444,7 @@ func (s *fileBasedClientSuite) TestUpdate_NewEntry() {
 	defer ctrl.Finish()
 
 	doneCh := make(chan interface{})
-	reader := NewMockfileReader(ctrl)
+	reader := dynamicconfig.NewMockfileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
@@ -447,8 +474,8 @@ testGetIntPropertyKey:
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {} value: 12 }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	client, err := NewFileBasedClientWithReader(reader,
-		&FileBasedClientConfig{
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
@@ -460,7 +487,7 @@ testGetIntPropertyKey:
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {{Namespace:samples-namespace}} value: 22 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetintpropertykey oldValue: nil newValue: { constraints: {} value: 2000 }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	s.NoError(client.update())
+	s.NoError(client.Update())
 	s.NoError(err)
 	close(doneCh)
 }
@@ -470,7 +497,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangeOrder_ShouldNotWriteLog() {
 	defer ctrl.Finish()
 
 	doneCh := make(chan interface{})
-	reader := NewMockfileReader(ctrl)
+	reader := dynamicconfig.NewMockfileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
@@ -506,8 +533,8 @@ testGetFloat64PropertyKey:
 	reader.EXPECT().ReadFile(gomock.Any()).Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(4)
-	client, err := NewFileBasedClientWithReader(reader,
-		&FileBasedClientConfig{
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
@@ -517,7 +544,7 @@ testGetFloat64PropertyKey:
 	reader.EXPECT().ReadFile(gomock.Any()).Return(updatedFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(1)
-	s.NoError(client.update())
+	s.NoError(client.Update())
 	s.NoError(err)
 	close(doneCh)
 }

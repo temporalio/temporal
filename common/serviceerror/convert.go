@@ -63,6 +63,11 @@ func FromStatus(st *status.Status) error {
 		case *errordetails.StickyWorkerUnavailableFailure:
 			return newStickyWorkerUnavailable(st)
 		}
+	case codes.FailedPrecondition:
+		switch errDetails.(type) {
+		case *errordetails.ObsoleteDispatchBuildIdFailure:
+			return newObsoleteDispatchBuildId(st)
+		}
 	}
 
 	return serviceerror.FromStatus(st)

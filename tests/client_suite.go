@@ -103,16 +103,14 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingActivitiesLimitError.Key():                  s.maxPendingActivities,
 		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              s.maxPendingCancelRequests,
 		dynamicconfig.NumPendingSignalsLimitError.Key():                     s.maxPendingSignals,
-		dynamicconfig.FrontendEnableNexusAPIs.Key():                         true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): limit,
-		nexusoperations.Enabled.Key():                                       true,
-		dynamicconfig.OutboundProcessorEnabled.Key():                        true,
-		dynamicconfig.EnableMutableStateTransitionHistory.Key():             true,
-		dynamicconfig.FrontendRefreshNexusIncomingServicesMinWait.Key():     1 * time.Millisecond,
+		dynamicconfig.EnableNexus.Key():                                     true,
+		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
+
 }
 
 func (s *ClientFunctionalSuite) TearDownSuite() {
@@ -123,6 +121,12 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
+	s.testCluster.host.dcClient.OverrideValue(
+		s.T(),
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.httpAPIAddress+"/api/v1/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -1891,7 +1895,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 		return err == nil && len(resp.Executions) == 1
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// reset it using v2 as the bad build id
+	// reset it using v2 as the bad build ID
 	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace:       s.namespace,
 		VisibilityQuery: query,

@@ -35,6 +35,8 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -64,6 +66,7 @@ type (
 		Cfg     *config.SQL
 		Factory *sql.Factory
 		Logger  log.Logger
+		Metrics *metricstest.Capture
 	}
 )
 
@@ -71,6 +74,8 @@ func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, f
 	var testData PostgreSQLTestData
 	testData.Cfg = NewPostgreSQLConfig(pluginName)
 	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
+	mh := metricstest.NewCaptureHandler()
+	testData.Metrics = mh.StartCapture()
 	SetupPostgreSQLDatabase(testData.Cfg)
 	SetupPostgreSQLSchema(testData.Cfg)
 
@@ -79,10 +84,12 @@ func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, f
 		resolver.NewNoopResolver(),
 		testPostgreSQLClusterName,
 		testData.Logger,
+		mh,
 	)
 
 	tearDown := func() {
 		testData.Factory.Close()
+		mh.StopCapture(testData.Metrics)
 		TearDownPostgreSQLDatabase(testData.Cfg)
 	}
 
@@ -109,7 +116,7 @@ func SetupPostgreSQLDatabase(cfg *config.SQL) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
 	}
@@ -122,7 +129,7 @@ func SetupPostgreSQLDatabase(cfg *config.SQL) {
 }
 
 func SetupPostgreSQLSchema(cfg *config.SQL) {
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
 	}
@@ -166,7 +173,7 @@ func TearDownPostgreSQLDatabase(cfg *config.SQL) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
 	}

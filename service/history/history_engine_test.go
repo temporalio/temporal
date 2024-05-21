@@ -246,7 +246,6 @@ func (s *engineSuite) SetupTest() {
 		versionChecker:             headers.NewDefaultVersionChecker(),
 	}
 	s.mockShard.SetEngineForTesting(h)
-	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	h.eventNotifier.Start()
 
@@ -5154,20 +5153,40 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
+	eventVersion := int64(100)
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-			Version:   1,
+			Version:   eventVersion,
 		},
 	}
-	ms := workflow.TestLocalMutableState(
+	globalNamespaceID := uuid.New()
+	globalNamespaceName := "global-namespace-name"
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: globalNamespaceID, Name: globalNamespaceName},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		tests.Version,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(namespaceEntry.Name()).Return(namespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, eventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	ms := workflow.TestGlobalMutableState(
 		s.mockHistoryEngine.shardContext,
 		s.eventsCache,
-		tests.LocalNamespaceEntry,
+		log.NewTestLogger(),
+		namespaceEntry.FailoverVersion(),
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
-		log.NewTestLogger(),
 	)
 	// Add dummy event
 	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
@@ -5180,7 +5199,7 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 
 	err := s.mockHistoryEngine.ReapplyEvents(
 		context.Background(),
-		tests.NamespaceID,
+		namespaceEntry.ID(),
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
 		history,
@@ -5188,9 +5207,9 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 	s.NoError(err)
 }
 
-func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
+func (s *engineSuite) TestReapplyEvents_IgnoreSameClusterEvents() {
 	workflowExecution := commonpb.WorkflowExecution{
-		WorkflowId: "test-reapply-same-version",
+		WorkflowId: "test-reapply-same-cluster",
 		RunId:      tests.RunID,
 	}
 	taskqueue := "testTaskQueue"
@@ -5239,20 +5258,40 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	eventVersion := int64(100)
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-			Version:   100,
+			Version:   eventVersion,
 		},
 	}
-	ms := workflow.TestLocalMutableState(
+	globalNamespaceID := uuid.New()
+	globalNamespaceName := "global-namespace-name"
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: globalNamespaceID, Name: globalNamespaceName},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		tests.Version,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(namespaceEntry.Name()).Return(namespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, eventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	ms := workflow.TestGlobalMutableState(
 		s.mockHistoryEngine.shardContext,
 		s.eventsCache,
-		tests.LocalNamespaceEntry,
+		log.NewTestLogger(),
+		namespaceEntry.FailoverVersion(),
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
-		log.NewTestLogger(),
 	)
 	// Add dummy event
 	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
@@ -5275,9 +5314,10 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil)
+
 	err = s.mockHistoryEngine.ReapplyEvents(
 		context.Background(),
-		tests.NamespaceID,
+		namespaceEntry.ID(),
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
 		history,
@@ -6284,6 +6324,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 		&taskqueuepb.TaskQueue{Name: taskQueue},
 		identity,
 		nil,
+		nil,
 	)
 
 	return event
@@ -6360,7 +6401,7 @@ func addActivityTaskScheduledEventWithRetry(
 
 func addActivityTaskStartedEvent(ms workflow.MutableState, scheduledEventID int64, identity string) *historypb.HistoryEvent {
 	ai, _ := ms.GetActivityInfo(scheduledEventID)
-	event, _ := ms.AddActivityTaskStartedEvent(ai, scheduledEventID, tests.RunID, identity, nil)
+	event, _ := ms.AddActivityTaskStartedEvent(ai, scheduledEventID, tests.RunID, identity, nil, nil)
 	return event
 }
 

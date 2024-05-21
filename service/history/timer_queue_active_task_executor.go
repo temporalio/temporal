@@ -300,12 +300,14 @@ Loop:
 			continue Loop
 		}
 
-		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
-		// If retryState is Timeout then it means that expirationTime is expired.
-		// ExpirationTime is expired when ScheduleToClose timeout is expired.
 		if retryState == enumspb.RETRY_STATE_TIMEOUT {
-			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			// If retryState is Timeout then it means that expirationTime is expired.
+			// ExpirationTime is expired when ScheduleToClose timeout is expired.
+			const timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			var failureMsg = fmt.Sprintf("activity %v timeout", timeoutType.String())
+			timeoutFailure = failure.NewTimeoutFailure(failureMsg, timeoutType)
 		}
+		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
@@ -430,6 +432,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 		return nil
 	}
 
+	// TODO: deprecated, remove below 3 metrics after v1.25
 	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
 		metrics.WorkflowRetryBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
@@ -446,6 +449,12 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	}
+
+	nsName := mutableState.GetNamespaceEntry().Name().String()
+	metrics.WorkflowBackoffCount.With(t.metricHandler).Record(
+		1,
+		metrics.NamespaceTag(nsName),
+		metrics.StringTag("backoff_type", task.WorkflowBackoffType.String()))
 
 	if mutableState.HadOrHasWorkflowTask() {
 		// already has workflow task

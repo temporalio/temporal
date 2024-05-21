@@ -28,19 +28,18 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-var RequestTimeout = dynamicconfig.NewGlobalDurationSetting(
+var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"component.callbacks.request.timeout",
 	time.Second*10,
 	`RequestTimeout is the timeout for executing a single callback request.`,
 )
 
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFn
+	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		// TODO(bergundy): This should be controllable per namespace + destination.
 		RequestTimeout: RequestTimeout.Get(dc),
 	}
 }

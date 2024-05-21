@@ -80,8 +80,7 @@ func (s *FunctionalSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
@@ -177,8 +176,7 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 	s.Logger.Info("StartWorkflowExecution on foreign namespace", tag.WorkflowNamespace(s.foreignNamespace), tag.WorkflowRunID(we2.RunId))
 
 	cancellationSent := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if !cancellationSent {
 			cancellationSent = true
@@ -194,7 +192,7 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 
 		// Find cancel requested event and verify it.
 		var cancelRequestEvent *historypb.HistoryEvent
-		for _, x := range history.Events {
+		for _, x := range task.History.Events {
 			if x.EventType == enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
 				cancelRequestEvent = x
 			}
@@ -219,12 +217,11 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 		T:                   s.T(),
 	}
 
-	foreignwtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		// Find cancel requested event and verify it.
 		var cancelRequestEvent *historypb.HistoryEvent
-		for _, x := range history.Events {
+		for _, x := range task.History.Events {
 			if x.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
 				cancelRequestEvent = x
 			}
@@ -313,8 +310,7 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 	s.Logger.Info("StartWorkflowExecution on foreign namespace", tag.WorkflowNamespace(s.foreignNamespace), tag.WorkflowRunID(we2.RunId))
 
 	cancellationSent := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if !cancellationSent {
 			cancellationSent = true
@@ -330,7 +326,7 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 
 		// Find cancel requested event and verify it.
 		var cancelRequestEvent *historypb.HistoryEvent
-		for _, x := range history.Events {
+		for _, x := range task.History.Events {
 			if x.EventType == enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
 				cancelRequestEvent = x
 			}
@@ -355,12 +351,11 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 		T:                   s.T(),
 	}
 
-	foreignwtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		// Find cancel requested event not present
 		var cancelRequestEvent *historypb.HistoryEvent
-		for _, x := range history.Events {
+		for _, x := range task.History.Events {
 			if x.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
 				cancelRequestEvent = x
 			}
@@ -430,8 +425,7 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFou
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	cancellationSent := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		if !cancellationSent {
 			cancellationSent = true
@@ -446,7 +440,7 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFou
 
 		// Find cancel requested event and verify it.
 		var cancelRequestEvent *historypb.HistoryEvent
-		for _, x := range history.Events {
+		for _, x := range task.History.Events {
 			if x.EventType == enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
 				cancelRequestEvent = x
 			}
@@ -528,20 +522,19 @@ func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	var requestCancelEvent *historypb.HistoryEvent
 	var workflowtaskFailedEvent *historypb.HistoryEvent
 	workflowComplete := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !childCancelled {
-			startEvent := history.Events[0]
+			startEvent := task.History.Events[0]
 			if startEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 				return nil, errors.New("first event is not workflow execution started")
 			}
 
-			workflowTaskScheduledEvent := history.Events[1]
+			workflowTaskScheduledEvent := task.History.Events[1]
 			if workflowTaskScheduledEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
 				return nil, errors.New("second event is not workflow task scheduled")
 			}
 
-			cancelRequestedEvent := history.Events[2]
+			cancelRequestedEvent := task.History.Events[2]
 			if cancelRequestedEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
 				return nil, errors.New("third event is not cancel requested")
 			}
@@ -567,11 +560,11 @@ func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 			}}, nil
 		}
 
-		if previousStartedEventID != 0 {
+		if task.PreviousStartedEventId != 0 {
 			return nil, errors.New("previous started decision moved unexpectedly after first failed workflow task")
 		}
 		// Validate child workflow as cancelled
-		for _, event := range history.Events[previousStartedEventID:] {
+		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 			s.Logger.Info(fmt.Sprintf("Processing EventID: %v, Event: %v", event.GetEventId(), event))
 			switch event.GetEventType() {
 			case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:

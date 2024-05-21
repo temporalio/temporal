@@ -47,8 +47,10 @@ frontend.accessHistoryFraction:
   - value: 1.0
 frontend.adminDeleteAccessHistoryFraction:
   - value: 1.0
-frontend.enableNexusHTTPHandler:
+system.enableNexus:
   - value: true
+component.nexusoperations.callback.endpoint.template:
+  - value: http://localhost:7243/api/v1/namespaces/{{.NamespaceName}}/nexus/callback
 matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:

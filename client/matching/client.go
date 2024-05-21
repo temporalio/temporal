@@ -89,7 +89,7 @@ func (c *clientImpl) AddActivityTask(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		request.GetForwardedSource())
+		request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (c *clientImpl) AddWorkflowTask(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		request.GetForwardedSource())
+		request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 }
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.GetForwardedSource())
+	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
 	}

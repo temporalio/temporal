@@ -497,45 +497,30 @@ is currently processing a task.
 		`TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.`,
 	)
 
-	NexusIncomingServiceNameMaxLength = NewGlobalIntSetting(
-		"limit.incomingServiceNameMaxLength",
+	NexusEndpointNameMaxLength = NewGlobalIntSetting(
+		"limit.endpointNameMaxLength",
 		200,
-		`NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name.`,
+		`NexusEndpointNameMaxLength is the maximum length of a Nexus endpoint name.`,
 	)
-	NexusIncomingServiceMaxSize = NewGlobalIntSetting(
-		"limit.incomingServiceMaxSize",
+	NexusEndpointDescriptionMaxSize = NewGlobalIntSetting(
+		"limit.endpointDescriptionMaxSize",
 		4*1024,
-		`NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes.`,
+		`NexusEndpointDescriptionMaxSize is the maximum size of a Nexus endpoint description in bytes.`,
 	)
-	NexusIncomingServiceListDefaultPageSize = NewGlobalIntSetting(
-		"limit.incomingServiceListDefaultPageSize",
+	NexusEndpointExternalURLMaxLength = NewGlobalIntSetting(
+		"limit.endpointExternalURLMaxLength",
+		4*1024,
+		`NexusEndpointExternalURLMaxLength is the maximum length of a Nexus endpoint external target URL.`,
+	)
+	NexusEndpointListDefaultPageSize = NewGlobalIntSetting(
+		"limit.endpointListDefaultPageSize",
 		100,
-		`NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services.`,
+		`NexusEndpointListDefaultPageSize is the default page size for listing Nexus endpoints.`,
 	)
-	NexusIncomingServiceListMaxPageSize = NewGlobalIntSetting(
-		"limit.incomingServiceListMaxPageSize",
+	NexusEndpointListMaxPageSize = NewGlobalIntSetting(
+		"limit.endpointListMaxPageSize",
 		1000,
-		`NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.`,
-	)
-	NexusOutgoingServiceURLMaxLength = NewGlobalIntSetting(
-		"limit.outgoingServiceURLMaxLength",
-		1000,
-		`NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL and public callback URL.`,
-	)
-	NexusOutgoingServiceNameMaxLength = NewGlobalIntSetting(
-		"limit.outgoingServiceNameMaxLength",
-		200,
-		`NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.`,
-	)
-	NexusOutgoingServiceListDefaultPageSize = NewGlobalIntSetting(
-		"limit.outgoingServiceListDefaultPageSize",
-		100,
-		`NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services.`,
-	)
-	NexusOutgoingServiceListMaxPageSize = NewGlobalIntSetting(
-		"limit.outgoingServiceListMaxPageSize",
-		1000,
-		`NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services.`,
+		`NexusEndpointListMaxPageSize is the maximum page size for listing Nexus endpoints.`,
 	)
 
 	RemovableBuildIdDurationSinceDefault = NewGlobalDurationSetting(
@@ -820,35 +805,36 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
-	FrontendEnableNexusAPIs = NewGlobalBoolSetting(
-		"frontend.enableNexusAPIs",
+	EnableNexus = NewGlobalBoolSetting(
+		"system.enableNexus",
 		false,
-		`FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.`,
+		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
+server hosts for it to take effect.`,
 	)
-	FrontendRefreshNexusIncomingServicesLongPollTimeout = NewGlobalDurationSetting(
-		"frontend.refreshNexusIncomingServicesLongPollTimeout",
+	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
+		"system.refreshNexusEndpointsLongPollTimeout",
 		5*time.Minute,
-		`FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.`,
+		`RefreshNexusEndpointsLongPollTimeout is the maximum duration of background long poll requests to update Nexus endpoints.`,
 	)
-	FrontendRefreshNexusIncomingServicesMinWait = NewGlobalDurationSetting(
-		"frontend.refreshNexusIncomingServicesMinWait",
+	RefreshNexusEndpointsMinWait = NewGlobalDurationSetting(
+		"system.refreshNexusEndpointsMinWait",
 		1*time.Second,
-		`FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.`,
-	)
-	FrontendEnableCallbackAttachment = NewNamespaceBoolSetting(
-		"frontend.enableCallbackAttachment",
-		false,
-		`FrontendEnableCallbackAttachment enables attaching callbacks to workflows.`,
+		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
 		`FrontendCallbackURLMaxLength is the maximum length of callback URL`,
 	)
-	FrontendMaxCallbacksPerWorkflow = NewNamespaceIntSetting(
-		"frontend.maxCallbacksPerWorkflow",
+	FrontendCallbackHeaderMaxSize = NewNamespaceIntSetting(
+		"frontend.callbackHeaderMaxLength",
+		8*1024,
+		`FrontendCallbackHeaderMaxSize is the maximum accumulated size of callback header keys and values`,
+	)
+	MaxCallbacksPerWorkflow = NewNamespaceIntSetting(
+		"system.maxCallbacksPerWorkflow",
 		32,
-		`FrontendMaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
@@ -1125,10 +1111,10 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
-	MatchingListNexusIncomingServicesLongPollTimeout = NewGlobalDurationSetting(
-		"matching.listNexusIncomingServicesLongPollTimeout",
+	MatchingListNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
+		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
-		`MatchingListNexusIncomingServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls.`,
+		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
 	)
 	MatchingMembershipUnloadDelay = NewGlobalDurationSetting(
 		"matching.membershipUnloadDelay",
@@ -1142,7 +1128,6 @@ Set to zero to disable proactive unload.`,
 		`MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
 these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.`,
 	)
-
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
@@ -1267,13 +1252,6 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 		256000*4*1024,
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 HistoryCacheSizeBasedLimit is set to true.`,
-	)
-	EnableMutableStateTransitionHistory = NewGlobalBoolSetting(
-		"history.enableMutableStateTransitionHistory",
-		false,
-		`EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
-The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
-change with the pending replication design.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
@@ -1604,11 +1582,6 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		`TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue`,
 	)
 
-	OutboundProcessorEnabled = NewGlobalBoolSetting(
-		"history.outboundProcessorEnabled",
-		false,
-		`OutboundProcessorEnabled enables starting the outbound queue processor.`,
-	)
 	OutboundTaskBatchSize = NewGlobalIntSetting(
 		"history.outboundTaskBatchSize",
 		100,
@@ -1653,6 +1626,31 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		"history.outboundQueueMaxReaderCount",
 		4,
 		`OutboundQueueMaxReaderCount is the max number of readers in one multi-cursor outbound queue`,
+	)
+	OutboundQueueGroupLimiterBufferSize = NewDestinationIntSetting(
+		"history.outboundQueue.groupLimiter.bufferSize",
+		100,
+		`OutboundQueueGroupLimiterBufferSize is the max buffer size of the group limiter`,
+	)
+	OutboundQueueGroupLimiterConcurrency = NewDestinationIntSetting(
+		"history.outboundQueue.groupLimiter.concurrency",
+		100,
+		`OutboundQueueGroupLimiterConcurrency is the concurrency of the group limiter`,
+	)
+	OutboundQueueHostSchedulerMaxTaskRPS = NewDestinationFloatSetting(
+		"history.outboundQueue.hostScheduler.maxTaskRPS",
+		100.0,
+		`OutboundQueueHostSchedulerMaxTaskRPS is the host scheduler max task RPS`,
+	)
+	OutboundQueueCircuitBreakerSettings = NewDestinationMapSetting(
+		"history.outboundQueue.circuitBreakerSettings",
+		map[string]any{},
+		`OutboundQueueCircuitBreakerSettings are circuit breaker settings.
+Accepted config keys (see gobreaker reference for more details):
+- maxRequests: maximum number of requests allowed to pass through when it is half-open (default 1).
+- interval (seconds): cyclic period in closed state to clear the internal counts;
+  if interval is 0, then it never clears the internal counts (default 0).
+- timeout (seconds): period of open state before changing to half-open state (default 60).`,
 	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
@@ -1954,6 +1952,11 @@ the number of children greater than or equal to this threshold`,
 		`MutableStateChecksumInvalidateBefore is the epoch timestamp before which all checksums are to be discarded`,
 	)
 
+	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
+		"history.ReplicationTaskApplyTimeout",
+		20*time.Second,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply`,
+	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",
 		4,
@@ -2074,6 +2077,17 @@ that task will be sent to DLQ.`,
 		512,
 		`ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count`,
 	)
+	ReplicationLowPriorityProcessorSchedulerWorkerCount = NewGlobalIntSetting(
+		"history.ReplicationLowPriorityProcessorSchedulerWorkerCount",
+		128,
+		`ReplicationLowPriorityProcessorSchedulerWorkerCount is the low priority replication task executor worker count`,
+	)
+	ReplicationLowPriorityTaskParallelism = NewGlobalIntSetting(
+		"history.ReplicationLowPriorityTaskParallelism",
+		4,
+		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
+	)
+
 	EnableEagerNamespaceRefresher = NewGlobalBoolSetting(
 		"history.EnableEagerNamespaceRefresher",
 		false,
@@ -2088,6 +2102,11 @@ that task will be sent to DLQ.`,
 		"history.EnableReplicateLocalGeneratedEvents",
 		false,
 		`EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events`,
+	)
+	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
+		"history.EnableReplicationTaskTieredProcessing",
+		false,
+		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
 
 	// keys for worker
@@ -2305,6 +2324,12 @@ If the service configures with archival feature enabled, update worker.historySc
 		"worker.schedulerNamespaceStartWorkflowRPS",
 		30.0,
 		`SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules`,
+	)
+	SchedulerLocalActivitySleepLimit = NewNamespaceDurationSetting(
+		"worker.schedulerLocalActivitySleepLimit",
+		1*time.Second,
+		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
+close to or more than the workflow task timeout)`,
 	)
 	WorkerDeleteNamespaceActivityLimitsConfig = NewGlobalMapSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

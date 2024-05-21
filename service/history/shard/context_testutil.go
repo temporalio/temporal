@@ -30,6 +30,7 @@ import (
 	"sync"
 
 	"github.com/golang/mock/gomock"
+	"go.temporal.io/server/common/log"
 	"golang.org/x/sync/semaphore"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -200,6 +201,12 @@ func (s *ContextTest) SetEngineForTesting(engine Engine) {
 func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 	// for testing only, will only be called immediately after initialization
 	s.eventsCache = c
+}
+
+// SetLoggers sets both s.throttledLogger and s.contextTaggedLogger. Only used by tests.
+func (s *ContextTest) SetLoggers(l log.Logger) {
+	s.throttledLogger = l
+	s.contextTaggedLogger = l
 }
 
 // SetHistoryClientForTesting sets history client. Only used by tests.

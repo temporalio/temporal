@@ -23,6 +23,7 @@
 package workflow
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -49,6 +50,7 @@ func (e FailWorkflowTaskError) Error() string {
 // CommandHandler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted
 // worker request.
 type CommandHandler func(
+	context.Context,
 	MutableState,
 	CommandValidator,
 	int64,

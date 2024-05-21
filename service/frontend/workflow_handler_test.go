@@ -2113,16 +2113,16 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMan
 	// Simulate std visibility, which does not support CountWorkflowExecutions
 	// TODO: remove this once every visibility implementation supports CountWorkflowExecutions
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(nil, store.OperationNotSupportedErr)
-	s.mockVisibilityMgr.EXPECT().ListOpenWorkflowExecutionsByType(
+	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(
 		gomock.Any(),
 		gomock.Any(),
 	).DoAndReturn(
 		func(
 			_ context.Context,
-			request *manager.ListWorkflowExecutionsByTypeRequest,
+			request *manager.ListWorkflowExecutionsRequestV2,
 		) (*manager.ListWorkflowExecutionsResponse, error) {
 			s.Equal(testNamespace, request.Namespace)
-			s.Equal(batcher.BatchWFTypeName, request.WorkflowTypeName)
+			s.True(strings.Contains(request.Query, searchattribute.WorkflowType))
 			s.Equal(int(config.MaxConcurrentBatchOperation(testNamespace.String())), request.PageSize)
 			s.Equal([]byte{}, request.NextPageToken)
 			return &manager.ListWorkflowExecutionsResponse{
