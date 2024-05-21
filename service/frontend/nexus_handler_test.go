@@ -249,7 +249,7 @@ func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *t
 	require.Equal(t, map[string]string{"outcome": "global_rate_limited"}, snap["test"][0].Tags)
 }
 
-func TestNexusInterceptRequest_ForwardingDisabled_ResultsInBadRequest(t *testing.T) {
+func TestNexusInterceptRequest_ForwardingDisabled_ResultsInUnavailable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	var err error
@@ -264,7 +264,7 @@ func TestNexusInterceptRequest_ForwardingDisabled_ResultsInBadRequest(t *testing
 	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
-	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
+	require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerError.Type)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
