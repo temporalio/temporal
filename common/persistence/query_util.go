@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -93,7 +94,7 @@ func LoadAndSplitQueryFromReaders(
 				case sqlEndKeyword[0]:
 					if hasWordAt(contentStr, sqlEndIfKeyword, j) {
 						if len(st) == 0 || st[len(st)-1] != sqlIfKeyword[0] {
-							return nil, fmt.Errorf("error reading contents: unmatched `END IF` keyword")
+							return nil, errors.New("error reading contents: unmatched `END IF` keyword")
 						}
 						st = st[:len(st)-1]
 						j += len(sqlEndIfKeyword) - 1
