@@ -128,11 +128,56 @@ type (
 		clusterMeta          cluster.Metadata
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory *pollerHistory
-		currentPolls  atomic.Int64
-		taskValidator taskValidator
+		pollerHistory              *pollerHistory
+		currentPolls               atomic.Int64
+		taskValidator              taskValidator
+		TasksAddedInIntervals      *taskTracker
+		TasksDispatchedInIntervals *taskTracker
 	}
 )
+
+type taskTracker struct {
+	startIntervalTime time.Time
+	interval          time.Duration
+	tasksInInterval   map[time.Time]int64
+}
+
+func newTaskTracker() *taskTracker {
+	return &taskTracker{
+		startIntervalTime: time.Now(),
+		interval:          30 * time.Second, // todo: Shivam - replace with config value
+		tasksInInterval:   make(map[time.Time]int64),
+	}
+}
+
+// trackTasks is responsible for adding/removing tasks from the current time that falls in the appropriate interval
+func (s *taskTracker) trackTasks() {
+	currentTime := time.Now()
+	elapsed := currentTime.Truncate(s.interval)
+
+	// finding the right interval
+	if currentTime.Sub(s.startIntervalTime) >= s.interval {
+		s.startIntervalTime = elapsed
+	}
+
+	s.tasksInInterval[s.startIntervalTime] += 1
+}
+
+// rate is responsible for returning the rate of tasks added/dispatched in a given interval
+func (s *taskTracker) rate() float32 {
+	currentTime := time.Now()
+
+	// if currentTime - interval > (s.startIntervalTime + interval) return 0
+	endInterval := s.startIntervalTime.Add(s.interval)
+	if currentTime.After(endInterval) {
+		return 0
+	}
+
+	// return totalTasks/ min(currentTime - 30, 30 seconds)
+	totalTasks := s.tasksInInterval[s.startIntervalTime]
+	elapsedTime := min(currentTime.Sub(s.startIntervalTime).Seconds(), s.interval.Seconds())
+	return float32(totalTasks) / float32(elapsedTime)
+}
 
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
@@ -154,17 +199,19 @@ func newPhysicalTaskQueueManager(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(queue.VersionSet()))
 	pqMgr := &physicalTaskQueueManagerImpl{
-		status:               common.DaemonStatusInitialized,
-		partitionMgr:         partitionMgr,
-		namespaceRegistry:    e.namespaceRegistry,
-		matchingClient:       e.matchingRawClient,
-		metricsHandler:       e.metricsHandler,
-		clusterMeta:          e.clusterMeta,
-		queue:                queue,
-		logger:               logger,
-		throttledLogger:      throttledLogger,
-		config:               config,
-		taggedMetricsHandler: taggedMetricsHandler,
+		status:                     common.DaemonStatusInitialized,
+		partitionMgr:               partitionMgr,
+		namespaceRegistry:          e.namespaceRegistry,
+		matchingClient:             e.matchingRawClient,
+		metricsHandler:             e.metricsHandler,
+		clusterMeta:                e.clusterMeta,
+		queue:                      queue,
+		logger:                     logger,
+		throttledLogger:            throttledLogger,
+		config:                     config,
+		taggedMetricsHandler:       taggedMetricsHandler,
+		TasksAddedInIntervals:      newTaskTracker(),
+		TasksDispatchedInIntervals: newTaskTracker(),
 	}
 	pqMgr.pollerHistory = newPollerHistory()
 
@@ -245,6 +292,7 @@ func (c *physicalTaskQueueManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
+	c.TasksAddedInIntervals.trackTasks()
 	if params.forwardedFrom == "" {
 		// request sent by history service
 		c.liveness.markAlive()
@@ -325,6 +373,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 	task.namespace = c.partitionMgr.ns.Name()
 	task.backlogCountHint = c.backlogMgr.db.getApproximateBacklogCount
+	c.TasksDispatchedInIntervals.trackTasks()
 	return task, nil
 }
 
@@ -423,8 +472,8 @@ func (c *physicalTaskQueueManagerImpl) GetBacklogInfo(ctx context.Context) (*tas
 	return &taskqueuepb.BacklogInfo{
 		ApproximateBacklogCount: approximateBacklogCount,
 		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.taskReader.getBacklogHeadCreateTime()),
-		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
-		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature
+		TasksAddRate:            c.TasksAddedInIntervals.rate(),
+		TasksDispatchRate:       c.TasksDispatchedInIntervals.rate(),
 	}, nil
 }
 

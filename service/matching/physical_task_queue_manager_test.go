@@ -116,6 +116,32 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	require.True(t, sync)
 }
 
+func TestAddDispatchTasksRate(t *testing.T) {
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
+	cfg.RangeSize = 1 // TaskID block size
+	var leaseErr error
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
+		makeTestBlocAlloc(func() (taskQueueState, error) {
+			return taskQueueState{rangeID: 1}, leaseErr
+		}))
+	tqm.Start()
+	defer tqm.Stop()
+
+	// adding a bunch of tasks
+	for i := 0; i < 100; i++ {
+		sync, err := tqm.AddTask(context.TODO(), addTaskParams{
+			taskInfo: &persistencespb.TaskInfo{
+				CreateTime: timestamp.TimePtr(time.Now().UTC()),
+			},
+			source: enumsspb.TASK_SOURCE_HISTORY})
+		require.False(t, sync)
+		require.NoError(t, err)
+	}
+
+	require.GreaterOrEqual(t, tqm.TasksAddedInIntervals.rate(), float32(1))
+	require.Zero(t, tqm.TasksDispatchedInIntervals.rate())
+}
+
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
