@@ -188,6 +188,26 @@ func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_bac
 	s.assertTruncateFailureCalled()
 }
 
+// TestRetryActivity_should_be_scheduled_when_next_retry_delay_is_set asserts that the activity is retried after NextRetryDelay period specified in the application failure.
+func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_retry_delay_is_set() {
+	s.mutableState.timeSource = s.timeSource
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	nextAttempt := s.activity.Attempt + 1
+	expectedScheduledTime := s.timeSource.Now().Add(time.Minute).UTC()
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId, expectedScheduledTime, nextAttempt)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	s.failure.GetApplicationFailureInfo().NextRetryDelay = durationpb.New(time.Minute)
+	_, err := s.mutableState.RetryActivity(s.activity, s.failure)
+	s.NoError(err)
+	s.Equal(s.onActivityCreate.mutableStateApproximateSize-s.onActivityCreate.activitySize+s.activity.Size(), s.mutableState.approximateSize)
+	s.Equal(s.activity.Version, s.mutableState.currentVersion)
+	s.Equal(s.activity.Attempt, nextAttempt)
+
+	s.Equal(expectedScheduledTime, s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
+	s.assertTruncateFailureCalled()
+}
+
 func (s *retryActivitySuite) TestRetryActivity_when_no_next_backoff_interval_should_fail() {
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	s.mutableState.taskGenerator = taskGeneratorMock
