@@ -49,23 +49,22 @@ func newFaultInjectionClusterMetadataStore(
 	}
 }
 
-func (c *faultInjectionClusterMetadataStore) Close(
-)  {
+func (c *faultInjectionClusterMetadataStore) Close() {
 	c.baseStore.Close()
 }
 
 func (c *faultInjectionClusterMetadataStore) DeleteClusterMetadata(
-	 ctx context.Context, 
-	 request *persistence.InternalDeleteClusterMetadataRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteClusterMetadata"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalDeleteClusterMetadataRequest,
+) error {
+	return inject0(c.generator.generate("DeleteClusterMetadata"), func() error {
 		return c.baseStore.DeleteClusterMetadata(ctx, request)
 	})
 }
 
 func (c *faultInjectionClusterMetadataStore) GetClusterMembers(
-	 ctx context.Context, 
-	 request *persistence.GetClusterMembersRequest, 
+	ctx context.Context,
+	request *persistence.GetClusterMembersRequest,
 ) (*persistence.GetClusterMembersResponse, error) {
 	return inject1(c.generator.generate("GetClusterMembers"), func() (*persistence.GetClusterMembersResponse, error) {
 		return c.baseStore.GetClusterMembers(ctx, request)
@@ -73,22 +72,21 @@ func (c *faultInjectionClusterMetadataStore) GetClusterMembers(
 }
 
 func (c *faultInjectionClusterMetadataStore) GetClusterMetadata(
-	 ctx context.Context, 
-	 request *persistence.InternalGetClusterMetadataRequest, 
+	ctx context.Context,
+	request *persistence.InternalGetClusterMetadataRequest,
 ) (*persistence.InternalGetClusterMetadataResponse, error) {
 	return inject1(c.generator.generate("GetClusterMetadata"), func() (*persistence.InternalGetClusterMetadataResponse, error) {
 		return c.baseStore.GetClusterMetadata(ctx, request)
 	})
 }
 
-func (c *faultInjectionClusterMetadataStore) GetName(
-) (string) {
+func (c *faultInjectionClusterMetadataStore) GetName() string {
 	return c.baseStore.GetName()
 }
 
 func (c *faultInjectionClusterMetadataStore) ListClusterMetadata(
-	 ctx context.Context, 
-	 request *persistence.InternalListClusterMetadataRequest, 
+	ctx context.Context,
+	request *persistence.InternalListClusterMetadataRequest,
 ) (*persistence.InternalListClusterMetadataResponse, error) {
 	return inject1(c.generator.generate("ListClusterMetadata"), func() (*persistence.InternalListClusterMetadataResponse, error) {
 		return c.baseStore.ListClusterMetadata(ctx, request)
@@ -96,17 +94,17 @@ func (c *faultInjectionClusterMetadataStore) ListClusterMetadata(
 }
 
 func (c *faultInjectionClusterMetadataStore) PruneClusterMembership(
-	 ctx context.Context, 
-	 request *persistence.PruneClusterMembershipRequest, 
-) (error) {
-	return inject0(c.generator.generate("PruneClusterMembership"), func() (error) {
+	ctx context.Context,
+	request *persistence.PruneClusterMembershipRequest,
+) error {
+	return inject0(c.generator.generate("PruneClusterMembership"), func() error {
 		return c.baseStore.PruneClusterMembership(ctx, request)
 	})
 }
 
 func (c *faultInjectionClusterMetadataStore) SaveClusterMetadata(
-	 ctx context.Context, 
-	 request *persistence.InternalSaveClusterMetadataRequest, 
+	ctx context.Context,
+	request *persistence.InternalSaveClusterMetadataRequest,
 ) (bool, error) {
 	return inject1(c.generator.generate("SaveClusterMetadata"), func() (bool, error) {
 		return c.baseStore.SaveClusterMetadata(ctx, request)
@@ -114,10 +112,10 @@ func (c *faultInjectionClusterMetadataStore) SaveClusterMetadata(
 }
 
 func (c *faultInjectionClusterMetadataStore) UpsertClusterMembership(
-	 ctx context.Context, 
-	 request *persistence.UpsertClusterMembershipRequest, 
-) (error) {
-	return inject0(c.generator.generate("UpsertClusterMembership"), func() (error) {
+	ctx context.Context,
+	request *persistence.UpsertClusterMembershipRequest,
+) error {
+	return inject0(c.generator.generate("UpsertClusterMembership"), func() error {
 		return c.baseStore.UpsertClusterMembership(ctx, request)
 	})
 }

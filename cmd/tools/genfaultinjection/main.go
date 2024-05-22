@@ -114,15 +114,13 @@ func newFaultInjection{{.StoreName}}(
 `)
 
 	writeStoreMethods(w, store, `
-func (c *faultInjection{{.StoreName}}) {{.MethodName}}(
-{{.InParams}}) {{.OutParams}} {
-	return inject{{.NumOutParams}}(c.generator.generate("{{.MethodName}}"), func() {{.OutParams}} {
+func (c *faultInjection{{.StoreName}}) {{.MethodName}}({{.InParams}}){{.OutParams}} {
+	return inject{{.NumOutParams}}(c.generator.generate("{{.MethodName}}"), func(){{.OutParams}} {
 		return c.baseStore.{{.MethodName}}({{.InVars}})
 	})
 }
 `, `
-func (c *faultInjection{{.StoreName}}) {{.MethodName}}(
-{{.InParams}}) {{.OutParams}} {
+func (c *faultInjection{{.StoreName}}) {{.MethodName}}({{.InParams}}){{.OutParams}} {
 	{{if ne .OutParams ""}}return {{end}}c.baseStore.{{.MethodName}}({{.InVars}})
 }
 `)
@@ -154,31 +152,36 @@ func writeStoreMethod(w io.Writer, store reflect.Type, m reflect.Method, tmpl st
 		} else if strings.HasSuffix(mT.In(i).String(), "Request") {
 			pName = "request"
 		}
-		inParams += fmt.Sprintf("\t %s %s, \n", pName, mT.In(i).String())
+		inParams += fmt.Sprintf("\n\t%s %s,", pName, mT.In(i).String())
 		inVars += fmt.Sprintf("%s, ", pName)
 	}
-	if len(inParams) > 2 {
+	if mT.NumIn() > 0 {
 		// Remove trailing ", " if any.
 		inVars = inVars[:len(inVars)-2]
+		inParams += "\n"
 	}
 
 	outParams := ""
 	for i := 0; i < mT.NumOut(); i++ {
 		outParams += fmt.Sprintf("%s, ", mT.Out(i).String())
 	}
-	if len(outParams) > 2 {
+	if mT.NumOut() > 0 {
 		// Remove trailing ", " if any.
 		outParams = outParams[:len(outParams)-2]
-		outParams = fmt.Sprintf("(%s)", outParams)
+		if mT.NumOut() > 1 {
+			outParams = fmt.Sprintf(" (%s)", outParams)
+		} else {
+			outParams = fmt.Sprintf(" %s", outParams)
+		}
 	}
 
-	fields := map[string]string{
+	fields := map[string]any{
 		"StoreName":    store.Name(),
 		"MethodName":   m.Name,
 		"InParams":     inParams,
 		"InVars":       inVars,
 		"OutParams":    outParams,
-		"NumOutParams": fmt.Sprintf("%d", mT.NumOut()-1),
+		"NumOutParams": mT.NumOut() - 1,
 	}
 
 	var t string

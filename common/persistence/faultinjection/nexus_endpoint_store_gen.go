@@ -49,37 +49,35 @@ func newFaultInjectionNexusEndpointStore(
 	}
 }
 
-func (c *faultInjectionNexusEndpointStore) Close(
-)  {
+func (c *faultInjectionNexusEndpointStore) Close() {
 	c.baseStore.Close()
 }
 
 func (c *faultInjectionNexusEndpointStore) CreateOrUpdateNexusEndpoint(
-	 ctx context.Context, 
-	 request *persistence.InternalCreateOrUpdateNexusEndpointRequest, 
-) (error) {
-	return inject0(c.generator.generate("CreateOrUpdateNexusEndpoint"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalCreateOrUpdateNexusEndpointRequest,
+) error {
+	return inject0(c.generator.generate("CreateOrUpdateNexusEndpoint"), func() error {
 		return c.baseStore.CreateOrUpdateNexusEndpoint(ctx, request)
 	})
 }
 
 func (c *faultInjectionNexusEndpointStore) DeleteNexusEndpoint(
-	 ctx context.Context, 
-	 request *persistence.DeleteNexusEndpointRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteNexusEndpoint"), func() (error) {
+	ctx context.Context,
+	request *persistence.DeleteNexusEndpointRequest,
+) error {
+	return inject0(c.generator.generate("DeleteNexusEndpoint"), func() error {
 		return c.baseStore.DeleteNexusEndpoint(ctx, request)
 	})
 }
 
-func (c *faultInjectionNexusEndpointStore) GetName(
-) (string) {
+func (c *faultInjectionNexusEndpointStore) GetName() string {
 	return c.baseStore.GetName()
 }
 
 func (c *faultInjectionNexusEndpointStore) GetNexusEndpoint(
-	 ctx context.Context, 
-	 request *persistence.GetNexusEndpointRequest, 
+	ctx context.Context,
+	request *persistence.GetNexusEndpointRequest,
 ) (*persistence.InternalNexusEndpoint, error) {
 	return inject1(c.generator.generate("GetNexusEndpoint"), func() (*persistence.InternalNexusEndpoint, error) {
 		return c.baseStore.GetNexusEndpoint(ctx, request)
@@ -87,8 +85,8 @@ func (c *faultInjectionNexusEndpointStore) GetNexusEndpoint(
 }
 
 func (c *faultInjectionNexusEndpointStore) ListNexusEndpoints(
-	 ctx context.Context, 
-	 request *persistence.ListNexusEndpointsRequest, 
+	ctx context.Context,
+	request *persistence.ListNexusEndpointsRequest,
 ) (*persistence.InternalListNexusEndpointsResponse, error) {
 	return inject1(c.generator.generate("ListNexusEndpoints"), func() (*persistence.InternalListNexusEndpointsResponse, error) {
 		return c.baseStore.ListNexusEndpoints(ctx, request)

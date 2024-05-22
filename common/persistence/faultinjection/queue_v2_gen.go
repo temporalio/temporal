@@ -50,8 +50,8 @@ func newFaultInjectionQueueV2(
 }
 
 func (c *faultInjectionQueueV2) CreateQueue(
-	 ctx context.Context, 
-	 request *persistence.InternalCreateQueueRequest, 
+	ctx context.Context,
+	request *persistence.InternalCreateQueueRequest,
 ) (*persistence.InternalCreateQueueResponse, error) {
 	return inject1(c.generator.generate("CreateQueue"), func() (*persistence.InternalCreateQueueResponse, error) {
 		return c.baseStore.CreateQueue(ctx, request)
@@ -59,8 +59,8 @@ func (c *faultInjectionQueueV2) CreateQueue(
 }
 
 func (c *faultInjectionQueueV2) EnqueueMessage(
-	 ctx context.Context, 
-	 request *persistence.InternalEnqueueMessageRequest, 
+	ctx context.Context,
+	request *persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
 	return inject1(c.generator.generate("EnqueueMessage"), func() (*persistence.InternalEnqueueMessageResponse, error) {
 		return c.baseStore.EnqueueMessage(ctx, request)
@@ -68,8 +68,8 @@ func (c *faultInjectionQueueV2) EnqueueMessage(
 }
 
 func (c *faultInjectionQueueV2) ListQueues(
-	 ctx context.Context, 
-	 request *persistence.InternalListQueuesRequest, 
+	ctx context.Context,
+	request *persistence.InternalListQueuesRequest,
 ) (*persistence.InternalListQueuesResponse, error) {
 	return inject1(c.generator.generate("ListQueues"), func() (*persistence.InternalListQueuesResponse, error) {
 		return c.baseStore.ListQueues(ctx, request)
@@ -77,8 +77,8 @@ func (c *faultInjectionQueueV2) ListQueues(
 }
 
 func (c *faultInjectionQueueV2) RangeDeleteMessages(
-	 ctx context.Context, 
-	 request *persistence.InternalRangeDeleteMessagesRequest, 
+	ctx context.Context,
+	request *persistence.InternalRangeDeleteMessagesRequest,
 ) (*persistence.InternalRangeDeleteMessagesResponse, error) {
 	return inject1(c.generator.generate("RangeDeleteMessages"), func() (*persistence.InternalRangeDeleteMessagesResponse, error) {
 		return c.baseStore.RangeDeleteMessages(ctx, request)
@@ -86,8 +86,8 @@ func (c *faultInjectionQueueV2) RangeDeleteMessages(
 }
 
 func (c *faultInjectionQueueV2) ReadMessages(
-	 ctx context.Context, 
-	 request *persistence.InternalReadMessagesRequest, 
+	ctx context.Context,
+	request *persistence.InternalReadMessagesRequest,
 ) (*persistence.InternalReadMessagesResponse, error) {
 	return inject1(c.generator.generate("ReadMessages"), func() (*persistence.InternalReadMessagesResponse, error) {
 		return c.baseStore.ReadMessages(ctx, request)

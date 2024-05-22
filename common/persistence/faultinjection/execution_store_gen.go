@@ -50,49 +50,48 @@ func newFaultInjectionExecutionStore(
 }
 
 func (c *faultInjectionExecutionStore) AddHistoryTasks(
-	 ctx context.Context, 
-	 request *persistence.InternalAddHistoryTasksRequest, 
-) (error) {
-	return inject0(c.generator.generate("AddHistoryTasks"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalAddHistoryTasksRequest,
+) error {
+	return inject0(c.generator.generate("AddHistoryTasks"), func() error {
 		return c.baseStore.AddHistoryTasks(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) AppendHistoryNodes(
-	 ctx context.Context, 
-	 request *persistence.InternalAppendHistoryNodesRequest, 
-) (error) {
-	return inject0(c.generator.generate("AppendHistoryNodes"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalAppendHistoryNodesRequest,
+) error {
+	return inject0(c.generator.generate("AppendHistoryNodes"), func() error {
 		return c.baseStore.AppendHistoryNodes(ctx, request)
 	})
 }
 
-func (c *faultInjectionExecutionStore) Close(
-)  {
+func (c *faultInjectionExecutionStore) Close() {
 	c.baseStore.Close()
 }
 
 func (c *faultInjectionExecutionStore) CompleteHistoryTask(
-	 ctx context.Context, 
-	 request *persistence.CompleteHistoryTaskRequest, 
-) (error) {
-	return inject0(c.generator.generate("CompleteHistoryTask"), func() (error) {
+	ctx context.Context,
+	request *persistence.CompleteHistoryTaskRequest,
+) error {
+	return inject0(c.generator.generate("CompleteHistoryTask"), func() error {
 		return c.baseStore.CompleteHistoryTask(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) ConflictResolveWorkflowExecution(
-	 ctx context.Context, 
-	 request *persistence.InternalConflictResolveWorkflowExecutionRequest, 
-) (error) {
-	return inject0(c.generator.generate("ConflictResolveWorkflowExecution"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalConflictResolveWorkflowExecutionRequest,
+) error {
+	return inject0(c.generator.generate("ConflictResolveWorkflowExecution"), func() error {
 		return c.baseStore.ConflictResolveWorkflowExecution(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) CreateWorkflowExecution(
-	 ctx context.Context, 
-	 request *persistence.InternalCreateWorkflowExecutionRequest, 
+	ctx context.Context,
+	request *persistence.InternalCreateWorkflowExecutionRequest,
 ) (*persistence.InternalCreateWorkflowExecutionResponse, error) {
 	return inject1(c.generator.generate("CreateWorkflowExecution"), func() (*persistence.InternalCreateWorkflowExecutionResponse, error) {
 		return c.baseStore.CreateWorkflowExecution(ctx, request)
@@ -100,62 +99,62 @@ func (c *faultInjectionExecutionStore) CreateWorkflowExecution(
 }
 
 func (c *faultInjectionExecutionStore) DeleteCurrentWorkflowExecution(
-	 ctx context.Context, 
-	 request *persistence.DeleteCurrentWorkflowExecutionRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteCurrentWorkflowExecution"), func() (error) {
+	ctx context.Context,
+	request *persistence.DeleteCurrentWorkflowExecutionRequest,
+) error {
+	return inject0(c.generator.generate("DeleteCurrentWorkflowExecution"), func() error {
 		return c.baseStore.DeleteCurrentWorkflowExecution(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) DeleteHistoryBranch(
-	 ctx context.Context, 
-	 request *persistence.InternalDeleteHistoryBranchRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteHistoryBranch"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalDeleteHistoryBranchRequest,
+) error {
+	return inject0(c.generator.generate("DeleteHistoryBranch"), func() error {
 		return c.baseStore.DeleteHistoryBranch(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) DeleteHistoryNodes(
-	 ctx context.Context, 
-	 request *persistence.InternalDeleteHistoryNodesRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteHistoryNodes"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalDeleteHistoryNodesRequest,
+) error {
+	return inject0(c.generator.generate("DeleteHistoryNodes"), func() error {
 		return c.baseStore.DeleteHistoryNodes(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(
-	 ctx context.Context, 
-	 request *persistence.DeleteReplicationTaskFromDLQRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteReplicationTaskFromDLQ"), func() (error) {
+	ctx context.Context,
+	request *persistence.DeleteReplicationTaskFromDLQRequest,
+) error {
+	return inject0(c.generator.generate("DeleteReplicationTaskFromDLQ"), func() error {
 		return c.baseStore.DeleteReplicationTaskFromDLQ(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) DeleteWorkflowExecution(
-	 ctx context.Context, 
-	 request *persistence.DeleteWorkflowExecutionRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteWorkflowExecution"), func() (error) {
+	ctx context.Context,
+	request *persistence.DeleteWorkflowExecutionRequest,
+) error {
+	return inject0(c.generator.generate("DeleteWorkflowExecution"), func() error {
 		return c.baseStore.DeleteWorkflowExecution(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) ForkHistoryBranch(
-	 ctx context.Context, 
-	 request *persistence.InternalForkHistoryBranchRequest, 
-) (error) {
-	return inject0(c.generator.generate("ForkHistoryBranch"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalForkHistoryBranchRequest,
+) error {
+	return inject0(c.generator.generate("ForkHistoryBranch"), func() error {
 		return c.baseStore.ForkHistoryBranch(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) GetAllHistoryTreeBranches(
-	 ctx context.Context, 
-	 request *persistence.GetAllHistoryTreeBranchesRequest, 
+	ctx context.Context,
+	request *persistence.GetAllHistoryTreeBranchesRequest,
 ) (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {
 	return inject1(c.generator.generate("GetAllHistoryTreeBranches"), func() (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {
 		return c.baseStore.GetAllHistoryTreeBranches(ctx, request)
@@ -163,22 +162,21 @@ func (c *faultInjectionExecutionStore) GetAllHistoryTreeBranches(
 }
 
 func (c *faultInjectionExecutionStore) GetCurrentExecution(
-	 ctx context.Context, 
-	 request *persistence.GetCurrentExecutionRequest, 
+	ctx context.Context,
+	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.InternalGetCurrentExecutionResponse, error) {
 	return inject1(c.generator.generate("GetCurrentExecution"), func() (*persistence.InternalGetCurrentExecutionResponse, error) {
 		return c.baseStore.GetCurrentExecution(ctx, request)
 	})
 }
 
-func (c *faultInjectionExecutionStore) GetHistoryBranchUtil(
-) (persistence.HistoryBranchUtil) {
+func (c *faultInjectionExecutionStore) GetHistoryBranchUtil() persistence.HistoryBranchUtil {
 	return c.baseStore.GetHistoryBranchUtil()
 }
 
 func (c *faultInjectionExecutionStore) GetHistoryTasks(
-	 ctx context.Context, 
-	 request *persistence.GetHistoryTasksRequest, 
+	ctx context.Context,
+	request *persistence.GetHistoryTasksRequest,
 ) (*persistence.InternalGetHistoryTasksResponse, error) {
 	return inject1(c.generator.generate("GetHistoryTasks"), func() (*persistence.InternalGetHistoryTasksResponse, error) {
 		return c.baseStore.GetHistoryTasks(ctx, request)
@@ -186,22 +184,21 @@ func (c *faultInjectionExecutionStore) GetHistoryTasks(
 }
 
 func (c *faultInjectionExecutionStore) GetHistoryTreeContainingBranch(
-	 ctx context.Context, 
-	 request *persistence.InternalGetHistoryTreeContainingBranchRequest, 
+	ctx context.Context,
+	request *persistence.InternalGetHistoryTreeContainingBranchRequest,
 ) (*persistence.InternalGetHistoryTreeContainingBranchResponse, error) {
 	return inject1(c.generator.generate("GetHistoryTreeContainingBranch"), func() (*persistence.InternalGetHistoryTreeContainingBranchResponse, error) {
 		return c.baseStore.GetHistoryTreeContainingBranch(ctx, request)
 	})
 }
 
-func (c *faultInjectionExecutionStore) GetName(
-) (string) {
+func (c *faultInjectionExecutionStore) GetName() string {
 	return c.baseStore.GetName()
 }
 
 func (c *faultInjectionExecutionStore) GetReplicationTasksFromDLQ(
-	 ctx context.Context, 
-	 request *persistence.GetReplicationTasksFromDLQRequest, 
+	ctx context.Context,
+	request *persistence.GetReplicationTasksFromDLQRequest,
 ) (*persistence.InternalGetHistoryTasksResponse, error) {
 	return inject1(c.generator.generate("GetReplicationTasksFromDLQ"), func() (*persistence.InternalGetHistoryTasksResponse, error) {
 		return c.baseStore.GetReplicationTasksFromDLQ(ctx, request)
@@ -209,8 +206,8 @@ func (c *faultInjectionExecutionStore) GetReplicationTasksFromDLQ(
 }
 
 func (c *faultInjectionExecutionStore) GetWorkflowExecution(
-	 ctx context.Context, 
-	 request *persistence.GetWorkflowExecutionRequest, 
+	ctx context.Context,
+	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.InternalGetWorkflowExecutionResponse, error) {
 	return inject1(c.generator.generate("GetWorkflowExecution"), func() (*persistence.InternalGetWorkflowExecutionResponse, error) {
 		return c.baseStore.GetWorkflowExecution(ctx, request)
@@ -218,8 +215,8 @@ func (c *faultInjectionExecutionStore) GetWorkflowExecution(
 }
 
 func (c *faultInjectionExecutionStore) IsReplicationDLQEmpty(
-	 ctx context.Context, 
-	 request *persistence.GetReplicationTasksFromDLQRequest, 
+	ctx context.Context,
+	request *persistence.GetReplicationTasksFromDLQRequest,
 ) (bool, error) {
 	return inject1(c.generator.generate("IsReplicationDLQEmpty"), func() (bool, error) {
 		return c.baseStore.IsReplicationDLQEmpty(ctx, request)
@@ -227,8 +224,8 @@ func (c *faultInjectionExecutionStore) IsReplicationDLQEmpty(
 }
 
 func (c *faultInjectionExecutionStore) ListConcreteExecutions(
-	 ctx context.Context, 
-	 request *persistence.ListConcreteExecutionsRequest, 
+	ctx context.Context,
+	request *persistence.ListConcreteExecutionsRequest,
 ) (*persistence.InternalListConcreteExecutionsResponse, error) {
 	return inject1(c.generator.generate("ListConcreteExecutions"), func() (*persistence.InternalListConcreteExecutionsResponse, error) {
 		return c.baseStore.ListConcreteExecutions(ctx, request)
@@ -236,35 +233,35 @@ func (c *faultInjectionExecutionStore) ListConcreteExecutions(
 }
 
 func (c *faultInjectionExecutionStore) PutReplicationTaskToDLQ(
-	 ctx context.Context, 
-	 request *persistence.PutReplicationTaskToDLQRequest, 
-) (error) {
-	return inject0(c.generator.generate("PutReplicationTaskToDLQ"), func() (error) {
+	ctx context.Context,
+	request *persistence.PutReplicationTaskToDLQRequest,
+) error {
+	return inject0(c.generator.generate("PutReplicationTaskToDLQ"), func() error {
 		return c.baseStore.PutReplicationTaskToDLQ(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) RangeCompleteHistoryTasks(
-	 ctx context.Context, 
-	 request *persistence.RangeCompleteHistoryTasksRequest, 
-) (error) {
-	return inject0(c.generator.generate("RangeCompleteHistoryTasks"), func() (error) {
+	ctx context.Context,
+	request *persistence.RangeCompleteHistoryTasksRequest,
+) error {
+	return inject0(c.generator.generate("RangeCompleteHistoryTasks"), func() error {
 		return c.baseStore.RangeCompleteHistoryTasks(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(
-	 ctx context.Context, 
-	 request *persistence.RangeDeleteReplicationTaskFromDLQRequest, 
-) (error) {
-	return inject0(c.generator.generate("RangeDeleteReplicationTaskFromDLQ"), func() (error) {
+	ctx context.Context,
+	request *persistence.RangeDeleteReplicationTaskFromDLQRequest,
+) error {
+	return inject0(c.generator.generate("RangeDeleteReplicationTaskFromDLQ"), func() error {
 		return c.baseStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) ReadHistoryBranch(
-	 ctx context.Context, 
-	 request *persistence.InternalReadHistoryBranchRequest, 
+	ctx context.Context,
+	request *persistence.InternalReadHistoryBranchRequest,
 ) (*persistence.InternalReadHistoryBranchResponse, error) {
 	return inject1(c.generator.generate("ReadHistoryBranch"), func() (*persistence.InternalReadHistoryBranchResponse, error) {
 		return c.baseStore.ReadHistoryBranch(ctx, request)
@@ -272,19 +269,19 @@ func (c *faultInjectionExecutionStore) ReadHistoryBranch(
 }
 
 func (c *faultInjectionExecutionStore) SetWorkflowExecution(
-	 ctx context.Context, 
-	 request *persistence.InternalSetWorkflowExecutionRequest, 
-) (error) {
-	return inject0(c.generator.generate("SetWorkflowExecution"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalSetWorkflowExecutionRequest,
+) error {
+	return inject0(c.generator.generate("SetWorkflowExecution"), func() error {
 		return c.baseStore.SetWorkflowExecution(ctx, request)
 	})
 }
 
 func (c *faultInjectionExecutionStore) UpdateWorkflowExecution(
-	 ctx context.Context, 
-	 request *persistence.InternalUpdateWorkflowExecutionRequest, 
-) (error) {
-	return inject0(c.generator.generate("UpdateWorkflowExecution"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalUpdateWorkflowExecutionRequest,
+) error {
+	return inject0(c.generator.generate("UpdateWorkflowExecution"), func() error {
 		return c.baseStore.UpdateWorkflowExecution(ctx, request)
 	})
 }

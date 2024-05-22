@@ -49,14 +49,13 @@ func newFaultInjectionTaskStore(
 	}
 }
 
-func (c *faultInjectionTaskStore) Close(
-)  {
+func (c *faultInjectionTaskStore) Close() {
 	c.baseStore.Close()
 }
 
 func (c *faultInjectionTaskStore) CompleteTasksLessThan(
-	 ctx context.Context, 
-	 request *persistence.CompleteTasksLessThanRequest, 
+	ctx context.Context,
+	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
 	return inject1(c.generator.generate("CompleteTasksLessThan"), func() (int, error) {
 		return c.baseStore.CompleteTasksLessThan(ctx, request)
@@ -64,8 +63,8 @@ func (c *faultInjectionTaskStore) CompleteTasksLessThan(
 }
 
 func (c *faultInjectionTaskStore) CountTaskQueuesByBuildId(
-	 ctx context.Context, 
-	 request *persistence.CountTaskQueuesByBuildIdRequest, 
+	ctx context.Context,
+	request *persistence.CountTaskQueuesByBuildIdRequest,
 ) (int, error) {
 	return inject1(c.generator.generate("CountTaskQueuesByBuildId"), func() (int, error) {
 		return c.baseStore.CountTaskQueuesByBuildId(ctx, request)
@@ -73,17 +72,17 @@ func (c *faultInjectionTaskStore) CountTaskQueuesByBuildId(
 }
 
 func (c *faultInjectionTaskStore) CreateTaskQueue(
-	 ctx context.Context, 
-	 request *persistence.InternalCreateTaskQueueRequest, 
-) (error) {
-	return inject0(c.generator.generate("CreateTaskQueue"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalCreateTaskQueueRequest,
+) error {
+	return inject0(c.generator.generate("CreateTaskQueue"), func() error {
 		return c.baseStore.CreateTaskQueue(ctx, request)
 	})
 }
 
 func (c *faultInjectionTaskStore) CreateTasks(
-	 ctx context.Context, 
-	 request *persistence.InternalCreateTasksRequest, 
+	ctx context.Context,
+	request *persistence.InternalCreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	return inject1(c.generator.generate("CreateTasks"), func() (*persistence.CreateTasksResponse, error) {
 		return c.baseStore.CreateTasks(ctx, request)
@@ -91,22 +90,21 @@ func (c *faultInjectionTaskStore) CreateTasks(
 }
 
 func (c *faultInjectionTaskStore) DeleteTaskQueue(
-	 ctx context.Context, 
-	 request *persistence.DeleteTaskQueueRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteTaskQueue"), func() (error) {
+	ctx context.Context,
+	request *persistence.DeleteTaskQueueRequest,
+) error {
+	return inject0(c.generator.generate("DeleteTaskQueue"), func() error {
 		return c.baseStore.DeleteTaskQueue(ctx, request)
 	})
 }
 
-func (c *faultInjectionTaskStore) GetName(
-) (string) {
+func (c *faultInjectionTaskStore) GetName() string {
 	return c.baseStore.GetName()
 }
 
 func (c *faultInjectionTaskStore) GetTaskQueue(
-	 ctx context.Context, 
-	 request *persistence.InternalGetTaskQueueRequest, 
+	ctx context.Context,
+	request *persistence.InternalGetTaskQueueRequest,
 ) (*persistence.InternalGetTaskQueueResponse, error) {
 	return inject1(c.generator.generate("GetTaskQueue"), func() (*persistence.InternalGetTaskQueueResponse, error) {
 		return c.baseStore.GetTaskQueue(ctx, request)
@@ -114,8 +112,8 @@ func (c *faultInjectionTaskStore) GetTaskQueue(
 }
 
 func (c *faultInjectionTaskStore) GetTaskQueueUserData(
-	 ctx context.Context, 
-	 request *persistence.GetTaskQueueUserDataRequest, 
+	ctx context.Context,
+	request *persistence.GetTaskQueueUserDataRequest,
 ) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
 	return inject1(c.generator.generate("GetTaskQueueUserData"), func() (*persistence.InternalGetTaskQueueUserDataResponse, error) {
 		return c.baseStore.GetTaskQueueUserData(ctx, request)
@@ -123,8 +121,8 @@ func (c *faultInjectionTaskStore) GetTaskQueueUserData(
 }
 
 func (c *faultInjectionTaskStore) GetTaskQueuesByBuildId(
-	 ctx context.Context, 
-	 request *persistence.GetTaskQueuesByBuildIdRequest, 
+	ctx context.Context,
+	request *persistence.GetTaskQueuesByBuildIdRequest,
 ) ([]string, error) {
 	return inject1(c.generator.generate("GetTaskQueuesByBuildId"), func() ([]string, error) {
 		return c.baseStore.GetTaskQueuesByBuildId(ctx, request)
@@ -132,8 +130,8 @@ func (c *faultInjectionTaskStore) GetTaskQueuesByBuildId(
 }
 
 func (c *faultInjectionTaskStore) GetTasks(
-	 ctx context.Context, 
-	 request *persistence.GetTasksRequest, 
+	ctx context.Context,
+	request *persistence.GetTasksRequest,
 ) (*persistence.InternalGetTasksResponse, error) {
 	return inject1(c.generator.generate("GetTasks"), func() (*persistence.InternalGetTasksResponse, error) {
 		return c.baseStore.GetTasks(ctx, request)
@@ -141,8 +139,8 @@ func (c *faultInjectionTaskStore) GetTasks(
 }
 
 func (c *faultInjectionTaskStore) ListTaskQueue(
-	 ctx context.Context, 
-	 request *persistence.ListTaskQueueRequest, 
+	ctx context.Context,
+	request *persistence.ListTaskQueueRequest,
 ) (*persistence.InternalListTaskQueueResponse, error) {
 	return inject1(c.generator.generate("ListTaskQueue"), func() (*persistence.InternalListTaskQueueResponse, error) {
 		return c.baseStore.ListTaskQueue(ctx, request)
@@ -150,8 +148,8 @@ func (c *faultInjectionTaskStore) ListTaskQueue(
 }
 
 func (c *faultInjectionTaskStore) ListTaskQueueUserDataEntries(
-	 ctx context.Context, 
-	 request *persistence.ListTaskQueueUserDataEntriesRequest, 
+	ctx context.Context,
+	request *persistence.ListTaskQueueUserDataEntriesRequest,
 ) (*persistence.InternalListTaskQueueUserDataEntriesResponse, error) {
 	return inject1(c.generator.generate("ListTaskQueueUserDataEntries"), func() (*persistence.InternalListTaskQueueUserDataEntriesResponse, error) {
 		return c.baseStore.ListTaskQueueUserDataEntries(ctx, request)
@@ -159,8 +157,8 @@ func (c *faultInjectionTaskStore) ListTaskQueueUserDataEntries(
 }
 
 func (c *faultInjectionTaskStore) UpdateTaskQueue(
-	 ctx context.Context, 
-	 request *persistence.InternalUpdateTaskQueueRequest, 
+	ctx context.Context,
+	request *persistence.InternalUpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	return inject1(c.generator.generate("UpdateTaskQueue"), func() (*persistence.UpdateTaskQueueResponse, error) {
 		return c.baseStore.UpdateTaskQueue(ctx, request)
@@ -168,10 +166,10 @@ func (c *faultInjectionTaskStore) UpdateTaskQueue(
 }
 
 func (c *faultInjectionTaskStore) UpdateTaskQueueUserData(
-	 ctx context.Context, 
-	 request *persistence.InternalUpdateTaskQueueUserDataRequest, 
-) (error) {
-	return inject0(c.generator.generate("UpdateTaskQueueUserData"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalUpdateTaskQueueUserDataRequest,
+) error {
+	return inject0(c.generator.generate("UpdateTaskQueueUserData"), func() error {
 		return c.baseStore.UpdateTaskQueueUserData(ctx, request)
 	})
 }

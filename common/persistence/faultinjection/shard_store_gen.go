@@ -50,32 +50,29 @@ func newFaultInjectionShardStore(
 }
 
 func (c *faultInjectionShardStore) AssertShardOwnership(
-	 ctx context.Context, 
-	 request *persistence.AssertShardOwnershipRequest, 
-) (error) {
-	return inject0(c.generator.generate("AssertShardOwnership"), func() (error) {
+	ctx context.Context,
+	request *persistence.AssertShardOwnershipRequest,
+) error {
+	return inject0(c.generator.generate("AssertShardOwnership"), func() error {
 		return c.baseStore.AssertShardOwnership(ctx, request)
 	})
 }
 
-func (c *faultInjectionShardStore) Close(
-)  {
+func (c *faultInjectionShardStore) Close() {
 	c.baseStore.Close()
 }
 
-func (c *faultInjectionShardStore) GetClusterName(
-) (string) {
+func (c *faultInjectionShardStore) GetClusterName() string {
 	return c.baseStore.GetClusterName()
 }
 
-func (c *faultInjectionShardStore) GetName(
-) (string) {
+func (c *faultInjectionShardStore) GetName() string {
 	return c.baseStore.GetName()
 }
 
 func (c *faultInjectionShardStore) GetOrCreateShard(
-	 ctx context.Context, 
-	 request *persistence.InternalGetOrCreateShardRequest, 
+	ctx context.Context,
+	request *persistence.InternalGetOrCreateShardRequest,
 ) (*persistence.InternalGetOrCreateShardResponse, error) {
 	return inject1(c.generator.generate("GetOrCreateShard"), func() (*persistence.InternalGetOrCreateShardResponse, error) {
 		return c.baseStore.GetOrCreateShard(ctx, request)
@@ -83,10 +80,10 @@ func (c *faultInjectionShardStore) GetOrCreateShard(
 }
 
 func (c *faultInjectionShardStore) UpdateShard(
-	 ctx context.Context, 
-	 request *persistence.InternalUpdateShardRequest, 
-) (error) {
-	return inject0(c.generator.generate("UpdateShard"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalUpdateShardRequest,
+) error {
+	return inject0(c.generator.generate("UpdateShard"), func() error {
 		return c.baseStore.UpdateShard(ctx, request)
 	})
 }

@@ -50,41 +50,40 @@ func newFaultInjectionQueue(
 	}
 }
 
-func (c *faultInjectionQueue) Close(
-)  {
+func (c *faultInjectionQueue) Close() {
 	c.baseStore.Close()
 }
 
 func (c *faultInjectionQueue) DeleteMessageFromDLQ(
-	 ctx context.Context, 
-	 p1 int64, 
-) (error) {
-	return inject0(c.generator.generate("DeleteMessageFromDLQ"), func() (error) {
+	ctx context.Context,
+	p1 int64,
+) error {
+	return inject0(c.generator.generate("DeleteMessageFromDLQ"), func() error {
 		return c.baseStore.DeleteMessageFromDLQ(ctx, p1)
 	})
 }
 
 func (c *faultInjectionQueue) DeleteMessagesBefore(
-	 ctx context.Context, 
-	 p1 int64, 
-) (error) {
-	return inject0(c.generator.generate("DeleteMessagesBefore"), func() (error) {
+	ctx context.Context,
+	p1 int64,
+) error {
+	return inject0(c.generator.generate("DeleteMessagesBefore"), func() error {
 		return c.baseStore.DeleteMessagesBefore(ctx, p1)
 	})
 }
 
 func (c *faultInjectionQueue) EnqueueMessage(
-	 ctx context.Context, 
-	 p1 *common.DataBlob, 
-) (error) {
-	return inject0(c.generator.generate("EnqueueMessage"), func() (error) {
+	ctx context.Context,
+	p1 *common.DataBlob,
+) error {
+	return inject0(c.generator.generate("EnqueueMessage"), func() error {
 		return c.baseStore.EnqueueMessage(ctx, p1)
 	})
 }
 
 func (c *faultInjectionQueue) EnqueueMessageToDLQ(
-	 ctx context.Context, 
-	 p1 *common.DataBlob, 
+	ctx context.Context,
+	p1 *common.DataBlob,
 ) (int64, error) {
 	return inject1(c.generator.generate("EnqueueMessageToDLQ"), func() (int64, error) {
 		return c.baseStore.EnqueueMessageToDLQ(ctx, p1)
@@ -92,40 +91,40 @@ func (c *faultInjectionQueue) EnqueueMessageToDLQ(
 }
 
 func (c *faultInjectionQueue) GetAckLevels(
-	 ctx context.Context, 
+	ctx context.Context,
 ) (*persistence.InternalQueueMetadata, error) {
 	return c.baseStore.GetAckLevels(ctx)
 }
 
 func (c *faultInjectionQueue) GetDLQAckLevels(
-	 ctx context.Context, 
+	ctx context.Context,
 ) (*persistence.InternalQueueMetadata, error) {
 	return c.baseStore.GetDLQAckLevels(ctx)
 }
 
 func (c *faultInjectionQueue) Init(
-	 ctx context.Context, 
-	 p1 *common.DataBlob, 
-) (error) {
-	return inject0(c.generator.generate("Init"), func() (error) {
+	ctx context.Context,
+	p1 *common.DataBlob,
+) error {
+	return inject0(c.generator.generate("Init"), func() error {
 		return c.baseStore.Init(ctx, p1)
 	})
 }
 
 func (c *faultInjectionQueue) RangeDeleteMessagesFromDLQ(
-	 ctx context.Context, 
-	 p1 int64, 
-	 p2 int64, 
-) (error) {
-	return inject0(c.generator.generate("RangeDeleteMessagesFromDLQ"), func() (error) {
+	ctx context.Context,
+	p1 int64,
+	p2 int64,
+) error {
+	return inject0(c.generator.generate("RangeDeleteMessagesFromDLQ"), func() error {
 		return c.baseStore.RangeDeleteMessagesFromDLQ(ctx, p1, p2)
 	})
 }
 
 func (c *faultInjectionQueue) ReadMessages(
-	 ctx context.Context, 
-	 p1 int64, 
-	 p2 int, 
+	ctx context.Context,
+	p1 int64,
+	p2 int,
 ) ([]*persistence.QueueMessage, error) {
 	return inject1(c.generator.generate("ReadMessages"), func() ([]*persistence.QueueMessage, error) {
 		return c.baseStore.ReadMessages(ctx, p1, p2)
@@ -133,11 +132,11 @@ func (c *faultInjectionQueue) ReadMessages(
 }
 
 func (c *faultInjectionQueue) ReadMessagesFromDLQ(
-	 ctx context.Context, 
-	 p1 int64, 
-	 p2 int64, 
-	 p3 int, 
-	 p4 []uint8, 
+	ctx context.Context,
+	p1 int64,
+	p2 int64,
+	p3 int,
+	p4 []uint8,
 ) ([]*persistence.QueueMessage, []uint8, error) {
 	return inject2(c.generator.generate("ReadMessagesFromDLQ"), func() ([]*persistence.QueueMessage, []uint8, error) {
 		return c.baseStore.ReadMessagesFromDLQ(ctx, p1, p2, p3, p4)
@@ -145,19 +144,19 @@ func (c *faultInjectionQueue) ReadMessagesFromDLQ(
 }
 
 func (c *faultInjectionQueue) UpdateAckLevel(
-	 ctx context.Context, 
-	 p1 *persistence.InternalQueueMetadata, 
-) (error) {
-	return inject0(c.generator.generate("UpdateAckLevel"), func() (error) {
+	ctx context.Context,
+	p1 *persistence.InternalQueueMetadata,
+) error {
+	return inject0(c.generator.generate("UpdateAckLevel"), func() error {
 		return c.baseStore.UpdateAckLevel(ctx, p1)
 	})
 }
 
 func (c *faultInjectionQueue) UpdateDLQAckLevel(
-	 ctx context.Context, 
-	 p1 *persistence.InternalQueueMetadata, 
-) (error) {
-	return inject0(c.generator.generate("UpdateDLQAckLevel"), func() (error) {
+	ctx context.Context,
+	p1 *persistence.InternalQueueMetadata,
+) error {
+	return inject0(c.generator.generate("UpdateDLQAckLevel"), func() error {
 		return c.baseStore.UpdateDLQAckLevel(ctx, p1)
 	})
 }

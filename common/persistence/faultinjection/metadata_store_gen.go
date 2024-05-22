@@ -49,14 +49,13 @@ func newFaultInjectionMetadataStore(
 	}
 }
 
-func (c *faultInjectionMetadataStore) Close(
-)  {
+func (c *faultInjectionMetadataStore) Close() {
 	c.baseStore.Close()
 }
 
 func (c *faultInjectionMetadataStore) CreateNamespace(
-	 ctx context.Context, 
-	 request *persistence.InternalCreateNamespaceRequest, 
+	ctx context.Context,
+	request *persistence.InternalCreateNamespaceRequest,
 ) (*persistence.CreateNamespaceResponse, error) {
 	return inject1(c.generator.generate("CreateNamespace"), func() (*persistence.CreateNamespaceResponse, error) {
 		return c.baseStore.CreateNamespace(ctx, request)
@@ -64,37 +63,36 @@ func (c *faultInjectionMetadataStore) CreateNamespace(
 }
 
 func (c *faultInjectionMetadataStore) DeleteNamespace(
-	 ctx context.Context, 
-	 request *persistence.DeleteNamespaceRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteNamespace"), func() (error) {
+	ctx context.Context,
+	request *persistence.DeleteNamespaceRequest,
+) error {
+	return inject0(c.generator.generate("DeleteNamespace"), func() error {
 		return c.baseStore.DeleteNamespace(ctx, request)
 	})
 }
 
 func (c *faultInjectionMetadataStore) DeleteNamespaceByName(
-	 ctx context.Context, 
-	 request *persistence.DeleteNamespaceByNameRequest, 
-) (error) {
-	return inject0(c.generator.generate("DeleteNamespaceByName"), func() (error) {
+	ctx context.Context,
+	request *persistence.DeleteNamespaceByNameRequest,
+) error {
+	return inject0(c.generator.generate("DeleteNamespaceByName"), func() error {
 		return c.baseStore.DeleteNamespaceByName(ctx, request)
 	})
 }
 
 func (c *faultInjectionMetadataStore) GetMetadata(
-	 ctx context.Context, 
+	ctx context.Context,
 ) (*persistence.GetMetadataResponse, error) {
 	return c.baseStore.GetMetadata(ctx)
 }
 
-func (c *faultInjectionMetadataStore) GetName(
-) (string) {
+func (c *faultInjectionMetadataStore) GetName() string {
 	return c.baseStore.GetName()
 }
 
 func (c *faultInjectionMetadataStore) GetNamespace(
-	 ctx context.Context, 
-	 request *persistence.GetNamespaceRequest, 
+	ctx context.Context,
+	request *persistence.GetNamespaceRequest,
 ) (*persistence.InternalGetNamespaceResponse, error) {
 	return inject1(c.generator.generate("GetNamespace"), func() (*persistence.InternalGetNamespaceResponse, error) {
 		return c.baseStore.GetNamespace(ctx, request)
@@ -102,8 +100,8 @@ func (c *faultInjectionMetadataStore) GetNamespace(
 }
 
 func (c *faultInjectionMetadataStore) ListNamespaces(
-	 ctx context.Context, 
-	 request *persistence.InternalListNamespacesRequest, 
+	ctx context.Context,
+	request *persistence.InternalListNamespacesRequest,
 ) (*persistence.InternalListNamespacesResponse, error) {
 	return inject1(c.generator.generate("ListNamespaces"), func() (*persistence.InternalListNamespacesResponse, error) {
 		return c.baseStore.ListNamespaces(ctx, request)
@@ -111,19 +109,19 @@ func (c *faultInjectionMetadataStore) ListNamespaces(
 }
 
 func (c *faultInjectionMetadataStore) RenameNamespace(
-	 ctx context.Context, 
-	 request *persistence.InternalRenameNamespaceRequest, 
-) (error) {
-	return inject0(c.generator.generate("RenameNamespace"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalRenameNamespaceRequest,
+) error {
+	return inject0(c.generator.generate("RenameNamespace"), func() error {
 		return c.baseStore.RenameNamespace(ctx, request)
 	})
 }
 
 func (c *faultInjectionMetadataStore) UpdateNamespace(
-	 ctx context.Context, 
-	 request *persistence.InternalUpdateNamespaceRequest, 
-) (error) {
-	return inject0(c.generator.generate("UpdateNamespace"), func() (error) {
+	ctx context.Context,
+	request *persistence.InternalUpdateNamespaceRequest,
+) error {
+	return inject0(c.generator.generate("UpdateNamespace"), func() error {
 		return c.baseStore.UpdateNamespace(ctx, request)
 	})
 }
