@@ -490,13 +490,15 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
-	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: ns,
-	}
-	resp, err := client1.DescribeNamespace(tests.NewContext(), descReq)
-	s.NoError(err)
-	s.NotNil(resp)
+	var resp *workflowservice.DescribeNamespaceResponse
+	s.Eventually(func() bool {
+		descReq := &workflowservice.DescribeNamespaceRequest{
+			Namespace: ns,
+		}
+		var err error
+		resp, err = client1.DescribeNamespace(tests.NewContext(), descReq)
+		return err == nil
+	}, cacheRefreshInterval, time.Second)
 
 	// Start a workflow
 	id := "reset-test"
@@ -696,7 +698,21 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 	})
 	s.NoError(err)
-	time.Sleep(time.Second * 5)
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we.GetRunId(),
+				},
+			})
+		return err == nil
+	},
+		time.Second*10,
+		time.Second)
+
 	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: resp.NamespaceInfo.GetId(),
 		Execution: &commonpb.WorkflowExecution{
@@ -705,7 +721,21 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 	})
 	s.NoError(err)
-	time.Sleep(time.Second * 5)
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      resetResp1.GetRunId(),
+				},
+			})
+		return err == nil
+	},
+		time.Second*10,
+		time.Second)
+
 	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: resp.NamespaceInfo.GetId(),
 		Execution: &commonpb.WorkflowExecution{
@@ -714,8 +744,6 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 	})
 	s.NoError(err)
-
-	// Verify the latest reset workflow is replicated to cluster 2 after force replication
 	s.Eventually(func() bool {
 		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
 			tests.NewContext(),
