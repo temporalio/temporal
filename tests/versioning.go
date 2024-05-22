@@ -3953,14 +3953,15 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.NoError(err)
 	s.waitForChan(ctx, started)
 
-	// 2. Wait for A to show up as running in visibility db
+	// 2. Wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
 	s.Eventually(func() bool {
-		listResp, err := s.engine.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 10,
+		queryARunning := fmt.Sprintf("TaskQueue = '%s' AND BuildIds IN ('assigned:A') AND ExecutionStatus = \"Running\"", tq)
+		resp, err := s.engine.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     queryARunning,
 		})
 		s.Nil(err)
-		return len(listResp.GetExecutions()) > 0
+		return resp.GetCount() > 0
 	}, 5*time.Second, 50*time.Millisecond)
 
 	// 3. Commit a different build id --> A should now only be reachable via visibility query
@@ -4020,14 +4021,15 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.NoError(err)
 	s.waitForChan(ctx, started)
 
-	// wait for visibility to show A as started
+	// wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
 	s.Eventually(func() bool {
-		listResp, err := s.engine.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 10,
+		queryARunning := fmt.Sprintf("TaskQueue = '%s' AND BuildIds IN ('assigned:A') AND ExecutionStatus = \"Running\"", tq)
+		resp, err := s.engine.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     queryARunning,
 		})
 		s.Nil(err)
-		return len(listResp.GetExecutions()) > 0
+		return resp.GetCount() > 0
 	}, 3*time.Second, 50*time.Millisecond)
 
 	// commit a different build ID --> A should now only be reachable via visibility query, B reachable as default
