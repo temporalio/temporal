@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	cnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests"
 )
 
@@ -66,9 +65,8 @@ func (s *NexusRequestForwardingSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
-		dynamicconfig.FrontendEnableNexusAPIs.Key():                                    true,
-		nexusoperations.Enabled.Key():                                                  true,
-		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
+		dynamicconfig.EnableNexus.Key():                  true,
+		dynamicconfig.RefreshNexusEndpointsMinWait.Key(): 1 * time.Millisecond,
 	}
 	s.setupSuite([]string{"nexus_request_forwarding_active", "nexus_request_forwarding_standby"})
 }
