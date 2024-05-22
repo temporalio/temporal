@@ -26,6 +26,7 @@ package xdc
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -42,6 +43,7 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -473,4 +475,259 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		return
 	}
 	s.Fail("Cannot replicate reset workflow to target cluster.")
+}
+
+func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() {
+	ns := "test--reset-sync-workflow-sate" + common.GenerateRandomString(5)
+	client1 := s.cluster1.GetFrontendClient() // active
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        ns,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
+	}
+	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
+	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	}
+	resp, err := client1.DescribeNamespace(tests.NewContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp)
+
+	// Start a workflow
+	id := "reset-test"
+	wt := "reset-test-type"
+	tl := "reset-test-tq"
+	identity := "worker1"
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           ns,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            identity,
+	}
+	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	poller := &tests.TaskPoller{
+		Engine:              client1,
+		Namespace:           ns,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
+	}
+
+	// Process start event in cluster 1
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	resetResp1, err := client1.ResetWorkflowExecution(tests.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: ns,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+		Reason:                    "test",
+		WorkflowTaskFinishEventId: 4,
+		RequestId:                 uuid.New(),
+	})
+	s.NoError(err)
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	resetResp2, err := client1.ResetWorkflowExecution(tests.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: ns,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      resetResp1.GetRunId(),
+		},
+		Reason:                    "test",
+		WorkflowTaskFinishEventId: 7,
+		RequestId:                 uuid.New(),
+	})
+	s.NoError(err)
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we.GetRunId(),
+				},
+			})
+		return err == nil
+	},
+		time.Second*10,
+		time.Second)
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      resetResp1.GetRunId(),
+				},
+			})
+		return err == nil
+	},
+		time.Second*10,
+		time.Second)
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      resetResp2.GetRunId(),
+				},
+			})
+		return err == nil
+	},
+		time.Second*10,
+		time.Second)
+
+	// Delete reset workflows
+	_, err = s.cluster2.GetAdminClient().DeleteWorkflowExecution(tests.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	_, err = s.cluster2.GetAdminClient().DeleteWorkflowExecution(tests.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      resetResp1.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	_, err = s.cluster2.GetAdminClient().DeleteWorkflowExecution(tests.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      resetResp2.GetRunId(),
+		},
+	})
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we.GetRunId(),
+				},
+			})
+		var expectedErr *serviceerror.NotFound
+		return errors.As(err, &expectedErr)
+	},
+		time.Second*10,
+		time.Second)
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      resetResp1.GetRunId(),
+				},
+			})
+		var expectedErr *serviceerror.NotFound
+		return errors.As(err, &expectedErr)
+	},
+		time.Second*10,
+		time.Second)
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      resetResp2.GetRunId(),
+				},
+			})
+		var expectedErr *serviceerror.NotFound
+		return errors.As(err, &expectedErr)
+	},
+		time.Second*10,
+		time.Second)
+
+	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
+		NamespaceId: resp.NamespaceInfo.GetId(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	time.Sleep(time.Second * 5)
+	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
+		NamespaceId: resp.NamespaceInfo.GetId(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      resetResp1.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	time.Sleep(time.Second * 5)
+	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
+		NamespaceId: resp.NamespaceInfo.GetId(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      resetResp2.GetRunId(),
+		},
+	})
+	s.NoError(err)
+
+	// Verify the latest reset workflow is replicated to cluster 2 after force replication
+	s.Eventually(func() bool {
+		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
+			tests.NewContext(),
+			&adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      resetResp2.GetRunId(),
+				},
+			})
+		return err == nil
+	},
+		time.Second*10,
+		time.Second)
 }
