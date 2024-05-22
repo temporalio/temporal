@@ -1156,6 +1156,23 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 	}
 }
 
+func (s *mutableStateSuite) TestRetryWorkflowTask_WithNextRetryDelay() {
+	expectedDelayDuration := time.Minute
+	s.mutableState.executionInfo.HasRetryPolicy = true
+	applicationFailure := &failurepb.Failure{
+		Message: "application failure with customized next retry delay",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:           "application-failure-type",
+			NonRetryable:   false,
+			NextRetryDelay: durationpb.New(expectedDelayDuration),
+		}},
+	}
+
+	duration, retryState := s.mutableState.GetRetryBackoffDuration(applicationFailure)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+	s.Equal(duration, expectedDelayDuration)
+}
 func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
