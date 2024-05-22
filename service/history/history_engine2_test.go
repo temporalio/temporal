@@ -159,8 +159,6 @@ func (s *engine2Suite) SetupTest() {
 	mockShard.SetStateMachineRegistry(reg)
 
 	s.mockShard = mockShard
-	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
-
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata

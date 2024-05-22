@@ -1323,20 +1323,8 @@ checks while a shard is lingering.`,
 		0,
 		`ShardLingerTimeLimit configures if and for how long the shard controller
 will temporarily delay closing shards after a membership update, awaiting a
-shard ownership lost error from persistence. Not recommended with
-persistence layers that are missing AssertShardOwnership support.
-If set to zero, shards will not delay closing.`,
-	)
-	ShardOwnershipAssertionEnabled = NewGlobalBoolSetting(
-		"history.shardOwnershipAssertionEnabled",
-		false,
-		`ShardOwnershipAssertionEnabled configures if the shard ownership is asserted
-for API requests when a NotFound or NamespaceNotFound error is returned from
-persistence.
-NOTE: Shard ownership assertion is not implemented by any persistence implementation
-in this codebase, because assertion is not needed for persistence implementation
-that guarantees read after write consistency. As a result, even if this config is
-enabled, it's a no-op.`,
+shard ownership lost error from persistence. If set to zero, shards will not delay closing.
+Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
 	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",

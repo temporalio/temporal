@@ -100,7 +100,6 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) SetupTest() {
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
 	s.shardContext.SetStateMachineRegistry(reg)
-	s.shardContext.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
 	mockNamespaceCache := s.shardContext.Resource.NamespaceCache
 	mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil).AnyTimes()

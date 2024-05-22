@@ -191,7 +191,6 @@ func NewDynamicConfig() *configs.Config {
 	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	config.EnableNexus = dynamicconfig.GetBoolPropertyFn(true)
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
-	config.ShardOwnershipAssertionEnabled = dynamicconfig.GetBoolPropertyFn(true)
 	config.EnableWorkflowExecutionTimeoutTimer = dynamicconfig.GetBoolPropertyFn(true)
 	return config
 }
