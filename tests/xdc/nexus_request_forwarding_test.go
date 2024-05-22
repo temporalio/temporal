@@ -177,7 +177,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, retErr, &unexpectedError)
 				require.Equal(t, http.StatusServiceUnavailable, unexpectedError.Response.StatusCode)
-				require.Equal(t, "bad request", unexpectedError.Failure.Message)
+				require.Equal(t, "cluster inactive", unexpectedError.Failure.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -278,7 +278,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, retErr, &unexpectedError)
 				require.Equal(t, http.StatusServiceUnavailable, unexpectedError.Response.StatusCode)
-				require.Equal(t, "bad request", unexpectedError.Failure.Message)
+				require.Equal(t, "cluster inactive", unexpectedError.Failure.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
