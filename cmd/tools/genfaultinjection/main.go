@@ -208,6 +208,7 @@ func readLicenseFile(filePath string) string {
 }
 func fatalIfErr(err error) {
 	if err != nil {
+		//nolint:revive // calls to log.Fatal only in main() or init() functions (revive)
 		log.Fatal(err)
 	}
 }
