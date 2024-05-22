@@ -519,7 +519,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 	// Unexpected errors handled below
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Warn("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
+	e.logger.Warn("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.isUnexpectedNonRetryableError(err) {
 		// Terminal errors are likely due to data corruption.
@@ -540,7 +540,6 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	// Unexpected but retryable error
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
