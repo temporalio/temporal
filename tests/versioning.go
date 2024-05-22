@@ -848,8 +848,8 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	timedoutTask := make(chan struct{})
 	wf2 := func(ctx workflow.Context) (string, error) {
 		time.Sleep(1 * time.Second)
-		close(timedoutTask)
-		time.Sleep(1 * time.Second)
+		timedoutTask <- struct{}{}
+		time.Sleep(100 * time.Second)
 		return "return after long sleep", nil
 	}
 
@@ -858,6 +858,9 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
+		// since the WF cache is shared by all workers in this process, we need to set this in a way that ensures
+		// WFTs will timeout in w2 but not in w3
+		DeadlockDetectionTimeout: 1500 * time.Millisecond,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w2.Start())
@@ -947,8 +950,8 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	timedoutTask := make(chan struct{})
 	wf2 := func(ctx workflow.Context) (string, error) {
 		time.Sleep(1 * time.Second)
-		close(timedoutTask)
-		time.Sleep(1 * time.Second)
+		timedoutTask <- struct{}{}
+		time.Sleep(100 * time.Second)
 		return "return after long sleep", nil
 	}
 
@@ -956,7 +959,9 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
-		DeadlockDetectionTimeout:         5 * time.Second,
+		// since the WF cache is shared by all workers in this process, we need to set this in a way that ensures
+		// WFTs will timeout in w2 but not in w3
+		DeadlockDetectionTimeout: 1500 * time.Millisecond,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w2.Start())
@@ -1128,7 +1133,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	act2 := func() (string, error) {
 		time.Sleep(1 * time.Second)
 		close(timedoutTask)
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Second)
 		return "return after long sleep", nil
 	}
 
@@ -1137,6 +1142,9 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
+		// since the WF cache is shared by all workers in this process, we need to set this in a way that ensures
+		// WFTs will timeout in w2 but not in w3
+		DeadlockDetectionTimeout: 1500 * time.Millisecond,
 	})
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
 	s.NoError(w2.Start())
@@ -1160,7 +1168,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 		return "done in v3!", nil
 	}
 
-	// run v3 worker so it can complete the activity
+	// run worker on v3 so it can complete the wf
 	w3 := worker.New(s.sdkClient, actTq, worker.Options{
 		BuildID:                          v3,
 		UseBuildIDForVersioning:          true,
@@ -1262,27 +1270,34 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	s.NoError(err)
 
 	s.waitForChan(ctx, failedTask)
-	time.Sleep(1100 * time.Millisecond)
 
-	// MS should have the correct build ID
-	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	if versionedWf {
-		s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
-		s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
-	} else {
-		s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
-		s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
-	}
-	s.Equal(1, len(dw.GetPendingActivities()))
-	s.Equal(v1, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId())
+	// MS should have the correct build ID after finishing the first WFT
+	s.Eventually(
+		func() bool {
+			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			s.NoError(err)
+			if len(dw.GetPendingActivities()) == 0 {
+				return false
+			}
+			if versionedWf {
+				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
+			} else {
+				s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
+			}
+			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+		},
+		10*time.Second,
+		50*time.Millisecond,
+	)
 
 	// v2 timesout the activity
 	timedoutTask := make(chan struct{})
 	act2 := func() (string, error) {
 		time.Sleep(1 * time.Second)
 		close(timedoutTask)
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Second)
 		return "return after long sleep", nil
 	}
 
@@ -1290,6 +1305,9 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
+		// since the WF cache is shared by all workers in this process, we need to set this in a way that ensures
+		// WFTs will timeout in w2 but not in w3
+		DeadlockDetectionTimeout: 1500 * time.Millisecond,
 	})
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
 	s.NoError(w2.Start())
@@ -1300,19 +1318,25 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
 	s.waitForChan(ctx, timedoutTask)
-	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the second time, now pending activity should be assigned to v2
-	dw, err = s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
-	s.Equal(v2, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId())
+	s.Eventually(
+		func() bool {
+			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			s.NoError(err)
+			s.Equal(1, len(dw.GetPendingActivities()))
+			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+		},
+		10*time.Second,
+		50*time.Millisecond,
+	)
 
 	// v3 can process the activity
 	act3 := func() (string, error) {
 		return "done in v3!", nil
 	}
 
+	// run worker on v3 so it can complete the wf
 	w3 := worker.New(s.sdkClient, actTq, worker.Options{
 		BuildID:                          v3,
 		UseBuildIDForVersioning:          true,
@@ -1436,7 +1460,9 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
-		DeadlockDetectionTimeout:         3 * time.Second,
+		// since the WF cache is shared by all workers in this process, we need to set this in a way that ensures
+		// WFTs will timeout in w2 but not in w3
+		DeadlockDetectionTimeout: 1500 * time.Millisecond,
 	})
 	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
 	w11.RegisterActivity(act)
@@ -1465,17 +1491,8 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		return "done on v1.2!", nil
 	}
 
-	// creating a new client because we do not want to share client with the previous the v11 worker as it keeps
-	// the workflow locked for a long time. WF cache is shared across all workers of the same client in Go SDK.
-	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.hostPort,
-		Namespace: s.namespace,
-	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
 	// run worker on v12 so it can complete the wf
-	w12 := worker.New(sdkClient2, tq, worker.Options{
+	w12 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                          v12,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,

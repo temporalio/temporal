@@ -54,3 +54,5 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
 history.enableWorkflowExecutionTimeoutTimer:
   - value: true
+history.hostLevelCacheMaxSize:
+  - value: 8192

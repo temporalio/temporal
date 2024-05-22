@@ -27,7 +27,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"math"
 	"testing"
 	"time"
 
@@ -64,6 +63,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
@@ -819,9 +819,15 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 				{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: math.MaxInt64, Version: 300},
+						{EventId: 102, Version: failoverVersion},
 					},
 				},
+			},
+		},
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{
+				NamespaceFailoverVersion: failoverVersion,
+				MaxTransitionCount:       1024,
 			},
 		},
 	}
@@ -833,7 +839,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	}
 
 	activityInfos := map[int64]*persistencespb.ActivityInfo{
-		5: {
+		90: {
 			Version:                failoverVersion,
 			ScheduledEventId:       int64(90),
 			ScheduledTime:          timestamppb.New(time.Now().UTC()),
@@ -912,18 +918,19 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
 	dbstate := s.buildWorkflowMutableState()
 	var err error
+
+	namespaceEntry := tests.GlobalNamespaceEntry
 	s.mutableState, err = NewMutableStateFromDB(
 		s.mockShard,
 		NewMapEventCache(s.T(), cacheStore),
 		s.logger,
-		tests.LocalNamespaceEntry,
+		namespaceEntry,
 		dbstate,
 		123,
 	)
 	s.NoError(err)
-	err = s.mutableState.UpdateCurrentVersion(
-		dbstate.ExecutionInfo.VersionHistories.Histories[0].Items[0].Version, false)
-	s.Require().NoError(err)
+	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+	s.NoError(err)
 
 	acceptedUpdateID := s.T().Name() + "-accepted-update-id"
 	acceptedMsgID := s.T().Name() + "-accepted-msg-id"
@@ -969,14 +976,6 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 
 	s.Require().Len(cacheStore, 3, "expected 1 UpdateCompleted event + 2 UpdateAccepted events in cache")
 
-	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetMeta().GetUpdateId())
-	s.Require().NoError(err)
-	s.Require().Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), outcome)
-
-	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
-	s.Require().Error(err)
-	s.Require().IsType((*serviceerror.NotFound)(nil), err)
-
 	numCompleted := 0
 	numAccepted := 0
 	s.mutableState.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
@@ -990,10 +989,26 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.Require().Equal(numCompleted, 1, "expected 1 completed")
 	s.Require().Equal(numAccepted, 1, "expected 1 accepted")
 
-	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+		namespaceEntry.IsGlobalNamespace(),
+		namespaceEntry.FailoverVersion(),
+	).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
 	s.Require().NoError(err)
 	s.Require().Len(mutation.ExecutionInfo.UpdateInfos, 2,
 		"expected 1 completed update + 1 accepted in mutation")
+
+	// this must be done after the transaction is closed
+	// as GetUpdateOutcome relies on event version history which is only updated when closing the transaction
+	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetMeta().GetUpdateId())
+	s.Require().NoError(err)
+	s.Require().Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), outcome)
+
+	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
+	s.Require().Error(err)
+	s.Require().IsType((*serviceerror.NotFound)(nil), err)
 }
 
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
@@ -1122,7 +1137,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 		{
 			name: "CloseTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1133,7 +1148,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 			name:                 "CloseTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1150,11 +1165,20 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 			}
 
 			var err error
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			namespaceEntry := tests.GlobalNamespaceEntry
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.NoError(err)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
 			s.NoError(err)
 
 			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = s.mutableState.GetNextEventID()
 			s.mutableState.executionInfo.WorkflowTaskStartedEventId = s.mutableState.GetNextEventID() + 1
+
+			s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+				namespaceEntry.IsGlobalNamespace(),
+				namespaceEntry.FailoverVersion(),
+			).Return(cluster.TestCurrentClusterName).AnyTimes()
+			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 			// Normal WT is persisted as is.
 			execInfo, err := tc.closeTxFunc(s.mutableState)
@@ -1408,6 +1432,153 @@ func (s *mutableStateSuite) TestRolloverAutoResetPointsWithExpiringTime() {
 		},
 	}
 	s.Equal(expected, newPoints.Points)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
+	namespaceEntry := tests.GlobalNamespaceEntry
+
+	completWorkflowTaskFn := func(ms MutableState) {
+		workflowTaskInfo := ms.GetStartedWorkflowTask()
+		_, err := ms.AddWorkflowTaskCompletedEvent(
+			workflowTaskInfo,
+			&workflowservice.RespondWorkflowTaskCompletedRequest{},
+			WorkflowTaskCompletionLimits{
+				MaxResetPoints:              10,
+				MaxSearchAttributeValueSize: 1024,
+			},
+		)
+		s.NoError(err)
+	}
+
+	testCases := []struct {
+		name                       string
+		dbStateMutationFn          func(dbState *persistencespb.WorkflowMutableState)
+		txFunc                     func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error)
+		versionedTransitionUpdated bool
+	}{
+		{
+			name: "CloseTranstionAsPassive",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: false,
+		},
+		{
+			name: "CloseTransactionAsMutation_HistoryEvents",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		{
+			name: "CloseTransactionAsMutation_SyncActivity",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				for _, ai := range ms.GetPendingActivityInfos() {
+					ms.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
+					break
+				}
+
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		{
+			name: "CloseTransactionAsMutation_DirtyStateMachine",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				root := ms.HSM()
+				err := hsm.MachineTransition(root, func(*MutableStateImpl) (hsm.TransitionOutput, error) {
+					return hsm.TransitionOutput{}, nil
+				})
+				s.NoError(err)
+				s.True(root.Dirty())
+
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		{
+			name: "CloseTransactionAsSnapshot",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		// TODO: add a test for flushing buffered events using last event version.
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+
+			dbState := s.buildWorkflowMutableState()
+			if tc.dbStateMutationFn != nil {
+				tc.dbStateMutationFn(dbState)
+			}
+
+			var err error
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.NoError(err)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+			s.NoError(err)
+
+			s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+				namespaceEntry.IsGlobalNamespace(),
+				namespaceEntry.FailoverVersion(),
+			).Return(cluster.TestCurrentClusterName).AnyTimes()
+			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+			expectedTransitionHistory := s.mutableState.executionInfo.TransitionHistory
+			if tc.versionedTransitionUpdated {
+				expectedTransitionHistory = UpdatedTransitionHistory(expectedTransitionHistory, namespaceEntry.FailoverVersion())
+			}
+
+			execInfo, err := tc.txFunc(s.mutableState)
+			s.Nil(err)
+
+			protorequire.ProtoSliceEqual(t, expectedTransitionHistory, execInfo.TransitionHistory)
+		})
+	}
+
 }
 
 func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {

@@ -119,5 +119,5 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_vis_archival/development"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development-cass.yaml"
+  filepath: "config/dynamicconfig/development-xdc.yaml"
   pollInterval: "10s"
