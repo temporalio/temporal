@@ -45,7 +45,7 @@ var Module = fx.Module(
 
 func ConfigProvider(coll *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled: dynamicconfig.FrontendEnableNexusAPIs.Get(coll),
+		Enabled: dynamicconfig.EnableNexus.Get(coll),
 	}
 }
 

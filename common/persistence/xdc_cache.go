@@ -34,7 +34,6 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
@@ -113,7 +112,6 @@ func NewEventsBlobCache(
 				TTL: ttl,
 				Pin: false,
 			},
-			metrics.NoopMetricsHandler,
 		),
 	}
 }

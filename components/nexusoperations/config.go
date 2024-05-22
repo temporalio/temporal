@@ -28,12 +28,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-var Enabled = dynamicconfig.NewNamespaceBoolSetting(
-	"component.nexusoperations.enabled",
-	false,
-	`Enabled toggles accepting of API requests and workflow commands that create or modify Nexus operations.`,
-)
-
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"component.nexusoperations.request.timeout",
 	time.Second*10,
@@ -72,7 +66,7 @@ Must be set in order to use Nexus Operations.`,
 )
 
 type Config struct {
-	Enabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	Enabled                 dynamicconfig.BoolPropertyFn
 	RequestTimeout          dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MaxConcurrentOperations dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -82,7 +76,7 @@ type Config struct {
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled:                 Enabled.Get(dc),
+		Enabled:                 dynamicconfig.EnableNexus.Get(dc),
 		RequestTimeout:          RequestTimeout.Get(dc),
 		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),

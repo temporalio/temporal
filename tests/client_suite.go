@@ -103,13 +103,10 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingActivitiesLimitError.Key():                  s.maxPendingActivities,
 		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              s.maxPendingCancelRequests,
 		dynamicconfig.NumPendingSignalsLimitError.Key():                     s.maxPendingSignals,
-		dynamicconfig.FrontendEnableNexusAPIs.Key():                         true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): limit,
-		nexusoperations.Enabled.Key():                                       true,
-		dynamicconfig.OutboundProcessorEnabled.Key():                        true,
-		dynamicconfig.EnableMutableStateTransitionHistory.Key():             true,
+		dynamicconfig.EnableNexus.Key():                                     true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")

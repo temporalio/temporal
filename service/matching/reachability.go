@@ -329,8 +329,8 @@ func newReachabilityCache(
 	reachabilityCacheClosedWFExecutionTTL time.Duration,
 ) reachabilityCache {
 	return reachabilityCache{
-		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}, handler),
-		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}, handler),
+		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}),
+		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}),
 		metricsHandler: handler,
 		visibilityMgr:  visibilityMgr,
 	}

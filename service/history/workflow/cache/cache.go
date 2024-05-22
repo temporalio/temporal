@@ -153,7 +153,7 @@ func newCache(
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:                     cache.New(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
+		Cache:                     cache.NewWithMetrics(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }

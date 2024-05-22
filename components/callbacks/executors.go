@@ -86,7 +86,7 @@ func (e activeExecutor) executeInvocationTask(
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	url, completion, err := e.loadUrlAndCallback(ctx, env, ref)
+	args, err := e.loadInvocationArgs(ctx, env, ref)
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,13 @@ func (e activeExecutor) executeInvocationTask(
 	)
 	defer cancel()
 
-	request, err := nexus.NewCompletionHTTPRequest(callCtx, url, completion)
+	request, err := nexus.NewCompletionHTTPRequest(callCtx, args.url, args.completion)
+	if request.Header == nil {
+		request.Header = make(http.Header)
+	}
+	for k, v := range args.header {
+		request.Header.Set(k, v)
+	}
 	if err != nil {
 		return queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
@@ -131,14 +137,18 @@ func (e activeExecutor) executeInvocationTask(
 	return err
 }
 
-func (e activeExecutor) loadUrlAndCallback(
+type invocationArgs struct {
+	url        string
+	header     map[string]string
+	completion nexus.OperationCompletion
+}
+
+func (e activeExecutor) loadInvocationArgs(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-) (string, nexus.OperationCompletion, error) {
-	var url string
-	var completion nexus.OperationCompletion
-	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+) (args invocationArgs, err error) {
+	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		callback, err := hsm.MachineData[Callback](node)
 		if err != nil {
 			return err
@@ -149,8 +159,9 @@ func (e activeExecutor) loadUrlAndCallback(
 		}
 		switch variant := callback.PublicInfo.GetCallback().GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
-			url = variant.Nexus.GetUrl()
-			completion, err = target.GetNexusCompletion(ctx)
+			args.url = variant.Nexus.GetUrl()
+			args.header = variant.Nexus.GetHeader()
+			args.completion, err = target.GetNexusCompletion(ctx)
 			if err != nil {
 				return err
 			}
@@ -161,7 +172,7 @@ func (e activeExecutor) loadUrlAndCallback(
 		}
 		return nil
 	})
-	return url, completion, err
+	return
 }
 
 func (e activeExecutor) saveResult(
