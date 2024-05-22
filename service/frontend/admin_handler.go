@@ -1653,6 +1653,10 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err = serverCluster.CloseSend()
+		logger.Error("Failed to close AdminStreamReplicationMessages server", tag.Error(err))
+	}()
 
 	shutdownChan := channel.NewShutdownOnce()
 	go func() {
