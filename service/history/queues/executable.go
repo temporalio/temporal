@@ -519,7 +519,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 	// Unexpected errors handled below
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
+	e.logger.Warn("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 
 	if e.isUnexpectedNonRetryableError(err) {
 		// Terminal errors are likely due to data corruption.
