@@ -1918,6 +1918,7 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueM
 		metrics.NamespaceTag(pmImpl.ns.Name().String()),
 		metrics.TaskTypeTag(physicalTaskQueueParameters.taskType.String()),
 		metrics.PartitionTypeTag(physicalTaskQueueParameters.partitionType.String()),
+		metrics.VersionedTag(versioned),
 	)
 }
 
