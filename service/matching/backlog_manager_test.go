@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"github.com/pborman/uuid"
+	"go.temporal.io/server/common/clock"
 	"golang.org/x/exp/rand"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"testing"
@@ -68,7 +69,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 	}
 	for _, test := range tests {
 		// TODO: do not create pq manager, directly create backlog manager
-		tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+		tlm := mustCreateTestPhysicalTaskQueueManager(t, controller, clock.NewEventTimeSource())
 		tlm.backlogMgr.taskReader.gorogrp.Go(tlm.backlogMgr.taskReader.dispatchBufferedTasks)
 		test(tlm)
 		// dispatchBufferedTasks should stop after invocation of the test function
@@ -81,7 +82,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	defer controller.Finish()
 
 	// TODO: do not create pq manager, directly create backlog manager
-	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller, clock.NewEventTimeSource())
 	tlm.backlogMgr.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{},
 	}
@@ -148,7 +149,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	defer controller.Finish()
 
 	// TODO: do not create pq manager, directly create backlog manager
-	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller, clock.NewEventTimeSource())
 	tlm.backlogMgr.db.rangeID = int64(1)
 	tlm.backlogMgr.db.ackLevel = int64(0)
 	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
@@ -203,7 +204,7 @@ func TestTaskWriterShutdown(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller, clock.NewEventTimeSource())
 	tlm.Start()
 	err := tlm.WaitUntilInitialized(context.Background())
 	require.NoError(t, err)

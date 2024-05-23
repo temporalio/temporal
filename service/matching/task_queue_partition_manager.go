@@ -29,6 +29,8 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/server/common/clock"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -155,7 +157,7 @@ func newTaskQueuePartitionManager(
 		userDataManager:      userDataManager,
 	}
 
-	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
+	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition), clock.NewRealTimeSource())
 	if err != nil {
 		return nil, err
 	}
@@ -571,7 +573,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 			} else {
 				dbq = VersionSetQueueKey(pm.partition, versionSet)
 			}
-			vq, err = newPhysicalTaskQueueManager(pm, dbq)
+			vq, err = newPhysicalTaskQueueManager(pm, dbq, clock.NewRealTimeSource())
 			if err != nil {
 				pm.versionedQueuesLock.Unlock()
 				return nil, err

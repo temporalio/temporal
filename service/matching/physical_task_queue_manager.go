@@ -64,6 +64,11 @@ const (
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
+
+	// denotes the duration of each mini-interval in the circularTaskBuffer
+	intervalSize = 5
+	// denotes the total duration which shall be used to calculate the rate of tasks added/dispatched
+	totalIntervalSize = 30
 )
 
 type (
@@ -136,36 +141,81 @@ type (
 	}
 )
 
-type taskTracker struct {
-	startIntervalTime time.Time
-	interval          time.Duration
-	tasksInInterval   map[time.Time]int64
+// a circular array of a fixed size which shall have it's pointer for tracking tasks
+type circularTaskBuffer struct {
+	buffer     []int
+	currentPos int
+	size       int
 }
 
-func newTaskTracker() *taskTracker {
+func newCircularTaskBuffer(size int) *circularTaskBuffer {
+	return &circularTaskBuffer{
+		buffer:     make([]int, size), // Initialize the buffer with the given size
+		size:       size,
+		currentPos: 0,
+	}
+}
+
+func (cb *circularTaskBuffer) incrementTaskCount() {
+	cb.buffer[cb.currentPos]++
+}
+
+func (cb *circularTaskBuffer) advance() {
+	cb.currentPos = (cb.currentPos + 1) % cb.size
+	cb.buffer[cb.currentPos] = 0 // Reset the task count for the new interval
+}
+
+// returns the total number of tasks in the buffer
+func (cb *circularTaskBuffer) totalTasks() int {
+	totalTasks := 0
+	for _, count := range cb.buffer {
+		totalTasks += count
+	}
+	return totalTasks
+}
+
+type taskTracker struct {
+	clock             clock.TimeSource
+	startTime         time.Time     // time when taskTracker was initialized
+	startIntervalTime time.Time     // the starting time of a window in the buffer
+	interval          time.Duration // the duration of each mini- in the buffer
+	totalIntervalSize int           // the number over which rate of tasks added/dispatched would be determined
+	tasksInInterval   *circularTaskBuffer
+}
+
+func newTaskTracker(timeSource clock.TimeSource, intervalSize int, totalIntervalSize int) *taskTracker {
 	return &taskTracker{
-		startIntervalTime: time.Now(),
-		interval:          30 * time.Second, // todo: Shivam - replace with config value
-		tasksInInterval:   make(map[time.Time]int64),
+		clock:             timeSource,
+		startTime:         timeSource.Now(),
+		startIntervalTime: timeSource.Now(),
+		interval:          time.Duration(intervalSize) * time.Second, // Todo: Shivam - replace with config value
+		totalIntervalSize: totalIntervalSize,
+		tasksInInterval:   newCircularTaskBuffer((totalIntervalSize / intervalSize) + 1), // Todo: Shivam - replace hardcoded value with number of buckets
 	}
 }
 
 // trackTasks is responsible for adding/removing tasks from the current time that falls in the appropriate interval
 func (s *taskTracker) trackTasks() {
-	currentTime := time.Now()
-	elapsed := currentTime.Truncate(s.interval)
+	currentTime := s.clock.Now()
 
-	// finding the right interval
-	if currentTime.Sub(s.startIntervalTime) >= s.interval {
-		s.startIntervalTime = elapsed
+	// Calculate elapsed time from the start interval time
+	elapsed := currentTime.Sub(s.startIntervalTime)
+	// Calculate the number of intervals elapsed since the start interval time
+	intervalsElapsed := int(elapsed / s.interval)
+
+	if intervalsElapsed != 0 {
+		for i := 0; i < intervalsElapsed; i++ {
+			s.tasksInInterval.advance() // advancing our circular buffer's position until we land on the right interval
+		}
+		s.startIntervalTime = s.startIntervalTime.Add(time.Duration(intervalsElapsed) * s.interval)
 	}
 
-	s.tasksInInterval[s.startIntervalTime] += 1
+	s.tasksInInterval.incrementTaskCount()
 }
 
 // rate is responsible for returning the rate of tasks added/dispatched in a given interval
 func (s *taskTracker) rate() float32 {
-	currentTime := time.Now()
+	currentTime := s.clock.Now()
 
 	// if currentTime - interval > (s.startIntervalTime + interval) return 0
 	endInterval := s.startIntervalTime.Add(s.interval)
@@ -173,9 +223,9 @@ func (s *taskTracker) rate() float32 {
 		return 0
 	}
 
-	// return totalTasks/ min(currentTime - 30, 30 seconds)
-	totalTasks := s.tasksInInterval[s.startIntervalTime]
-	elapsedTime := min(currentTime.Sub(s.startIntervalTime).Seconds(), s.interval.Seconds())
+	totalTasks := s.tasksInInterval.totalTasks()
+	elapsedTime := currentTime.Sub(s.startIntervalTime).Seconds() + float64(s.totalIntervalSize)
+
 	return float32(totalTasks) / float32(elapsedTime)
 }
 
@@ -189,6 +239,7 @@ var (
 func newPhysicalTaskQueueManager(
 	partitionMgr *taskQueuePartitionManagerImpl,
 	queue *PhysicalTaskQueueKey,
+	timeSource clock.TimeSource,
 	opts ...taskQueueManagerOpt,
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
@@ -210,8 +261,8 @@ func newPhysicalTaskQueueManager(
 		throttledLogger:            throttledLogger,
 		config:                     config,
 		taggedMetricsHandler:       taggedMetricsHandler,
-		TasksAddedInIntervals:      newTaskTracker(),
-		TasksDispatchedInIntervals: newTaskTracker(),
+		TasksAddedInIntervals:      newTaskTracker(timeSource, intervalSize, totalIntervalSize),
+		TasksDispatchedInIntervals: newTaskTracker(timeSource, intervalSize, totalIntervalSize),
 	}
 	pqMgr.pollerHistory = newPollerHistory()
 
