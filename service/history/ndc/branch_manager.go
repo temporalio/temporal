@@ -223,13 +223,15 @@ func (r *BranchMgrImpl) createNewBranch(
 	executionInfo := r.mutableState.GetExecutionInfo()
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
+	runID := uuid.New()
 
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseBranchLastEventID + 1,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID),
 		ShardID:         shardID,
 		NamespaceID:     namespaceID,
+		NewRunID:        runID,
 	})
 	if err != nil {
 		return 0, err
