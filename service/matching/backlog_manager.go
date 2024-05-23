@@ -68,6 +68,7 @@ type (
 		Start()
 		Stop()
 		WaitUntilInitialized(context.Context) error
+		BacklogCountHint() int64
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		String() string
@@ -197,12 +198,16 @@ func (c *backlogManagerImpl) processSpooledTask(
 	return c.pqMgr.ProcessSpooledTask(ctx, task)
 }
 
+func (c *backlogManagerImpl) BacklogCountHint() int64 {
+	return c.taskAckManager.getBacklogCountHint()
+}
+
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel:        c.taskAckManager.getReadLevel(),
 		AckLevel:         c.taskAckManager.getAckLevel(),
-		BacklogCountHint: c.db.getApproximateBacklogCount(), // replacing with a more accurate value of the backlog counter
+		BacklogCountHint: c.BacklogCountHint(),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
