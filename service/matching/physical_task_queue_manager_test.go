@@ -99,7 +99,7 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 }
 
 func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t), clock.NewEventTimeSource(),
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			// any error other than ConditionFailedError indicates an
 			// availability problem at a lower layer so the TQM should NOT
@@ -118,76 +118,59 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	require.True(t, sync)
 }
 
-// addTasks is a helper which adds numberOfTasks to a tqm
-func addTasks(t *testing.T, tqm *physicalTaskQueueManagerImpl, numberOfTasks int) {
+// addTasks is a helper which adds numberOfTasks to a taskTracker
+func trackTasksHelper(tr *taskTracker, numberOfTasks int) {
 	for i := 0; i < numberOfTasks; i++ {
 		// adding a bunch of tasks
-		sync, err := tqm.AddTask(context.TODO(), addTaskParams{
-			taskInfo: &persistencespb.TaskInfo{
-				CreateTime: timestamp.TimePtr(time.Now().UTC()),
-			},
-			source: enumsspb.TASK_SOURCE_HISTORY})
-		require.False(t, sync)
-		require.NoError(t, err)
+		tr.trackTasks()
 	}
 }
 
 func TestAddTasksRate(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.RangeSize = 1 // TaskID block size
-	var leaseErr error
-
 	// define a fake clock and it's time for testing
 	timeSource := clock.NewEventTimeSource()
 	currentTime := time.Now()
 	timeSource.Update(currentTime)
 
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t), timeSource,
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			return taskQueueState{rangeID: 1}, leaseErr
-		}))
-	tqm.Start()
-	defer tqm.Stop()
+	tr := newTaskTracker(timeSource, intervalSize, totalIntervalSize)
 
 	// mini windows will have the following format : (start time, end time)
 	// (0 - 4), (5 - 9), (10 - 14), (15 - 19), (20 - 24), (25 - 29), (30 - 34), ...
 
 	// tasks should be placed in the first mini-window
 	timeSource.Advance(1 * time.Second) // time: 1 second
-	addTasks(t, tqm, 100)
-	require.Equal(t, float32(3.2258065), tqm.TasksAddedInIntervals.rate()) // 100 tasks added in (30 + 1 (current window)) seconds = 100 / 31 = 3.22
-	require.Zero(t, tqm.TasksDispatchedInIntervals.rate())                 // no tasks have been dispatched
+	trackTasksHelper(tr, 100)
+	require.Equal(t, float32(3.2258065), tr.rate()) // 100 tasks added in (30 + 1 (current window)) seconds = 100 / 31 = 3.22
 
 	// tasks should be placed in the second mini-window
 	timeSource.Advance(5 * time.Second)
-	addTasks(t, tqm, 200)                                                // time: 6 second
-	require.Equal(t, float32(9.67742), tqm.TasksAddedInIntervals.rate()) // (100 + 200) tasks added in (30 + 1 (current window)) seconds = 300/31 = 9.6774
-	require.Zero(t, tqm.TasksDispatchedInIntervals.rate())               // no tasks have been dispatched
+	trackTasksHelper(tr, 200)                     // time: 6 second
+	require.Equal(t, float32(9.67742), tr.rate()) // (100 + 200) tasks added in (30 + 1 (current window)) seconds = 300/31 = 9.6774
 
 	timeSource.Advance(24 * time.Second) // time: 30 second
-	addTasks(t, tqm, 300)
-	require.Equal(t, float32(20), tqm.TasksAddedInIntervals.rate()) // (100 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 600/30 = 20
+	trackTasksHelper(tr, 300)
+	require.Equal(t, float32(20), tr.rate()) // (100 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 600/30 = 20
 
 	// this should clear out the first mini-window of 100 tasks
 	timeSource.Advance(5 * time.Second) // time: 35 second
-	addTasks(t, tqm, 10)
-	require.Equal(t, float32(17), tqm.TasksAddedInIntervals.rate()) // (10 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 510/30 = 17
+	trackTasksHelper(tr, 10)
+	require.Equal(t, float32(17), tr.rate()) // (10 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 510/30 = 17
 
 	// this should clear out the second and third mini-windows
 	timeSource.Advance(15 * time.Second) // time: 50 second
-	addTasks(t, tqm, 10)
-	require.Equal(t, float32(10.666667), tqm.TasksAddedInIntervals.rate()) // (10 + 10 + 300) tasks added in (30 + 0 (current window)) seconds = 320/30 = 10.66
+	trackTasksHelper(tr, 10)
+	require.Equal(t, float32(10.666667), tr.rate()) // (10 + 10 + 300) tasks added in (30 + 0 (current window)) seconds = 320/30 = 10.66
 
 	// a minute passes and no tasks are added
 	timeSource.Advance(60 * time.Second)
-	require.Equal(t, float32(0), tqm.TasksAddedInIntervals.rate()) // 0 tasks have been added in the last 30 seconds
+	require.Equal(t, float32(0), tr.rate()) // 0 tasks have been added in the last 30 seconds
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t), clock.NewEventTimeSource(),
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			return taskQueueState{rangeID: 1}, leaseErr
 		}))
@@ -227,7 +210,7 @@ func TestReaderSignaling(t *testing.T) {
 			<-readerNotifications
 		}
 	}
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t), clock.NewEventTimeSource())
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t))
 
 	// redirect taskReader signals into our local channel
 	tqm.backlogMgr.taskReader.notifyC = readerNotifications
@@ -293,22 +276,20 @@ func defaultTqId() *PhysicalTaskQueueKey {
 func mustCreateTestPhysicalTaskQueueManager(
 	t *testing.T,
 	controller *gomock.Controller,
-	clock clock.TimeSource,
 	opts ...taskQueueManagerOpt,
 ) *physicalTaskQueueManagerImpl {
 	t.Helper()
-	return mustCreateTestTaskQueueManagerWithConfig(t, controller, clock, defaultTqmTestOpts(controller), opts...)
+	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller), opts...)
 }
 
 func mustCreateTestTaskQueueManagerWithConfig(
 	t *testing.T,
 	controller *gomock.Controller,
-	clock clock.TimeSource,
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
 ) *physicalTaskQueueManagerImpl {
 	t.Helper()
-	tqm, err := createTestTaskQueueManagerWithConfig(controller, testOpts, clock, opts...)
+	tqm, err := createTestTaskQueueManagerWithConfig(controller, testOpts, opts...)
 	require.NoError(t, err)
 	return tqm
 }
@@ -316,7 +297,6 @@ func mustCreateTestTaskQueueManagerWithConfig(
 func createTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
-	clock clock.TimeSource,
 	opts ...taskQueueManagerOpt,
 ) (*physicalTaskQueueManagerImpl, error) {
 	nsName := namespace.Name("ns-name")
@@ -326,7 +306,7 @@ func createTestTaskQueueManagerWithConfig(
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, nsName)
 	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, partition, tqConfig, me.logger, me.namespaceRegistry)
 	pm := createTestTaskQueuePartitionManager(ns, partition, tqConfig, me, userDataManager)
-	tlMgr, err := newPhysicalTaskQueueManager(pm, testOpts.dbq, clock, opts...)
+	tlMgr, err := newPhysicalTaskQueueManager(pm, testOpts.dbq, opts...)
 	pm.defaultQueue = tlMgr
 	if err != nil {
 		return nil, err
@@ -359,7 +339,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	PollerIdentity := "test-poll"
 
 	// Create queue Manager and set queue state
-	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller, clock.NewEventTimeSource())
+	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 	tlm.backlogMgr.db.rangeID = int64(1)
 	tlm.backlogMgr.db.ackLevel = int64(0)
 	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
@@ -421,13 +401,13 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tqCfg.config = cfg
 
 	// Idle
-	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, clock.NewEventTimeSource(), tqCfg)
+	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
 	// Active poll-er
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, clock.NewEventTimeSource(), tqCfg)
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo("test-poll", &pollMetadata{})
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
@@ -437,7 +417,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 
 	// Active adding task
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, clock.NewEventTimeSource(), tqCfg)
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlm.backlogMgr.taskReader.Signal()
@@ -454,7 +434,7 @@ func TestAddTaskStandby(t *testing.T) {
 	tlm := mustCreateTestTaskQueueManagerWithConfig(
 		t,
 		controller,
-		clock.NewEventTimeSource(),
+
 		defaultTqmTestOpts(controller),
 		func(tqm *physicalTaskQueueManagerImpl) {
 			ns := namespace.NewGlobalNamespaceForTest(
@@ -506,7 +486,7 @@ func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, clock.NewEventTimeSource(), tqCfg)
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tm, ok := tqm.partitionMgr.engine.taskManager.(*testTaskManager)
 	require.True(t, ok)
 
@@ -526,7 +506,7 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, clock.NewEventTimeSource(), tqCfg)
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tm, ok := tqm.partitionMgr.engine.taskManager.(*testTaskManager)
 	require.True(t, ok)
 
