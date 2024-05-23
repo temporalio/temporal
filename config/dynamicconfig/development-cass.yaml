@@ -30,8 +30,6 @@
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
 #  - value: true
-# system.enableShadowReadMode:
-#   - value: true
 system.enableEagerWorkflowStart:
   - value: true
 frontend.enableUpdateWorkflowExecution:

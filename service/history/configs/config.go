@@ -51,7 +51,7 @@ type Config struct {
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
 	EnableReadFromSecondaryVisibility     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableShadowReadMode                  dynamicconfig.BoolPropertyFn
+	VisibilityEnableShadowReadMode        dynamicconfig.BoolPropertyFn
 	SecondaryVisibilityWritingMode        dynamicconfig.StringPropertyFn
 	VisibilityDisableOrderByClause        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination      dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -373,7 +373,7 @@ func NewConfig(
 		VisibilityPersistenceMaxReadQPS:       dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:      dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
 		EnableReadFromSecondaryVisibility:     dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
-		EnableShadowReadMode:                  dynamicconfig.EnableShadowReadMode.Get(dc),
+		VisibilityEnableShadowReadMode:        dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		SecondaryVisibilityWritingMode:        dynamicconfig.SecondaryVisibilityWritingMode.Get(dc),
 		VisibilityDisableOrderByClause:        dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:      dynamicconfig.VisibilityEnableManualPagination.Get(dc),

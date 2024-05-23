@@ -70,10 +70,10 @@ var (
 		false,
 		`EnableReadFromSecondaryVisibility is the config to enable read from secondary visibility`,
 	)
-	EnableShadowReadMode = NewGlobalBoolSetting(
-		"system.enableShadowReadMode",
+	VisibilityEnableShadowReadMode = NewGlobalBoolSetting(
+		"system.VisibilityEnableShadowReadMode",
 		false,
-		`EnableShadowReadMode is the config to enable shadow read from secondary visibility`,
+		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
 	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
 		"system.secondaryVisibilityWritingMode",

@@ -34,10 +34,10 @@ import (
 
 type (
 	VisibilityManagerDual struct {
-		visibilityManager          manager.VisibilityManager
-		secondaryVisibilityManager manager.VisibilityManager
-		managerSelector            managerSelector
-		enableShadowReadMode       dynamicconfig.BoolPropertyFn
+		visibilityManager              manager.VisibilityManager
+		secondaryVisibilityManager     manager.VisibilityManager
+		managerSelector                managerSelector
+		visibilityEnableShadowReadMode dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -49,13 +49,13 @@ func NewVisibilityManagerDual(
 	visibilityManager manager.VisibilityManager,
 	secondaryVisibilityManager manager.VisibilityManager,
 	managerSelector managerSelector,
-	enableShadowReadMode dynamicconfig.BoolPropertyFn,
+	visibilityEnableShadowReadMode dynamicconfig.BoolPropertyFn,
 ) *VisibilityManagerDual {
 	return &VisibilityManagerDual{
-		visibilityManager:          visibilityManager,
-		secondaryVisibilityManager: secondaryVisibilityManager,
-		managerSelector:            managerSelector,
-		enableShadowReadMode:       enableShadowReadMode,
+		visibilityManager:              visibilityManager,
+		secondaryVisibilityManager:     secondaryVisibilityManager,
+		managerSelector:                managerSelector,
+		visibilityEnableShadowReadMode: visibilityEnableShadowReadMode,
 	}
 }
 
@@ -181,78 +181,78 @@ func (v *VisibilityManagerDual) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if v.enableShadowReadMode() {
+	if v.visibilityEnableShadowReadMode() {
 		ms, err := v.managerSelector.readManagers(request.Namespace)
 		if err != nil {
 			return nil, err
 		}
+		//nolint:errcheck // ignore error since it's shadow request
 		go ms[1].ListWorkflowExecutions(ctx, request)
 		res, err := ms[0].ListWorkflowExecutions(ctx, request)
 		if err != nil {
 			return nil, err
 		}
 		return res, err
-	} else {
-		return v.managerSelector.readManager(request.Namespace).ListWorkflowExecutions(ctx, request)
 	}
+	return v.managerSelector.readManager(request.Namespace).ListWorkflowExecutions(ctx, request)
 }
 
 func (v *VisibilityManagerDual) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if v.enableShadowReadMode() {
+	if v.visibilityEnableShadowReadMode() {
 		ms, err := v.managerSelector.readManagers(request.Namespace)
 		if err != nil {
 			return nil, err
 		}
+		//nolint:errcheck // ignore error since it's shadow request
 		go ms[1].ScanWorkflowExecutions(ctx, request)
 		res, err := ms[0].ScanWorkflowExecutions(ctx, request)
 		if err != nil {
 			return nil, err
 		}
 		return res, err
-	} else {
-		return v.managerSelector.readManager(request.Namespace).ScanWorkflowExecutions(ctx, request)
 	}
+	return v.managerSelector.readManager(request.Namespace).ScanWorkflowExecutions(ctx, request)
 }
 
 func (v *VisibilityManagerDual) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	if v.enableShadowReadMode() {
+	if v.visibilityEnableShadowReadMode() {
 		ms, err := v.managerSelector.readManagers(request.Namespace)
 		if err != nil {
 			return nil, err
 		}
+		//nolint:errcheck // ignore error since it's shadow request
 		go ms[1].CountWorkflowExecutions(ctx, request)
 		res, err := ms[0].CountWorkflowExecutions(ctx, request)
 		if err != nil {
 			return nil, err
 		}
 		return res, err
-	} else {
-		return v.managerSelector.readManager(request.Namespace).CountWorkflowExecutions(ctx, request)
 	}
+	return v.managerSelector.readManager(request.Namespace).CountWorkflowExecutions(ctx, request)
 }
 
 func (v *VisibilityManagerDual) GetWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*manager.GetWorkflowExecutionResponse, error) {
-	if v.enableShadowReadMode() {
+	if v.visibilityEnableShadowReadMode() {
 		ms, err := v.managerSelector.readManagers(request.Namespace)
 		if err != nil {
 			return nil, err
 		}
+		//nolint:errcheck // ignore error since it's shadow request
 		go ms[1].GetWorkflowExecution(ctx, request)
 		res, err := ms[0].GetWorkflowExecution(ctx, request)
 		if err != nil {
 			return nil, err
 		}
 		return res, err
-	} else {
-		return v.managerSelector.readManager(request.Namespace).GetWorkflowExecution(ctx, request)
 	}
+	return v.managerSelector.readManager(request.Namespace).GetWorkflowExecution(ctx, request)
 }

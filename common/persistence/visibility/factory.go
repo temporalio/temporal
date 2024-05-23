@@ -65,7 +65,7 @@ func NewManager(
 	maxWriteQPS dynamicconfig.IntPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	enableShadowReadMode dynamicconfig.BoolPropertyFn,
+	visibilityEnableShadowReadMode dynamicconfig.BoolPropertyFn,
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
@@ -143,7 +143,7 @@ func NewManager(
 			visibilityManager,
 			secondaryVisibilityManager,
 			managerSelector,
-			enableShadowReadMode,
+			visibilityEnableShadowReadMode,
 		), nil
 	}
 

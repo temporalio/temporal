@@ -82,7 +82,7 @@ func (m *MockmanagerSelector) readManagers(nsName namespace.Name) ([]manager.Vis
 	return ret0, ret1
 }
 
-// readManagers indicates an expected call of readManager.
+// readManagers indicates an expected call of readManagers.
 func (mr *MockmanagerSelectorMockRecorder) readManagers(nsName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "readManagers", reflect.TypeOf((*MockmanagerSelector)(nil).readManagers), nsName)
