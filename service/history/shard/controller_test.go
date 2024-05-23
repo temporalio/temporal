@@ -821,8 +821,8 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 
 	mockEngine.EXPECT().Stop().Return().MinTimes(1)
 
-	// We mock 2 AssertShardOwnership calls because the first call happens
-	// before any waiting actually occcurs in shardLingerAndClose.
+	// We mock 2 AssertShardOwnership calls in shardLingerThenClose.
+	// The second one finds that the shard is no longer owned by the host, and unloads it.
 	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 		ShardID: shardID,
 		RangeID: 6,
@@ -837,8 +837,8 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 
 	s.shardController.acquireShards(context.Background())
 
-	// Wait for one check plus 100ms of test fudge factor.
-	expectedWait := time.Second / time.Duration(checkQPS)
+	// Wait for two checks plus 100ms of test fudge factor.
+	expectedWait := time.Second / time.Duration(checkQPS) * 2
 	time.Sleep(expectedWait + 100*time.Millisecond)
 
 	s.Len(s.shardController.ShardIDs(), 0)
