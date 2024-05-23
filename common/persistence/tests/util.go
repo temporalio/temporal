@@ -26,6 +26,7 @@ package tests
 
 import (
 	"math/rand"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,6 +103,7 @@ func RandomSnapshot(
 }
 
 func RandomMutation(
+	t *testing.T,
 	namespaceID string,
 	workflowID string,
 	runID string,
