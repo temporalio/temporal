@@ -190,7 +190,7 @@ func newTaskTracker(timeSource clock.TimeSource, intervalSize int, totalInterval
 		startIntervalTime: timeSource.Now(),
 		interval:          time.Duration(intervalSize) * time.Second, // Todo: Shivam - replace with config value
 		totalIntervalSize: totalIntervalSize,
-		tasksInInterval:   newCircularTaskBuffer((totalIntervalSize / intervalSize) + 1), // Todo: Shivam - replace hardcoded value with number of buckets
+		tasksInInterval:   newCircularTaskBuffer((totalIntervalSize / intervalSize) + 1),
 	}
 }
 
