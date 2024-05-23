@@ -232,6 +232,7 @@ func (s *taskTracker) rate() float32 {
 
 	// time passed since start of the current window + totalIntervalSize in milliseconds
 	elapsedTime := currentTime.Sub(s.startIntervalTime).Milliseconds() + int64(s.totalIntervalSize*1000)
+	// rate per second
 	return (float32(totalTasks) / float32(elapsedTime)) * 1000
 }
 
