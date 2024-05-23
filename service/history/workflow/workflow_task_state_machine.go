@@ -907,6 +907,10 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
 
+	// set to nil here to denote state/status was updated in the transaction.
+	// upon closing this transaction, the field will be set to the right value if there a workflow task.
+	m.ms.executionInfo.WorkflowTaskLastUpdatedVersionedTransition = nil
+
 	// NOTE: do not update task queue in execution info
 
 	m.ms.logger.Debug("Workflow task updated",
@@ -1133,6 +1137,10 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+	// set to nil here to denote state/status was updated in the transaction.
+	// upon closing this transaction, the field will be set to the right value if there a workflow task.
+	// setting it here just to be safe, the field should already be set to nil when the speculative workflow task is created.
+	m.ms.executionInfo.WorkflowTaskLastUpdatedVersionedTransition = nil
 
 	wt := m.getWorkflowTaskInfo()
 

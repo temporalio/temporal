@@ -27,6 +27,7 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 // A node in a hierarchical state machine tree.
 message StateMachineNode {
+    // TODO: deprecate this field and use last_updated_versioned_transition
     // Number of transitions on this state machine object.
     // Used to verify that a task is not stale if the state machine does not allow concurrent task execution.
     int64 transition_count = 1;
@@ -34,6 +35,7 @@ message StateMachineNode {
     // Seralized data of the underlying state machine.
     bytes data = 2;
     map<int32, StateMachineMap> children = 3;
+    VersionedTransition last_updated_versioned_transition = 4;
 }
 
 // Map of state machine ID to StateMachineNode.

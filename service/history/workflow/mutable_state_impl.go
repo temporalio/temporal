@@ -2251,7 +2251,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
-// AddFirstWorkflowTaskScheduled adds the first workflow task scehduled event unless it should be delayed as indicated
+// AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
 // by the startEvent's FirstWorkflowTaskBackoff.
 // Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
@@ -4031,7 +4031,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
 	}
-	ui := persistencespb.UpdateInfo{Value: admission}
+	ui := persistencespb.UpdateInfo{
+		Value:                          admission,
+		LastUpdatedVersionedTransition: nil,
+	}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -4073,12 +4076,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 		ui.Value = &persistencespb.UpdateInfo_Acceptance{
 			Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 		}
+		ui.LastUpdatedVersionedTransition = nil
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
 		ui := persistencespb.UpdateInfo{
 			Value: &persistencespb.UpdateInfo_Acceptance{
 				Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 			},
+			LastUpdatedVersionedTransition: nil,
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
 		ms.executionInfo.UpdateCount++
@@ -4129,6 +4134,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 			EventBatchId: batchID,
 		},
 	}
+	ui.LastUpdatedVersionedTransition = nil
 	sizeDelta = ui.Size() - sizeBefore
 	ms.approximateSize += sizeDelta
 	ms.writeEventToCache(event)
@@ -5135,6 +5141,12 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	if err := ms.closeTransactionTrackLastUpdatedVersionedTransition(
+		transactionPolicy,
+	); err != nil {
+		return closeTransactionResult{}, err
+	}
+
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
 		workflowEventsSeq,
@@ -5244,6 +5256,8 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	}
 
 	if transactionPolicy != TransactionPolicyActive {
+		// TODO: replication/standby logic will need a different way for updating transition history
+		// when not syncing mutable state
 		return nil
 	}
 
@@ -5261,6 +5275,85 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	)
 
 	return nil
+}
+
+func (ms *MutableStateImpl) closeTransactionTrackLastUpdatedVersionedTransition(
+	transactionPolicy TransactionPolicy,
+) error {
+	if transactionPolicy != TransactionPolicyActive {
+		// TODO: replication/standby logic will need a different way for updating LastUpdatedVersionedTransition
+		// when not syncing mutable state, especially when replication tasks got batched.
+		return nil
+	}
+
+	if !ms.config.EnableNexus() {
+		return nil
+	}
+
+	totalSizeDelta := 0
+	transitionHistory := ms.executionInfo.TransitionHistory
+	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	currentVersionedTransitionSize := currentVersionedTransition.Size()
+	for _, activityInfo := range ms.updateActivityInfos {
+		totalSizeDelta += currentVersionedTransitionSize - activityInfo.LastUpdatedVersionedTransition.Size()
+		activityInfo.LastUpdatedVersionedTransition = currentVersionedTransition
+	}
+	for _, timerInfo := range ms.updateTimerInfos {
+		totalSizeDelta += currentVersionedTransitionSize - timerInfo.LastUpdatedVersionedTransition.Size()
+		timerInfo.LastUpdatedVersionedTransition = currentVersionedTransition
+	}
+	for _, childInfo := range ms.updateChildExecutionInfos {
+		totalSizeDelta += currentVersionedTransitionSize - childInfo.LastUpdatedVersionedTransition.Size()
+		childInfo.LastUpdatedVersionedTransition = currentVersionedTransition
+	}
+	for _, cancelInfo := range ms.updateRequestCancelInfos {
+		totalSizeDelta += currentVersionedTransitionSize - cancelInfo.LastUpdatedVersionedTransition.Size()
+		cancelInfo.LastUpdatedVersionedTransition = currentVersionedTransition
+	}
+	for _, signalInfo := range ms.updateSignalInfos {
+		totalSizeDelta += currentVersionedTransitionSize - signalInfo.LastUpdatedVersionedTransition.Size()
+		signalInfo.LastUpdatedVersionedTransition = currentVersionedTransition
+	}
+
+	// signalRequestedIDs is a set in DB, we don't have a place to store the lastUpdateVersionedTransition for each
+	// signal requestedID.
+	// Deletion of signalRequestID is not replicated today, so we can even drop the check on deleteSignalRequestedIDs
+	if len(ms.updateSignalRequestedIDs) != 0 || len(ms.deleteSignalRequestedIDs) != 0 {
+		totalSizeDelta += currentVersionedTransitionSize - ms.executionInfo.SignalRequestIdsLastUpdatedVersionedTransition.Size()
+		ms.executionInfo.SignalRequestIdsLastUpdatedVersionedTransition = currentVersionedTransition
+	}
+
+	for _, updateInfo := range ms.executionInfo.UpdateInfos {
+		if updateInfo.LastUpdatedVersionedTransition == nil {
+			totalSizeDelta += currentVersionedTransitionSize - updateInfo.LastUpdatedVersionedTransition.Size()
+			updateInfo.LastUpdatedVersionedTransition = currentVersionedTransition
+		}
+	}
+
+	if ms.executionInfo.WorkflowTaskLastUpdatedVersionedTransition == nil &&
+		ms.HasPendingWorkflowTask() {
+		// if nil and we are here it means transition history is enabled
+		// and workflow task exists and has been updated in this transaction.
+		// TODO: we are not tracking workflow task size changes today.
+		ms.executionInfo.WorkflowTaskLastUpdatedVersionedTransition = currentVersionedTransition
+	}
+
+	if len(ms.InsertTasks[tasks.CategoryVisibility]) != 0 {
+		totalSizeDelta += currentVersionedTransitionSize - ms.executionInfo.VisibilityLastUpdatedVersionedTransition.Size()
+		ms.executionInfo.VisibilityLastUpdatedVersionedTransition = currentVersionedTransition
+	}
+
+	if ms.executionState.LastUpdatedVersionedTransition == nil {
+		// if nil and we are here it means transition history is enabled
+		// and execution state/status has been updated in this transaction.
+		// TODO: we are not tracking executionState size changes today.
+		ms.executionState.LastUpdatedVersionedTransition = currentVersionedTransition
+	}
+
+	ms.approximateSize += totalSizeDelta
+
+	// TODO: proper track size change for ms.executionInfo.SubStateMachinesByType
+	return ms.HSM().SetLastUpdatedVersionedTransition(currentVersionedTransition)
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareTasks(

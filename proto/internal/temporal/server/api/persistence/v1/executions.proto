@@ -207,6 +207,10 @@ message WorkflowExecutionInfo {
     // 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
     string root_workflow_id = 83;
     string root_run_id = 84;
+
+    VersionedTransition workflow_task_last_updated_versioned_transition = 90;
+    VersionedTransition visibility_last_updated_versioned_transition = 91;
+    VersionedTransition signal_request_ids_last_updated_versioned_transition = 92;
 }
 
 message ExecutionStats {
@@ -219,6 +223,7 @@ message WorkflowExecutionState {
     string run_id = 2;
     temporal.server.api.enums.v1.WorkflowExecutionState state = 3;
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
+    VersionedTransition last_updated_versioned_transition = 5;
 }
 
 // transfer column
@@ -403,6 +408,8 @@ message ActivityInfo {
         // workflows redirect_counter value when this activity started last time
         int64 last_redirect_counter = 2;
     }
+
+    VersionedTransition last_updated_versioned_transition = 38;
 }
 
 // timer_map column
@@ -413,6 +420,7 @@ message TimerInfo {
     int64 task_status = 4;
     // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
     string timer_id = 5;
+    VersionedTransition last_updated_versioned_transition = 6;
 }
 
 // child_executions_map column
@@ -431,6 +439,7 @@ message ChildExecutionInfo {
     int64 initiated_event_id = 12;
     temporal.server.api.clock.v1.VectorClock clock = 13;
     string namespace_id = 14;
+    VersionedTransition last_updated_versioned_transition = 15;
 }
 
 // request_cancel_map column
@@ -439,6 +448,7 @@ message RequestCancelInfo {
     int64 initiated_event_batch_id = 2;
     string cancel_request_id = 3;
     int64 initiated_event_id = 4;
+    VersionedTransition last_updated_versioned_transition = 5;
 }
 
 // signal_map column
@@ -451,6 +461,7 @@ message SignalInfo {
     reserved 6;
     int64 initiated_event_id = 7;
     reserved 8;
+    VersionedTransition last_updated_versioned_transition = 9;
 }
 
 // checksum column

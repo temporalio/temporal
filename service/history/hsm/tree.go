@@ -182,6 +182,21 @@ func (n *Node) Outputs() []PathAndOutputs {
 	return paos
 }
 
+// SetLastUpdatedVersionedTransition sets the LastUpdatedVersionedTransition
+// for all dirty Nodes rooted at the current Node.
+func (n *Node) SetLastUpdatedVersionedTransition(
+	currentVersionedTransition *persistencespb.VersionedTransition,
+) error {
+	return n.Walk(func(n *Node) error {
+		if len(n.cache.outputs) == 0 {
+			return nil
+		}
+
+		n.persistence.LastUpdatedVersionedTransition = currentVersionedTransition
+		return nil
+	})
+}
+
 // ClearTransactionState resets all transition outputs in the tree.
 // This should be called at the end of every transaction where the transitions are performed to avoid emitting duplicate
 // transition outputs.
