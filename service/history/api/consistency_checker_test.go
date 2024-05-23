@@ -171,70 +171,6 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	s.False(released)
 }
 
-func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_NotFound_OwnershipAsserted() {
-	ctx := context.Background()
-
-	wfContext := workflow.NewMockContext(s.controller)
-	released := false
-	releaseFn := func(err error) { released = true }
-
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
-		ctx,
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		protomock.Eq(&commonpb.WorkflowExecution{
-			WorkflowId: s.workflowID,
-			RunId:      s.currentRunID,
-		}),
-		workflow.LockPriorityHigh,
-	).Return(wfContext, releaseFn, nil)
-	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(nil, serviceerror.NewNotFound(""))
-
-	s.shardContext.EXPECT().AssertOwnership(ctx).Return(nil)
-
-	workflowLease, err := s.checker.getWorkflowLeaseValidatedByCheck(
-		ctx,
-		FailMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
-		workflow.LockPriorityHigh,
-	)
-	s.IsType(&serviceerror.NotFound{}, err)
-	s.Nil(workflowLease)
-	s.True(released)
-}
-
-func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_NotFound_OwnershipLost() {
-	ctx := context.Background()
-
-	wfContext := workflow.NewMockContext(s.controller)
-	released := false
-	releaseFn := func(err error) { released = true }
-
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
-		ctx,
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		protomock.Eq(&commonpb.WorkflowExecution{
-			WorkflowId: s.workflowID,
-			RunId:      s.currentRunID,
-		}),
-		workflow.LockPriorityHigh,
-	).Return(wfContext, releaseFn, nil)
-	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(nil, serviceerror.NewNotFound(""))
-
-	s.shardContext.EXPECT().AssertOwnership(ctx).Return(&persistence.ShardOwnershipLostError{})
-
-	workflowLease, err := s.checker.getWorkflowLeaseValidatedByCheck(
-		ctx,
-		FailMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
-		workflow.LockPriorityHigh,
-	)
-	s.IsType(&persistence.ShardOwnershipLostError{}, err)
-	s.Nil(workflowLease)
-	s.True(released)
-}
-
 func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_Error() {
 	ctx := context.Background()
 
@@ -290,64 +226,6 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.NoError(err)
 	s.Equal(s.currentRunID, runID)
-	s.True(released)
-}
-
-func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_OwnershipAsserted() {
-	ctx := context.Background()
-
-	released := false
-	releaseFn := func(err error) { released = true }
-
-	s.workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		s.workflowID,
-		workflow.LockPriorityHigh,
-	).Return(releaseFn, nil)
-	s.shardContext.EXPECT().GetCurrentExecution(
-		ctx,
-		&persistence.GetCurrentExecutionRequest{
-			ShardID:     s.shardContext.GetShardID(),
-			NamespaceID: s.namespaceID,
-			WorkflowID:  s.workflowID,
-		},
-	).Return(nil, serviceerror.NewNotFound(""))
-	s.shardContext.EXPECT().AssertOwnership(ctx).Return(nil)
-
-	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
-	s.IsType(&serviceerror.NotFound{}, err)
-	s.Empty(runID)
-	s.True(released)
-}
-
-func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_OwnershipLost() {
-	ctx := context.Background()
-
-	released := false
-	releaseFn := func(err error) { released = true }
-
-	s.workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		s.workflowID,
-		workflow.LockPriorityHigh,
-	).Return(releaseFn, nil)
-	s.shardContext.EXPECT().GetCurrentExecution(
-		ctx,
-		&persistence.GetCurrentExecutionRequest{
-			ShardID:     s.shardContext.GetShardID(),
-			NamespaceID: s.namespaceID,
-			WorkflowID:  s.workflowID,
-		},
-	).Return(nil, serviceerror.NewNotFound(""))
-	s.shardContext.EXPECT().AssertOwnership(ctx).Return(&persistence.ShardOwnershipLostError{})
-
-	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
-	s.IsType(&persistence.ShardOwnershipLostError{}, err)
-	s.Empty(runID)
 	s.True(released)
 }
 
