@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -143,6 +144,7 @@ type (
 
 // a circular array of a fixed size which shall have it's pointer for tracking tasks
 type circularTaskBuffer struct {
+	mutex      sync.RWMutex
 	buffer     []int
 	currentPos int
 	size       int
@@ -157,16 +159,22 @@ func newCircularTaskBuffer(size int) *circularTaskBuffer {
 }
 
 func (cb *circularTaskBuffer) incrementTaskCount() {
+	cb.mutex.Lock()
+	defer cb.mutex.Unlock()
 	cb.buffer[cb.currentPos]++
 }
 
 func (cb *circularTaskBuffer) advance() {
+	cb.mutex.Lock()
+	defer cb.mutex.Unlock()
 	cb.currentPos = (cb.currentPos + 1) % cb.size
 	cb.buffer[cb.currentPos] = 0 // Reset the task count for the new interval
 }
 
 // returns the total number of tasks in the buffer
 func (cb *circularTaskBuffer) totalTasks() int {
+	cb.mutex.RLock()
+	defer cb.mutex.RUnlock()
 	totalTasks := 0
 	for _, count := range cb.buffer {
 		totalTasks += count
