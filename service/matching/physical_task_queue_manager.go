@@ -198,8 +198,8 @@ func newTaskTracker(timeSource clock.TimeSource, intervalSize int, totalInterval
 
 // trackTasks is responsible for adding/removing tasks from the current time that falls in the appropriate interval
 func (s *taskTracker) trackTasks() {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	currentTime := s.clock.Now()
 
 	// Calculate elapsed time from the start interval time
@@ -219,8 +219,8 @@ func (s *taskTracker) trackTasks() {
 
 // rate is responsible for returning the rate of tasks added/dispatched in a given interval
 func (s *taskTracker) rate() float32 {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	currentTime := s.clock.Now()
 
 	// if currentTime - interval > (s.startIntervalTime + interval) return 0
