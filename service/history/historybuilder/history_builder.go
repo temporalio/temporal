@@ -159,6 +159,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		firstInChainRunID,
 		originalRunID,
 	)
+	if request.StartRequest.GetUserMetadata() != nil {
+		event.UserMetadata = request.StartRequest.GetUserMetadata()
+	}
 	event, _ = b.EventStore.add(event)
 	return event
 }
