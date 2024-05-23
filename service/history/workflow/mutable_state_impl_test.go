@@ -798,22 +798,22 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 	startTime := timestamppb.New(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	info := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId:                    namespaceID.String(),
-		WorkflowId:                     we.GetWorkflowId(),
-		TaskQueue:                      tl,
-		WorkflowTypeName:               "wType",
-		WorkflowRunTimeout:             timestamp.DurationFromSeconds(200),
-		DefaultWorkflowTaskTimeout:     timestamp.DurationFromSeconds(100),
-		LastWorkflowTaskStartedEventId: int64(99),
-		LastUpdateTime:                 timestamp.TimeNowPtrUtc(),
-		StartTime:                      startTime,
-		ExecutionTime:                  startTime,
-		WorkflowTaskVersion:            failoverVersion,
-		WorkflowTaskScheduledEventId:   101,
-		WorkflowTaskStartedEventId:     102,
-		WorkflowTaskTimeout:            timestamp.DurationFromSeconds(100),
-		WorkflowTaskAttempt:            1,
-		WorkflowTaskType:               enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		NamespaceId:                             namespaceID.String(),
+		WorkflowId:                              we.GetWorkflowId(),
+		TaskQueue:                               tl,
+		WorkflowTypeName:                        "wType",
+		WorkflowRunTimeout:                      timestamp.DurationFromSeconds(200),
+		DefaultWorkflowTaskTimeout:              timestamp.DurationFromSeconds(100),
+		LastCompletedWorkflowTaskStartedEventId: int64(99),
+		LastUpdateTime:                          timestamp.TimeNowPtrUtc(),
+		StartTime:                               startTime,
+		ExecutionTime:                           startTime,
+		WorkflowTaskVersion:                     failoverVersion,
+		WorkflowTaskScheduledEventId:            101,
+		WorkflowTaskStartedEventId:              102,
+		WorkflowTaskTimeout:                     timestamp.DurationFromSeconds(100),
+		WorkflowTaskAttempt:                     1,
+		WorkflowTaskType:                        enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		VersionHistories: &historyspb.VersionHistories{
 			Histories: []*historyspb.VersionHistory{
 				{
