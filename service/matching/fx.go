@@ -171,6 +171,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
+		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
