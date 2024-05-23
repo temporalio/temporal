@@ -77,15 +77,13 @@ type (
 		) error
 	}
 
-	stateRebuilderProvider func() StateRebuilder
-
 	workflowResetterImpl struct {
 		shardContext      shard.Context
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		workflowCache     wcache.Cache
-		newStateRebuilder stateRebuilderProvider
+		stateRebuilder    StateRebuilder
 		transaction       workflow.Transaction
 		logger            log.Logger
 	}
@@ -104,11 +102,9 @@ func NewWorkflowResetter(
 		clusterMetadata:   shardContext.GetClusterMetadata(),
 		executionMgr:      shardContext.GetExecutionManager(),
 		workflowCache:     workflowCache,
-		newStateRebuilder: func() StateRebuilder {
-			return NewStateRebuilder(shardContext, logger)
-		},
-		transaction: workflow.NewTransaction(shardContext),
-		logger:      logger,
+		stateRebuilder:    NewStateRebuilder(shardContext, logger),
+		transaction:       workflow.NewTransaction(shardContext),
+		logger:            logger,
 	}
 }
 
@@ -283,6 +279,17 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
 
+	// if workflow was reset after it was expired - at this point expiration task will
+	// already be fired since it is (re)created from the event, and event has old expiration time
+	// generate workflow execution task. again. this time with proper expiration time
+	taskRefresher := workflow.NewTaskRefresher(
+		r.shardContext,
+		r.logger,
+	)
+	if err := taskRefresher.RefreshTasks(ctx, resetMutableState); err != nil {
+		return nil, err
+	}
+
 	if resetMutableState.GetCurrentVersion() > resetWorkflowVersion {
 		return nil, serviceerror.NewInternal("WorkflowResetter encountered version mismatch.")
 	}
@@ -404,7 +411,8 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.shardContext.GetLogger(),
 		r.shardContext.GetMetricsHandler(),
 	)
-	resetMutableState, resetHistorySize, err := r.newStateRebuilder().Rebuild(
+
+	resetMutableState, resetHistorySize, err := r.stateRebuilder.Rebuild(
 		ctx,
 		r.shardContext.GetTimeSource().Now(),
 		definition.NewWorkflowKey(

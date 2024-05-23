@@ -118,9 +118,7 @@ func (s *workflowResetterSuite) SetupTest() {
 		wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler),
 		s.logger,
 	)
-	s.workflowResetter.newStateRebuilder = func() StateRebuilder {
-		return s.mockStateRebuilder
-	}
+	s.workflowResetter.stateRebuilder = s.mockStateRebuilder
 	s.workflowResetter.transaction = s.mockTransaction
 
 	s.namespaceID = tests.NamespaceID

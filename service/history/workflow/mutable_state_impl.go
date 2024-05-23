@@ -2183,7 +2183,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
-		// TODO: for workflow reset case, re-calculate the expiration time instead of reusing the one in the event
 		ms.executionInfo.WorkflowExecutionExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}
 

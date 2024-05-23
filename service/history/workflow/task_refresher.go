@@ -36,9 +36,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -49,25 +47,19 @@ type (
 	}
 
 	TaskRefresherImpl struct {
-		shard             shard.Context
-		config            *configs.Config
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
+		shard  shard.Context
+		logger log.Logger
 	}
 )
 
 func NewTaskRefresher(
 	shard shard.Context,
-	config *configs.Config,
-	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) *TaskRefresherImpl {
 
 	return &TaskRefresherImpl{
-		shard:             shard,
-		config:            config,
-		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
+		shard:  shard,
+		logger: logger,
 	}
 }
 
