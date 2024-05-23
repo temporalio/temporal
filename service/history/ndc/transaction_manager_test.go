@@ -194,11 +194,11 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
-	lastWorkflowTaskStartedEventID := int64(9999)
-	nextEventID := lastWorkflowTaskStartedEventID * 2
+	LastCompletedWorkflowTaskStartedEventId := int64(9999)
+	nextEventID := LastCompletedWorkflowTaskStartedEventId * 2
 	lastWorkflowTaskStartedVersion := s.namespaceEntry.FailoverVersion()
 	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
-		{EventId: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
+		{EventId: LastCompletedWorkflowTaskStartedEventId, Version: lastWorkflowTaskStartedVersion},
 	})
 	histories := versionhistory.NewVersionHistories(versionHistory)
 	histroySize := rand.Int63()
@@ -231,7 +231,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetStartedEventIdOfLastCompletedWorkflowTask().Return(lastWorkflowTaskStartedEventID)
+	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(LastCompletedWorkflowTaskStartedEventId)
 	mutableState.EXPECT().AddHistorySize(histroySize)
 
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
@@ -240,7 +240,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		workflowID,
 		runID,
 		versionHistory.GetBranchToken(),
-		lastWorkflowTaskStartedEventID,
+		LastCompletedWorkflowTaskStartedEventId,
 		lastWorkflowTaskStartedVersion,
 		nextEventID,
 		gomock.Any(),
@@ -273,11 +273,11 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
-	lastWorkflowTaskStartedEventID := int64(9999)
-	nextEventID := lastWorkflowTaskStartedEventID * 2
+	LastCompletedWorkflowTaskStartedEventId := int64(9999)
+	nextEventID := LastCompletedWorkflowTaskStartedEventId * 2
 	lastWorkflowTaskStartedVersion := s.namespaceEntry.FailoverVersion()
 	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
-		{EventId: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
+		{EventId: LastCompletedWorkflowTaskStartedEventId, Version: lastWorkflowTaskStartedVersion},
 	})
 	histories := versionhistory.NewVersionHistories(versionHistory)
 
@@ -310,7 +310,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetStartedEventIdOfLastCompletedWorkflowTask().Return(lastWorkflowTaskStartedEventID)
+	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(LastCompletedWorkflowTaskStartedEventId)
 	mutableState.EXPECT().AddHistorySize(historySize)
 
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
@@ -319,7 +319,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		workflowID,
 		runID,
 		versionHistory.GetBranchToken(),
-		lastWorkflowTaskStartedEventID,
+		LastCompletedWorkflowTaskStartedEventId,
 		lastWorkflowTaskStartedVersion,
 		nextEventID,
 		gomock.Any(),

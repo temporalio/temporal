@@ -1975,6 +1975,20 @@ func (mr *MockMutableStateMockRecorder) GetInheritedBuildId() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInheritedBuildId", reflect.TypeOf((*MockMutableState)(nil).GetInheritedBuildId))
 }
 
+// GetLastCompletedWorkflowTaskStartedEventId mocks base method.
+func (m *MockMutableState) GetLastCompletedWorkflowTaskStartedEventId() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLastCompletedWorkflowTaskStartedEventId")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetLastCompletedWorkflowTaskStartedEventId indicates an expected call of GetLastCompletedWorkflowTaskStartedEventId.
+func (mr *MockMutableStateMockRecorder) GetLastCompletedWorkflowTaskStartedEventId() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastCompletedWorkflowTaskStartedEventId", reflect.TypeOf((*MockMutableState)(nil).GetLastCompletedWorkflowTaskStartedEventId))
+}
+
 // GetLastEventVersion mocks base method.
 func (m *MockMutableState) GetLastEventVersion() (int64, error) {
 	m.ctrl.T.Helper()
@@ -2278,20 +2292,6 @@ func (m *MockMutableState) GetStartVersion() (int64, error) {
 func (mr *MockMutableStateMockRecorder) GetStartVersion() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStartVersion", reflect.TypeOf((*MockMutableState)(nil).GetStartVersion))
-}
-
-// GetStartedEventIdOfLastCompletedWorkflowTask mocks base method.
-func (m *MockMutableState) GetStartedEventIdOfLastCompletedWorkflowTask() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStartedEventIdOfLastCompletedWorkflowTask")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetStartedEventIdOfLastCompletedWorkflowTask indicates an expected call of GetStartedEventIdOfLastCompletedWorkflowTask.
-func (mr *MockMutableStateMockRecorder) GetStartedEventIdOfLastCompletedWorkflowTask() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStartedEventIdOfLastCompletedWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).GetStartedEventIdOfLastCompletedWorkflowTask))
 }
 
 // GetStartedWorkflowTask mocks base method.

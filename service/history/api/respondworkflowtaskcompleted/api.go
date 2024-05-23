@@ -656,7 +656,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// SDK needs to know where to roll back its history event pointer, i.e. after what event all other events needs to be dropped.
 	// SDK uses WorkflowTaskStartedEventID to do that.
 	if completedEvent == nil {
-		resp.ResetHistoryEventId = ms.GetExecutionInfo().LastWorkflowTaskStartedEventId
+		resp.ResetHistoryEventId = ms.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId
 	}
 
 	for _, mutation := range responseMutations {
