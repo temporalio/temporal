@@ -33,8 +33,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/metrics"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -194,9 +195,9 @@ func (u *Updater) ApplyRequest(
 	//   WTStarted
 	//   WTCompleted
 	//   --> NextEventID points here
-	// In this case difference between NextEventID and LastWorkflowTaskStartedEventID is 2.
+	// In this case difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
 	// If there are other events after WTCompleted event, then difference is > 2 and speculative WT can't be created.
-	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetStartedEventIdOfLastCompletedWorkflowTask()+2
+	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetLastCompletedWorkflowTaskStartedEventId()+2
 	if !canCreateSpeculativeWT {
 		return &api.UpdateWorkflowAction{
 			Noop:               false,

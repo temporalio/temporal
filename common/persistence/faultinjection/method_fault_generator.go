@@ -67,7 +67,7 @@ func newMethodFaultGenerator(faults []fault, seed int64) *methodFaultGenerator {
 	}
 }
 
-func (p *methodFaultGenerator) generate() *fault {
+func (p *methodFaultGenerator) generate(_ string) *fault {
 	if p.rate <= 0 {
 		return nil
 	}

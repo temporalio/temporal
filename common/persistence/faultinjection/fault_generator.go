@@ -26,6 +26,6 @@ package faultinjection
 
 type (
 	faultGenerator interface {
-		generate() *fault
+		generate(methodName string) *fault
 	}
 )

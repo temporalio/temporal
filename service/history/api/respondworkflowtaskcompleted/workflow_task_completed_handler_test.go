@@ -26,11 +26,14 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -38,10 +41,12 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -147,6 +152,77 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.Equal(t,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
 			tc.handler.workflowTaskFailedCause.failedCause)
+	})
+
+	// Verifies that if user metadata is present in the command then it is passed through to the newly created event.
+	t.Run("Attach user metadata", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, defaultBlobSizeLimit)
+		msgID := t.Name() + "-message-id"
+		command := msgCommand(msgID)
+		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
+			TimerId: fmt.Sprintf("random-timer-id-%d", rand.Int63()),
+		}
+		command.UserMetadata = &sdkpb.UserMetadata{
+			Summary: &commonpb.Payload{
+				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+				Data:     []byte(`Test summary Data`),
+			},
+			Details: &commonpb.Payload{
+				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+				Data:     []byte(`Test Details Data`),
+			},
+		}
+
+		command.CommandType = enumspb.COMMAND_TYPE_START_TIMER
+		command.Attributes = &commandpb.Command_StartTimerCommandAttributes{
+			StartTimerCommandAttributes: startTimerCommandAttributes,
+		}
+
+		// mock an event creation.
+		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().AddTimerStartedEvent(tc.handler.workflowTaskCompletedID, startTimerCommandAttributes).MaxTimes(1).Return(event, nil, nil)
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.NoError(t, err)
+
+		// Verify that the user metadata is populated properly in the event object
+		require.Equal(t, event.UserMetadata, command.UserMetadata)
+	})
+
+	// Verifies that the error is properly handled when event creation fails.
+	t.Run("Event creation failure", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, defaultBlobSizeLimit)
+		command := msgCommand(t.Name() + "-message-id")
+		completeWorkflowExecutionCommandAttributes := &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			Result: &commonpb.Payloads{
+				Payloads: []*commonpb.Payload{},
+			},
+		}
+		command.UserMetadata = &sdkpb.UserMetadata{
+			Summary: &commonpb.Payload{},
+			Details: &commonpb.Payload{},
+		}
+
+		command.CommandType = enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION
+		command.Attributes = &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: completeWorkflowExecutionCommandAttributes,
+		}
+
+		// mock a failed event creation.
+		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().AddCompletedWorkflowEvent(tc.handler.workflowTaskCompletedID, completeWorkflowExecutionCommandAttributes, "").MaxTimes(1).Return(event, fmt.Errorf("FAIL"))
+		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
+		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
+		tc.ms.EXPECT().IsWorkflowExecutionRunning().AnyTimes().Return(true)
+		tc.ms.EXPECT().GetCronBackoffDuration().AnyTimes().Return(backoff.NoBackoff)
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.Error(t, err)
+
+		// Verify that the event is discarded anduser metadata is not attached to the event.
+		require.Nil(t, event.UserMetadata)
 	})
 
 	t.Run("message not found", func(t *testing.T) {

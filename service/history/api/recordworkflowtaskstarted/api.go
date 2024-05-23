@@ -299,8 +299,8 @@ func CreateRecordWorkflowTaskStartedResponse(
 	response := &historyservice.RecordWorkflowTaskStartedResponse{}
 	response.WorkflowType = ms.GetWorkflowType()
 	executionInfo := ms.GetExecutionInfo()
-	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
-		response.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
+	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
+		response.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
 	}
 
 	// Starting workflowTask could result in different scheduledEventID if workflowTask was transient and new events came in

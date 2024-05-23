@@ -2266,7 +2266,9 @@ func (s GlobalTypedSetting[T]) WithDefault(v T) GlobalTypedSetting[T] {
 	return newS
 }
 
-func (s GlobalTypedSetting[T]) Get(c *Collection) func() T {
+type TypedPropertyFn[T any] func() T
+
+func (s GlobalTypedSetting[T]) Get(c *Collection) TypedPropertyFn[T] {
 	return func() T {
 		return matchAndConvert(
 			c,
@@ -2276,6 +2278,12 @@ func (s GlobalTypedSetting[T]) Get(c *Collection) func() T {
 			s.convert,
 			precedenceGlobal(),
 		)
+	}
+}
+
+func GetTypedPropertyFn[T any](value T) TypedPropertyFn[T] {
+	return func() T {
+		return value
 	}
 }
 
@@ -2314,7 +2322,9 @@ func (s NamespaceTypedSetting[T]) WithDefault(v T) NamespaceTypedSetting[T] {
 	return newS
 }
 
-func (s NamespaceTypedSetting[T]) Get(c *Collection) func(namespace string) T {
+type TypedPropertyFnWithNamespaceFilter[T any] func(namespace string) T
+
+func (s NamespaceTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithNamespaceFilter[T] {
 	return func(namespace string) T {
 		return matchAndConvert(
 			c,
@@ -2324,6 +2334,12 @@ func (s NamespaceTypedSetting[T]) Get(c *Collection) func(namespace string) T {
 			s.convert,
 			precedenceNamespace(namespace),
 		)
+	}
+}
+
+func GetTypedPropertyFnFilteredByNamespace[T any](value T) TypedPropertyFnWithNamespaceFilter[T] {
+	return func(namespace string) T {
+		return value
 	}
 }
 
@@ -2362,7 +2378,9 @@ func (s NamespaceIDTypedSetting[T]) WithDefault(v T) NamespaceIDTypedSetting[T] 
 	return newS
 }
 
-func (s NamespaceIDTypedSetting[T]) Get(c *Collection) func(namespaceID string) T {
+type TypedPropertyFnWithNamespaceIDFilter[T any] func(namespaceID string) T
+
+func (s NamespaceIDTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithNamespaceIDFilter[T] {
 	return func(namespaceID string) T {
 		return matchAndConvert(
 			c,
@@ -2372,6 +2390,12 @@ func (s NamespaceIDTypedSetting[T]) Get(c *Collection) func(namespaceID string) 
 			s.convert,
 			precedenceNamespaceID(namespaceID),
 		)
+	}
+}
+
+func GetTypedPropertyFnFilteredByNamespaceID[T any](value T) TypedPropertyFnWithNamespaceIDFilter[T] {
+	return func(namespaceID string) T {
+		return value
 	}
 }
 
@@ -2410,7 +2434,9 @@ func (s TaskQueueTypedSetting[T]) WithDefault(v T) TaskQueueTypedSetting[T] {
 	return newS
 }
 
-func (s TaskQueueTypedSetting[T]) Get(c *Collection) func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) T {
+type TypedPropertyFnWithTaskQueueFilter[T any] func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) T
+
+func (s TaskQueueTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithTaskQueueFilter[T] {
 	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) T {
 		return matchAndConvert(
 			c,
@@ -2420,6 +2446,12 @@ func (s TaskQueueTypedSetting[T]) Get(c *Collection) func(namespace string, task
 			s.convert,
 			precedenceTaskQueue(namespace, taskQueue, taskQueueType),
 		)
+	}
+}
+
+func GetTypedPropertyFnFilteredByTaskQueue[T any](value T) TypedPropertyFnWithTaskQueueFilter[T] {
+	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) T {
+		return value
 	}
 }
 
@@ -2458,7 +2490,9 @@ func (s ShardIDTypedSetting[T]) WithDefault(v T) ShardIDTypedSetting[T] {
 	return newS
 }
 
-func (s ShardIDTypedSetting[T]) Get(c *Collection) func(shardID int32) T {
+type TypedPropertyFnWithShardIDFilter[T any] func(shardID int32) T
+
+func (s ShardIDTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithShardIDFilter[T] {
 	return func(shardID int32) T {
 		return matchAndConvert(
 			c,
@@ -2468,6 +2502,12 @@ func (s ShardIDTypedSetting[T]) Get(c *Collection) func(shardID int32) T {
 			s.convert,
 			precedenceShardID(shardID),
 		)
+	}
+}
+
+func GetTypedPropertyFnFilteredByShardID[T any](value T) TypedPropertyFnWithShardIDFilter[T] {
+	return func(shardID int32) T {
+		return value
 	}
 }
 
@@ -2506,7 +2546,9 @@ func (s TaskTypeTypedSetting[T]) WithDefault(v T) TaskTypeTypedSetting[T] {
 	return newS
 }
 
-func (s TaskTypeTypedSetting[T]) Get(c *Collection) func(taskType enumsspb.TaskType) T {
+type TypedPropertyFnWithTaskTypeFilter[T any] func(taskType enumsspb.TaskType) T
+
+func (s TaskTypeTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithTaskTypeFilter[T] {
 	return func(taskType enumsspb.TaskType) T {
 		return matchAndConvert(
 			c,
@@ -2516,6 +2558,12 @@ func (s TaskTypeTypedSetting[T]) Get(c *Collection) func(taskType enumsspb.TaskT
 			s.convert,
 			precedenceTaskType(taskType),
 		)
+	}
+}
+
+func GetTypedPropertyFnFilteredByTaskType[T any](value T) TypedPropertyFnWithTaskTypeFilter[T] {
+	return func(taskType enumsspb.TaskType) T {
+		return value
 	}
 }
 
@@ -2554,7 +2602,9 @@ func (s DestinationTypedSetting[T]) WithDefault(v T) DestinationTypedSetting[T] 
 	return newS
 }
 
-func (s DestinationTypedSetting[T]) Get(c *Collection) func(namespace string, destination string) T {
+type TypedPropertyFnWithDestinationFilter[T any] func(namespace string, destination string) T
+
+func (s DestinationTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithDestinationFilter[T] {
 	return func(namespace string, destination string) T {
 		return matchAndConvert(
 			c,
@@ -2564,5 +2614,11 @@ func (s DestinationTypedSetting[T]) Get(c *Collection) func(namespace string, de
 			s.convert,
 			precedenceDestination(namespace, destination),
 		)
+	}
+}
+
+func GetTypedPropertyFnFilteredByDestination[T any](value T) TypedPropertyFnWithDestinationFilter[T] {
+	return func(namespace string, destination string) T {
+		return value
 	}
 }

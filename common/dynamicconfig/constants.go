@@ -714,6 +714,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10,
 		`FrontendMaxBadBinaries is the max number of bad binaries in namespace config`,
 	)
+	FrontendMaskInternalErrorDetails = NewNamespaceBoolSetting(
+		"frontend.maskInternalErrorDetails",
+		true,
+		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
+	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
