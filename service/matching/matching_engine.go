@@ -941,7 +941,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					},
 					Versions:          req.GetVersions(),
 					ReportBacklogInfo: false,
-					ReportPollers:     req.GetReportTaskReachability(),
+					ReportPollers:     req.GetReportPollers(),
 				})
 				if err != nil {
 					return nil, err
@@ -970,21 +970,24 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Pollers: physicalInfo.Pollers,
 				}
 			}
-			reachability, err := getBuildIdTaskReachability(ctx,
-				newReachabilityCalculator(
-					userData.GetVersioningData(),
-					e.reachabilityCache,
-					request.GetNamespaceId(),
-					req.GetNamespace(),
-					req.GetTaskQueue().GetName(),
-					e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
-				),
-				e.metricsHandler,
-				e.logger,
-				bid,
-			)
-			if err != nil {
-				return nil, err
+			var reachability enumspb.BuildIdTaskReachability
+			if req.GetReportTaskReachability() {
+				reachability, err = getBuildIdTaskReachability(ctx,
+					newReachabilityCalculator(
+						userData.GetVersioningData(),
+						e.reachabilityCache,
+						request.GetNamespaceId(),
+						req.GetNamespace(),
+						req.GetTaskQueue().GetName(),
+						e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+					),
+					e.metricsHandler,
+					e.logger,
+					bid,
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 			versionsInfo[bid] = &taskqueuepb.TaskQueueVersionInfo{
 				TypesInfo:        typesInfo,
