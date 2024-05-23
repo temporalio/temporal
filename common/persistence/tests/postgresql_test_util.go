@@ -25,7 +25,6 @@
 package tests
 
 import (
-	"fmt"
 	"net"
 	"path/filepath"
 	"strconv"
@@ -76,8 +75,8 @@ func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, f
 	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
 	mh := metricstest.NewCaptureHandler()
 	testData.Metrics = mh.StartCapture()
-	SetupPostgreSQLDatabase(testData.Cfg)
-	SetupPostgreSQLSchema(testData.Cfg)
+	SetupPostgreSQLDatabase(t, testData.Cfg)
+	SetupPostgreSQLSchema(t, testData.Cfg)
 
 	testData.Factory = sql.NewFactory(
 		*testData.Cfg,
@@ -90,7 +89,7 @@ func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, f
 	tearDown := func() {
 		testData.Factory.Close()
 		mh.StopCapture(testData.Metrics)
-		TearDownPostgreSQLDatabase(testData.Cfg)
+		TearDownPostgreSQLDatabase(t, testData.Cfg)
 	}
 
 	return testData, tearDown
@@ -111,76 +110,76 @@ func NewPostgreSQLConfig(pluginName string) *config.SQL {
 	}
 }
 
-func SetupPostgreSQLDatabase(cfg *config.SQL) {
+func SetupPostgreSQLDatabase(t *testing.T, cfg *config.SQL) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
+		t.Fatalf("unable to create PostgreSQL admin DB: %v", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	err = db.CreateDatabase(cfg.DatabaseName)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL database: %v", err))
+		t.Fatalf("unable to create PostgreSQL database: %v", err)
 	}
 }
 
-func SetupPostgreSQLSchema(cfg *config.SQL) {
+func SetupPostgreSQLSchema(t *testing.T, cfg *config.SQL) {
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
+		t.Fatalf("unable to create PostgreSQL admin DB: %v", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	schemaPath, err := filepath.Abs(testPostgreSQLExecutionSchema)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	statements, err := p.LoadAndSplitQuery([]string{schemaPath})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	for _, stmt := range statements {
 		if err = db.Exec(stmt); err != nil {
-			panic(err)
+			t.Fatal(err)
 		}
 	}
 
 	schemaPath, err = filepath.Abs(testPostgreSQLVisibilitySchema)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	statements, err = p.LoadAndSplitQuery([]string{schemaPath})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	for _, stmt := range statements {
 		if err = db.Exec(stmt); err != nil {
-			panic(err)
+			t.Fatal(err)
 		}
 	}
 }
 
-func TearDownPostgreSQLDatabase(cfg *config.SQL) {
+func TearDownPostgreSQLDatabase(t *testing.T, cfg *config.SQL) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
+		t.Fatalf("unable to create PostgreSQL admin DB: %v", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	err = db.DropDatabase(cfg.DatabaseName)
 	if err != nil {
-		panic(fmt.Sprintf("unable to drop PostgreSQL database: %v", err))
+		t.Fatalf("unable to drop PostgreSQL database: %v", err)
 	}
 }
