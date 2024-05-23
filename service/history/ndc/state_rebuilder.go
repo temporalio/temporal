@@ -184,6 +184,7 @@ func (r *StateRebuilderImpl) Rebuild(
 		}
 	}
 
+	r.logger.Info("QQQQQQ before CloseTransactionAsSnapshot")
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
 	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive)
 	if err != nil {
