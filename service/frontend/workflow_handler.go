@@ -4505,7 +4505,7 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	ns namespace.Name,
 	callbacks []*commonpb.Callback,
 ) error {
-	if len(callbacks) > 0 && !wh.config.EnableCallbackAttachment(ns.String()) {
+	if len(callbacks) > 0 && !wh.config.EnableNexusAPIs() {
 		return status.Error(
 			codes.InvalidArgument,
 			"attaching workflow callbacks is disabled for this namespace",
@@ -4543,6 +4543,19 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 			}
 			// TODO: check in dynamic config that address is valid and that http is only accepted
 			// if "insecure" is allowed for address.
+			headerSize := 0
+			for k, v := range cb.Nexus.GetHeader() {
+				headerSize += len(k) + len(v)
+			}
+			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
+				return status.Error(
+					codes.InvalidArgument,
+					fmt.Sprintf(
+						"invalid header: header size longer than max allowed size of %d",
+						wh.config.CallbackHeaderMaxSize(ns.String()),
+					),
+				)
+			}
 
 		default:
 			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))

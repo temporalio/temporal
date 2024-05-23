@@ -75,7 +75,7 @@ type (
 
 func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryConfig {
 	config := &EndpointRegistryConfig{
-		refreshEnabled:         dynamicconfig.EnableNexusEndpointRegistryBackgroundRefresh.Get(dc),
+		refreshEnabled:         dynamicconfig.EnableNexus.Get(dc),
 		refreshLongPollTimeout: dynamicconfig.RefreshNexusEndpointsLongPollTimeout.Get(dc),
 		refreshPageSize:        dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc),
 		refreshMinWait:         dynamicconfig.RefreshNexusEndpointsMinWait.Get(dc),

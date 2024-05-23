@@ -1038,7 +1038,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	limits WorkflowTaskCompletionLimits,
 ) error {
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
-	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
+	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
@@ -1131,11 +1131,6 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	// If execution info in mutable state has speculative workflow task, then
 	// convert it to normal workflow task before persisting.
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
-
-	if !m.ms.IsWorkflowExecutionRunning() {
-		// Workflow execution can be terminated. New events can't be added after workflow is finished.
-		return nil
-	}
 
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 

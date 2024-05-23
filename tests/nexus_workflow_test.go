@@ -608,7 +608,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionErrors() {
 	s.T().Run("ConfigDisabled", func(t *testing.T) {
 		dc := s.testCluster.host.dcClient
 
-		dc.OverrideValue(t, dynamicconfig.FrontendEnableNexusAPIs, false)
+		dc.OverrideValue(t, dynamicconfig.EnableNexus, false)
 		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
 		res, snap := s.sendNexusCompletionRequest(ctx, t, publicCallbackUrl, completion, "")
 		require.Equal(t, http.StatusNotFound, res.StatusCode)

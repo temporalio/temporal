@@ -718,6 +718,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10,
 		`FrontendMaxBadBinaries is the max number of bad binaries in namespace config`,
 	)
+	FrontendMaskInternalErrorDetails = NewNamespaceBoolSetting(
+		"frontend.maskInternalErrorDetails",
+		true,
+		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
+	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
@@ -810,16 +815,11 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
-	FrontendEnableNexusAPIs = NewGlobalBoolSetting(
-		"frontend.enableNexusAPIs",
+	EnableNexus = NewGlobalBoolSetting(
+		"system.enableNexus",
 		false,
-		`FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.`,
-	)
-	EnableNexusEndpointRegistryBackgroundRefresh = NewGlobalBoolSetting(
-		"system.enableNexusEndpointRegistryBackgroundRefresh",
-		false,
-		`EnableNexusEndpointRegistryBackgroundRefresh toggles the background refresh job of the Nexus endpoint registry on
-frontend and history hosts.`,
+		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
+server hosts for it to take effect.`,
 	)
 	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"system.refreshNexusEndpointsLongPollTimeout",
@@ -831,20 +831,20 @@ frontend and history hosts.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
-	FrontendEnableCallbackAttachment = NewNamespaceBoolSetting(
-		"frontend.enableCallbackAttachment",
-		false,
-		`FrontendEnableCallbackAttachment enables attaching callbacks to workflows.`,
-	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
 		`FrontendCallbackURLMaxLength is the maximum length of callback URL`,
 	)
-	FrontendMaxCallbacksPerWorkflow = NewNamespaceIntSetting(
-		"frontend.maxCallbacksPerWorkflow",
+	FrontendCallbackHeaderMaxSize = NewNamespaceIntSetting(
+		"frontend.callbackHeaderMaxLength",
+		8*1024,
+		`FrontendCallbackHeaderMaxSize is the maximum accumulated size of callback header keys and values`,
+	)
+	MaxCallbacksPerWorkflow = NewNamespaceIntSetting(
+		"system.maxCallbacksPerWorkflow",
 		32,
-		`FrontendMaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
@@ -1249,12 +1249,12 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 	)
 	EnableHostHistoryCache = NewGlobalBoolSetting(
 		"history.enableHostHistoryCache",
-		false,
+		true,
 		`EnableHostHistoryCache controls if the history cache is host level`,
 	)
 	HistoryCacheHostLevelMaxSize = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSize",
-		256000,
+		128000,
 		`HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache`,
 	)
 	HistoryCacheHostLevelMaxSizeBytes = NewGlobalIntSetting(
@@ -1262,13 +1262,6 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 		256000*4*1024,
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 HistoryCacheSizeBasedLimit is set to true.`,
-	)
-	EnableMutableStateTransitionHistory = NewGlobalBoolSetting(
-		"history.enableMutableStateTransitionHistory",
-		false,
-		`EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
-The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
-change with the pending replication design.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
@@ -1599,11 +1592,6 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		`TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue`,
 	)
 
-	OutboundProcessorEnabled = NewGlobalBoolSetting(
-		"history.outboundProcessorEnabled",
-		false,
-		`OutboundProcessorEnabled enables starting the outbound queue processor.`,
-	)
 	OutboundTaskBatchSize = NewGlobalIntSetting(
 		"history.outboundTaskBatchSize",
 		100,

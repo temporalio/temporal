@@ -190,15 +190,15 @@ type Config struct {
 	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
 	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
 
-	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs and whether to register a handler for Nexus
-	// HTTP requests.
+	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
 
-	// EnableCallbackAttachment enables attaching callbacks to workflows.
-	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackHeaderMaxSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
+
+	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -304,11 +304,13 @@ func NewConfig(
 		AccessHistoryFraction:            dynamicconfig.FrontendAccessHistoryFraction.Get(dc),
 		AdminDeleteAccessHistoryFraction: dynamicconfig.FrontendAdminDeleteAccessHistoryFraction.Get(dc),
 
-		EnableNexusAPIs:             dynamicconfig.FrontendEnableNexusAPIs.Get(dc),
-		EnableCallbackAttachment:    dynamicconfig.FrontendEnableCallbackAttachment.Get(dc),
+		EnableNexusAPIs:             dynamicconfig.EnableNexus.Get(dc),
 		CallbackURLMaxLength:        dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		MaxCallbacksPerWorkflow:     dynamicconfig.FrontendMaxCallbacksPerWorkflow.Get(dc),
+		CallbackHeaderMaxSize:       dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		MaxCallbacksPerWorkflow:     dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
+
+		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 	}
 }
 

@@ -127,8 +127,12 @@ func ClientProviderFactory(
 				return nil, err
 			}
 		case *nexuspb.EndpointTarget_Worker_:
-			// TODO(bergundy): support worker targets
-			return nil, serviceerror.NewInternal("worker targets not yet implemented")
+			// TODO(bergundy): properly get frontend client
+			url = "http://localhost:7243/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint.Id)
+			httpClient, err = m.Get(clientProviderCacheKey{key, url})
+			if err != nil {
+				return nil, err
+			}
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}

@@ -239,7 +239,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_timeout"))
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
 		}
-		return nil, err
+		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
@@ -269,8 +269,10 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 			}
 		}
 	}
-	return nil, fmt.Errorf("unhandled response outcome: %T", response.GetOutcome()) //nolint:goerr113
+	// This is the worker's fault.
+	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamError, "empty outcome")
 }
+
 func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
 	oc, err := h.getOperationContext(ctx, "CancelOperation")
 	if err != nil {
@@ -302,7 +304,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_timeout"))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
 		}
-		return err
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
@@ -316,7 +318,8 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
 		return nil
 	}
-	return fmt.Errorf("unhandled response outcome: %T", response.GetOutcome()) //nolint:goerr113
+	// This is the worker's fault.
+	return nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamError, "empty outcome")
 }
 
 // convertNexusHandlerError converts any 5xx user handler error to a downsream error.
