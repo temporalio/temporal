@@ -954,7 +954,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
-							Pollers: append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
+							Pollers: dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
 						}
 						physicalInfoByBuildId[buildId][taskQueueType] = merged
 					}
@@ -1010,6 +1010,18 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return nil, err
 	}
 	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus()), nil
+}
+
+func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
+	allKeys := make(map[string]bool)
+	var list []*taskqueuepb.PollerInfo
+	for _, item := range pollerInfos {
+		if _, value := allKeys[item.GetIdentity()]; !value {
+			allKeys[item.GetIdentity()] = true
+			list = append(list, item)
+		}
+	}
+	return list
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueuePartition(
