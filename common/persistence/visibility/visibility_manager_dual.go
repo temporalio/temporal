@@ -34,10 +34,10 @@ import (
 
 type (
 	VisibilityManagerDual struct {
-		visibilityManager              manager.VisibilityManager
-		secondaryVisibilityManager     manager.VisibilityManager
-		managerSelector                managerSelector
-		visibilityEnableShadowReadMode dynamicconfig.BoolPropertyFn
+		visibilityManager          manager.VisibilityManager
+		secondaryVisibilityManager manager.VisibilityManager
+		managerSelector            managerSelector
+		enableShadowReadMode       dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -49,13 +49,13 @@ func NewVisibilityManagerDual(
 	visibilityManager manager.VisibilityManager,
 	secondaryVisibilityManager manager.VisibilityManager,
 	managerSelector managerSelector,
-	visibilityEnableShadowReadMode dynamicconfig.BoolPropertyFn,
+	enableShadowReadMode dynamicconfig.BoolPropertyFn,
 ) *VisibilityManagerDual {
 	return &VisibilityManagerDual{
-		visibilityManager:              visibilityManager,
-		secondaryVisibilityManager:     secondaryVisibilityManager,
-		managerSelector:                managerSelector,
-		visibilityEnableShadowReadMode: visibilityEnableShadowReadMode,
+		visibilityManager:          visibilityManager,
+		secondaryVisibilityManager: secondaryVisibilityManager,
+		managerSelector:            managerSelector,
+		enableShadowReadMode:       enableShadowReadMode,
 	}
 }
 
@@ -181,7 +181,7 @@ func (v *VisibilityManagerDual) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if v.visibilityEnableShadowReadMode() {
+	if v.enableShadowReadMode() {
 		ms, err := v.managerSelector.readManagers(request.Namespace)
 		if err != nil {
 			return nil, err
@@ -201,7 +201,7 @@ func (v *VisibilityManagerDual) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if v.visibilityEnableShadowReadMode() {
+	if v.enableShadowReadMode() {
 		ms, err := v.managerSelector.readManagers(request.Namespace)
 		if err != nil {
 			return nil, err
@@ -221,7 +221,7 @@ func (v *VisibilityManagerDual) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	if v.visibilityEnableShadowReadMode() {
+	if v.enableShadowReadMode() {
 		ms, err := v.managerSelector.readManagers(request.Namespace)
 		if err != nil {
 			return nil, err
@@ -241,7 +241,7 @@ func (v *VisibilityManagerDual) GetWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*manager.GetWorkflowExecutionResponse, error) {
-	if v.visibilityEnableShadowReadMode() {
+	if v.enableShadowReadMode() {
 		ms, err := v.managerSelector.readManagers(request.Namespace)
 		if err != nil {
 			return nil, err
