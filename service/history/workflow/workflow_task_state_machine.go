@@ -632,7 +632,7 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		return false
 	}
 
-	// Speculative WFT can be dropped only if there are no events after previous WFTCompleted event,
+	// Speculative WFT can only be discarded only if there are no events after previous WFTCompleted event,
 	// i.e. last event in the history is WFTCompleted event.
 	// It is guaranteed that WFTStarted event is followed by WFTCompleted event and history tail might look like:
 	//   previous WFTStarted
@@ -640,9 +640,18 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 	//   --> NextEventID points here because it doesn't move for speculative WFT.
 	// In this case difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
 	// If there are other events after WFTCompleted event, then difference is > 2 and speculative WFT can't be dropped.
-	if m.ms.GetNextEventID() != m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
+	if !request.GetCapabilities().GetDiscardSpeculativeWorkflowTaskWithEvents() &&
+		m.ms.GetNextEventID() > m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
 		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
 			metrics.ReasonTag("interleaved_events"))
+		return false
+	}
+
+	// TODO: add comment, fix comment above, fix doc, add tests
+	if request.GetCapabilities().GetDiscardSpeculativeWorkflowTaskWithEvents() &&
+		m.ms.GetNextEventID() > m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2+int64(m.ms.config.DiscardSpeculativeWorkflowTaskMaximumEventsCount()) {
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("too_many_interleaved_events"))
 		return false
 	}
 
