@@ -144,7 +144,6 @@ type (
 
 // a circular array of a fixed size which shall have it's pointer for tracking tasks
 type circularTaskBuffer struct {
-	mutex      sync.RWMutex
 	buffer     []int
 	currentPos int
 	size       int
@@ -159,22 +158,16 @@ func newCircularTaskBuffer(size int) *circularTaskBuffer {
 }
 
 func (cb *circularTaskBuffer) incrementTaskCount() {
-	cb.mutex.Lock()
-	defer cb.mutex.Unlock()
 	cb.buffer[cb.currentPos]++
 }
 
 func (cb *circularTaskBuffer) advance() {
-	cb.mutex.Lock()
-	defer cb.mutex.Unlock()
 	cb.currentPos = (cb.currentPos + 1) % cb.size
 	cb.buffer[cb.currentPos] = 0 // Reset the task count for the new interval
 }
 
 // returns the total number of tasks in the buffer
 func (cb *circularTaskBuffer) totalTasks() int {
-	cb.mutex.RLock()
-	defer cb.mutex.RUnlock()
 	totalTasks := 0
 	for _, count := range cb.buffer {
 		totalTasks += count
@@ -183,6 +176,7 @@ func (cb *circularTaskBuffer) totalTasks() int {
 }
 
 type taskTracker struct {
+	mutex             sync.RWMutex
 	clock             clock.TimeSource
 	startTime         time.Time     // time when taskTracker was initialized
 	startIntervalTime time.Time     // the starting time of a window in the buffer
@@ -204,6 +198,8 @@ func newTaskTracker(timeSource clock.TimeSource, intervalSize int, totalInterval
 
 // trackTasks is responsible for adding/removing tasks from the current time that falls in the appropriate interval
 func (s *taskTracker) trackTasks() {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 	currentTime := s.clock.Now()
 
 	// Calculate elapsed time from the start interval time
@@ -223,6 +219,8 @@ func (s *taskTracker) trackTasks() {
 
 // rate is responsible for returning the rate of tasks added/dispatched in a given interval
 func (s *taskTracker) rate() float32 {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 	currentTime := s.clock.Now()
 
 	// if currentTime - interval > (s.startIntervalTime + interval) return 0
