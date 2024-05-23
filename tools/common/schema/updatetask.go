@@ -42,6 +42,7 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -89,7 +90,7 @@ var (
 )
 
 // NewUpdateSchemaTask returns a new instance of UpdateTask
-func newUpdateSchemaTask(db DB, config *UpdateConfig, logger log.Logger) *UpdateTask {
+func NewUpdateSchemaTask(db DB, config *UpdateConfig, logger log.Logger) *UpdateTask {
 	return &UpdateTask{
 		db:     db,
 		config: config,
