@@ -119,7 +119,7 @@ func UpdateWorkflowWithNew(
 	}
 
 	if postActions.AbortUpdates {
-		workflowLease.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+		workflowLease.GetContext().UpdateRegistry(ctx, shardContext, nil).Abort(update.AbortReasonWorkflowCompleted)
 	}
 
 	return nil

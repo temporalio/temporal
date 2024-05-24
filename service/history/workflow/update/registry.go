@@ -39,6 +39,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -115,6 +116,7 @@ type (
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
+		shutdownCh      chan struct{}
 		completedCount  int
 		failoverVersion int64
 	}
@@ -134,6 +136,12 @@ func WithInFlightLimit(f func() int) Option {
 func WithTotalLimit(f func() int) Option {
 	return func(r *registry) {
 		r.maxTotal = f
+	}
+}
+
+func WithShutdownSignal(ch chan struct{}) Option {
+	return func(r *registry) {
+		r.shutdownCh = ch
 	}
 }
 
@@ -222,7 +230,14 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	if err := r.checkLimits(ctx); err != nil {
 		return nil, false, err
 	}
-	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	opts := []updateOpt{
+		r.remover(id),
+		withInstrumentation(&r.instrumentation),
+	}
+	if r.shutdownCh != nil {
+		opts = append(opts, withShutdownSignal(r.shutdownCh))
+	}
+	upd := New(id, opts...)
 	r.updates[id] = upd
 	return upd, false, nil
 }

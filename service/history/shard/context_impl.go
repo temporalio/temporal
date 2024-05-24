@@ -118,6 +118,7 @@ type (
 		engineFactory       EngineFactory
 		engineFuture        *future.FutureImpl[Engine]
 		queueMetricEmitter  sync.Once
+		closeCh             chan struct{}
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -337,6 +338,10 @@ func (s *ContextImpl) GenerateTaskID() (int64, error) {
 	defer s.wUnlock()
 
 	return s.generateTaskIDLocked()
+}
+
+func (s *ContextImpl) OnClose() chan struct{} {
+	return s.closeCh
 }
 
 func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
@@ -1472,6 +1477,8 @@ func (s *ContextImpl) FinishStop() {
 	// an Engine here, we won't ever have one.
 	_ = s.transition(contextRequestFinishStop{})
 
+	close(s.closeCh)
+
 	// use a context that we know is cancelled so that this doesn't block
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 
@@ -2078,6 +2085,7 @@ func newContext(
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
+		closeCh:                 make(chan struct{}),
 		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:           factory,

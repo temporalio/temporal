@@ -121,6 +121,7 @@ type (
 		UnloadForOwnershipLost()
 
 		StateMachineRegistry() *hsm.Registry
+		OnClose() chan struct{}
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

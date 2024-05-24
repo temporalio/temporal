@@ -689,7 +689,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		return updateErr
 	}
 
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	weContext.UpdateRegistry(ctx, t.shardContext, nil).Abort(update.AbortReasonWorkflowCompleted)
 	return nil
 }
 
@@ -727,7 +727,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return updateErr
 	}
 
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	weContext.UpdateRegistry(ctx, t.shardContext, nil).Abort(update.AbortReasonWorkflowCompleted)
 	return nil
 }
 

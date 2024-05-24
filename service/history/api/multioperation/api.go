@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -173,7 +174,7 @@ func updateWorkflow(
 		currentWorkflowLease,
 		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			ms := lease.GetMutableState()
-			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			updateReg := lease.GetContext().UpdateRegistry(ctx, shardContext, ms)
 			return updater.ApplyRequest(ctx, updateReg, ms)
 		},
 		nil,
@@ -238,7 +239,7 @@ func startAndUpdateWorkflow(
 		)
 		if updateErr == nil {
 			// UpdateWorkflowAction return value is ignored since Start will always create WFT
-			updateReg := workflowCtx.UpdateRegistry(ctx, ms)
+			updateReg := workflowCtx.UpdateRegistry(ctx, shardContext, ms)
 			_, updateErr = updater.ApplyRequest(ctx, updateReg, ms)
 		}
 		return updateErr

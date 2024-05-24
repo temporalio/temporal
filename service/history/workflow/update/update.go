@@ -104,6 +104,7 @@ type (
 		request         *anypb.Any // of type *updatepb.Request
 		acceptedEventID int64
 		onComplete      func()
+		shutdownCh      chan struct{}
 		instrumentation *instrumentation
 		admittedTime    time.Time
 
@@ -135,6 +136,12 @@ func New(id string, opts ...updateOpt) *Update {
 func withCompletionCallback(cb func()) updateOpt {
 	return func(u *Update) {
 		u.onComplete = cb
+	}
+}
+
+func withShutdownSignal(c chan struct{}) updateOpt {
+	return func(u *Update) {
+		u.shutdownCh = c
 	}
 }
 
@@ -209,8 +216,18 @@ func (u *Update) WaitLifecycleStage(
 	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
 	softTimeout time.Duration,
 ) (*Status, error) {
+	abortCtx, abortFunc := context.WithCancelCause(ctx)
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-u.shutdownCh:
+			abortFunc(registryClearedErr)
+		case <-done:
+		}
+	}()
 
-	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
+	stCtx, stCancel := context.WithTimeout(abortCtx, softTimeout)
 	defer stCancel()
 
 	if u.outcome.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
@@ -275,6 +292,10 @@ func (u *Update) WaitLifecycleStage(
 
 	// If waitStage=COMPLETED or ACCEPTED and neither has been reached before the softTimeout has expired.
 	if stCtx.Err() != nil {
+		if cause := context.Cause(abortCtx); cause != nil {
+			return nil, cause
+		}
+
 		metrics.WorkflowExecutionUpdateServerTimeout.With(u.instrumentation.metrics).Record(1)
 		return statusAdmitted(), nil
 	}

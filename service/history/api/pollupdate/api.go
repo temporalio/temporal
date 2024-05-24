@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	updatepb "go.temporal.io/api/update/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -69,7 +70,7 @@ func Invoke(
 		release := workflowLease.GetReleaseFn()
 		defer release(nil)
 		wfCtx := workflowLease.GetContext()
-		upd := wfCtx.UpdateRegistry(ctx, nil).Find(ctx, updateRef.UpdateId)
+		upd := wfCtx.UpdateRegistry(ctx, shardContext, nil).Find(ctx, updateRef.UpdateId)
 		wfKey := wfCtx.GetWorkflowKey()
 		return &wfKey, upd, nil
 	}()
