@@ -265,9 +265,9 @@ func VisibilityPluginNameTag(value string) Tag {
 	return &tagImpl{key: visibilityPluginNameTagName, value: value}
 }
 
-// VersionedTag represents whether a loaded task queue manager represents a specific version set.
-func VersionedTag(versioned bool) Tag {
-	return &tagImpl{key: versionedTagName, value: strconv.FormatBool(versioned)}
+// VersionedTag represents whether a loaded task queue manager represents a specific version set or build ID or not.
+func VersionedTag(versioned string) Tag {
+	return &tagImpl{key: versionedTagName, value: versioned}
 }
 
 func ServiceErrorTypeTag(err error) Tag {
