@@ -34,17 +34,22 @@ Furthermore, a few more Server-specific service errors are defined in this repos
 
 ## gRPC
 
-A failed gRPC request can be retried server-side and client-side.
+A failed gRPC request can be retried by the (server-side) gRPC handler and the service client.
 Both use the aforementioned `backoff` package to configure and execute the retries.
 
-**Server-side**: All Temporal services wrap their API handlers with the gRPC interceptor
+**gRPC handler**: All Temporal services wrap their API handlers with the gRPC interceptor
 `interceptor.RetryableInterceptor` to retry a failed gRPC request with certain errors.
 Look for `NewRetryableInterceptor` to see the configuration for each service.
 
-**Client-side**: Similarly, each service client can retry a failed gRPC request with certain errors.
+**gRPC client**: Similarly, each service client can retry a failed gRPC request with certain errors.
 Look for `NewRetryableClient` to see the configuration for each service client.
 
-NOTE: Server-side retries can be more efficient since they avoid a round-trip,
+For example, for a gRPC request from Frontend to History,
+there are 3 places an error can be retried (marked with 🔁):
+
+<img src="../_assets/retries.svg">
+
+NOTE: gRPC handler retries can be more efficient since they avoid a round-trip,
 but note that retry behavior multiplies between server and client, and client-side is more flexible
-(e.g. can direct a request to a different server), so server-side should be used sparingly.
-Therefore, the server-side retries are configured to do no more than one extra attempt.
+(e.g. can direct a request to a different server). So gRPC handler retries should be used sparingly
+and are configured to do no more than one extra attempt.
