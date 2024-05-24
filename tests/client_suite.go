@@ -103,13 +103,10 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingActivitiesLimitError.Key():                  s.maxPendingActivities,
 		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              s.maxPendingCancelRequests,
 		dynamicconfig.NumPendingSignalsLimitError.Key():                     s.maxPendingSignals,
-		dynamicconfig.FrontendEnableNexusAPIs.Key():                         true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): limit,
-		nexusoperations.Enabled.Key():                                       true,
-		dynamicconfig.OutboundProcessorEnabled.Key():                        true,
-		dynamicconfig.EnableMutableStateTransitionHistory.Key():             true,
+		dynamicconfig.EnableNexus.Key():                                     true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
@@ -129,7 +126,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	s.testCluster.host.dcClient.OverrideValue(
 		s.T(),
 		nexusoperations.CallbackURLTemplate,
-		"http://"+s.httpAPIAddress+"/api/v1/namespaces/{{.NamespaceName}}/nexus/callback")
+		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -1898,7 +1895,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 		return err == nil && len(resp.Executions) == 1
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// reset it using v2 as the bad build id
+	// reset it using v2 as the bad build ID
 	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace:       s.namespace,
 		VisibilityQuery: query,

@@ -22,11 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package interceptor
 
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -38,16 +39,16 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 const (
-	dcRedirectionContextHeaderName = "xdc-redirection"
-	dcRedirectionApiHeaderName     = "xdc-redirection-api"
+	DCRedirectionContextHeaderName = "xdc-redirection"
+	DCRedirectionApiHeaderName     = "xdc-redirection-api"
 	dcRedirectionMetricsPrefix     = "DCRedirection"
 )
 
@@ -130,10 +131,9 @@ var (
 type (
 	responseConstructorFn func() any
 
-	// RedirectionInterceptor is simple wrapper over frontend service, doing redirection based on policy
-	RedirectionInterceptor struct {
+	// Redirection is simple wrapper over frontend service, doing redirection based on policy
+	Redirection struct {
 		currentClusterName string
-		config             *Config
 		namespaceCache     namespace.Registry
 		redirectionPolicy  DCRedirectionPolicy
 		logger             log.Logger
@@ -143,9 +143,9 @@ type (
 	}
 )
 
-// NewRedirectionInterceptor creates DC redirection interceptor
-func NewRedirectionInterceptor(
-	configuration *Config,
+// NewRedirection creates DC redirection interceptor
+func NewRedirection(
+	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceCache namespace.Registry,
 	policy config.DCRedirectionPolicy,
 	logger log.Logger,
@@ -153,17 +153,16 @@ func NewRedirectionInterceptor(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	clusterMetadata cluster.Metadata,
-) *RedirectionInterceptor {
+) *Redirection {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		clusterMetadata,
-		configuration,
+		enabledForNS,
 		namespaceCache,
 		policy,
 	)
 
-	return &RedirectionInterceptor{
+	return &Redirection{
 		currentClusterName: clusterMetadata.GetCurrentClusterName(),
-		config:             configuration,
 		redirectionPolicy:  dcRedirectionPolicy,
 		namespaceCache:     namespaceCache,
 		logger:             logger,
@@ -173,9 +172,9 @@ func NewRedirectionInterceptor(
 	}
 }
 
-var _ grpc.UnaryServerInterceptor = (*RedirectionInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*Redirection)(nil).Intercept
 
-func (i *RedirectionInterceptor) Intercept(
+func (i *Redirection) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -183,10 +182,10 @@ func (i *RedirectionInterceptor) Intercept(
 ) (_ any, retError error) {
 	defer log.CapturePanic(i.logger, &retError)
 
-	if _, isWorkflowHandler := info.Server.(*WorkflowHandler); !isWorkflowHandler {
+	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
 		return handler(ctx, req)
 	}
-	if !i.redirectionAllowed(ctx) {
+	if !i.RedirectionAllowed(ctx) {
 		return handler(ctx, req)
 	}
 
@@ -195,7 +194,7 @@ func (i *RedirectionInterceptor) Intercept(
 		return i.handleLocalAPIInvocation(ctx, req, handler, methodName)
 	}
 	if raFn, ok := globalAPIResponses[methodName]; ok {
-		namespaceName, err := interceptor.GetNamespaceName(i.namespaceCache, req)
+		namespaceName, err := GetNamespaceName(i.namespaceCache, req)
 		if err != nil {
 			return nil, err
 		}
@@ -204,24 +203,24 @@ func (i *RedirectionInterceptor) Intercept(
 
 	// This should not happen unless new API is added without updating localAPIResponses and  globalAPIResponses maps.
 	// Also covered by unit test.
-	i.logger.Warn("RedirectionInterceptor encountered unknown API", tag.Name(info.FullMethod))
+	i.logger.Warn("Redirection encountered unknown API", tag.Name(info.FullMethod))
 	return handler(ctx, req)
 }
 
-func (i *RedirectionInterceptor) handleLocalAPIInvocation(
+func (i *Redirection) handleLocalAPIInvocation(
 	ctx context.Context,
 	req any,
 	handler grpc.UnaryHandler,
 	methodName string,
 ) (_ any, retError error) {
-	scope, startTime := i.beforeCall(dcRedirectionMetricsPrefix + methodName)
+	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.afterCall(scope, startTime, i.currentClusterName, retError)
+		i.AfterCall(scope, startTime, i.currentClusterName, retError)
 	}()
 	return handler(ctx, req)
 }
 
-func (i *RedirectionInterceptor) handleRedirectAPIInvocation(
+func (i *Redirection) handleRedirectAPIInvocation(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -234,9 +233,9 @@ func (i *RedirectionInterceptor) handleRedirectAPIInvocation(
 	var clusterName string
 	var err error
 
-	scope, startTime := i.beforeCall(dcRedirectionMetricsPrefix + methodName)
+	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.afterCall(scope, startTime, clusterName, retError)
+		i.AfterCall(scope, startTime, clusterName, retError)
 	}()
 
 	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
@@ -249,7 +248,7 @@ func (i *RedirectionInterceptor) handleRedirectAPIInvocation(
 				return err
 			}
 			resp = respCtorFn()
-			ctx = metadata.AppendToOutgoingContext(ctx, dcRedirectionApiHeaderName, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionApiHeaderName, "true")
 			err = remoteClient.Invoke(ctx, info.FullMethod, req, resp)
 			if err != nil {
 				return err
@@ -260,13 +259,13 @@ func (i *RedirectionInterceptor) handleRedirectAPIInvocation(
 	return resp, err
 }
 
-func (i *RedirectionInterceptor) beforeCall(
+func (i *Redirection) BeforeCall(
 	operation string,
 ) (metrics.Handler, time.Time) {
 	return i.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.ServiceRoleTag(metrics.DCRedirectionRoleTagValue)), i.timeSource.Now()
 }
 
-func (i *RedirectionInterceptor) afterCall(
+func (i *Redirection) AfterCall(
 	metricsHandler metrics.Handler,
 	startTime time.Time,
 	clusterName string,
@@ -280,7 +279,7 @@ func (i *RedirectionInterceptor) afterCall(
 	}
 }
 
-func (i *RedirectionInterceptor) redirectionAllowed(
+func (i *Redirection) RedirectionAllowed(
 	ctx context.Context,
 ) bool {
 	// default to allow dc redirection
@@ -288,7 +287,7 @@ func (i *RedirectionInterceptor) redirectionAllowed(
 	if !ok {
 		return true
 	}
-	values := md.Get(dcRedirectionContextHeaderName)
+	values := md.Get(DCRedirectionContextHeaderName)
 	if len(values) == 0 {
 		return true
 	}

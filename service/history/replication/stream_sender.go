@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -47,7 +47,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -61,20 +63,21 @@ type (
 		Stop()
 	}
 	StreamSenderImpl struct {
-		server        historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
-		shardContext  shard.Context
-		historyEngine shard.Engine
-		taskConverter SourceTaskConverter
-		metrics       metrics.Handler
-		logger        log.Logger
-
-		status               int32
-		clientShardKey       ClusterShardKey
-		serverShardKey       ClusterShardKey
-		shutdownChan         channel.ShutdownOnce
-		config               *configs.Config
-		isTieredStackEnabled bool
-		flowController       SenderFlowController
+		server                  historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
+		shardContext            shard.Context
+		historyEngine           shard.Engine
+		taskConverter           SourceTaskConverter
+		metrics                 metrics.Handler
+		logger                  log.Logger
+		status                  int32
+		clientClusterName       string
+		clientShardKey          ClusterShardKey
+		serverShardKey          ClusterShardKey
+		clientClusterShardCount int32
+		shutdownChan            channel.ShutdownOnce
+		config                  *configs.Config
+		isTieredStackEnabled    bool
+		flowController          SenderFlowController
 	}
 )
 
@@ -84,6 +87,7 @@ func NewStreamSender(
 	historyEngine shard.Engine,
 	taskConverter SourceTaskConverter,
 	clientClusterName string,
+	clientClusterShardCount int32,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 	config *configs.Config,
@@ -94,20 +98,21 @@ func NewStreamSender(
 		tag.TargetShardID(clientShardKey.ShardID),
 	)
 	return &StreamSenderImpl{
-		server:        server,
-		shardContext:  shardContext,
-		historyEngine: historyEngine,
-		taskConverter: taskConverter,
-		metrics:       shardContext.GetMetricsHandler(),
-		logger:        logger,
-
-		status:               common.DaemonStatusInitialized,
-		clientShardKey:       clientShardKey,
-		serverShardKey:       serverShardKey,
-		shutdownChan:         channel.NewShutdownOnce(),
-		config:               config,
-		isTieredStackEnabled: config.EnableReplicationTaskTieredProcessing(),
-		flowController:       NewSenderFlowController(config, logger),
+		server:                  server,
+		shardContext:            shardContext,
+		historyEngine:           historyEngine,
+		taskConverter:           taskConverter,
+		metrics:                 shardContext.GetMetricsHandler(),
+		logger:                  logger,
+		status:                  common.DaemonStatusInitialized,
+		clientClusterName:       clientClusterName,
+		clientShardKey:          clientShardKey,
+		serverShardKey:          serverShardKey,
+		clientClusterShardCount: clientClusterShardCount,
+		shutdownChan:            channel.NewShutdownOnce(),
+		config:                  config,
+		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
+		flowController:          NewSenderFlowController(config, logger),
 	}
 }
 
@@ -487,6 +492,11 @@ Loop:
 		if err != nil {
 			return err
 		}
+
+		if !s.shouldProcessTask(item) {
+			continue
+		}
+
 		skipCount++
 		// To avoid a situation: we are skipping a lot of tasks and never send any task, receiver side will not have updated high watermark,
 		// so it will not ACK back to sender, sender will not update the ACK level.
@@ -508,36 +518,49 @@ Loop:
 			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
-		task, err := s.taskConverter.Convert(item)
-		if err != nil {
-			return err
-		}
-		if task == nil {
-			continue Loop
-		}
-		task.Priority = priority
-		if s.isTieredStackEnabled {
-			s.flowController.Wait(priority)
-		}
-		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{task},
-					ExclusiveHighWatermark:     task.SourceTaskId + 1,
-					ExclusiveHighWatermarkTime: task.VisibilityTime,
-					Priority:                   priority,
+		operation := func() error {
+			task, err := s.taskConverter.Convert(item)
+			if err != nil {
+				return err
+			}
+			if task == nil {
+				return nil
+			}
+			task.Priority = priority
+			if s.isTieredStackEnabled {
+				s.flowController.Wait(priority)
+			}
+			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+					Messages: &replicationspb.WorkflowReplicationMessages{
+						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
+						ExclusiveHighWatermark:     task.SourceTaskId + 1,
+						ExclusiveHighWatermarkTime: task.VisibilityTime,
+						Priority:                   priority,
+					},
 				},
-			},
-		}); err != nil {
+			}); err != nil {
+				return err
+			}
+			skipCount = 0
+			metrics.ReplicationTasksSend.With(s.metrics).Record(
+				int64(1),
+				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+				metrics.OperationTag(TaskOperationTag(task)),
+			)
+			return nil
+		}
+
+		retryPolicy := backoff.NewExponentialRetryPolicy(1 * time.Second).
+			WithBackoffCoefficient(1.2).
+			WithMaximumInterval(3 * time.Second).
+			WithMaximumAttempts(80).
+			WithExpirationInterval(3 * time.Minute)
+
+		if err := backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError); err != nil {
 			return err
 		}
-		skipCount = 0
-		metrics.ReplicationTasksSend.With(s.metrics).Record(
-			int64(1),
-			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTag(task)),
-		)
 	}
 	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -558,6 +581,34 @@ func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowRe
 		return NewStreamError("ReplicationStreamError send failed", err)
 	}
 	return nil
+}
+
+func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
+	clientShardID := common.WorkflowIDToHistoryShard(item.GetNamespaceID(), item.GetWorkflowID(), s.clientClusterShardCount)
+	if clientShardID != s.clientShardKey.ShardID {
+		return false
+	}
+
+	var shouldProcessTask bool
+	namespaceEntry, err := s.shardContext.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(item.GetNamespaceID()),
+	)
+	if err != nil {
+		// if there is error, then blindly send the task, better safe than sorry
+		shouldProcessTask = true
+	}
+
+	if namespaceEntry != nil {
+	FilterLoop:
+		for _, targetCluster := range namespaceEntry.ClusterNames() {
+			if s.clientClusterName == targetCluster {
+				shouldProcessTask = true
+				break FilterLoop
+			}
+		}
+	}
+
+	return shouldProcessTask
 }
 
 func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriority {

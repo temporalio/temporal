@@ -400,6 +400,10 @@ func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient
 	return c.matchingClient
 }
 
+func (c *temporalImpl) GetFrontendNamespaceRegistry() namespace.Registry {
+	return c.frontendNamespaceRegistry
+}
+
 func (c *temporalImpl) startFrontend(
 	hostsByService map[primitives.ServiceName]static.Hosts,
 	startWG *sync.WaitGroup,

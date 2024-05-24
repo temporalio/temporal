@@ -40,6 +40,7 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -69,9 +70,12 @@ func NewNexusHTTPHandler(
 	serviceConfig *Config,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
+	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry *commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceConcurrencyLimitIntercptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -90,11 +94,15 @@ func NewNexusHTTPHandler(
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
 			Handler: &nexusHandler{
-				logger:            logger,
-				metricsHandler:    metricsHandler,
-				namespaceRegistry: namespaceRegistry,
-				matchingClient:    matchingClient,
-				auth:              authInterceptor,
+				logger:                        logger,
+				metricsHandler:                metricsHandler,
+				clusterMetadata:               clusterMetadata,
+				namespaceRegistry:             namespaceRegistry,
+				matchingClient:                matchingClient,
+				auth:                          authInterceptor,
+				redirectionInterceptor:        redirectionInterceptor,
+				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
+				forwardingClients:             clientCache,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

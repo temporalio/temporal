@@ -105,6 +105,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
+	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -213,7 +214,7 @@ func GrpcServerOptionsProvider(
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
-	redirectionInterceptor *RedirectionInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
@@ -222,6 +223,7 @@ func GrpcServerOptionsProvider(
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
+	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	utf8Validator *utf8validator.Validator,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
@@ -251,8 +253,12 @@ func GrpcServerOptionsProvider(
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
-		// Service Error Interceptor should be the most outer interceptor on error handling
-		rpc.NewServiceErrorInterceptor(logger),
+		// Order or interceptors is important
+		// Mask error interceptor should be the most outer interceptor since it handle the errors format
+		// Service Error Interceptor should be the next most outer interceptor on error handling
+		maskInternalErrorDetailsInterceptor.Intercept,
+		rpc.ServiceErrorInterceptor,
+		rpc.NewFrontendServiceErrorInterceptor(logger),
 		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
@@ -329,9 +335,9 @@ func RedirectionInterceptorProvider(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	clusterMetadata cluster.Metadata,
-) *RedirectionInterceptor {
-	return NewRedirectionInterceptor(
-		configuration,
+) *interceptor.Redirection {
+	return interceptor.NewRedirection(
+		configuration.EnableNamespaceNotActiveAutoForwarding,
 		namespaceCache,
 		policy,
 		logger,
@@ -390,6 +396,15 @@ func RateLimitInterceptorProvider(
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
+	)
+}
+
+func MaskInternalErrorDetailsInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+) *interceptor.MaskInternalErrorDetailsInterceptor {
+	return interceptor.NewMaskInternalErrorDetailsInterceptor(
+		serviceConfig.MaskInternalErrorDetails, namespaceRegistry,
 	)
 }
 
@@ -532,6 +547,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
+		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
@@ -710,9 +726,12 @@ func RegisterNexusHTTPHandler(
 	serviceName primitives.ServiceName,
 	matchingClient resource.MatchingClient,
 	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
+	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry *nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
@@ -724,9 +743,12 @@ func RegisterNexusHTTPHandler(
 		serviceConfig,
 		matchingClient,
 		metricsHandler,
+		clusterMetadata,
+		clientCache,
 		namespaceRegistry,
 		endpointRegistry,
 		authInterceptor,
+		redirectionInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceRateLimiterInterceptor,
 		namespaceCountLimiterInterceptor,

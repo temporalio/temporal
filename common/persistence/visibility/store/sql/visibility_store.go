@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistencesql "go.temporal.io/server/common/persistence/sql"
@@ -67,8 +68,9 @@ func NewSQLVisibilityStore(
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) (*VisibilityStore, error) {
-	refDbConn := persistencesql.NewRefCountedDBConn(sqlplugin.DbKindVisibility, &cfg, r)
+	refDbConn := persistencesql.NewRefCountedDBConn(sqlplugin.DbKindVisibility, &cfg, r, logger, metricsHandler)
 	db, err := refDbConn.Get()
 	if err != nil {
 		return nil, err

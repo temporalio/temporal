@@ -51,10 +51,10 @@ func (ch *commandHandler) HandleScheduleCommand(
 	command *commandpb.Command,
 ) error {
 	nsName := ms.GetNamespaceEntry().Name().String()
-	if !ch.config.Enabled(nsName) {
+	if !ch.config.Enabled() {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
-			Message: "Nexus operations disabled for this workflow's namespace",
+			Message: "Nexus operations disabled",
 		}
 	}
 
@@ -150,11 +150,10 @@ func (ch *commandHandler) HandleCancelCommand(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
 ) error {
-	nsName := ms.GetNamespaceEntry().Name().String()
-	if !ch.config.Enabled(nsName) {
+	if !ch.config.Enabled() {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
-			Message: "Nexus operations disabled for this workflow's namespace",
+			Message: "Nexus operations disabled",
 		}
 	}
 

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package interceptor
 
 import (
 	"context"
@@ -61,7 +61,7 @@ type (
 		clientBean      *client.MockBean
 		clusterMetadata *cluster.MockMetadata
 
-		redirector *RedirectionInterceptor
+		redirector *Redirection
 	}
 )
 
@@ -85,8 +85,8 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.redirector = NewRedirectionInterceptor(
-		NewConfig(dynamicconfig.NewNoopCollection(), 1),
+	s.redirector = NewRedirection(
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{
 			Policy: DCRedirectionPolicyAllAPIsForwarding,
@@ -333,31 +333,31 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NamespaceNot
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Empty() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{}))
-	allowed := s.redirector.redirectionAllowed(ctx)
+	allowed := s.redirector.RedirectionAllowed(ctx)
 	s.True(allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Error() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		dcRedirectionContextHeaderName: "?",
+		DCRedirectionContextHeaderName: "?",
 	}))
-	allowed := s.redirector.redirectionAllowed(ctx)
+	allowed := s.redirector.RedirectionAllowed(ctx)
 	s.True(allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_True() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		dcRedirectionContextHeaderName: "t",
+		DCRedirectionContextHeaderName: "t",
 	}))
-	allowed := s.redirector.redirectionAllowed(ctx)
+	allowed := s.redirector.RedirectionAllowed(ctx)
 	s.True(allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_False() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		dcRedirectionContextHeaderName: "f",
+		DCRedirectionContextHeaderName: "f",
 	}))
-	allowed := s.redirector.redirectionAllowed(ctx)
+	allowed := s.redirector.RedirectionAllowed(ctx)
 	s.False(allowed)
 }
 

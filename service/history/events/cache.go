@@ -108,9 +108,9 @@ func newEventsCache(
 	opts := &cache.Options{}
 	opts.TTL = ttl
 
-	taggedMetricHandler := metricsHandler.WithTags(metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue))
+	taggedMetricHandler := metricsHandler.WithTags(metrics.CacheTypeTag(metrics.EventsCacheTypeTagValue))
 	return &CacheImpl{
-		Cache:            cache.New(maxSize, opts, taggedMetricHandler),
+		Cache:            cache.NewWithMetrics(maxSize, opts, taggedMetricHandler),
 		executionManager: executionManager,
 		metricsHandler:   taggedMetricHandler,
 		logger:           logger,

@@ -65,6 +65,7 @@ func NewManager(
 	maxWriteQPS dynamicconfig.IntPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableShadowReadMode dynamicconfig.BoolPropertyFn,
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
@@ -142,6 +143,7 @@ func NewManager(
 			visibilityManager,
 			secondaryVisibilityManager,
 			managerSelector,
+			visibilityEnableShadowReadMode,
 		), nil
 	}
 
@@ -260,6 +262,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
 			logger,
+			metricsHandler,
 		)
 	} else if dsConfig.Elasticsearch != nil {
 		visStore = newElasticsearchVisibilityStore(

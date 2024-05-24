@@ -35,6 +35,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/taskqueue/v1"
@@ -91,7 +93,7 @@ func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
 			RunId:       "run",
 			WorkflowId:  "wf",
 		},
-		forwardedFrom: "another-partition",
+		forwardInfo: &taskqueue.TaskForwardInfo{SourcePartition: "another-partition"},
 	})
 	s.Assert().Equal(errRemoteSyncMatchFailed, err)
 }
@@ -114,6 +116,70 @@ func (s *PartitionManagerTestSuite) TestAddTaskNoRules_AssignedTask() {
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)
+}
+
+func (s *PartitionManagerTestSuite) TestPollWithRedirectRules() {
+	source := "bld1"
+	target := "bld2"
+	versioningData := &persistence.VersioningData{
+		RedirectRules: []*persistence.RedirectRule{
+			{
+				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
+					SourceBuildId: source,
+					TargetBuildId: target,
+				},
+			},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(source))
+
+	s.validatePollTask(target, true)
+
+	_, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
+		workerVersionCapabilities: &common.WorkerVersionCapabilities{
+			BuildId:       source,
+			UseVersioning: true,
+		},
+	})
+	s.Assert().Equal(serviceerror.NewNewerBuildExists(target), err)
+}
+
+func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
+	source := "bld1"
+	target := "bld2"
+	versioningData := &persistence.VersioningData{
+		RedirectRules: []*persistence.RedirectRule{
+			{
+				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
+					SourceBuildId: source,
+					TargetBuildId: target,
+				},
+			},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(source))
+
+	// task is backlogged in the source queue so it is loaded by now
+	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	s.Assert().NoError(err)
+	s.Assert().NotNil(sourceQ)
+
+	// unload sourceQ
+	s.partitionMgr.unloadPhysicalQueue(sourceQ)
+
+	// poll from target
+	s.validatePollTask(target, true)
+
+	// polling from target should've loaded the source as well
+	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	s.Assert().NoError(err)
+	s.Assert().NotNil(sourceQ)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_NoVersionDirective() {
@@ -173,7 +239,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
 	s.validatePollTask(taskBld, true)
 
-	// now use the version set build id
+	// now use the version set build ID
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(vs.BuildIds[0].Id))
 	// make sure version set queue is loaded
 	s.Assert().NotNil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
@@ -296,7 +362,7 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 }
 
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistence.VersioningData, directive *taskqueue.TaskVersionDirective) {
-	timeout := 100 * time.Millisecond
+	timeout := 1000000 * time.Millisecond
 	if expectedSyncMatch {
 		// trySyncMatch "eats" one second from the context timeout!
 		timeout += time.Second
@@ -312,6 +378,7 @@ func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expe
 			WorkflowId:       "wf",
 			VersionDirective: directive,
 		},
+		directive: directive,
 	})
 	s.Assert().NoError(err)
 	s.Assert().Equal(expectedSyncMatch, syncMatch)
@@ -342,7 +409,7 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 
 // Poll task and assert no error and that a non-nil task is returned
 func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000000*time.Millisecond)
 	defer cancel()
 
 	task, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{

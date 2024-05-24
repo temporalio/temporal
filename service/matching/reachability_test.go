@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"go.temporal.io/server/common/log"
 	"slices"
 	"testing"
 	"time"
@@ -38,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -186,7 +186,7 @@ func TestMakeBuildIdQuery(t *testing.T) {
 	assert.Equal(t, expectedQuery, query)
 }
 
-// nothing in assignment rules for this test --> buildIdsOfInterest list will always just contain the original build id
+// nothing in assignment rules for this test --> buildIdsOfInterest list will always just contain the original build ID
 func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	// Visibility: [ (NULL, closed), (A, open) ]
 	t.Parallel()
@@ -194,7 +194,7 @@ func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	trc := mkTestReachabilityCalculatorWithEmptyVisibility(t)
 	rc := trc.rc
 
-	// reachability("") --> reachable (it's the default build id)
+	// reachability("") --> reachable (it's the default build ID)
 	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability("") --> closed_workflows_only (now that "" is not default)

@@ -43,21 +43,21 @@ const (
 )
 
 func (pdb *db) InitializeNexusEndpointsTableVersion(ctx context.Context) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx, createEndpointsTableVersionQry)
+	return pdb.ExecContext(ctx, createEndpointsTableVersionQry)
 }
 
 func (pdb *db) IncrementNexusEndpointsTableVersion(
 	ctx context.Context,
 	lastKnownTableVersion int64,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx, incrementEndpointsTableVersionQry, lastKnownTableVersion+1, lastKnownTableVersion)
+	return pdb.ExecContext(ctx, incrementEndpointsTableVersionQry, lastKnownTableVersion+1, lastKnownTableVersion)
 }
 
 func (pdb *db) GetNexusEndpointsTableVersion(
 	ctx context.Context,
 ) (int64, error) {
 	var version int64
-	err := pdb.conn.GetContext(ctx, &version, getEndpointsTableVersionQry)
+	err := pdb.GetContext(ctx, &version, getEndpointsTableVersionQry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
 	}
@@ -68,7 +68,7 @@ func (pdb *db) InsertIntoNexusEndpoints(
 	ctx context.Context,
 	row *sqlplugin.NexusEndpointsRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(
+	return pdb.ExecContext(
 		ctx,
 		createEndpointQry,
 		row.ID,
@@ -80,7 +80,7 @@ func (pdb *db) UpdateNexusEndpoint(
 	ctx context.Context,
 	row *sqlplugin.NexusEndpointsRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(
+	return pdb.ExecContext(
 		ctx,
 		updateEndpointQry,
 		row.Data,
@@ -94,7 +94,7 @@ func (pdb *db) DeleteFromNexusEndpoints(
 	ctx context.Context,
 	id []byte,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx, deleteEndpointQry, id)
+	return pdb.ExecContext(ctx, deleteEndpointQry, id)
 }
 
 func (pdb *db) GetNexusEndpointByID(
@@ -102,7 +102,7 @@ func (pdb *db) GetNexusEndpointByID(
 	id []byte,
 ) (*sqlplugin.NexusEndpointsRow, error) {
 	var row sqlplugin.NexusEndpointsRow
-	err := pdb.conn.GetContext(ctx, &row, getEndpointByIdQry, id)
+	err := pdb.GetContext(ctx, &row, getEndpointByIdQry, id)
 	return &row, err
 }
 
@@ -111,6 +111,6 @@ func (pdb *db) ListNexusEndpoints(
 	request *sqlplugin.ListNexusEndpointsRequest,
 ) ([]sqlplugin.NexusEndpointsRow, error) {
 	var rows []sqlplugin.NexusEndpointsRow
-	err := pdb.conn.SelectContext(ctx, &rows, getEndpointsQry, request.LastID, request.Limit)
+	err := pdb.SelectContext(ctx, &rows, getEndpointsQry, request.LastID, request.Limit)
 	return rows, err
 }

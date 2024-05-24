@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -104,6 +105,8 @@ func ClientProviderFactory(
 	namespaceRegistry namespace.Registry,
 	endpointRegistry *commonnexus.EndpointRegistry,
 	httpTransportProvider NexusTransportProvider,
+	clusterMetadata cluster.Metadata,
+	httpClientCache *cluster.FrontendHTTPClientCache,
 ) ClientProvider {
 	// TODO(bergundy): This should use an LRU or other form of cache that supports eviction.
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
@@ -127,8 +130,12 @@ func ClientProviderFactory(
 				return nil, err
 			}
 		case *nexuspb.EndpointTarget_Worker_:
-			// TODO(bergundy): support worker targets
-			return nil, serviceerror.NewInternal("worker targets not yet implemented")
+			cl, err := httpClientCache.Get(clusterMetadata.GetCurrentClusterName())
+			if err != nil {
+				return nil, err
+			}
+			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint.Id)
+			httpClient = &cl.Client
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}

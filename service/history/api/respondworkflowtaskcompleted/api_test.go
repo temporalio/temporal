@@ -184,6 +184,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 			&taskqueuepb.TaskQueue{Name: tv.TaskQueue().Name},
 			tv.Any().String(),
 			nil,
+			nil,
 		)
 
 		mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(

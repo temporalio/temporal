@@ -208,11 +208,11 @@ func NewRegistry(
 		clock:                    clock.NewRealTimeSource(),
 		metricsHandler:           metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceCacheScope)),
 		logger:                   logger,
-		cacheNameToID:            cache.New(cacheMaxSize, &cacheOpts, metrics.NoopMetricsHandler),
-		cacheByID:                cache.New(cacheMaxSize, &cacheOpts, metrics.NoopMetricsHandler),
+		cacheNameToID:            cache.New(cacheMaxSize, &cacheOpts),
+		cacheByID:                cache.New(cacheMaxSize, &cacheOpts),
 		refreshInterval:          refreshInterval,
 		stateChangeCallbacks:     make(map[any]StateChangeCallbackFn),
-		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughNotFoundCacheOpts, metrics.NoopMetricsHandler),
+		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughNotFoundCacheOpts),
 
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
 	}
@@ -465,8 +465,8 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	}
 
 	// Make a copy of the existing namespace cache (excluding deleted), so we can calculate diff and do "compare and swap".
-	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts, metrics.NoopMetricsHandler)
-	newCacheByID := cache.New(cacheMaxSize, &cacheOpts, metrics.NoopMetricsHandler)
+	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts)
+	newCacheByID := cache.New(cacheMaxSize, &cacheOpts)
 	var deletedEntries []*Namespace
 	for _, namespace := range r.getAllNamespace() {
 		if _, namespaceExistsDb := namespaceIDsDb[namespace.ID()]; !namespaceExistsDb {

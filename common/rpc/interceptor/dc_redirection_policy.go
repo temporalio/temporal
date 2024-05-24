@@ -22,9 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dc_redirection_policy_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dc_redirection_policy_mock.go
 
-package frontend
+package interceptor
 
 import (
 	"context"
@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -72,7 +73,7 @@ type (
 	// which (based on namespace) forwards selected APIs calls to active cluster
 	SelectedAPIsForwardingRedirectionPolicy struct {
 		currentClusterName string
-		config             *Config
+		enabledForNS       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		namespaceRegistry  namespace.Registry
 		enableForAllAPIs   bool
 	}
@@ -89,7 +90,7 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 }
 
 // RedirectionPolicyGenerator generate corresponding redirection policy
-func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config,
+func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
 	switch policy.Policy {
 	case DCRedirectionPolicyDefault:
@@ -99,10 +100,10 @@ func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewSelectedAPIsForwardingPolicy(currentClusterName, config, namespaceRegistry)
+		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
 	case DCRedirectionPolicyAllAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewAllAPIsForwardingPolicy(currentClusterName, config, namespaceRegistry)
+		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -126,19 +127,19 @@ func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(_ context.Context, _ 
 }
 
 // NewSelectedAPIsForwardingPolicy creates a forwarding policy for selected APIs based on namespace
-func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, namespaceRegistry namespace.Registry) *SelectedAPIsForwardingRedirectionPolicy {
+func NewSelectedAPIsForwardingPolicy(currentClusterName string, enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter, namespaceRegistry namespace.Registry) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
-		config:             config,
+		enabledForNS:       enabledForNS,
 		namespaceRegistry:  namespaceRegistry,
 	}
 }
 
 // NewAllAPIsForwardingPolicy creates a forwarding policy for all APIs based on namespace
-func NewAllAPIsForwardingPolicy(currentClusterName string, config *Config, namespaceRegistry namespace.Registry) *SelectedAPIsForwardingRedirectionPolicy {
+func NewAllAPIsForwardingPolicy(currentClusterName string, enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter, namespaceRegistry namespace.Registry) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
-		config:             config,
+		enabledForNS:       enabledForNS,
 		namespaceRegistry:  namespaceRegistry,
 		enableForAllAPIs:   true,
 	}
@@ -192,7 +193,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	if !policy.config.EnableNamespaceNotActiveAutoForwarding(namespaceEntry.Name().String()) {
+	if !policy.enabledForNS(namespaceEntry.Name().String()) {
 		// do not do dc redirection if auto-forwarding dynamic config flag is not enabled
 		return policy.currentClusterName, false
 	}

@@ -33,8 +33,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/metrics"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -188,22 +189,6 @@ func (u *Updater) ApplyRequest(
 		}, nil
 	}
 
-	// Speculative WT can be created only if there are no events which worker has not yet seen,
-	// i.e. last event in the history is WTCompleted event.
-	// It is guaranteed that WTStarted event is followed by WTCompleted event and history tail might look like:
-	//   WTStarted
-	//   WTCompleted
-	//   --> NextEventID points here
-	// In this case difference between NextEventID and LastWorkflowTaskStartedEventID is 2.
-	// If there are other events after WTCompleted event, then difference is > 2 and speculative WT can't be created.
-	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetLastWorkflowTaskStartedEventID()+2
-	if !canCreateSpeculativeWT {
-		return &api.UpdateWorkflowAction{
-			Noop:               false,
-			CreateWorkflowTask: true,
-		}, nil
-	}
-
 	// This will try not to add an event but will create speculative WT in mutable state.
 	newWorkflowTask, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 	if err != nil {
@@ -227,7 +212,7 @@ func (u *Updater) ApplyRequest(
 		ms.GetInheritedBuildId(),
 		ms.GetAssignedBuildId(),
 		ms.GetMostRecentWorkerVersionStamp(),
-		ms.GetLastWorkflowTaskStartedEventID(),
+		ms.HasCompletedAnyWorkflowTask(),
 	)
 
 	return &api.UpdateWorkflowAction{
