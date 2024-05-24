@@ -445,7 +445,7 @@ func (task *UpdateTask) setupDryRunDatabase() error {
 		Overwrite:      true,
 		InitialVersion: "0.0",
 	}
-	setupTask := newSetupSchemaTask(task.db, setupConfig, task.logger)
+	setupTask := NewSetupSchemaTask(task.db, setupConfig, task.logger)
 	return setupTask.Run()
 }
 
