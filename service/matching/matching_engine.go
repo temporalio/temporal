@@ -941,7 +941,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					},
 					Versions:          req.GetVersions(),
 					ReportBacklogInfo: false,
-					ReportPollers:     req.GetReportTaskReachability(),
+					ReportPollers:     req.GetReportPollers(),
 				})
 				if err != nil {
 					return nil, err
@@ -954,7 +954,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
-							Pollers: append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
+							Pollers: dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
 						}
 						physicalInfoByBuildId[buildId][taskQueueType] = merged
 					}
@@ -970,21 +970,24 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Pollers: physicalInfo.Pollers,
 				}
 			}
-			reachability, err := getBuildIdTaskReachability(ctx,
-				newReachabilityCalculator(
-					userData.GetVersioningData(),
-					e.reachabilityCache,
-					request.GetNamespaceId(),
-					req.GetNamespace(),
-					req.GetTaskQueue().GetName(),
-					e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
-				),
-				e.metricsHandler,
-				e.logger,
-				bid,
-			)
-			if err != nil {
-				return nil, err
+			var reachability enumspb.BuildIdTaskReachability
+			if req.GetReportTaskReachability() {
+				reachability, err = getBuildIdTaskReachability(ctx,
+					newReachabilityCalculator(
+						userData.GetVersioningData(),
+						e.reachabilityCache,
+						request.GetNamespaceId(),
+						req.GetNamespace(),
+						req.GetTaskQueue().GetName(),
+						e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+					),
+					e.metricsHandler,
+					e.logger,
+					bid,
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 			versionsInfo[bid] = &taskqueuepb.TaskQueueVersionInfo{
 				TypesInfo:        typesInfo,
@@ -1007,6 +1010,18 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return nil, err
 	}
 	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus()), nil
+}
+
+func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
+	allKeys := make(map[string]bool)
+	var list []*taskqueuepb.PollerInfo
+	for _, item := range pollerInfos {
+		if _, value := allKeys[item.GetIdentity()]; !value {
+			allKeys[item.GetIdentity()] = true
+			list = append(list, item)
+		}
+	}
+	return list
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueuePartition(
@@ -1915,6 +1930,7 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueM
 		metrics.NamespaceTag(pmImpl.ns.Name().String()),
 		metrics.TaskTypeTag(physicalTaskQueueParameters.taskType.String()),
 		metrics.PartitionTypeTag(physicalTaskQueueParameters.partitionType.String()),
+		metrics.VersionedTag(versioned),
 	)
 }
 
