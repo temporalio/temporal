@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility"
 )
 
 // Config represents configuration for history service
@@ -52,6 +51,7 @@ type Config struct {
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
 	EnableReadFromSecondaryVisibility     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableShadowReadMode        dynamicconfig.BoolPropertyFn
 	SecondaryVisibilityWritingMode        dynamicconfig.StringPropertyFn
 	VisibilityDisableOrderByClause        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination      dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -371,10 +371,11 @@ func NewConfig(
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 		ContinueAsNewMinInterval:             dynamicconfig.ContinueAsNewMinInterval.Get(dc),
 
-		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
-		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
-		EnableReadFromSecondaryVisibility:     visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
-		SecondaryVisibilityWritingMode:        visibility.GetSecondaryVisibilityWritingModeConfig(dc),
+		VisibilityPersistenceMaxReadQPS:       dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:      dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
+		EnableReadFromSecondaryVisibility:     dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:        dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
+		SecondaryVisibilityWritingMode:        dynamicconfig.SecondaryVisibilityWritingMode.Get(dc),
 		VisibilityDisableOrderByClause:        dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:      dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 		VisibilityAllowList:                   dynamicconfig.VisibilityAllowList.Get(dc),

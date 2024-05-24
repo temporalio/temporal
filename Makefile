@@ -486,6 +486,7 @@ install-schema-es:
 	curl --fail -X PUT "http://127.0.0.1:9200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
 # No --fail here because create index is not idempotent operation.
 	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev" --write-out "\n"
+# curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_secondary" --write-out "\n"
 
 install-schema-xdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."

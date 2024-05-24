@@ -73,6 +73,21 @@ func (mr *MockmanagerSelectorMockRecorder) readManager(nsName interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "readManager", reflect.TypeOf((*MockmanagerSelector)(nil).readManager), nsName)
 }
 
+// readManagers mocks base method.
+func (m *MockmanagerSelector) readManagers(nsName namespace.Name) ([]manager.VisibilityManager, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "readManagers", nsName)
+	ret0, _ := ret[0].([]manager.VisibilityManager)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// readManagers indicates an expected call of readManagers.
+func (mr *MockmanagerSelectorMockRecorder) readManagers(nsName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "readManagers", reflect.TypeOf((*MockmanagerSelector)(nil).readManagers), nsName)
+}
+
 // writeManagers mocks base method.
 func (m *MockmanagerSelector) writeManagers() ([]manager.VisibilityManager, error) {
 	m.ctrl.T.Helper()

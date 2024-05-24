@@ -47,8 +47,8 @@ import (
 )
 
 const (
-	dcRedirectionContextHeaderName = "xdc-redirection"
-	dcRedirectionApiHeaderName     = "xdc-redirection-api"
+	DCRedirectionContextHeaderName = "xdc-redirection"
+	DCRedirectionApiHeaderName     = "xdc-redirection-api"
 	dcRedirectionMetricsPrefix     = "DCRedirection"
 )
 
@@ -185,7 +185,7 @@ func (i *Redirection) Intercept(
 	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
 		return handler(ctx, req)
 	}
-	if !i.redirectionAllowed(ctx) {
+	if !i.RedirectionAllowed(ctx) {
 		return handler(ctx, req)
 	}
 
@@ -213,9 +213,9 @@ func (i *Redirection) handleLocalAPIInvocation(
 	handler grpc.UnaryHandler,
 	methodName string,
 ) (_ any, retError error) {
-	scope, startTime := i.beforeCall(dcRedirectionMetricsPrefix + methodName)
+	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.afterCall(scope, startTime, i.currentClusterName, retError)
+		i.AfterCall(scope, startTime, i.currentClusterName, retError)
 	}()
 	return handler(ctx, req)
 }
@@ -233,9 +233,9 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	var clusterName string
 	var err error
 
-	scope, startTime := i.beforeCall(dcRedirectionMetricsPrefix + methodName)
+	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.afterCall(scope, startTime, clusterName, retError)
+		i.AfterCall(scope, startTime, clusterName, retError)
 	}()
 
 	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
@@ -248,7 +248,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 				return err
 			}
 			resp = respCtorFn()
-			ctx = metadata.AppendToOutgoingContext(ctx, dcRedirectionApiHeaderName, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionApiHeaderName, "true")
 			err = remoteClient.Invoke(ctx, info.FullMethod, req, resp)
 			if err != nil {
 				return err
@@ -259,13 +259,13 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	return resp, err
 }
 
-func (i *Redirection) beforeCall(
+func (i *Redirection) BeforeCall(
 	operation string,
 ) (metrics.Handler, time.Time) {
 	return i.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.ServiceRoleTag(metrics.DCRedirectionRoleTagValue)), i.timeSource.Now()
 }
 
-func (i *Redirection) afterCall(
+func (i *Redirection) AfterCall(
 	metricsHandler metrics.Handler,
 	startTime time.Time,
 	clusterName string,
@@ -279,7 +279,7 @@ func (i *Redirection) afterCall(
 	}
 }
 
-func (i *Redirection) redirectionAllowed(
+func (i *Redirection) RedirectionAllowed(
 	ctx context.Context,
 ) bool {
 	// default to allow dc redirection
@@ -287,7 +287,7 @@ func (i *Redirection) redirectionAllowed(
 	if !ok {
 		return true
 	}
-	values := md.Get(dcRedirectionContextHeaderName)
+	values := md.Get(DCRedirectionContextHeaderName)
 	if len(values) == 0 {
 		return true
 	}
