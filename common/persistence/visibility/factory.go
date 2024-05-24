@@ -298,28 +298,15 @@ func newElasticsearchVisibilityStore(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) store.VisibilityStore {
-	if esClient == nil {
-		return nil
-	}
-
-	var (
-		esProcessor           elasticsearch.Processor
-		esProcessorAckTimeout dynamicconfig.DurationPropertyFn
-	)
-	if esProcessorConfig != nil {
-		esProcessor = elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, metricsHandler)
-		esProcessor.Start()
-		esProcessorAckTimeout = esProcessorConfig.ESProcessorAckTimeout
-	}
 	s := elasticsearch.NewVisibilityStore(
 		esClient,
 		defaultIndexName,
+		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
-		esProcessor,
-		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
-		metricsHandler)
+		metricsHandler,
+		logger)
 	return s
 }

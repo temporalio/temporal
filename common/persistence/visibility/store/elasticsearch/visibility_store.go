@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -133,22 +134,33 @@ var (
 func NewVisibilityStore(
 	esClient client.Client,
 	index string,
+	esProcessorConfig *ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
-	processor Processor,
-	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *visibilityStore {
-
+	if esClient == nil {
+		return nil
+	}
+	var (
+		esProcessor           Processor
+		esProcessorAckTimeout dynamicconfig.DurationPropertyFn
+	)
+	if esProcessorConfig != nil {
+		esProcessor = NewProcessor(esProcessorConfig, esClient, logger, metricsHandler)
+		esProcessor.Start()
+		esProcessorAckTimeout = esProcessorConfig.ESProcessorAckTimeout
+	}
 	return &visibilityStore{
 		esClient:                       esClient,
 		index:                          index,
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
-		processor:                      processor,
-		processorAckTimeout:            processorAckTimeout,
+		processor:                      esProcessor,
+		processorAckTimeout:            esProcessorAckTimeout,
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),

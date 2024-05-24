@@ -141,7 +141,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
-	s.visibilityStore = NewVisibilityStore(
+	s.visibilityStore = &visibilityStore{
 		s.mockESClient,
 		testIndex,
 		searchattribute.NewTestProvider(),
@@ -151,7 +151,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
 		s.mockMetricsHandler,
-	)
+	}
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -1783,17 +1783,17 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			visibilityStore := NewVisibilityStore(
+			visibilityStore := &visibilityStore{
 				s.mockESClient,
 				testIndex,
 				searchattribute.NewTestProvider(),
 				searchattribute.NewTestMapperProvider(nil),
 				s.mockProcessor,
-				dynamicconfig.GetDurationPropertyFn(1*time.Minute*debug.TimeoutMultiplier),
+				dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier),
 				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
 				s.mockMetricsHandler,
-			)
+			}
 			params := &client.SearchParameters{
 				Index:  testIndex,
 				Query:  baseQuery,
