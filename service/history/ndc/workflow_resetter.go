@@ -395,6 +395,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 
 	resetContext := workflow.NewContext(
 		r.shardContext.GetConfig(),
+		r.shardContext.GetCleaner(),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,

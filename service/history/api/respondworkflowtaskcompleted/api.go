@@ -514,6 +514,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.shardContext,
 			workflow.NewContext(
 				handler.shardContext.GetConfig(),
+				handler.shardContext.GetCleaner(),
 				definition.NewWorkflowKey(
 					newWorkflowExecutionInfo.NamespaceId,
 					newWorkflowExecutionInfo.WorkflowId,

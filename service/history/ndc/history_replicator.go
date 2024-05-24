@@ -410,6 +410,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionState := newMutableState.GetExecutionState()
 		newContext := workflow.NewContext(
 			r.shardContext.GetConfig(),
+			r.shardContext.GetCleaner(),
 			definition.NewWorkflowKey(
 				newExecutionInfo.NamespaceId,
 				newExecutionInfo.WorkflowId,

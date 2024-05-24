@@ -22,46 +22,74 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package common
 
 import (
-	"fmt"
+	"context"
+	"sync"
+	"time"
+
+	"github.com/pkg/errors"
 )
 
-type (
-	// WorkflowKey is the combinations which represent a workflow
-	WorkflowKey struct {
-		NamespaceID string
-		WorkflowID  string
-		RunID       string
-	}
+var (
+	AlreadyDone = errors.New("cannot register anymore, already cleaned up")
 )
 
-// NewWorkflowKey create a new WorkflowKey
-func NewWorkflowKey(
-	namespaceID string,
-	workflowID string,
-	runID string,
-) WorkflowKey {
-	return WorkflowKey{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
+type Cleaner struct {
+	mu        sync.Mutex
+	wg        sync.WaitGroup
+	callbacks map[string]func(context.Context)
+}
+
+func NewCleaner() *Cleaner {
+	return &Cleaner{
+		callbacks: make(map[string]func(context.Context)),
 	}
 }
 
-func (k *WorkflowKey) GetNamespaceID() string {
-	return k.NamespaceID
+func (b *Cleaner) Register(id string, callback func(context.Context)) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.callbacks == nil {
+		return AlreadyDone
+	}
+
+	b.wg.Add(1)
+	b.callbacks[id] = callback
+	return nil
 }
 
-func (k *WorkflowKey) GetWorkflowID() string {
-	return k.WorkflowID
+func (b *Cleaner) Deregister(id string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	delete(b.callbacks, id)
+	b.wg.Done()
 }
 
-func (k *WorkflowKey) GetRunID() string {
-	return k.RunID
-}
+func (b *Cleaner) Cleanup(timeout time.Duration) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
-func (k *WorkflowKey) String() string {
-	return fmt.Sprintf("%v/%v/%v", k.NamespaceID, k.WorkflowID, k.RunID)
+	// TODO: run in parallel?
+	go func() {
+		for _, cb := range b.callbacks {
+			cb(context.Background())
+			b.wg.Done()
+		}
+		b.callbacks = nil
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		b.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.NewTimer(timeout).C:
+	}
 }

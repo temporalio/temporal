@@ -673,6 +673,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		t.shardContext,
 		workflow.NewContext(
 			t.shardContext.GetConfig(),
+			t.shardContext.GetCleaner(),
 			definition.NewWorkflowKey(
 				newExecutionInfo.NamespaceId,
 				newExecutionInfo.WorkflowId,

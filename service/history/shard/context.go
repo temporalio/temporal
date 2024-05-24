@@ -121,6 +121,7 @@ type (
 		UnloadForOwnershipLost()
 
 		StateMachineRegistry() *hsm.Registry
+		GetCleaner() *common.Cleaner
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

@@ -131,6 +131,7 @@ func NewWorkflowWithSignal(
 
 	newWorkflowContext := workflow.NewContext(
 		shard.GetConfig(),
+		shard.GetCleaner(),
 		definition.NewWorkflowKey(
 			namespaceEntry.ID().String(),
 			workflowID,

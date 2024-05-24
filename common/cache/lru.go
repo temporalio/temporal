@@ -31,6 +31,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 )
@@ -370,6 +371,9 @@ func (c *lru) calculateNewCacheSize(newEntrySize int, existingEntrySize int) int
 
 func (c *lru) deleteInternal(element *list.Element) {
 	entry := c.byAccess.Remove(element).(*entryImpl)
+	if callback, ok := entry.value.(EvictCallback); ok {
+		callback.OnEvict()
+	}
 	c.currSize -= entry.Size()
 	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 	metrics.CacheEntryAgeOnEviction.With(c.metricsHandler).Record(c.timeSource.Now().UTC().Sub(entry.createTime))

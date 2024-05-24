@@ -36,9 +36,8 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -171,6 +170,7 @@ type (
 		throttledLogger log.ThrottledLogger
 		metricsHandler  metrics.Handler
 		config          *configs.Config
+		cleaner         *common.Cleaner
 
 		mutex          locks.PriorityMutex
 		MutableState   MutableState
@@ -182,19 +182,29 @@ var _ Context = (*ContextImpl)(nil)
 
 func NewContext(
 	config *configs.Config,
+	cleaner *common.Cleaner,
 	workflowKey definition.WorkflowKey,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 ) *ContextImpl {
-	return &ContextImpl{
+	workflowCtx := &ContextImpl{
 		workflowKey:     workflowKey,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
 		config:          config,
+		cleaner:         cleaner,
 		mutex:           locks.NewPriorityMutex(),
 	}
+
+	cleaner.Register(workflowKey.String(), func(ctx context.Context) {
+		workflowCtx.Lock(ctx, LockPriorityHigh)
+		defer workflowCtx.Unlock(LockPriorityHigh)
+		workflowCtx.Clear()
+	})
+
+	return workflowCtx
 }
 
 func (c *ContextImpl) Lock(
@@ -803,6 +813,10 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 	eventBatches = append(eventBatches, eventBatch1...)
 	eventBatches = append(eventBatches, eventBatch2...)
 	return c.ReapplyEvents(ctx, shardContext, eventBatches)
+}
+
+func (c *ContextImpl) OnEvict() {
+	c.cleaner.Deregister(c.workflowKey.String())
 }
 
 func (c *ContextImpl) conflictResolveEventReapply(

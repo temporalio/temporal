@@ -268,6 +268,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		metrics.CacheMissCounter.With(handler).Record(1)
 		workflowCtx = workflow.NewContext(
 			shardContext.GetConfig(),
+			shardContext.GetCleaner(),
 			cacheKey.WorkflowKey,
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
