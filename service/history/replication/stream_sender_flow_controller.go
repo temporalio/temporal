@@ -39,8 +39,6 @@ import (
 	"go.temporal.io/server/service/history/configs"
 )
 
-const DefaultSenderRps = 100
-
 type (
 	flowControlState struct {
 		mu          sync.Mutex
@@ -82,7 +80,7 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 	flowControlStates[enums.TASK_PRIORITY_LOW] = lowPriorityState
 	return &SenderFlowControllerImpl{
 		flowControlStates:  flowControlStates,
-		defaultRateLimiter: quotas.NewRateLimiter(DefaultSenderRps, DefaultSenderRps),
+		defaultRateLimiter: quotas.NewRateLimiter(float64(config.ReplicationStreamSenderHighPriorityMaxQPS()), config.ReplicationStreamSenderHighPriorityMaxQPS()),
 		logger:             logger,
 	}
 }
@@ -98,7 +96,7 @@ func (s *SenderFlowControllerImpl) RefreshReceiverFlowControlInfo(syncState *rep
 
 func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControlCommand enums.ReplicationFlowControlCommand) {
 	switch flowControlCommand {
-	case enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME:
+	case enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, enums.REPLICATION_FLOW_CONTROL_COMMAND_UNSPECIFIED:
 		state.mu.Lock()
 		defer state.mu.Unlock()
 		state.resume = true

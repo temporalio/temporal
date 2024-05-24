@@ -276,6 +276,7 @@ type Config struct {
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderHighPriorityMaxQPS           dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityMaxQPS            dynamicconfig.IntPropertyFn
+	ReplicationReceiverMaxOutstandingTaskCount          dynamicconfig.IntPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -498,6 +499,7 @@ func NewConfig(
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
 		ReplicationStreamSenderHighPriorityMaxQPS:           dynamicconfig.ReplicationStreamSenderHighPriorityMaxQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityMaxQPS:            dynamicconfig.ReplicationStreamSenderLowPriorityMaxQPS.Get(dc),
+		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),

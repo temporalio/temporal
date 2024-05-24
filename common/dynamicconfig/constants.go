@@ -2120,13 +2120,18 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationStreamSenderHighPriorityMaxQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityMaxQPS",
-		10,
-		`Maximum number of replication tasks that can be sent per second per shard`,
+		100,
+		`Maximum number of high priority replication tasks that can be sent per second per shard`,
 	)
 	ReplicationStreamSenderLowPriorityMaxQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderLowPriorityMaxQPS",
-		10,
-		`Maximum number of replication tasks that can be sent per second per shard`,
+		100,
+		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxOutstandingTaskCount",
+		50,
+		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
 
 	// keys for worker

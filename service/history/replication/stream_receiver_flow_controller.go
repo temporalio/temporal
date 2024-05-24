@@ -27,34 +27,35 @@ package replication
 
 import (
 	"go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/service/history/configs"
 )
-
-const MaxOutstandingTasks = 100
 
 type (
 	FlowControlSignalProvider func() *FlowControlSignal
 
+	// FlowControlSignal holds signals to make flow control decision, more signalsProvider can be added here i.e. total persistence rps, cpu usage etc.
 	FlowControlSignal struct {
 		taskTrackingCount int
 	}
 	ReceiverFlowController interface {
 		GetFlowControlInfo(priority enums.TaskPriority) enums.ReplicationFlowControlCommand
 	}
-	// more signalsProvider can be added here i.e. total persistence rps, cpu usage etc.
 	streamReceiverFlowControllerImpl struct {
 		signalsProvider map[enums.TaskPriority]FlowControlSignalProvider
+		config          *configs.Config
 	}
 )
 
-func NewReceiverFlowControl(signals map[enums.TaskPriority]FlowControlSignalProvider) *streamReceiverFlowControllerImpl {
+func NewReceiverFlowControl(signals map[enums.TaskPriority]FlowControlSignalProvider, config *configs.Config) *streamReceiverFlowControllerImpl {
 	return &streamReceiverFlowControllerImpl{
 		signalsProvider: signals,
+		config:          config,
 	}
 }
 
 func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enums.TaskPriority) enums.ReplicationFlowControlCommand {
 	if signal, ok := s.signalsProvider[priority]; ok {
-		if signal().taskTrackingCount > MaxOutstandingTasks {
+		if signal().taskTrackingCount > s.config.ReplicationReceiverMaxOutstandingTaskCount() {
 			return enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 		}
 	}

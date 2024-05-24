@@ -129,7 +129,7 @@ func NewStreamReceiver(
 		),
 		taskConverter:  taskConverter,
 		receiverMode:   ReceiverModeUnset,
-		flowController: NewReceiverFlowControl(taskTrackerMap),
+		flowController: NewReceiverFlowControl(taskTrackerMap, processToolBox.Config),
 	}
 }
 

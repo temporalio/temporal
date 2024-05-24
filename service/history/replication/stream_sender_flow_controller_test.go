@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/api/enums/v1"
 	replicationpb "go.temporal.io/server/api/replication/v1"
@@ -129,7 +130,9 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 	}()
 
 	// Ensure the goroutine has time to start and block
-	time.Sleep(100 * time.Millisecond)
+	assert.Eventually(s.T(), func() bool {
+		return state.waiters == 1
+	}, 1*time.Second, 100*time.Millisecond)
 
 	s.Equal(1, state.waiters)
 

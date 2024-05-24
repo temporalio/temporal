@@ -30,13 +30,17 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
 	flowControlTestSuite struct {
 		suite.Suite
-		ctrl       *gomock.Controller
-		controller *streamReceiverFlowControllerImpl
+		ctrl                *gomock.Controller
+		controller          *streamReceiverFlowControllerImpl
+		config              *configs.Config
+		maxOutStandingTasks int
 	}
 )
 
@@ -54,7 +58,9 @@ func (f *flowControlTestSuite) SetupTest() {
 		enums.TASK_PRIORITY_HIGH: highPrioritySignal,
 	}
 
-	f.controller = NewReceiverFlowControl(signals)
+	f.config = tests.NewDynamicConfig()
+	f.controller = NewReceiverFlowControl(signals, f.config)
+	f.maxOutStandingTasks = f.config.ReplicationReceiverMaxOutstandingTaskCount()
 }
 
 func TestFlowControlTestSuite(t *testing.T) {
@@ -82,28 +88,28 @@ func (f *flowControlTestSuite) TestUnknownPriority() {
 
 func (f *flowControlTestSuite) TestBoundaryCondition() {
 	boundarySignal := func() *FlowControlSignal {
-		return &FlowControlSignal{taskTrackingCount: MaxOutstandingTasks}
+		return &FlowControlSignal{taskTrackingCount: f.maxOutStandingTasks}
 	}
 
 	signals := map[enums.TaskPriority]FlowControlSignalProvider{
 		enums.TASK_PRIORITY_LOW: boundarySignal,
 	}
 
-	f.controller = NewReceiverFlowControl(signals)
+	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual := f.controller.GetFlowControlInfo(enums.TASK_PRIORITY_LOW)
 	expected := enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
 	f.Equal(expected, actual)
 
 	boundarySignal = func() *FlowControlSignal {
-		return &FlowControlSignal{taskTrackingCount: MaxOutstandingTasks + 1}
+		return &FlowControlSignal{taskTrackingCount: f.maxOutStandingTasks + 1}
 	}
 
 	signals = map[enums.TaskPriority]FlowControlSignalProvider{
 		enums.TASK_PRIORITY_LOW: boundarySignal,
 	}
 
-	f.controller = NewReceiverFlowControl(signals)
+	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual = f.controller.GetFlowControlInfo(enums.TASK_PRIORITY_LOW)
 	expected = enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
