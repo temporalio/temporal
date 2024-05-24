@@ -139,7 +139,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
-	currentUpdateRegistry := currentWorkflow.GetContext().UpdateRegistry(ctx, nil)
+	currentUpdateRegistry := currentWorkflow.GetContext().UpdateRegistry(ctx, r.shardContext, nil)
 	if currentMutableState.IsWorkflowExecutionRunning() {
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -240,7 +240,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	currentWorkflow.GetContext().UpdateRegistry(ctx, r.shardContext, nil).Abort(update.AbortReasonWorkflowCompleted)
 
 	return nil
 }
