@@ -933,8 +933,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							bInfo = &taskqueuepb.BacklogInfo{
 								ApproximateBacklogCount: bInfo_Root.ApproximateBacklogCount + bInfo_Partition.ApproximateBacklogCount,
 								ApproximateBacklogAge:   e.largerBacklogAge(bInfo_Root.ApproximateBacklogAge, bInfo_Partition.ApproximateBacklogAge),
-								TasksAddRate:            float32(0),
-								TasksDispatchRate:       float32(0),
+								TasksAddRate:            bInfo_Root.TasksAddRate + bInfo_Partition.TasksAddRate,
+								TasksDispatchRate:       bInfo_Root.TasksDispatchRate + bInfo_Root.TasksDispatchRate,
 							}
 						}
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
