@@ -104,9 +104,6 @@ type (
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
-
-		// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
-		FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 	}
 
 	forwarderConfig struct {
@@ -215,8 +212,6 @@ func NewConfig(
 		VisibilityEnableManualPagination:  dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
-
-		FrontendAccessHistoryFraction: dynamicconfig.FrontendAccessHistoryFraction.Get(dc),
 	}
 }
 
