@@ -265,9 +265,9 @@ func newVisibilityStoreFromDataStoreConfig(
 			metricsHandler,
 		)
 	} else if dsConfig.Elasticsearch != nil {
-		visStore = newElasticsearchVisibilityStore(
-			dsConfig.Elasticsearch.GetVisibilityIndex(),
+		visStore = elasticsearch.NewVisibilityStore(
 			esClient,
+			dsConfig.Elasticsearch.GetVisibilityIndex(),
 			esProcessorConfig,
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
@@ -285,28 +285,4 @@ func newVisibilityStoreFromDataStoreConfig(
 		)
 	}
 	return visStore, err
-}
-
-func newElasticsearchVisibilityStore(
-	defaultIndexName string,
-	esClient esclient.Client,
-	esProcessorConfig *elasticsearch.ProcessorConfig,
-	searchAttributesProvider searchattribute.Provider,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
-	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	metricsHandler metrics.Handler,
-	logger log.Logger,
-) store.VisibilityStore {
-	s := elasticsearch.NewVisibilityStore(
-		esClient,
-		defaultIndexName,
-		esProcessorConfig,
-		searchAttributesProvider,
-		searchAttributesMapperProvider,
-		visibilityDisableOrderByClause,
-		visibilityEnableManualPagination,
-		metricsHandler,
-		logger)
-	return s
 }

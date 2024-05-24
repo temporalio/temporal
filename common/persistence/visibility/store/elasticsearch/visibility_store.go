@@ -134,7 +134,7 @@ var (
 func NewVisibilityStore(
 	esClient client.Client,
 	index string,
-	esProcessorConfig *ProcessorConfig,
+	processorConfig *ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
@@ -146,21 +146,21 @@ func NewVisibilityStore(
 		return nil
 	}
 	var (
-		esProcessor           Processor
-		esProcessorAckTimeout dynamicconfig.DurationPropertyFn
+		processor           Processor
+		processorAckTimeout dynamicconfig.DurationPropertyFn
 	)
-	if esProcessorConfig != nil {
-		esProcessor = NewProcessor(esProcessorConfig, esClient, logger, metricsHandler)
-		esProcessor.Start()
-		esProcessorAckTimeout = esProcessorConfig.ESProcessorAckTimeout
+	if processorConfig != nil {
+		processor = NewProcessor(processorConfig, esClient, logger, metricsHandler)
+		processor.Start()
+		processorAckTimeout = processorConfig.ESProcessorAckTimeout
 	}
 	return &visibilityStore{
 		esClient:                       esClient,
 		index:                          index,
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
-		processor:                      esProcessor,
-		processorAckTimeout:            esProcessorAckTimeout,
+		processor:                      processor,
+		processorAckTimeout:            processorAckTimeout,
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
@@ -168,7 +168,6 @@ func NewVisibilityStore(
 }
 
 func (s *visibilityStore) Close() {
-	// TODO (alex): visibilityStore shouldn't Stop processor. Processor should be stopped where it is created.
 	if s.processor != nil {
 		s.processor.Stop()
 	}

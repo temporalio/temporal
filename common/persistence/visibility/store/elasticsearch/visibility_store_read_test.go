@@ -142,15 +142,15 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
 	s.visibilityStore = &visibilityStore{
-		s.mockESClient,
-		testIndex,
-		searchattribute.NewTestProvider(),
-		searchattribute.NewTestMapperProvider(nil),
-		s.mockProcessor,
-		esProcessorAckTimeout,
-		visibilityDisableOrderByClause,
-		visibilityEnableManualPagination,
-		s.mockMetricsHandler,
+		esClient:                       s.mockESClient,
+		index:                          testIndex,
+		searchAttributesProvider:       searchattribute.NewTestProvider(),
+		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+		processor:                      s.mockProcessor,
+		processorAckTimeout:            esProcessorAckTimeout,
+		disableOrderByClause:           visibilityDisableOrderByClause,
+		enableManualPagination:         visibilityEnableManualPagination,
+		metricsHandler:                 s.mockMetricsHandler,
 	}
 }
 
@@ -1784,15 +1784,15 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			visibilityStore := &visibilityStore{
-				s.mockESClient,
-				testIndex,
-				searchattribute.NewTestProvider(),
-				searchattribute.NewTestMapperProvider(nil),
-				s.mockProcessor,
-				dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier),
-				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
-				s.mockMetricsHandler,
+				esClient:                       s.mockESClient,
+				index:                          testIndex,
+				searchAttributesProvider:       searchattribute.NewTestProvider(),
+				searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+				processor:                      s.mockProcessor,
+				processorAckTimeout:            dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier),
+				disableOrderByClause:           dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+				enableManualPagination:         dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
+				metricsHandler:                 s.mockMetricsHandler,
 			}
 			params := &client.SearchParameters{
 				Index:  testIndex,
