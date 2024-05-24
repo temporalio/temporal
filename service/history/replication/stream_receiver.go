@@ -101,9 +101,17 @@ func NewStreamReceiver(
 	)
 	highPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
-	taskTrackerMap := make(map[enums.TaskPriority]ExecutableTaskTracker)
-	taskTrackerMap[enums.TASK_PRIORITY_HIGH] = highPriorityTaskTracker
-	taskTrackerMap[enums.TASK_PRIORITY_LOW] = lowPriorityTaskTracker
+	taskTrackerMap := make(map[enums.TaskPriority]FlowControlSignalProvider)
+	taskTrackerMap[enums.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
+		return &FlowControlSignal{
+			taskTrackingCount: highPriorityTaskTracker.Size(),
+		}
+	}
+	taskTrackerMap[enums.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
+		return &FlowControlSignal{
+			taskTrackingCount: lowPriorityTaskTracker.Size(),
+		}
+	}
 	return &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 

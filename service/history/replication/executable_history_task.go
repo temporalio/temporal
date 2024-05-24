@@ -113,7 +113,6 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
-
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemPreemptableCallerInfo,

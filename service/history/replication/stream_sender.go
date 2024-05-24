@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"math"
 	"sync/atomic"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -106,7 +107,7 @@ func NewStreamSender(
 		shutdownChan:         channel.NewShutdownOnce(),
 		config:               config,
 		isTieredStackEnabled: config.EnableReplicationTaskTieredProcessing(),
-		flowController:       NewSenderFlowController(enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW),
+		flowController:       NewSenderFlowController(config, logger),
 	}
 }
 
@@ -335,6 +336,9 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
 	)
+	if s.isTieredStackEnabled {
+		s.flowController.RefreshReceiverFlowControlInfo(attr)
+	}
 
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
 		readerID,
@@ -461,7 +465,7 @@ func (s *StreamSenderImpl) sendTasks(
 	}
 
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
-	ctx, cancel := context.WithTimeout(ctx, replicationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
@@ -512,10 +516,8 @@ Loop:
 			continue Loop
 		}
 		task.Priority = priority
-		s.logger.Debug("StreamSender send replication task", tag.TaskID(task.SourceTaskId))
-		err = s.flowController.Wait(priority)
-		if err != nil {
-			return err
+		if s.isTieredStackEnabled {
+			s.flowController.Wait(priority)
 		}
 		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{

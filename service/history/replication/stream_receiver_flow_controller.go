@@ -22,6 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination receiver_flow_controller_mock.go
 package replication
 
 import (
@@ -31,24 +32,29 @@ import (
 const MaxOutstandingTasks = 100
 
 type (
+	FlowControlSignalProvider func() *FlowControlSignal
+
+	FlowControlSignal struct {
+		taskTrackingCount int
+	}
 	ReceiverFlowController interface {
 		GetFlowControlInfo(priority enums.TaskPriority) enums.ReplicationFlowControlCommand
 	}
-	// more signals can be added here i.e. total persistence rps, cpu usage etc.
+	// more signalsProvider can be added here i.e. total persistence rps, cpu usage etc.
 	streamReceiverFlowControllerImpl struct {
-		taskTrackers map[enums.TaskPriority]ExecutableTaskTracker
+		signalsProvider map[enums.TaskPriority]FlowControlSignalProvider
 	}
 )
 
-func NewReceiverFlowControl(taskTrackers map[enums.TaskPriority]ExecutableTaskTracker) *streamReceiverFlowControllerImpl {
+func NewReceiverFlowControl(signals map[enums.TaskPriority]FlowControlSignalProvider) *streamReceiverFlowControllerImpl {
 	return &streamReceiverFlowControllerImpl{
-		taskTrackers: taskTrackers,
+		signalsProvider: signals,
 	}
 }
 
 func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enums.TaskPriority) enums.ReplicationFlowControlCommand {
-	if taskTracker, ok := s.taskTrackers[priority]; ok {
-		if taskTracker.Size() > 100 {
+	if signal, ok := s.signalsProvider[priority]; ok {
+		if signal().taskTrackingCount > MaxOutstandingTasks {
 			return enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 		}
 	}

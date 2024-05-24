@@ -2117,8 +2117,18 @@ that task will be sent to DLQ.`,
 	)
 	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
 		"history.EnableReplicationTaskTieredProcessing",
-		false,
+		true,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
+	)
+	ReplicationStreamSenderHighPriorityMaxQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderHighPriorityMaxQPS",
+		10,
+		`Maximum number of replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamSenderLowPriorityMaxQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLowPriorityMaxQPS",
+		10,
+		`Maximum number of replication tasks that can be sent per second per shard`,
 	)
 
 	// keys for worker
