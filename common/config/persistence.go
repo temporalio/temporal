@@ -75,9 +75,7 @@ func (c *Persistence) Validate() error {
 	// - advancedVisibilityStore (es),    advancedVisibilityStore (es) [via elasticsearch.indices config]
 	//
 	// Invalid dual visibility combinations:
-	// - visibilityStore (advanced sql),  secondaryVisibilityStore (standard, es)
 	// - visibilityStore (advanced sql),  advancedVisibilityStore (es)
-	// - visibilityStore (es),            secondaryVisibilityStore (any)
 	// - visibilityStore (es),            advancedVisibilityStore (es)
 	// - advancedVisibilityStore (es),    secondaryVisibilityStore (any)
 	//
@@ -99,10 +97,9 @@ func (c *Persistence) Validate() error {
 			c.AdvancedVisibilityStore,
 		)
 	}
-	if c.DataStores[c.VisibilityStore].Elasticsearch != nil &&
-		(c.SecondaryVisibilityStore != "" || c.AdvancedVisibilityStore != "") {
+	if c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.AdvancedVisibilityStore != "" {
 		return errors.New(
-			"persistence config: cannot set secondaryVisibilityStore or advancedVisibilityStore " +
+			"persistence config: cannot set advancedVisibilityStore " +
 				"when visibilityStore is setting elasticsearch datastore",
 		)
 	}
