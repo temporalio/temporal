@@ -5282,7 +5282,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdatedVersionedTransition(
 ) error {
 	if transactionPolicy != TransactionPolicyActive {
 		// TODO: replication/standby logic will need a different way for updating LastUpdatedVersionedTransition
-		// when not syncing mutable state, especially when replication tasks got batched.
+		// when reapplying history, especially when history replication tasks got batched.
 		return nil
 	}
 
@@ -5352,7 +5352,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdatedVersionedTransition(
 
 	ms.approximateSize += totalSizeDelta
 
-	// TODO: proper track size change for ms.executionInfo.SubStateMachinesByType
+	// TODO: we are not tracking ms.executionInfo.SubStateMachinesByType size changes today.
 	return ms.HSM().SetLastUpdatedVersionedTransition(currentVersionedTransition)
 }
 

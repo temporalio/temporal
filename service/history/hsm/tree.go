@@ -188,13 +188,19 @@ func (n *Node) SetLastUpdatedVersionedTransition(
 	currentVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	return n.Walk(func(n *Node) error {
-		if len(n.cache.outputs) == 0 {
+		if len(n.cache.outputs) == 0 &&
+			n.persistence.LastUpdatedVersionedTransition != nil {
 			return nil
 		}
 
+		// node is dirty or newly created
 		n.persistence.LastUpdatedVersionedTransition = currentVersionedTransition
 		return nil
 	})
+}
+
+func (n *Node) LastUpdatedVersionedTransition() *persistencespb.VersionedTransition {
+	return n.persistence.LastUpdatedVersionedTransition
 }
 
 // ClearTransactionState resets all transition outputs in the tree.
