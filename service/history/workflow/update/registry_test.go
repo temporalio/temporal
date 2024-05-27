@@ -27,6 +27,7 @@ package update_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -633,7 +634,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 }
 
-// NOTE: tests for various Update states can be found in update tests
+// NOTE: tests for various update states can be found in the update tests
 func TestAbort(t *testing.T) {
 	t.Parallel()
 	tv := testvars.New(t.Name())
@@ -656,15 +657,59 @@ func TestAbort(t *testing.T) {
 				})
 		},
 	})
-	reg.Abort(update.AbortReasonWorkflowCompleted)
 
 	// both updates are aborted now
+	var wg sync.WaitGroup
 	for i := 1; i <= 2; i++ {
-		upd := reg.Find(context.Background(), tv.UpdateID(fmt.Sprintf("%d", i)))
-		require.NotNil(t, upd)
-		_, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
-		require.Equal(t, err, consts.ErrWorkflowCompleted)
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			upd := reg.Find(context.Background(), tv.UpdateID(fmt.Sprintf("%d", id)))
+			require.NotNil(t, upd)
+
+			_, err := upd.WaitLifecycleStage(context.Background(), 0, 1*time.Second)
+			require.Equal(t, consts.ErrWorkflowCompleted, err)
+		}(i)
 	}
+
+	reg.Abort(update.AbortReasonWorkflowCompleted)
+	wg.Wait()
+
+	require.Equal(t, 2, reg.Len(), "registry should still contain both updates")
+}
+
+func TestClear(t *testing.T) {
+	t.Parallel()
+	tv := testvars.New(t.Name())
+
+	reg := update.NewRegistry(&mockUpdateStore{
+		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+			visitor(
+				tv.UpdateID(),
+				&persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Admission{
+						Admission: &persistencespb.UpdateAdmissionInfo{},
+					},
+				})
+		},
+	})
+
+	upd := reg.Find(context.Background(), tv.UpdateID())
+	require.NotNil(t, upd)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := upd.WaitLifecycleStage(context.Background(), 0, 1*time.Second)
+		require.Equal(t, update.WorkflowUpdateAbortedErr, err)
+	}()
+
+	reg.Clear()
+	wg.Wait()
+
+	require.Equal(t, reg.Len(), 0, "registry should be cleared")
 }
 
 func TestFailoverVersion(t *testing.T) {
