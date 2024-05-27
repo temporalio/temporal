@@ -277,18 +277,18 @@ func (r *registry) Contains(id string) bool {
 	return r.updates[id] != nil
 }
 
-// RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
+// RejectUnprocessed rejects all updates that are waiting for workflow task to be completed.
 // This method should be called after all messages from worker are handled to make sure
 // that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
 func (r *registry) RejectUnprocessed(
 	ctx context.Context,
 	effects effect.Controller,
 ) ([]string, error) {
-
-	updatesToReject := r.filter(func(u *Update) bool { return u.isSent() })
-
-	if len(updatesToReject) == 0 {
-		return nil, nil
+	var updatesToReject []*Update
+	for _, upd := range r.updates {
+		if upd.isSent() {
+			updatesToReject = append(updatesToReject, upd)
+		}
 	}
 
 	var rejectedUpdateIDs []string
@@ -419,18 +419,6 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 		fut,
 		withInstrumentation(&r.instrumentation),
 	)
-}
-
-// filter returns a slice of all updates in the registry for which the
-// provided predicate function returns true.
-func (r *registry) filter(predicate func(u *Update) bool) []*Update {
-	var res []*Update
-	for _, upd := range r.updates {
-		if predicate(upd) {
-			res = append(res, upd)
-		}
-	}
-	return res
 }
 
 func (r *registry) GetSize() int {

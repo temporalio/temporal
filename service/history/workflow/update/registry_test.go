@@ -483,60 +483,100 @@ func TestSendMessages(t *testing.T) {
 }
 
 func TestRejectUnprocessed(t *testing.T) {
+	t.Parallel()
+
 	var (
-		ctx          = context.Background()
-		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
+		tv           = testvars.New(t.Name())
+		upd1, upd2   *update.Update
 		reg          = update.NewRegistry(emptyUpdateStore)
+		evStore      = mockEventStore{Controller: effect.Immediate(context.Background())}
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
-	updateID1, updateID2, updateID3 := t.Name()+"-update-id-1", t.Name()+"-update-id-2", t.Name()+"-update-id-3"
-	upd1, _, err := reg.FindOrCreate(ctx, updateID1)
-	require.NoError(t, err)
-	upd2, _, err := reg.FindOrCreate(ctx, updateID2)
-	require.NoError(t, err)
 
-	rejectedIDs, err := reg.RejectUnprocessed(ctx, evStore)
-	require.NoError(t, err)
-	require.Empty(t, rejectedIDs, "updates in stateCreated should not be rejected")
+	t.Run("empty registry has no updates to reject", func(t *testing.T) {
+		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
+		require.NoError(t, err)
+		require.Empty(t, rejectedIDs)
+	})
 
-	err = upd1.Admit(ctx, &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID1},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
-	require.NoError(t, err)
-	err = upd2.Admit(ctx, &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID2},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
-	require.NoError(t, err)
+	t.Run("registry with updates [#1, #2] in stateCreated rejects nothing", func(t *testing.T) {
+		var err error
+		upd1, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
+		require.NoError(t, err)
+		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+		require.NoError(t, err)
 
-	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
-	require.NoError(t, err)
-	require.Empty(t, rejectedIDs, "updates in stateAdmitted should not be rejected")
+		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
+		require.NoError(t, err)
+		require.Empty(t, rejectedIDs)
+	})
 
-	upd1.Send(ctx, false, sequencingID)
+	t.Run("registry with updates [#1, #2] in stateAdmitted rejects nothing", func(t *testing.T) {
+		err := upd1.Admit(
+			context.Background(),
+			&updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+				Input: &updatepb.Input{Name: "not_empty"},
+			},
+			evStore)
+		require.NoError(t, err)
+		err = upd2.Admit(
+			context.Background(),
+			&updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("2")},
+				Input: &updatepb.Input{Name: "not_empty"},
+			},
+			evStore)
+		require.NoError(t, err)
 
-	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
-	require.NoError(t, err)
-	require.Len(t, rejectedIDs, 1, "only one update in stateSent should be rejected")
+		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
+		require.NoError(t, err)
+		require.Empty(t, rejectedIDs)
+	})
 
-	upd3, _, err := reg.FindOrCreate(ctx, updateID3)
-	require.NoError(t, err)
-	err = upd3.Admit(ctx, &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID3},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
-	require.NoError(t, err)
-	upd2.Send(ctx, false, sequencingID)
-	upd3.Send(ctx, false, sequencingID)
+	t.Run("registry with update #1 in stateSent rejects it", func(t *testing.T) {
+		_ = upd1.Send(context.Background(), false, sequencingID)
 
-	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
-	require.NoError(t, err)
-	require.Len(t, rejectedIDs, 2, "2 updates in stateSent should be rejected")
+		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
+		require.NoError(t, err)
+		require.Len(t, rejectedIDs, 1, "only update #1 in stateSent should be rejected")
+		require.Equal(t, rejectedIDs[0], tv.UpdateID("1"), "update #1 should have been rejected")
 
-	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
-	require.NoError(t, err)
-	require.Len(t, rejectedIDs, 0, "rejected updates shouldn't be rejected again")
+		rejectedIDs, err = reg.RejectUnprocessed(context.Background(), evStore)
+		require.NoError(t, err)
+		require.Empty(t, rejectedIDs, "rejected update #1 should not be rejected again")
+	})
+
+	t.Run("registry with update #2 in stateAccepted rejects nothing", func(t *testing.T) {
+		_ = upd2.Send(context.Background(), false, sequencingID)
+		err := upd2.OnProtocolMessage(
+			context.Background(),
+			&protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+				AcceptedRequestMessageId:         tv.String(),
+				AcceptedRequestSequencingEventId: testSequencingEventID,
+			})},
+			evStore)
+		require.NoError(t, err)
+
+		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
+		require.NoError(t, err)
+		require.Empty(t, rejectedIDs)
+	})
+
+	t.Run("registry with update #2 in stateCompleted rejects nothing", func(t *testing.T) {
+		err := upd2.OnProtocolMessage(
+			context.Background(),
+			&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{
+				Meta:    &updatepb.Meta{UpdateId: tv.UpdateID("2")},
+				Outcome: successOutcome(t, tv.String())}),
+			},
+			evStore)
+		require.NoError(t, err)
+
+		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
+		require.NoError(t, err)
+		require.Empty(t, rejectedIDs)
+	})
 }
 
 func TestAbort(t *testing.T) {
