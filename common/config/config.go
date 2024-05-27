@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/auth"
@@ -385,6 +386,8 @@ type (
 
 	// SQL is the configuration for connecting to a SQL backed datastore
 	SQL struct {
+		// Connect is a function that returns a sql db connection. String based configuration is ignored if this is provided.
+		Connect func(sqlConfig *SQL) (*sqlx.DB, error) `yaml:"-" json:"-"`
 		// User is the username to be used for the conn
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
