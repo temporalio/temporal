@@ -101,14 +101,6 @@ type (
 		FailoverVersion() int64
 	}
 
-	// Store represents the update package's requirements for reading updates from the store.
-	Store interface {
-		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-		GetCurrentVersion() int64
-		IsWorkflowExecutionRunning() bool
-	}
-
 	registry struct {
 		updates         map[string]*Update
 		store           Store
