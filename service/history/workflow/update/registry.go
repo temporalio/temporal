@@ -211,7 +211,7 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	if upd := r.Find(ctx, id); upd != nil {
 		return upd, true, nil
 	}
-	if err := r.checkLimits(ctx); err != nil {
+	if err := r.checkLimits(); err != nil {
 		return nil, false, err
 	}
 	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
@@ -226,7 +226,7 @@ func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Me
 
 	// Check only total limit here. This might add more than maxInFlight updates to registry,
 	// but provides better developer experience.
-	if err := r.checkTotalLimit(ctx); err != nil {
+	if err := r.checkTotalLimit(); err != nil {
 		return nil, err
 	}
 
@@ -370,7 +370,7 @@ func (r *registry) remover(id string) updateOpt {
 	)
 }
 
-func (r *registry) checkLimits(ctx context.Context) error {
+func (r *registry) checkLimits() error {
 	if len(r.updates) >= r.maxInFlight() {
 		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
@@ -379,11 +379,10 @@ func (r *registry) checkLimits(ctx context.Context) error {
 			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
 		}
 	}
-
-	return r.checkTotalLimit(ctx)
+	return r.checkTotalLimit()
 }
 
-func (r *registry) checkTotalLimit(_ context.Context) error {
+func (r *registry) checkTotalLimit() error {
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(

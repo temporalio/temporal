@@ -100,6 +100,193 @@ func TestFind(t *testing.T) {
 	})
 }
 
+func TestFindOrCreate(t *testing.T) {
+	t.Parallel()
+	tv := testvars.New(t.Name())
+
+	t.Run("find stored update", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				storedUpdate := &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Acceptance{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+					},
+				}
+				visitor(tv.UpdateID(), storedUpdate)
+			},
+		})
+
+		upd, found, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, upd)
+	})
+
+	t.Run("create update if not found", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+
+		upd, found, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
+		require.NoError(t, err)
+		require.False(t, found)
+		require.NotNil(t, upd)
+
+		upd, found, err = reg.FindOrCreate(context.Background(), tv.UpdateID())
+		require.NoError(t, err)
+		require.True(t, found, "second lookup for same updateID should find previous")
+		require.NotNil(t, upd)
+	})
+
+	t.Run("enforce in-flight update limit", func(t *testing.T) {
+		var (
+			limit = 1
+			reg   = update.NewRegistry(
+				emptyUpdateStore,
+				update.WithInFlightLimit(
+					func() int { return limit },
+				),
+			)
+			evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
+		)
+
+		// create an in-flight update #1
+		upd1, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
+		require.NoError(t, err, "creating update #1 should have beeen allowed")
+		require.False(t, existed)
+		require.Equal(t, 1, reg.Len())
+
+		t.Run("deny new update since it is exceeding the limit", func(t *testing.T) {
+			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			var resExh *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &resExh, "creating update #2 should have been denied")
+			require.Equal(t, 1, reg.Len())
+		})
+
+		t.Run("admitting 1st update still denies new update to be created", func(t *testing.T) {
+			err = upd1.Admit(
+				context.Background(),
+				&updatepb.Request{
+					Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+					Input: &updatepb.Input{Name: "not_empty"},
+				},
+				evStore)
+			require.NoError(t, err, "update #1 should have been admitted")
+
+			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			var resExh *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &resExh, "creating update #2 should have been denied")
+			require.Equal(t, 1, reg.Len())
+		})
+
+		t.Run("sending 1st update still denies new update to be created", func(t *testing.T) {
+			_ = upd1.Send(
+				context.Background(), false, &protocolpb.Message_EventId{EventId: testSequencingEventID})
+
+			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			var resExh *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &resExh, "creating update #2 should have been denied")
+			require.Equal(t, 1, reg.Len())
+		})
+
+		t.Run("increasing limit allows new updated to be created", func(t *testing.T) {
+			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			var resExh *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &resExh)
+			require.Equal(t, 1, reg.Len())
+
+			limit += 1
+
+			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			require.NoError(t, err, "creating update #2 should have beeen created after limit increase")
+			require.False(t, existed)
+			require.Equal(t, 2, reg.Len())
+		})
+
+		t.Run("rejecting 1st update allows new update to be created", func(t *testing.T) {
+			rej := protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
+				RejectedRequestMessageId: "update1/request",
+				RejectedRequest: &updatepb.Request{
+					Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+					Input: &updatepb.Input{Name: "not_empty"},
+				},
+				Failure: &failurepb.Failure{Message: "intentional failure in " + t.Name()},
+			})}
+			require.NoError(t, upd1.OnProtocolMessage(context.Background(), &rej, evStore))
+			require.Equal(t, 1, reg.Len(), "update #1 should have been removed from registry")
+
+			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("3"))
+			require.NoError(t, err, "update #3 should have been created after #1 completed")
+			require.False(t, existed)
+			require.Equal(t, 2, reg.Len())
+		})
+	})
+
+	t.Run("enforce total update limit", func(t *testing.T) {
+		var (
+			limit = 1
+			reg   = update.NewRegistry(
+				emptyUpdateStore,
+				update.WithTotalLimit(
+					func() int { return limit },
+				),
+			)
+			evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
+		)
+
+		// create an in-flight update #1
+		upd1, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
+		require.NoError(t, err, "creating update #1 should have beeen allowed")
+		require.False(t, existed)
+		require.Equal(t, 1, reg.Len())
+
+		t.Run("deny new update since it is exceeding the limit", func(t *testing.T) {
+			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			var failedPrecon *serviceerror.FailedPrecondition
+			require.ErrorAs(t, err, &failedPrecon)
+			require.Equal(t, 1, reg.Len())
+		})
+
+		t.Run("completing 1st update still denies new update to be created", func(t *testing.T) {
+			err = upd1.Admit(
+				context.Background(),
+				&updatepb.Request{
+					Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+					Input: &updatepb.Input{Name: "not_empty"},
+				},
+				evStore)
+			require.NoError(t, err, "update #1 should have been admitted")
+
+			err = upd1.OnProtocolMessage(
+				context.Background(),
+				&protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
+					RejectedRequestMessageId: "update1/request",
+					RejectedRequest: &updatepb.Request{
+						Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+						Input: &updatepb.Input{Name: "not_empty"},
+					},
+					Failure: &failurepb.Failure{
+						Message: "intentional failure in " + t.Name(),
+					},
+				})},
+				evStore)
+			require.NoError(t, err, "update #1 should have been completed")
+
+			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			var failedPrecon *serviceerror.FailedPrecondition
+			require.ErrorAs(t, err, &failedPrecon)
+			require.Equal(t, 0, reg.Len())
+		})
+
+		t.Run("increasing limit allows new updated to be created", func(t *testing.T) {
+			limit = 2
+
+			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			require.NoError(t, err, "update #2 should have been created after the limit increase")
+			require.False(t, existed)
+			require.Equal(t, 1, reg.Len())
+		})
+	})
+}
+
 func TestHasOutgoingMessages(t *testing.T) {
 	t.Parallel()
 
@@ -154,90 +341,6 @@ func TestHasOutgoingMessages(t *testing.T) {
 
 		require.False(t, reg.HasOutgoingMessages(false))
 		require.False(t, reg.HasOutgoingMessages(true))
-	})
-}
-
-func TestFindOrCreate(t *testing.T) {
-	t.Parallel()
-
-	var (
-		ctx               = context.Background()
-		acceptedUpdateID  = t.Name() + "-accepted-update-id"
-		completedUpdateID = t.Name() + "-completed-update-id"
-		completedOutcome  = successOutcome(t, "success!")
-
-		storeData = map[string]*persistencespb.UpdateInfo{
-			acceptedUpdateID: {
-				Value: &persistencespb.UpdateInfo_Acceptance{
-					Acceptance: &persistencespb.UpdateAcceptanceInfo{
-						EventId: 120,
-					},
-				},
-			},
-			completedUpdateID: {
-				Value: &persistencespb.UpdateInfo_Completion{
-					Completion: &persistencespb.UpdateCompletionInfo{
-						EventId: 123,
-					},
-				},
-			},
-		}
-
-		// make a store with 1 accepted and 1 completed update
-		store = mockUpdateStore{
-			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
-				for updID, updInfo := range storeData {
-					visitor(updID, updInfo)
-				}
-			},
-			GetUpdateOutcomeFunc: func(
-				ctx context.Context,
-				updateID string,
-			) (*updatepb.Outcome, error) {
-				if updateID == completedUpdateID {
-					return completedOutcome, nil
-				}
-				return nil, serviceerror.NewNotFound("not found")
-			},
-		}
-		reg = update.NewRegistry(store)
-	)
-
-	t.Run("new update", func(t *testing.T) {
-		updateID := "a completely new update ID"
-		_, found, err := reg.FindOrCreate(ctx, updateID)
-		require.NoError(t, err)
-		require.False(t, found)
-
-		_, found, err = reg.FindOrCreate(ctx, updateID)
-		require.NoError(t, err)
-		require.True(t, found, "second lookup for same updateID should find previous")
-	})
-
-	t.Run("find stored completed", func(t *testing.T) {
-		upd, found, err := reg.FindOrCreate(ctx, completedUpdateID)
-		require.NoError(t, err)
-		require.True(t, found)
-		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
-		require.NoError(t, err, "completed update should also be accepted")
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
-		require.Equal(t, completedOutcome, status.Outcome,
-			"completed update should have an outcome")
-		status, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
-		require.NoError(t, err, "completed update should have an outcome")
-		require.Equal(t, completedOutcome, status.Outcome,
-			"completed update should have an outcome")
-	})
-
-	t.Run("find stored accepted", func(t *testing.T) {
-		upd, found, err := reg.FindOrCreate(ctx, acceptedUpdateID)
-		require.NoError(t, err)
-		require.True(t, found)
-		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
-		require.Nil(t, status.Outcome)
 	})
 }
 
@@ -394,164 +497,6 @@ func TestSendMessageGathering(t *testing.T) {
 	for _, msg := range msgs {
 		require.Equal(t, wftStartedEventID-1, msg.GetEventId())
 	}
-}
-
-func TestInFlightLimit(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx   = context.Background()
-		limit = 1
-		reg   = update.NewRegistry(
-			emptyUpdateStore,
-			update.WithInFlightLimit(
-				func() int { return limit },
-			),
-		)
-		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
-		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
-	)
-	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
-	require.NoError(t, err)
-	require.False(t, existed)
-	require.Equal(t, 1, reg.Len())
-
-	t.Run("exceed limit", func(t *testing.T) {
-		_, _, err = reg.FindOrCreate(ctx, "update2")
-		var resExh *serviceerror.ResourceExhausted
-		require.ErrorAs(t, err, &resExh)
-		require.Equal(t, 1, reg.Len())
-	})
-
-	// complete update1 so that it is removed from the registry
-	req := updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: "update1"},
-		Input: &updatepb.Input{Name: "not_empty"},
-	}
-	require.NoError(t, upd1.Admit(ctx, &req, evStore))
-
-	_ = upd1.Send(ctx, false, sequencingID)
-
-	t.Run("exceed limit after send", func(t *testing.T) {
-		_, _, err = reg.FindOrCreate(ctx, "update2")
-		var resExh *serviceerror.ResourceExhausted
-		require.ErrorAs(t, err, &resExh)
-		require.Equal(t, 1, reg.Len())
-	})
-
-	rej := protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
-		RejectedRequestMessageId: "update1/request",
-		RejectedRequest:          &req,
-		Failure: &failurepb.Failure{
-			Message: "intentional failure in " + t.Name(),
-		},
-	})}
-	require.NoError(t, upd1.OnProtocolMessage(ctx, &rej, evStore))
-	require.Equal(t, 0, reg.Len(),
-		"completed update should have been removed from registry")
-
-	t.Run("create next after returning below limit", func(t *testing.T) {
-		_, existed, err = reg.FindOrCreate(ctx, "update2")
-		require.NoError(t, err,
-			"second update should be created after first completed")
-		require.False(t, existed)
-	})
-
-	t.Log("Increasing limit to 2; Update registry should honor the change")
-	limit = 2
-
-	t.Run("runtime limit increase is respected", func(t *testing.T) {
-		require.Equal(t, 1, reg.Len(),
-			"update2 from previous test should still be in registry")
-		_, existed, err := reg.FindOrCreate(ctx, "update3")
-		require.NoError(t, err,
-			"update should have been created under new higher limit")
-		require.False(t, existed)
-		require.Equal(t, 2, reg.Len())
-
-		_, _, err = reg.FindOrCreate(ctx, "update4")
-		var resExh *serviceerror.ResourceExhausted
-		require.ErrorAs(t, err, &resExh,
-			"third update should be rejected when limit = 2")
-		require.Equal(t, 2, reg.Len())
-	})
-}
-
-func TestTotalLimit(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx   = context.Background()
-		limit = 1
-		reg   = update.NewRegistry(
-			emptyUpdateStore,
-			update.WithTotalLimit(
-				func() int { return limit },
-			),
-		)
-		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
-		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
-	)
-	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
-	require.NoError(t, err)
-	require.False(t, existed)
-	require.Equal(t, 1, reg.Len())
-
-	t.Run("exceed limit", func(t *testing.T) {
-		_, _, err = reg.FindOrCreate(ctx, "update2")
-		var failedPrecon *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPrecon)
-		require.Equal(t, 1, reg.Len())
-	})
-
-	// complete update1 so that it is removed from the registry and incremented counter
-	req := updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: "update1"},
-		Input: &updatepb.Input{Name: "not_empty"},
-	}
-	require.NoError(t, upd1.Admit(ctx, &req, evStore))
-
-	_ = upd1.Send(ctx, false, sequencingID)
-
-	t.Run("exceed limit after send", func(t *testing.T) {
-		_, _, err = reg.FindOrCreate(ctx, "update2")
-		var failedPrecon *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPrecon)
-		require.Equal(t, 1, reg.Len())
-	})
-
-	rej := protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
-		RejectedRequestMessageId: "update1/request",
-		RejectedRequest:          &req,
-		Failure: &failurepb.Failure{
-			Message: "intentional failure in " + t.Name(),
-		},
-	})}
-	require.NoError(t, upd1.OnProtocolMessage(ctx, &rej, evStore))
-
-	t.Run("try to create next after completing previous", func(t *testing.T) {
-		_, existed, err = reg.FindOrCreate(ctx, "update2")
-		var failedPrecon *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPrecon)
-		require.Equal(t, 0, reg.Len())
-	})
-
-	t.Log("Increasing limit to 2; Update registry should honor the change")
-	limit = 2
-
-	t.Run("runtime limit increase is respected", func(t *testing.T) {
-		require.Equal(t, 0, reg.Len(),
-			"registry should be empty")
-		_, existed, err := reg.FindOrCreate(ctx, "update2")
-		require.NoError(t, err,
-			"update2 should have been created under new higher limit")
-		require.False(t, existed)
-		require.Equal(t, 1, reg.Len())
-
-		_, _, err = reg.FindOrCreate(ctx, "update3")
-		var failedPrecon *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPrecon,
-			"update3 should be rejected when limit = 2")
-		require.Equal(t, 1, reg.Len())
-	})
 }
 
 func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
