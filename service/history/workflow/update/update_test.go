@@ -1157,3 +1157,4 @@ func TestCompletedWorkflow(t *testing.T) {
 }
 
 // TODO: test aborting an Update in various states
+// TODO: test "should not be able to completed update for completed workflow"
