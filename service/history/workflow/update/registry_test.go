@@ -156,7 +156,7 @@ func TestFindOrCreate(t *testing.T) {
 		t.Run("deny new update since it is exceeding the limit", func(t *testing.T) {
 			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var resExh *serviceerror.ResourceExhausted
-			require.ErrorAs(t, err, &resExh, "creating update #2 should have been denied")
+			require.ErrorAs(t, err, &resExh, "creating update #2 should be denied")
 			require.Equal(t, 1, reg.Len())
 		})
 
@@ -168,11 +168,11 @@ func TestFindOrCreate(t *testing.T) {
 					Input: &updatepb.Input{Name: "not_empty"},
 				},
 				evStore)
-			require.NoError(t, err, "update #1 should have been admitted")
+			require.NoError(t, err, "update #1 should be admitted")
 
 			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var resExh *serviceerror.ResourceExhausted
-			require.ErrorAs(t, err, &resExh, "creating update #2 should have been denied")
+			require.ErrorAs(t, err, &resExh, "creating update #2 should be denied")
 			require.Equal(t, 1, reg.Len())
 		})
 
@@ -182,7 +182,7 @@ func TestFindOrCreate(t *testing.T) {
 
 			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var resExh *serviceerror.ResourceExhausted
-			require.ErrorAs(t, err, &resExh, "creating update #2 should have been denied")
+			require.ErrorAs(t, err, &resExh, "creating update #2 should be denied")
 			require.Equal(t, 1, reg.Len())
 		})
 
@@ -210,10 +210,10 @@ func TestFindOrCreate(t *testing.T) {
 				Failure: &failurepb.Failure{Message: "intentional failure in " + t.Name()},
 			})}
 			require.NoError(t, upd1.OnProtocolMessage(context.Background(), &rej, evStore))
-			require.Equal(t, 1, reg.Len(), "update #1 should have been removed from registry")
+			require.Equal(t, 1, reg.Len(), "update #1 should be removed from registry")
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("3"))
-			require.NoError(t, err, "update #3 should have been created after #1 completed")
+			require.NoError(t, err, "update #3 should be created after #1 completed")
 			require.False(t, existed)
 			require.Equal(t, 2, reg.Len())
 		})
@@ -252,7 +252,7 @@ func TestFindOrCreate(t *testing.T) {
 					Input: &updatepb.Input{Name: "not_empty"},
 				},
 				evStore)
-			require.NoError(t, err, "update #1 should have been admitted")
+			require.NoError(t, err, "update #1 should be admitted")
 
 			err = upd1.OnProtocolMessage(
 				context.Background(),
@@ -267,7 +267,7 @@ func TestFindOrCreate(t *testing.T) {
 					},
 				})},
 				evStore)
-			require.NoError(t, err, "update #1 should have been completed")
+			require.NoError(t, err, "update #1 should be completed")
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var failedPrecon *serviceerror.FailedPrecondition
@@ -279,7 +279,7 @@ func TestFindOrCreate(t *testing.T) {
 			limit = 2
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
-			require.NoError(t, err, "update #2 should have been created after the limit increase")
+			require.NoError(t, err, "update #2 should be created after the limit increase")
 			require.False(t, existed)
 			require.Equal(t, 1, reg.Len())
 		})
@@ -540,7 +540,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
 		require.Len(t, rejectedIDs, 1, "only update #1 in stateSent should be rejected")
-		require.Equal(t, rejectedIDs[0], tv.UpdateID("1"), "update #1 should have been rejected")
+		require.Equal(t, rejectedIDs[0], tv.UpdateID("1"), "update #1 should be rejected")
 
 		rejectedIDs, err = reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
