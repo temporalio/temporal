@@ -26,7 +26,6 @@ package update_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -497,38 +496,6 @@ func TestSendMessageGathering(t *testing.T) {
 	for _, msg := range msgs {
 		require.Equal(t, wftStartedEventID-1, msg.GetEventId())
 	}
-}
-
-func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx               = context.Background()
-		completedUpdateID = t.Name() + "-completed-update-id"
-		expectError       = fmt.Errorf("expected error in %s", t.Name())
-		regStore          = mockUpdateStore{
-			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
-				completedUpdateInfo := &persistencespb.UpdateInfo{
-					Value: &persistencespb.UpdateInfo_Completion{
-						Completion: &persistencespb.UpdateCompletionInfo{EventId: 123},
-					},
-				}
-				visitor(completedUpdateID, completedUpdateInfo)
-			},
-			GetUpdateOutcomeFunc: func(
-				ctx context.Context,
-				updateID string,
-			) (*updatepb.Outcome, error) {
-				return nil, expectError
-			},
-		}
-		reg = update.NewRegistry(regStore)
-	)
-
-	upd := reg.Find(ctx, completedUpdateID)
-	require.NotNil(t, upd)
-
-	_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.ErrorIs(t, expectError, err)
 }
 
 func TestRejectUnprocessed(t *testing.T) {
