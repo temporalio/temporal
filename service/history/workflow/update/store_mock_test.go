@@ -45,7 +45,9 @@ type mockUpdateStore struct {
 func (m mockUpdateStore) VisitUpdates(
 	visitor func(updID string, updInfo *persistencespb.UpdateInfo),
 ) {
-	m.VisitUpdatesFunc(visitor)
+	if m.VisitUpdatesFunc != nil {
+		m.VisitUpdatesFunc(visitor)
+	}
 }
 
 func (m mockUpdateStore) GetUpdateOutcome(

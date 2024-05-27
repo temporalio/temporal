@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -47,27 +48,60 @@ import (
 
 func TestFind(t *testing.T) {
 	t.Parallel()
-	var (
-		ctx      = context.Background()
-		updateID = t.Name() + "-update-id"
-		store    = mockUpdateStore{
-			VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
+	tv := testvars.New(t.Name())
+
+	t.Run("return update when found in registry", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+				return &updatepb.Outcome{
+					Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()},
+				}, nil
 			},
+		})
+		upd := reg.Find(context.Background(), tv.UpdateID())
+		require.NotNil(t, upd)
+	})
+
+	t.Run("return update when found in store", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				storedUpdate := &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Acceptance{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+					},
+				}
+				visitor(tv.UpdateID(), storedUpdate)
+			},
+		})
+		upd := reg.Find(context.Background(), tv.UpdateID())
+		require.NotNil(t, upd)
+	})
+
+	t.Run("return nil when not found", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
 			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
-		}
-		reg = update.NewRegistry(store)
-	)
-	upd := reg.Find(ctx, updateID)
-	require.Nil(t, upd)
+		})
+		upd := reg.Find(context.Background(), tv.UpdateID())
+		require.Nil(t, upd)
+	})
 
-	_, found, err := reg.FindOrCreate(ctx, updateID)
-	require.NoError(t, err)
-	require.False(t, found)
+	t.Run("return completed update with error when loading from store fails", func(t *testing.T) {
+		internalErr := serviceerror.NewInternal("internal error")
 
-	upd = reg.Find(ctx, updateID)
-	require.NotNil(t, upd)
+		reg := update.NewRegistry(&mockUpdateStore{
+			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+				return nil, internalErr
+			},
+		})
+		upd := reg.Find(context.Background(), tv.UpdateID())
+		require.NotNil(t, upd)
+
+		_, err := upd.WaitLifecycleStage(
+			context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
+		require.Equal(t, internalErr, err)
+	})
 }
 
 func TestHasOutgoingMessages(t *testing.T) {
