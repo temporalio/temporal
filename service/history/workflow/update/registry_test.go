@@ -660,3 +660,23 @@ func TestAbort(t *testing.T) {
 	require.Nil(t, status.Outcome.GetFailure())
 	require.NotNil(t, status.Outcome.GetSuccess())
 }
+
+func TestFailoverVersion(t *testing.T) {
+	t.Run("return version obtained from store", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			GetCurrentVersionFunc: func() int64 { return 42 },
+		})
+		require.Equal(t, int64(42), reg.FailoverVersion())
+	})
+
+	t.Run("returns same version obtained from store after store changes its version", func(t *testing.T) {
+		var failoverVersion int64 = 42
+		reg := update.NewRegistry(&mockUpdateStore{
+			GetCurrentVersionFunc: func() int64 { return failoverVersion },
+		})
+		failoverVersion = 1024
+
+		require.Equal(t, int64(42), reg.FailoverVersion(),
+			"should still be original failover version")
+	})
+}
