@@ -322,6 +322,7 @@ func (r *registry) Send(
 	includeAlreadySent bool,
 	workflowTaskStartedEventID int64,
 ) []*protocolpb.Message {
+	var outgoingMessages []*protocolpb.Message
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the
 	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
@@ -332,8 +333,7 @@ func (r *registry) Send(
 	//  and events reordering in some SDKs.
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
-	var outgoingMessages []*protocolpb.Message
-
+	// sort updates by the time they were admitted
 	var sortedUpdates []*Update
 	for _, upd := range r.updates {
 		sortedUpdates = append(sortedUpdates, upd)
@@ -346,6 +346,7 @@ func (r *registry) Send(
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
 		}
 	}
+
 	return outgoingMessages
 }
 

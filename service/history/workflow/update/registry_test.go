@@ -294,10 +294,6 @@ func TestHasOutgoingMessages(t *testing.T) {
 		upd     *update.Update
 		reg     = update.NewRegistry(emptyUpdateStore)
 		evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
-		updReq  = updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
-			Input: &updatepb.Input{Name: "not_empty"},
-		}
 	)
 
 	t.Run("empty registry", func(t *testing.T) {
@@ -313,7 +309,13 @@ func TestHasOutgoingMessages(t *testing.T) {
 	})
 
 	t.Run("registy with admitted update", func(t *testing.T) {
-		err := upd.Admit(context.Background(), &updReq, evStore)
+		err := upd.Admit(
+			context.Background(),
+			&updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+				Input: &updatepb.Input{Name: "not_empty"},
+			},
+			evStore)
 		require.NoError(t, err)
 
 		require.True(t, reg.HasOutgoingMessages(false))
@@ -391,70 +393,93 @@ func TestUpdateAccepted_WorkflowCompleted(t *testing.T) {
 	require.Equal(t, 1, reg.Len(), "update should still be present in map")
 }
 
-func TestSendMessageGathering(t *testing.T) {
+func TestSendMessages(t *testing.T) {
 	t.Parallel()
+
 	var (
-		ctx     = context.Background()
-		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
-		reg     = update.NewRegistry(emptyUpdateStore)
+		tv         = testvars.New(t.Name())
+		upd1, upd2 *update.Update
+		reg        = update.NewRegistry(emptyUpdateStore)
+		evStore    = mockEventStore{Controller: effect.Immediate(context.Background())}
 	)
-	updateID1, updateID2 := t.Name()+"-update-id-1", t.Name()+"-update-id-2"
-	upd1, _, err := reg.FindOrCreate(ctx, updateID1)
-	require.NoError(t, err)
-	upd2, _, err := reg.FindOrCreate(ctx, updateID2)
-	require.NoError(t, err)
-	wftStartedEventID := int64(2208)
 
-	msgs := reg.Send(ctx, false, wftStartedEventID)
-	require.Empty(t, msgs)
-	require.False(t, upd1.IsSent())
-	require.False(t, upd2.IsSent())
+	t.Run("empty registry has no messages to send", func(t *testing.T) {
+		msgs := reg.Send(context.Background(), true, testSequencingEventID)
+		require.Empty(t, msgs)
+	})
 
-	err = upd1.Admit(ctx, &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID1},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
-	require.NoError(t, err)
+	t.Run("registry with 2 created updates has no messages to send", func(t *testing.T) {
+		var err error
+		upd1, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
+		require.NoError(t, err)
+		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+		require.NoError(t, err)
 
-	msgs = reg.Send(ctx, false, wftStartedEventID)
-	require.Len(t, msgs, 1)
-	require.True(t, upd1.IsSent())
-	require.False(t, upd2.IsSent())
+		msgs := reg.Send(context.Background(), true, testSequencingEventID)
+		require.Empty(t, msgs)
+		require.False(t, upd1.IsSent())
+		require.False(t, upd2.IsSent())
+	})
 
-	msgs = reg.Send(ctx, false, wftStartedEventID)
-	require.Len(t, msgs, 0)
-	require.True(t, upd1.IsSent())
-	require.False(t, upd2.IsSent())
+	t.Run("registy with 1 admitted update has 1 message to send", func(t *testing.T) {
+		err := upd1.Admit(
+			context.Background(),
+			&updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+				Input: &updatepb.Input{Name: "not_empty"},
+			},
+			evStore)
+		require.NoError(t, err)
 
-	msgs = reg.Send(ctx, true, wftStartedEventID)
-	require.Len(t, msgs, 1)
-	require.True(t, upd1.IsSent())
-	require.False(t, upd2.IsSent())
+		msgs := reg.Send(context.Background(), false, testSequencingEventID)
+		require.Len(t, msgs, 1)
+		require.True(t, upd1.IsSent())
+		require.False(t, upd2.IsSent())
+		require.Equal(t, tv.UpdateID("1"), msgs[0].ProtocolInstanceId)
+		require.Equal(t, testSequencingEventID-1, msgs[0].GetEventId())
 
-	err = upd2.Admit(ctx, &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID2},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
-	require.NoError(t, err)
+		// no more to send as update #1 is already sent
+		msgs = reg.Send(context.Background(), false, testSequencingEventID)
+		require.Empty(t, msgs)
+		require.True(t, upd1.IsSent())
+		require.False(t, upd2.IsSent())
 
-	msgs = reg.Send(ctx, false, wftStartedEventID)
-	require.Len(t, msgs, 1)
-	require.True(t, upd1.IsSent())
-	require.True(t, upd2.IsSent())
+		// including already sent updates returns update #1 message again
+		msgs = reg.Send(context.Background(), true, testSequencingEventID)
+		require.Len(t, msgs, 1)
+		require.True(t, upd1.IsSent())
+		require.False(t, upd2.IsSent())
+	})
 
-	msgs = reg.Send(ctx, false, wftStartedEventID)
-	require.Len(t, msgs, 0)
-	require.True(t, upd1.IsSent())
-	require.True(t, upd2.IsSent())
+	t.Run("registy with 2 admitted updates returns messages sorted by admission time", func(t *testing.T) {
+		err := upd2.Admit(
+			context.Background(),
+			&updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("2")},
+				Input: &updatepb.Input{Name: "not_empty"},
+			},
+			evStore)
+		require.NoError(t, err)
 
-	msgs = reg.Send(ctx, true, wftStartedEventID)
-	require.Len(t, msgs, 2)
-	require.True(t, upd1.IsSent())
-	require.True(t, upd2.IsSent())
+		msgs := reg.Send(context.Background(), false, testSequencingEventID)
+		require.Len(t, msgs, 1)
+		require.True(t, upd1.IsSent())
+		require.True(t, upd2.IsSent())
 
-	for _, msg := range msgs {
-		require.Equal(t, wftStartedEventID-1, msg.GetEventId())
-	}
+		// no more to send as update #1 and #2 are already sent
+		msgs = reg.Send(context.Background(), false, testSequencingEventID)
+		require.Empty(t, msgs)
+		require.True(t, upd1.IsSent())
+		require.True(t, upd2.IsSent())
+
+		// including already sent updates returns update #1 and #2 message again
+		msgs = reg.Send(context.Background(), true, testSequencingEventID)
+		require.Len(t, msgs, 2)
+		require.True(t, upd1.IsSent())
+		require.True(t, upd2.IsSent())
+		require.Equal(t, tv.UpdateID("1"), msgs[0].ProtocolInstanceId)
+		require.Equal(t, tv.UpdateID("2"), msgs[1].ProtocolInstanceId)
+	})
 }
 
 func TestRejectUnprocessed(t *testing.T) {
