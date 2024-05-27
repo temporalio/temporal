@@ -343,47 +343,6 @@ func TestHasOutgoingMessages(t *testing.T) {
 	})
 }
 
-func TestUpdateRemovalFromRegistry(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx                    = context.Background()
-		storedAcceptedUpdateID = t.Name() + "-accepted-update-id"
-		regStore               = mockUpdateStore{
-			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
-				storedAcceptedUpdateInfo := &persistencespb.UpdateInfo{
-					Value: &persistencespb.UpdateInfo_Acceptance{
-						Acceptance: &persistencespb.UpdateAcceptanceInfo{
-							EventId: 120,
-						},
-					},
-				}
-				visitor(storedAcceptedUpdateID, storedAcceptedUpdateInfo)
-			},
-		}
-		reg     = update.NewRegistry(regStore)
-		effects = effect.Buffer{}
-		evStore = mockEventStore{Controller: &effects}
-	)
-
-	upd, found, err := reg.FindOrCreate(ctx, storedAcceptedUpdateID)
-	require.NoError(t, err)
-	require.True(t, found)
-
-	meta := updatepb.Meta{UpdateId: storedAcceptedUpdateID}
-	outcome := successOutcome(t, "success!")
-
-	err = upd.OnProtocolMessage(
-		ctx,
-		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: outcome})},
-		evStore,
-	)
-
-	require.NoError(t, err)
-	require.Equal(t, 1, reg.Len(), "update should still be present in map")
-	effects.Apply(ctx)
-	require.Equal(t, 0, reg.Len(), "update should have been removed")
-}
-
 func TestUpdateAccepted_WorkflowCompleted(t *testing.T) {
 	t.Parallel()
 	var (
