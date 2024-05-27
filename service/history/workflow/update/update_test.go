@@ -1155,3 +1155,5 @@ func TestCompletedWorkflow(t *testing.T) {
 		require.Nil(t, status)
 	})
 }
+
+// TODO: test aborting an Update in various states

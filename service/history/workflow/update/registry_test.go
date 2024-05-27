@@ -26,6 +26,7 @@ package update_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -680,89 +681,43 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 }
 
+// NOTE: tests for various Update states can be found in update tests
 func TestAbort(t *testing.T) {
-	var (
-		ctx          = context.Background()
-		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
-		reg          = update.NewRegistry(emptyUpdateStore)
-		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
-	)
-	updateID1, updateID2, updateID3, updateID4, updateID5 := t.Name()+"-update-id-1", t.Name()+"-update-id-2", t.Name()+"-update-id-3", t.Name()+"-update-id-4", t.Name()+"-update-id-5"
-	updCreated, _, _ := reg.FindOrCreate(ctx, updateID1)
+	t.Parallel()
+	tv := testvars.New(t.Name())
 
-	updAdmitted, _, _ := reg.FindOrCreate(ctx, updateID2)
-	_ = updAdmitted.Admit(ctx, &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID2},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
-
-	updSent, _, _ := reg.FindOrCreate(ctx, updateID3)
-	_ = updSent.Admit(ctx, &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID3},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
-	updSent.Send(ctx, false, sequencingID)
-
-	msgRequest4 := &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID4},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}
-	updAccepted, _, _ := reg.FindOrCreate(ctx, updateID4)
-	_ = updAccepted.Admit(ctx, msgRequest4, evStore)
-	updAccepted.Send(ctx, false, sequencingID)
-	_ = updAccepted.OnProtocolMessage(ctx, &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
-		AcceptedRequestMessageId:         "random",
-		AcceptedRequestSequencingEventId: testSequencingEventID,
-		AcceptedRequest:                  msgRequest4,
-	})}, evStore)
-
-	msgRequest5 := &updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID5},
-		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}
-	updCompleted, _, _ := reg.FindOrCreate(ctx, updateID5)
-	_ = updCompleted.Admit(ctx, msgRequest5, evStore)
-	updCompleted.Send(ctx, false, sequencingID)
-	_ = updCompleted.OnProtocolMessage(ctx, &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
-		AcceptedRequestMessageId:         "random",
-		AcceptedRequestSequencingEventId: testSequencingEventID,
-		AcceptedRequest:                  msgRequest4,
-	})}, evStore)
-	_ = updCompleted.OnProtocolMessage(
-		ctx,
-		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID5}, Outcome: successOutcome(t, "update completed")})},
-		evStore)
-
+	reg := update.NewRegistry(&mockUpdateStore{
+		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+			visitor(
+				tv.UpdateID("1"),
+				&persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Admission{
+						Admission: &persistencespb.UpdateAdmissionInfo{},
+					},
+				})
+			visitor(
+				tv.UpdateID("2"),
+				&persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Admission{
+						Admission: &persistencespb.UpdateAdmissionInfo{},
+					},
+				})
+		},
+	})
 	reg.Abort(update.AbortReasonWorkflowCompleted)
 
-	status, err := updCreated.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.Error(t, err)
-	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
-	require.Nil(t, status)
-
-	status, err = updAdmitted.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.Error(t, err)
-	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
-	require.Nil(t, status)
-
-	status, err = updSent.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.Error(t, err)
-	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
-	require.Nil(t, status)
-
-	status, err = updAccepted.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.Error(t, err)
-	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
-	require.Nil(t, status)
-
-	status, err = updCompleted.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.NoError(t, err)
-	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
-	require.Nil(t, status.Outcome.GetFailure())
-	require.NotNil(t, status.Outcome.GetSuccess())
+	// both updates are aborted now
+	for i := 1; i <= 2; i++ {
+		upd := reg.Find(context.Background(), tv.UpdateID(fmt.Sprintf("%d", i)))
+		require.NotNil(t, upd)
+		_, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
+		require.Equal(t, err, consts.ErrWorkflowCompleted)
+	}
 }
 
 func TestFailoverVersion(t *testing.T) {
+	t.Parallel()
+
 	t.Run("return version obtained from store", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
 			GetCurrentVersionFunc: func() int64 { return 42 },
