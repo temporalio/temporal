@@ -40,3 +40,5 @@ func ObserveCompletion(b *bool) updateOpt {
 func (u *Update) NeedToSend(includeAlreadySent bool) bool { return u.needToSend(includeAlreadySent) }
 
 func (u *Update) IsSent() bool { return u.isSent() }
+
+func CompletedCount(r Registry) int { return r.(*registry).completedCount }

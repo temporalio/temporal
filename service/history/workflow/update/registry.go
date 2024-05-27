@@ -46,6 +46,8 @@ import (
 	"go.temporal.io/server/internal/effect"
 )
 
+var _ Registry = (*registry)(nil)
+
 type (
 	// Registry maintains a set of updates that have been admitted to run
 	// against a workflow execution.
@@ -152,8 +154,6 @@ func WithTracerProvider(t trace.TracerProvider) Option {
 		r.instrumentation.tracer = t.Tracer(libraryName)
 	}
 }
-
-var _ Registry = (*registry)(nil)
 
 func NewRegistry(
 	store Store,

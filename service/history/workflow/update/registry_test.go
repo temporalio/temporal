@@ -45,6 +45,107 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
+func TestNewRegistry(t *testing.T) {
+	t.Parallel()
+	tv := testvars.New(t.Name())
+
+	t.Run("registry created from empty store has no updates", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+
+		require.Empty(t, reg.Len())
+		require.False(t, reg.Contains(tv.UpdateID()))
+	})
+
+	t.Run("registry created from store with update in stateAdmitted contains admitted update", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				visitor(
+					tv.UpdateID(),
+					&persistencespb.UpdateInfo{
+						Value: &persistencespb.UpdateInfo_Admission{
+							Admission: &persistencespb.UpdateAdmissionInfo{},
+						},
+					})
+			},
+		})
+
+		require.Equal(t, 1, reg.Len())
+		require.True(t, reg.Contains(tv.UpdateID()))
+
+		upd := reg.Find(context.Background(), tv.UpdateID())
+		require.NotNil(t, upd)
+
+		s, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
+	})
+
+	t.Run("registry created from store with update in stateAccepted contains accepted update", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				visitor(
+					tv.UpdateID(),
+					&persistencespb.UpdateInfo{
+						Value: &persistencespb.UpdateInfo_Acceptance{
+							Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+						},
+					})
+			},
+		})
+
+		require.Equal(t, 1, reg.Len())
+		require.True(t, reg.Contains(tv.UpdateID()))
+
+		upd := reg.Find(context.Background(), tv.UpdateID())
+		require.NotNil(t, upd)
+
+		s, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, s.Stage)
+	})
+
+	t.Run("registry created from store with update in stateAccepted but non-running workflow contains aborted update", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				visitor(
+					tv.UpdateID(),
+					&persistencespb.UpdateInfo{
+						Value: &persistencespb.UpdateInfo_Acceptance{
+							Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+						},
+					})
+			},
+			IsWorkflowExecutionRunningFunc: func() bool { return false },
+		})
+
+		require.Equal(t, 1, reg.Len())
+		require.True(t, reg.Contains(tv.UpdateID()))
+
+		upd := reg.Find(context.Background(), tv.UpdateID())
+		require.NotNil(t, upd)
+
+		_, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
+		require.Equal(t, err, consts.ErrWorkflowCompleted)
+	})
+
+	t.Run("registry created from store with update in stateCompleted has no updates but increased completed count", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				visitor(
+					tv.UpdateID(),
+					&persistencespb.UpdateInfo{
+						Value: &persistencespb.UpdateInfo_Completion{
+							Completion: &persistencespb.UpdateCompletionInfo{},
+						},
+					})
+			},
+		})
+
+		require.Equal(t, 0, reg.Len())
+		require.Equal(t, 1, update.CompletedCount(reg))
+	})
+}
+
 func TestFind(t *testing.T) {
 	t.Parallel()
 	tv := testvars.New(t.Name())

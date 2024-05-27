@@ -45,6 +45,10 @@ import (
 	"go.temporal.io/server/internal/effect"
 )
 
+var (
+	WorkflowUpdateAbortedErr = serviceerror.NewUnavailable("Workflow Update was aborted.")
+)
+
 type (
 	// EventStore is the interface that an Update needs to read and write events
 	// and to be notified when buffered writes have been flushed. It is the
@@ -263,7 +267,7 @@ func (u *Update) WaitLifecycleStage(
 			if !errors.Is(err, registryClearedErr) {
 				return nil, err
 			}
-			return nil, serviceerror.NewUnavailable("Workflow Update was aborted.")
+			return nil, WorkflowUpdateAbortedErr
 		}
 
 		if ctx.Err() != nil {
