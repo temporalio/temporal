@@ -34,6 +34,13 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
+var emptyUpdateStore = mockUpdateStore{
+	VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {},
+	GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+		return nil, serviceerror.NewNotFound("not found")
+	},
+}
+
 type mockUpdateStore struct {
 	update.Store
 	VisitUpdatesFunc               func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
@@ -69,12 +76,4 @@ func (m mockUpdateStore) IsWorkflowExecutionRunning() bool {
 		return true
 	}
 	return m.IsWorkflowExecutionRunningFunc()
-}
-
-var emptyUpdateStore = mockUpdateStore{
-	VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
-	},
-	GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
-		return nil, serviceerror.NewNotFound("not found")
-	},
 }

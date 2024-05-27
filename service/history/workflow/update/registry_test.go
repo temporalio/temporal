@@ -78,11 +78,7 @@ func TestFind(t *testing.T) {
 	})
 
 	t.Run("return nil when not found", func(t *testing.T) {
-		reg := update.NewRegistry(&mockUpdateStore{
-			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
-				return nil, serviceerror.NewNotFound("not found")
-			},
-		})
+		reg := update.NewRegistry(emptyUpdateStore)
 		upd := reg.Find(context.Background(), tv.UpdateID())
 		require.Nil(t, upd)
 	})
@@ -106,46 +102,59 @@ func TestFind(t *testing.T) {
 
 func TestHasOutgoingMessages(t *testing.T) {
 	t.Parallel()
+
 	var (
-		ctx      = context.Background()
-		updateID = t.Name() + "-update-id"
-		store    = mockUpdateStore{
-			VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
-			},
-			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
-				return nil, serviceerror.NewNotFound("not found")
-			},
+		tv      = testvars.New(t.Name())
+		upd     *update.Update
+		reg     = update.NewRegistry(emptyUpdateStore)
+		evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
+		updReq  = updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input: &updatepb.Input{Name: "not_empty"},
 		}
-		reg     = update.NewRegistry(store)
-		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
 	)
 
-	upd, _, err := reg.FindOrCreate(ctx, updateID)
-	require.NoError(t, err)
-	require.False(t, reg.HasOutgoingMessages(false))
+	t.Run("empty registry", func(t *testing.T) {
+		require.False(t, reg.HasOutgoingMessages(false))
+	})
 
-	req := updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: updateID},
-		Input: &updatepb.Input{Name: "not_empty"},
-	}
-	require.NoError(t, upd.Admit(ctx, &req, evStore))
-	require.True(t, reg.HasOutgoingMessages(false))
+	t.Run("registry with created update", func(t *testing.T) {
+		var err error
+		upd, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID())
+		require.NoError(t, err)
 
-	msg := reg.Send(ctx, false, testSequencingEventID)
-	require.Len(t, msg, 1)
-	require.False(t, reg.HasOutgoingMessages(false))
-	require.True(t, reg.HasOutgoingMessages(true))
+		require.False(t, reg.HasOutgoingMessages(false))
+	})
 
-	acptReq := protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
-		AcceptedRequestMessageId:         "random",
-		AcceptedRequestSequencingEventId: testSequencingEventID,
-		AcceptedRequest:                  &req,
-	})}
+	t.Run("registy with admitted update", func(t *testing.T) {
+		err := upd.Admit(context.Background(), &updReq, evStore)
+		require.NoError(t, err)
 
-	err = upd.OnProtocolMessage(ctx, &acptReq, evStore)
-	require.NoError(t, err)
-	require.False(t, reg.HasOutgoingMessages(false))
-	require.False(t, reg.HasOutgoingMessages(true))
+		require.True(t, reg.HasOutgoingMessages(false))
+		require.True(t, reg.HasOutgoingMessages(true))
+	})
+
+	t.Run("registry with sent update", func(t *testing.T) {
+		msg := reg.Send(context.Background(), false, testSequencingEventID)
+		require.Len(t, msg, 1)
+
+		require.False(t, reg.HasOutgoingMessages(false))
+		require.True(t, reg.HasOutgoingMessages(true))
+	})
+
+	t.Run("registry with accepted update", func(t *testing.T) {
+		err := upd.OnProtocolMessage(
+			context.Background(),
+			&protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+				AcceptedRequestMessageId:         tv.MessageID(),
+				AcceptedRequestSequencingEventId: testSequencingEventID,
+			})},
+			evStore)
+		require.NoError(t, err)
+
+		require.False(t, reg.HasOutgoingMessages(false))
+		require.False(t, reg.HasOutgoingMessages(true))
+	})
 }
 
 func TestFindOrCreate(t *testing.T) {
