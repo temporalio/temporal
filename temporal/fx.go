@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/pborman/uuid"
@@ -139,6 +140,7 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsConfig              *esclient.Config
 		EsClient              esclient.Client
+		EsHttpClient          *http.Client
 		MetricsHandler        metrics.Handler
 	}
 )
@@ -245,6 +247,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// EsConfig / EsClient
 	var esConfig *esclient.Config
 	var esClient esclient.Client
+	var esHttpClient *http.Client
 
 	if persistenceConfig.VisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
@@ -257,19 +260,13 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	if esConfig != nil {
-		esHttpClient := so.elasticsearchHttpClient
+		esHttpClient = so.elasticsearchHttpClient
 		if esHttpClient == nil {
 			var err error
 			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
 			if err != nil {
 				return serverOptionsProvider{}, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 			}
-		}
-
-		esClient, err = esclient.NewClient(esConfig, esHttpClient, logger)
-		if err != nil {
-			return serverOptionsProvider{}, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
-				esConfig.URL.Redacted(), esConfig.Username, err)
 		}
 	}
 
@@ -312,6 +309,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsConfig:              esConfig,
 		EsClient:              esClient,
+		EsHttpClient:          esHttpClient,
 		MetricsHandler:        metricHandler,
 	}, nil
 }
@@ -360,6 +358,7 @@ type (
 		MetricsHandler             metrics.Handler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
+		EsHttpClient               *http.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
 		PersistenceConfig          config.Persistence
 		ClusterMetadata            *cluster.Config
@@ -397,6 +396,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		fx.Supply(
 			serviceName,
 			params.EsConfig,
+			params.EsHttpClient,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,

@@ -26,6 +26,7 @@ package worker
 
 import (
 	"context"
+	"net/http"
 
 	"go.uber.org/fx"
 
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -155,7 +155,7 @@ func VisibilityManagerProvider(
 	persistenceConfig *config.Persistence,
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	serviceConfig *Config,
-	esClient esclient.Client,
+	esHttpClient *http.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -164,7 +164,7 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esClient,
+		esHttpClient,
 		nil, // worker visibility never write
 		saProvider,
 		searchAttributesMapperProvider,

@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -132,8 +134,8 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	esClient client.Client,
-	index string,
+	esHttpClient *http.Client,
+	cfg *client.Config,
 	processorConfig *ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -142,7 +144,8 @@ func NewVisibilityStore(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *visibilityStore {
-	if esClient == nil {
+	esClient, err := esclient.NewClient(cfg, esHttpClient, logger)
+	if esClient == nil || err != nil {
 		return nil
 	}
 	var (
@@ -156,7 +159,7 @@ func NewVisibilityStore(
 	}
 	return &visibilityStore{
 		esClient:                       esClient,
-		index:                          index,
+		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		processor:                      processor,

@@ -27,6 +27,7 @@ package frontend
 import (
 	"fmt"
 	"net"
+	"net/http"
 
 	"github.com/gorilla/mux"
 	"go.uber.org/fx"
@@ -530,7 +531,7 @@ func VisibilityManagerProvider(
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	esClient esclient.Client,
+	esHttpClient *http.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -539,7 +540,7 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esClient,
+		esHttpClient,
 		nil, // frontend visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
