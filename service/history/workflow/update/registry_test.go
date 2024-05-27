@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	. "go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/workflow/update"
 )
@@ -101,7 +102,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 	require.False(t, reg.HasOutgoingMessages(false))
 	require.True(t, reg.HasOutgoingMessages(true))
 
-	acptReq := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+	acptReq := protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
 		AcceptedRequestMessageId:         "random",
 		AcceptedRequestSequencingEventId: testSequencingEventID,
 		AcceptedRequest:                  &req,
@@ -115,6 +116,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 
 func TestFindOrCreate(t *testing.T) {
 	t.Parallel()
+
 	var (
 		ctx               = context.Background()
 		acceptedUpdateID  = t.Name() + "-accepted-update-id"
@@ -137,6 +139,7 @@ func TestFindOrCreate(t *testing.T) {
 				},
 			},
 		}
+
 		// make a store with 1 accepted and 1 completed update
 		store = mockUpdateStore{
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
@@ -167,6 +170,7 @@ func TestFindOrCreate(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found, "second lookup for same updateID should find previous")
 	})
+
 	t.Run("find stored completed", func(t *testing.T) {
 		upd, found, err := reg.FindOrCreate(ctx, completedUpdateID)
 		require.NoError(t, err)
@@ -182,6 +186,7 @@ func TestFindOrCreate(t *testing.T) {
 		require.Equal(t, completedOutcome, status.Outcome,
 			"completed update should have an outcome")
 	})
+
 	t.Run("find stored accepted", func(t *testing.T) {
 		upd, found, err := reg.FindOrCreate(ctx, acceptedUpdateID)
 		require.NoError(t, err)
@@ -224,7 +229,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 
 	err = upd.OnProtocolMessage(
 		ctx,
-		&protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: outcome})},
+		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: outcome})},
 		evStore,
 	)
 
@@ -275,7 +280,7 @@ func TestUpdateAccepted_WorkflowCompleted(t *testing.T) {
 	outcome := successOutcome(t, "success!")
 	err = upd.OnProtocolMessage(
 		ctx,
-		&protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: outcome})},
+		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: outcome})},
 		evStore,
 	)
 	require.Error(t, err, "should not be able to completed update for completed workflow")
@@ -390,7 +395,7 @@ func TestInFlightLimit(t *testing.T) {
 		require.Equal(t, 1, reg.Len())
 	})
 
-	rej := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
+	rej := protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
 		RejectedRequestMessageId: "update1/request",
 		RejectedRequest:          &req,
 		Failure: &failurepb.Failure{
@@ -470,7 +475,7 @@ func TestTotalLimit(t *testing.T) {
 		require.Equal(t, 1, reg.Len())
 	})
 
-	rej := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
+	rej := protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
 		RejectedRequestMessageId: "update1/request",
 		RejectedRequest:          &req,
 		Failure: &failurepb.Failure{
@@ -625,7 +630,7 @@ func TestAbort(t *testing.T) {
 	updAccepted, _, _ := reg.FindOrCreate(ctx, updateID4)
 	_ = updAccepted.Admit(ctx, msgRequest4, evStore)
 	updAccepted.Send(ctx, false, sequencingID)
-	_ = updAccepted.OnProtocolMessage(ctx, &protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+	_ = updAccepted.OnProtocolMessage(ctx, &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
 		AcceptedRequestMessageId:         "random",
 		AcceptedRequestSequencingEventId: testSequencingEventID,
 		AcceptedRequest:                  msgRequest4,
@@ -638,14 +643,14 @@ func TestAbort(t *testing.T) {
 	updCompleted, _, _ := reg.FindOrCreate(ctx, updateID5)
 	_ = updCompleted.Admit(ctx, msgRequest5, evStore)
 	updCompleted.Send(ctx, false, sequencingID)
-	_ = updCompleted.OnProtocolMessage(ctx, &protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+	_ = updCompleted.OnProtocolMessage(ctx, &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
 		AcceptedRequestMessageId:         "random",
 		AcceptedRequestSequencingEventId: testSequencingEventID,
 		AcceptedRequest:                  msgRequest4,
 	})}, evStore)
 	_ = updCompleted.OnProtocolMessage(
 		ctx,
-		&protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID5}, Outcome: successOutcome(t, "update completed")})},
+		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID5}, Outcome: successOutcome(t, "update completed")})},
 		evStore)
 
 	reg.Abort(update.AbortReasonWorkflowCompleted)
