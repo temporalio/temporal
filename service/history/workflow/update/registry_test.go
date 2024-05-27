@@ -409,7 +409,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 		require.False(t, reg.HasOutgoingMessages(false))
 	})
 
-	t.Run("registy with admitted update", func(t *testing.T) {
+	t.Run("registry with admitted update", func(t *testing.T) {
 		err := upd.Admit(
 			context.Background(),
 			&updatepb.Request{
@@ -522,7 +522,7 @@ func TestSendMessages(t *testing.T) {
 		require.False(t, upd2.IsSent())
 	})
 
-	t.Run("registy with 1 admitted update has 1 message to send", func(t *testing.T) {
+	t.Run("registry with 1 admitted update has 1 message to send", func(t *testing.T) {
 		err := upd1.Admit(
 			context.Background(),
 			&updatepb.Request{
@@ -552,7 +552,7 @@ func TestSendMessages(t *testing.T) {
 		require.False(t, upd2.IsSent())
 	})
 
-	t.Run("registy with 2 admitted updates returns messages sorted by admission time", func(t *testing.T) {
+	t.Run("registry with 2 admitted updates returns messages sorted by admission time", func(t *testing.T) {
 		err := upd2.Admit(
 			context.Background(),
 			&updatepb.Request{
