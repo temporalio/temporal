@@ -50,7 +50,7 @@ import (
 
 func TestNewRegistry(t *testing.T) {
 	t.Parallel()
-	tv := testvars.New(t.Name())
+	tv := testvars.New(t)
 
 	t.Run("registry created from empty store has no updates", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
@@ -160,7 +160,7 @@ func TestNewRegistry(t *testing.T) {
 
 func TestFind(t *testing.T) {
 	t.Parallel()
-	tv := testvars.New(t.Name())
+	tv := testvars.New(t)
 
 	t.Run("return update when found in registry", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
@@ -214,7 +214,7 @@ func TestFind(t *testing.T) {
 
 func TestFindOrCreate(t *testing.T) {
 	t.Parallel()
-	tv := testvars.New(t.Name())
+	tv := testvars.New(t)
 
 	t.Run("find stored update", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
@@ -379,7 +379,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 	t.Parallel()
 
 	var (
-		tv      = testvars.New(t.Name())
+		tv      = testvars.New(t)
 		upd     *update.Update
 		reg     = update.NewRegistry(emptyUpdateStore)
 		evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
@@ -424,7 +424,7 @@ func TestSendMessages(t *testing.T) {
 	t.Parallel()
 
 	var (
-		tv         = testvars.New(t.Name())
+		tv         = testvars.New(t)
 		upd1, upd2 *update.Update
 		reg        = update.NewRegistry(emptyUpdateStore)
 		evStore    = mockEventStore{Controller: effect.Immediate(context.Background())}
@@ -499,7 +499,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		tv           = testvars.New(t.Name())
+		tv           = testvars.New(t)
 		upd1, upd2   *update.Update
 		reg          = update.NewRegistry(emptyUpdateStore)
 		evStore      = mockEventStore{Controller: effect.Immediate(context.Background())}
@@ -574,7 +574,7 @@ func TestRejectUnprocessed(t *testing.T) {
 // NOTE: tests for various update states can be found in the update tests
 func TestAbort(t *testing.T) {
 	t.Parallel()
-	tv := testvars.New(t.Name())
+	tv := testvars.New(t)
 
 	reg := update.NewRegistry(&mockUpdateStore{
 		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
@@ -618,7 +618,7 @@ func TestAbort(t *testing.T) {
 
 func TestClear(t *testing.T) {
 	t.Parallel()
-	tv := testvars.New(t.Name())
+	tv := testvars.New(t)
 
 	reg := update.NewRegistry(&mockUpdateStore{
 		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
@@ -673,7 +673,7 @@ func TestFailoverVersion(t *testing.T) {
 
 func TestTryResurrect(t *testing.T) {
 	t.Parallel()
-	tv := testvars.New(t.Name())
+	tv := testvars.New(t)
 
 	t.Run("add acceptance message as new update with stateAdmitted", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
@@ -835,7 +835,7 @@ func testAcceptUpdate(
 	upd *update.Update,
 ) {
 	t.Helper()
-	tv := testvars.New(t.Name())
+	tv := testvars.New(t)
 
 	err := upd.OnProtocolMessage(
 		context.Background(),
