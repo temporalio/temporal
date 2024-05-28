@@ -103,7 +103,7 @@ type clientProviderCacheKey struct {
 
 func ClientProviderFactory(
 	namespaceRegistry namespace.Registry,
-	endpointRegistry *commonnexus.EndpointRegistryImpl,
+	endpointRegistry commonnexus.EndpointRegistry,
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
 	httpClientCache *cluster.FrontendHTTPClientCache,
