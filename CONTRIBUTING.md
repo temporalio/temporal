@@ -125,6 +125,8 @@ When you are done, press `Ctrl+C` to stop the server. Don't forget to stop depen
 make stop-dependencies
 ```
 
+See the [developer documentation on testing](./docs/development/testing.md) to learn more about writing tests.
+
 ## Working with merged API changes
 gRPC / protobuf changes merged to the [api](https://github.com/temporalio/api) repo automatically trigger a commit in [api-go](https://github.com/temporalio/api-go). To bring such changes into your feature branch, use `make update-go-api update-proto`.
 
