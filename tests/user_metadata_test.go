@@ -30,6 +30,7 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/testing/testvars"
 )
 
@@ -57,7 +58,7 @@ func (s *FunctionalSuite) TestUserMetadata() {
 	}
 
 	s.Run("StartWorkflowExecution records UserMetadata", func() {
-		tv := testvars.New(s.T().Name())
+		tv := testvars.New(s.T())
 		id := tv.WorkflowID("functional-user-metadata-StartWorkflowExecution")
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.StartWorkflowExecutionRequest{
@@ -79,7 +80,7 @@ func (s *FunctionalSuite) TestUserMetadata() {
 	})
 
 	s.Run("SignalWithStartWorkflowExecution records UserMetadata", func() {
-		tv := testvars.New(s.T().Name())
+		tv := testvars.New(s.T())
 		id := tv.WorkflowID("functional-user-metadata-SignalWithStartWorkflowExecution")
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -102,7 +103,7 @@ func (s *FunctionalSuite) TestUserMetadata() {
 	})
 
 	s.Run("ExecuteMultiOperation records UserMetadata", func() {
-		tv := testvars.New(s.T().Name())
+		tv := testvars.New(s.T())
 		id := tv.WorkflowID("functional-user-metadata-ExecuteMultiOperation")
 		metadata := prepareTestUserMetadata()
 		startWorkflowRequest := &workflowservice.StartWorkflowExecutionRequest{
