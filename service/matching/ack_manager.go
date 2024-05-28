@@ -27,6 +27,8 @@ package matching
 import (
 	"sync"
 
+	"go.uber.org/atomic"
+
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
 	"go.temporal.io/server/common/log"
@@ -40,6 +42,7 @@ type ackManager struct {
 	outstandingTasks *treemap.Map        // TaskID->acked
 	readLevel        int64               // Maximum TaskID inserted into outstandingTasks
 	ackLevel         int64               // Maximum TaskID below which all tasks are acked
+	backlogCountHint atomic.Int64
 	logger           log.Logger
 }
 
@@ -66,6 +69,7 @@ func (m *ackManager) addTask(taskID int64) {
 		m.logger.Fatal("Already present in outstanding tasks", tag.TaskID(taskID))
 	}
 	m.outstandingTasks.Put(taskID, false)
+	m.backlogCountHint.Inc()
 }
 
 func (m *ackManager) getReadLevel() int64 {
@@ -132,6 +136,7 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 	// TODO the ack level management should be done by a dedicated coroutine
 	//  this is only a temporarily solution
 	m.outstandingTasks.Put(taskID, true)
+	m.backlogCountHint.Dec()
 
 	// Adjust the ack level as far as we can
 	for {
@@ -145,4 +150,8 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 		m.backlogMgr.db.updateApproximateBacklogCount(-1)
 	}
 
+}
+
+func (m *ackManager) getBacklogCountHint() int64 {
+	return m.backlogCountHint.Load()
 }
