@@ -37,6 +37,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
@@ -731,5 +732,111 @@ func TestFailoverVersion(t *testing.T) {
 
 		require.Equal(t, int64(42), reg.FailoverVersion(),
 			"should still be original failover version")
+	})
+}
+
+func TestTryResurrect(t *testing.T) {
+	t.Parallel()
+	tv := testvars.New(t.Name())
+
+	t.Run("add acceptance message as new update with stateAdmitted", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         tv.MessageID(),
+			AcceptedRequestSequencingEventId: testSequencingEventID,
+			AcceptedRequest:                  &updatepb.Request{},
+		})}
+
+		upd, err := reg.TryResurrect(context.Background(), msg)
+		require.NoError(t, err)
+		require.NotNil(t, upd)
+
+		s, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
+	})
+
+	t.Run("add rejection message as new update with stateAdmitted", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
+			RejectedRequestMessageId:         tv.MessageID(),
+			RejectedRequestSequencingEventId: testSequencingEventID,
+			RejectedRequest:                  &updatepb.Request{},
+		})}
+
+		upd, err := reg.TryResurrect(context.Background(), msg)
+		require.NoError(t, err)
+		require.NotNil(t, upd)
+
+		s, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
+	})
+
+	t.Run("ignore nil messages", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+
+		upd, err := reg.TryResurrect(context.Background(), nil)
+		require.Nil(t, err)
+		require.Nil(t, upd)
+
+		upd, err = reg.TryResurrect(context.Background(), &protocolpb.Message{Body: nil})
+		require.Nil(t, err)
+		require.Nil(t, upd)
+	})
+
+	t.Run("ignore completed protocol message", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+		completedMsg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Outcome{
+			Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()},
+		})}
+
+		upd, err := reg.TryResurrect(context.Background(), completedMsg)
+		require.Nil(t, err)
+		require.Nil(t, upd)
+	})
+
+	t.Run("ignore invalid message body", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+		invalidMsg := &protocolpb.Message{Body: &anypb.Any{TypeUrl: "invalid"}}
+
+		_, err := reg.TryResurrect(context.Background(), invalidMsg)
+		var invalidArg *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArg)
+		require.Equal(t, 0, reg.Len())
+	})
+
+	t.Run("do not enforce in-flight update limit", func(t *testing.T) {
+		reg := update.NewRegistry(
+			emptyUpdateStore,
+			update.WithInFlightLimit(
+				func() int { return 0 },
+			),
+		)
+		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         tv.MessageID(),
+			AcceptedRequestSequencingEventId: testSequencingEventID,
+		})}
+
+		_, err := reg.TryResurrect(context.Background(), msg)
+		require.NoError(t, err)
+	})
+
+	t.Run("enforce total update limit", func(t *testing.T) {
+		reg := update.NewRegistry(
+			emptyUpdateStore,
+			update.WithTotalLimit(
+				func() int { return 0 },
+			),
+		)
+		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         tv.MessageID(),
+			AcceptedRequestSequencingEventId: testSequencingEventID,
+		})}
+
+		_, err := reg.TryResurrect(context.Background(), msg)
+		var failedPrecon *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecon)
+		require.Equal(t, 0, reg.Len())
 	})
 }

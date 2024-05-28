@@ -234,16 +234,19 @@ func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Me
 	if err != nil {
 		return nil, invalidArgf("unable to unmarshal request: %v", err)
 	}
+
 	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
 	if err != nil {
 		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
 	}
+
 	var reqMsg *updatepb.Request
 	switch updMsg := body.(type) {
 	case *updatepb.Acceptance:
 		reqMsg = updMsg.GetAcceptedRequest()
 	case *updatepb.Rejection:
 		reqMsg = updMsg.GetRejectedRequest()
+	default:
 		// Ignore all other message types.
 	}
 	if reqMsg == nil {
@@ -251,7 +254,7 @@ func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Me
 	}
 	reqAny, err := anypb.New(reqMsg)
 	if err != nil {
-		return nil, invalidArgf("unable to unmarshal request body: %v", err)
+		return nil, invalidArgf("unable to marshal request: %v", err)
 	}
 
 	updateID := acptOrRejMsg.ProtocolInstanceId
@@ -262,6 +265,7 @@ func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Me
 		withInstrumentation(&r.instrumentation),
 	)
 	r.updates[updateID] = upd
+
 	return upd, nil
 }
 
