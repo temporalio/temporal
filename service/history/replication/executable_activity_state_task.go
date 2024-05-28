@@ -51,8 +51,9 @@ type (
 		req *historyservice.SyncActivityRequest
 
 		// following fields are used only for batching functionality
-		batchable     bool
-		activityInfos []*historyservice.ActivitySyncInfo
+		batchable              bool
+		activityInfos          []*historyservice.ActivitySyncInfo
+		markPoisonPillAttempts int
 	}
 )
 
@@ -80,41 +81,42 @@ func NewExecutableActivityStateTask(
 			sourceClusterName,
 		),
 		req: &historyservice.SyncActivityRequest{
-			NamespaceId:        task.NamespaceId,
-			WorkflowId:         task.WorkflowId,
-			RunId:              task.RunId,
-			Version:            task.Version,
-			ScheduledEventId:   task.ScheduledEventId,
-			ScheduledTime:      task.ScheduledTime,
-			StartedEventId:     task.StartedEventId,
-			StartedTime:        task.StartedTime,
-			LastHeartbeatTime:  task.LastHeartbeatTime,
-			Details:            task.Details,
-			Attempt:            task.Attempt,
-			LastFailure:        task.LastFailure,
-			LastWorkerIdentity: task.LastWorkerIdentity,
-			LastStartedBuildId: task.LastStartedBuildId,
+			NamespaceId:                task.NamespaceId,
+			WorkflowId:                 task.WorkflowId,
+			RunId:                      task.RunId,
+			Version:                    task.Version,
+			ScheduledEventId:           task.ScheduledEventId,
+			ScheduledTime:              task.ScheduledTime,
+			StartedEventId:             task.StartedEventId,
+			StartedTime:                task.StartedTime,
+			LastHeartbeatTime:          task.LastHeartbeatTime,
+			Details:                    task.Details,
+			Attempt:                    task.Attempt,
+			LastFailure:                task.LastFailure,
+			LastWorkerIdentity:         task.LastWorkerIdentity,
+			LastStartedBuildId:         task.LastStartedBuildId,
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
-			BaseExecutionInfo:  task.BaseExecutionInfo,
-			VersionHistory:     task.VersionHistory,
+			BaseExecutionInfo:          task.BaseExecutionInfo,
+			VersionHistory:             task.VersionHistory,
 		},
 
 		batchable: true,
 		activityInfos: append(make([]*historyservice.ActivitySyncInfo, 0, 1), &historyservice.ActivitySyncInfo{
-			Version:            task.Version,
-			ScheduledEventId:   task.ScheduledEventId,
-			ScheduledTime:      task.ScheduledTime,
-			StartedEventId:     task.StartedEventId,
-			StartedTime:        task.StartedTime,
-			LastHeartbeatTime:  task.LastHeartbeatTime,
-			Details:            task.Details,
-			Attempt:            task.Attempt,
-			LastFailure:        task.LastFailure,
-			LastWorkerIdentity: task.LastWorkerIdentity,
-			VersionHistory:     task.VersionHistory,
-			LastStartedBuildId: task.LastStartedBuildId,
+			Version:                    task.Version,
+			ScheduledEventId:           task.ScheduledEventId,
+			ScheduledTime:              task.ScheduledTime,
+			StartedEventId:             task.StartedEventId,
+			StartedTime:                task.StartedTime,
+			LastHeartbeatTime:          task.LastHeartbeatTime,
+			Details:                    task.Details,
+			Attempt:                    task.Attempt,
+			LastFailure:                task.LastFailure,
+			LastWorkerIdentity:         task.LastWorkerIdentity,
+			VersionHistory:             task.VersionHistory,
+			LastStartedBuildId:         task.LastStartedBuildId,
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
 		}),
+		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -210,6 +212,25 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
+	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
+		replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
+			NamespaceId:      e.NamespaceID,
+			WorkflowId:       e.WorkflowID,
+			RunId:            e.RunID,
+			TaskId:           e.ExecutableTask.TaskID(),
+			TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+			ScheduledEventId: e.req.ScheduledEventId,
+			Version:          e.req.Version,
+		}
+		e.Logger.Error("MarkPoisonPill reached max attempts",
+			tag.SourceCluster(e.SourceClusterName()),
+			tag.ReplicationTask(replicationTaskInfo),
+			tag.ActivityInfo(e.req),
+		)
+		return nil
+	}
+	e.markPoisonPillAttempts++
+
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
