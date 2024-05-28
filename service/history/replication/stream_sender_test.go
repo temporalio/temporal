@@ -846,6 +846,7 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 }
 
 func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
+	s.streamSender.isTieredStackEnabled = true
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 100
 	item0 := &tasks.SyncWorkflowStateTask{
@@ -923,6 +924,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 }
 
 func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
+	s.streamSender.isTieredStackEnabled = true
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 100
 	item0 := &tasks.SyncWorkflowStateTask{
