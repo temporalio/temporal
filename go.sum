@@ -286,6 +286,8 @@ github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb/go.mod h1:143
 github.com/temporalio/tchannel-go v1.22.1-0.20220818200552-1be8d8cffa5b/go.mod h1:c+V9Z/ZgkzAdyGvHrvC5AsXgN+M9Qwey04cBdKYzV7U=
 github.com/temporalio/tchannel-go v1.22.1-0.20231116015023-bd4fb7678499 h1:PUclzwrSQgakQIiEvvgVdcfulynpX0JM1f716pEcCTU=
 github.com/temporalio/tchannel-go v1.22.1-0.20231116015023-bd4fb7678499/go.mod h1:ezRQRwu9KQXy8Wuuv1aaFFxoCNz5CeNbVOOkh3xctbY=
+github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938 h1:sEJGhmDo+0FaPWM6f0v8Tjia0H5pR6/Baj6+kS78B+M=
+github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938/go.mod h1:ezRQRwu9KQXy8Wuuv1aaFFxoCNz5CeNbVOOkh3xctbY=
 github.com/temporalio/tctl-kit v0.0.0-20230328153839-577f95d16fa0 h1:E1iAre7/4VvSJri8uOnItKVsMKnP+WEQourm+zVO0cc=
 github.com/temporalio/tctl-kit v0.0.0-20230328153839-577f95d16fa0/go.mod h1:hk/LJCKZNNmtVSWRKepbdUJme+k/4fb/hPkekXk40sk=
 github.com/twmb/murmur3 v1.1.8 h1:8Yt9taO/WN3l08xErzjeschgZU2QSrwm1kclYq+0aRg=
