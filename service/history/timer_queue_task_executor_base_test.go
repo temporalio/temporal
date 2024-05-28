@@ -461,3 +461,44 @@ func (s *timerQueueTaskExecutorBaseSuite) TestExecuteStateMachineTimerTask_Execu
 	s.Equal(1, len(info.StateMachineTimers))
 	s.True(info.StateMachineTimers[0].Scheduled)
 }
+func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeouts() {
+
+	timeNow := s.testShardContext.GetTimeSource().Now()
+	timeBefore := timeNow.Add(time.Duration(-15) * time.Second)
+	timeAfter := timeNow.Add(time.Duration(15) * time.Second)
+
+	timerTask := &tasks.WorkflowExecutionTimeoutTask{
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  tests.WorkflowID,
+		FirstRunID:  uuid.New(),
+		TaskID:      100,
+	}
+	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+
+	testCases := []struct {
+		name           string
+		expirationTime time.Time
+		isValid        bool
+	}{
+		{
+			name:           "expiration set before now",
+			expirationTime: timeBefore,
+			isValid:        true,
+		},
+		{
+			name:           "expiration set after now",
+			expirationTime: timeAfter,
+			isValid:        false,
+		},
+	}
+
+	for _, tc := range testCases {
+		mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			FirstExecutionRunId:             timerTask.FirstRunID,
+			WorkflowExecutionExpirationTime: timestamppb.New(tc.expirationTime),
+		})
+		isValid := s.timerQueueTaskExecutorBase.isValidExecutionTimeoutTask(mockMutableState, timerTask)
+		s.Equal(tc.isValid, isValid)
+	}
+}
