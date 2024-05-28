@@ -57,7 +57,7 @@ import (
 type NexusHTTPHandler struct {
 	logger                               log.Logger
 	nexusHandler                         http.Handler
-	enpointRegistry                      *commonnexus.EndpointRegistry
+	enpointRegistry                      commonnexus.EndpointRegistry
 	namespaceRegistry                    namespace.Registry
 	preprocessErrorCounter               metrics.CounterFunc
 	auth                                 *authorization.Interceptor
@@ -75,7 +75,7 @@ func NewNexusHTTPHandler(
 	clusterMetadata cluster.Metadata,
 	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
-	endpointRegistry *commonnexus.EndpointRegistry,
+	endpointRegistry commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,

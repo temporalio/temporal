@@ -729,7 +729,7 @@ func RegisterNexusHTTPHandler(
 	clusterMetadata cluster.Metadata,
 	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
-	endpointRegistry *nexus.EndpointRegistry,
+	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
@@ -839,7 +839,7 @@ func NexusEndpointRegistryProvider(
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
 	namespaceRegistry namespace.Registry,
-) *nexus.EndpointRegistry {
+) nexus.EndpointRegistry {
 	registryConfig := nexus.NewEndpointRegistryConfig(dc)
 	return nexus.NewEndpointRegistry(
 		registryConfig,
@@ -850,7 +850,7 @@ func NexusEndpointRegistryProvider(
 	)
 }
 
-func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry *nexus.EndpointRegistry) {
+func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegistry) {
 	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
 }
 

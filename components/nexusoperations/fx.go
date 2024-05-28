@@ -63,7 +63,7 @@ func EndpointRegistryProvider(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
-) *commonnexus.EndpointRegistry {
+) commonnexus.EndpointRegistry {
 	registryConfig := commonnexus.NewEndpointRegistryConfig(dc)
 	return commonnexus.NewEndpointRegistry(
 		registryConfig,
@@ -74,11 +74,11 @@ func EndpointRegistryProvider(
 	)
 }
 
-func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry *commonnexus.EndpointRegistry) {
+func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry commonnexus.EndpointRegistry) {
 	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
 }
 
-func EndpointCheckerProvider(reg *commonnexus.EndpointRegistry) EndpointChecker {
+func EndpointCheckerProvider(reg commonnexus.EndpointRegistry) EndpointChecker {
 	return func(ctx context.Context, namespaceName, endpointName string) error {
 		_, err := reg.GetByName(ctx, endpointName)
 		return err
@@ -105,7 +105,7 @@ type clientProviderCacheKey struct {
 
 func ClientProviderFactory(
 	namespaceRegistry namespace.Registry,
-	endpointRegistry *commonnexus.EndpointRegistry,
+	endpointRegistry *commonnexus.EndpointRegistryImpl,
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
 	httpClientCache *cluster.FrontendHTTPClientCache,
