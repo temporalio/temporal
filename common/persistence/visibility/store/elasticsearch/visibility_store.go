@@ -143,11 +143,11 @@ func NewVisibilityStore(
 ) (*visibilityStore, error) {
 	esHttpClient := cfg.GetHttpClient()
 	if esHttpClient == nil {
-		esHttpClient, err := client.NewAwsHttpClient(cfg.AWSRequestSigning)
+		var err error
+		esHttpClient, err = client.NewAwsHttpClient(cfg.AWSRequestSigning)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 		}
-		cfg.SetHttpClient(esHttpClient)
 	}
 	esClient, err := client.NewClient(cfg, esHttpClient, logger)
 	if err != nil {
