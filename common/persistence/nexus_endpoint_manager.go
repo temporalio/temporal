@@ -36,8 +36,8 @@ import (
 )
 
 var (
-	ErrNexusTableVersionConflict = serviceerror.NewFailedPrecondition("nexus endpoints table version mismatch")
-	ErrNexusEndpointVersionConflict = serviceerror.NewFailedPrecondition("nexus endpoint version mismatch")
+	ErrNexusTableVersionConflict          = serviceerror.NewFailedPrecondition("nexus endpoints table version mismatch")
+	ErrNexusEndpointVersionConflict       = serviceerror.NewFailedPrecondition("nexus endpoint version mismatch")
 	ErrNegativeListNexusEndpointsPageSize = &InvalidPersistenceRequestError{
 		Msg: "received negative page size for listing Nexus endpoints",
 	}

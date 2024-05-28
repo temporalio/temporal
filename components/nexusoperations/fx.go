@@ -60,7 +60,6 @@ var Module = fx.Module(
 func EndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	endpointManager persistence.NexusEndpointManager,
-	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
 ) commonnexus.EndpointRegistry {
@@ -69,7 +68,6 @@ func EndpointRegistryProvider(
 		registryConfig,
 		matchingClient,
 		endpointManager,
-		namespaceRegistry,
 		logger,
 	)
 }

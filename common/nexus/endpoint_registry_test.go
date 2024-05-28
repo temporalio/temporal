@@ -75,7 +75,7 @@ func TestGet(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* namespace registry is unused in this test */, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -115,7 +115,7 @@ func TestGetNotFound(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* namespace registry is unused in this test */, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -147,7 +147,7 @@ func TestInitializationFallback(t *testing.T) {
 		Entries:       []*persistencepb.NexusEndpointEntry{testEndpoint},
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* namespace registry is unused in this test */, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -221,7 +221,7 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* namespace registry is unused in this test */, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -288,7 +288,7 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 		NextPageToken: nil,
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, nil /* TODO */, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 

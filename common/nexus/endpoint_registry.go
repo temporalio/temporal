@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/goro"
 )
@@ -75,10 +74,9 @@ type (
 
 		refreshPoller *goro.Handle
 
-		matchingClient    matchingservice.MatchingServiceClient
-		namespaceRegistry namespace.Registry
-		persistence       p.NexusEndpointManager
-		logger            log.Logger
+		matchingClient matchingservice.MatchingServiceClient
+		persistence    p.NexusEndpointManager
+		logger         log.Logger
 	}
 )
 
@@ -97,18 +95,16 @@ func NewEndpointRegistry(
 	config *EndpointRegistryConfig,
 	matchingClient matchingservice.MatchingServiceClient,
 	persistence p.NexusEndpointManager,
-	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) *EndpointRegistryImpl {
 	return &EndpointRegistryImpl{
-		config:            config,
-		dataReady:         make(chan struct{}),
-		endpointsByID:     make(map[string]*persistencespb.NexusEndpointEntry),
-		endpointsByName:   make(map[string]*persistencespb.NexusEndpointEntry),
-		matchingClient:    matchingClient,
-		persistence:       persistence,
-		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
+		config:          config,
+		dataReady:       make(chan struct{}),
+		endpointsByID:   make(map[string]*persistencespb.NexusEndpointEntry),
+		endpointsByName: make(map[string]*persistencespb.NexusEndpointEntry),
+		matchingClient:  matchingClient,
+		persistence:     persistence,
+		logger:          logger,
 	}
 }
 

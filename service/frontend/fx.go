@@ -838,14 +838,12 @@ func NexusEndpointRegistryProvider(
 	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
-	namespaceRegistry namespace.Registry,
 ) nexus.EndpointRegistry {
 	registryConfig := nexus.NewEndpointRegistryConfig(dc)
 	return nexus.NewEndpointRegistry(
 		registryConfig,
 		matchingClient,
 		nexusEndpointManager,
-		namespaceRegistry,
 		logger,
 	)
 }

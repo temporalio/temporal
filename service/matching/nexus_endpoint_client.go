@@ -75,7 +75,7 @@ type (
 
 		sync.RWMutex        // protects tableVersion, endpoints, endpointsByID, endpointsByName, and tableVersionChanged
 		tableVersion        int64
-		endpoints           []*persistencespb.NexusEndpointEntry // sorted by ID to support pagination during ListNexusEndpoints
+		endpointEntries     []*persistencespb.NexusEndpointEntry // sorted by ID to support pagination during ListNexusEndpoints
 		endpointsByID       map[string]*persistencespb.NexusEndpointEntry
 		endpointsByName     map[string]*persistencespb.NexusEndpointEntry
 		tableVersionChanged chan struct{}
@@ -200,14 +200,14 @@ func (m *nexusEndpointClient) UpdateNexusEndpoint(
 }
 
 func (m *nexusEndpointClient) insertEndpointLocked(entry *persistencespb.NexusEndpointEntry) {
-	idx, found := slices.BinarySearchFunc(m.endpoints, entry, func(a *persistencespb.NexusEndpointEntry, b *persistencespb.NexusEndpointEntry) int {
+	idx, found := slices.BinarySearchFunc(m.endpointEntries, entry, func(a *persistencespb.NexusEndpointEntry, b *persistencespb.NexusEndpointEntry) int {
 		return bytes.Compare([]byte(a.Id), []byte(b.Id))
 	})
 
 	if found {
-		m.endpoints[idx] = entry
+		m.endpointEntries[idx] = entry
 	} else {
-		m.endpoints = slices.Insert(m.endpoints, idx, entry)
+		m.endpointEntries = slices.Insert(m.endpointEntries, idx, entry)
 	}
 }
 
@@ -241,7 +241,7 @@ func (m *nexusEndpointClient) DeleteNexusEndpoint(
 	m.tableVersion++
 	delete(m.endpointsByID, request.Id)
 	delete(m.endpointsByName, entry.Endpoint.Spec.Name)
-	m.endpoints = slices.DeleteFunc(m.endpoints, func(entry *persistencespb.NexusEndpointEntry) bool {
+	m.endpointEntries = slices.DeleteFunc(m.endpointEntries, func(entry *persistencespb.NexusEndpointEntry) bool {
 		return entry.Id == request.Id
 	})
 	ch := m.tableVersionChanged
@@ -281,7 +281,7 @@ func (m *nexusEndpointClient) ListNexusEndpoints(
 
 		startFound := false
 		startIdx, startFound = slices.BinarySearchFunc(
-			m.endpoints,
+			m.endpointEntries,
 			&persistencespb.NexusEndpointEntry{Id: nextEndpointID},
 			func(a *persistencespb.NexusEndpointEntry, b *persistencespb.NexusEndpointEntry) int {
 				return bytes.Compare([]byte(a.Id), []byte(b.Id))
@@ -292,14 +292,14 @@ func (m *nexusEndpointClient) ListNexusEndpoints(
 		}
 	}
 
-	endIdx := min(startIdx+int(request.PageSize), len(m.endpoints))
+	endIdx := min(startIdx+int(request.PageSize), len(m.endpointEntries))
 
 	var nextPageToken []byte
-	if endIdx < len(m.endpoints) {
-		nextPageToken = []byte(m.endpoints[endIdx].Id)
+	if endIdx < len(m.endpointEntries) {
+		nextPageToken = []byte(m.endpointEntries[endIdx].Id)
 	}
 
-	entries := m.endpoints[startIdx:endIdx]
+	entries := m.endpointEntries[startIdx:endIdx]
 
 	resp := &matchingservice.ListNexusEndpointsResponse{
 		TableVersion:  m.tableVersion,
@@ -343,7 +343,7 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 		pageToken = resp.NextPageToken
 		m.tableVersion = resp.TableVersion
 		for _, entry := range resp.Entries {
-			m.endpoints = append(m.endpoints, entry)
+			m.endpointEntries = append(m.endpointEntries, entry)
 			m.endpointsByID[entry.Id] = entry
 			m.endpointsByName[entry.Endpoint.Spec.Name] = entry
 		}
@@ -359,7 +359,7 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 
 func (m *nexusEndpointClient) resetCacheStateLocked() {
 	m.tableVersion = 0
-	m.endpoints = []*persistencespb.NexusEndpointEntry{}
+	m.endpointEntries = []*persistencespb.NexusEndpointEntry{}
 	m.endpointsByID = make(map[string]*persistencespb.NexusEndpointEntry)
 	m.endpointsByName = make(map[string]*persistencespb.NexusEndpointEntry)
 }
