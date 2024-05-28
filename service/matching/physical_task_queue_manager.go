@@ -429,7 +429,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	task.namespace = c.partitionMgr.ns.Name()
-	task.backlogCountHint = c.backlogMgr.db.getApproximateBacklogCount
+	task.backlogCountHint = c.backlogMgr.BacklogCountHint
 	c.TasksDispatchedInIntervals.incrementTaskCount()
 	return task, nil
 }

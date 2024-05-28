@@ -33,6 +33,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAckManager_AddingTasksIncreasesBacklogCounter(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	backlogMgr := newBacklogMgr(controller)
+
+	t.Parallel()
+	backlogMgr.taskAckManager.addTask(1)
+	require.Equal(t, backlogMgr.taskAckManager.getBacklogCountHint(), int64(1))
+	backlogMgr.taskAckManager.addTask(12)
+	require.Equal(t, backlogMgr.taskAckManager.getBacklogCountHint(), int64(2))
+}
+
 func TestAckManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
 	t.Parallel()
 	controller := gomock.NewController(t)

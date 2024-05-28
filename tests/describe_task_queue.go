@@ -218,7 +218,6 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBa
 					s.validateBacklogCount(backlogCounter, expectedBacklogCount, queueType) &&
 					s.validateBacklogHeadCreateTime(queueType, backlogHeadCreateTime, nullBacklogHeadCreateTime) &&
 					s.validateAddDispatchTasksRate(queueType, workflows, backlogAddTasksRate, backlogDispatchTasksRate, polled)
-
 			}
 			return validator == true
 		}, 3*time.Second, 50*time.Millisecond)
