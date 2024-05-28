@@ -66,15 +66,15 @@ type (
 )
 
 func (u *HistoryBranchUtilImpl) NewHistoryBranch(
-	namespaceID string,
-	workflowID string,
-	runID string,
+	_ string, // namespaceID
+	_ string, // workflowID
+	_ string, // runID
 	treeID string,
 	branchID *string,
 	ancestors []*persistencespb.HistoryBranchRange,
-	runTimeout time.Duration,
-	executionTimeout time.Duration,
-	retentionDuration time.Duration,
+	_ time.Duration, // runTimeout
+	_ time.Duration, // executionTimeout
+	_ time.Duration, // retentionDuration
 ) ([]byte, error) {
 	var id string
 	if branchID == nil {
