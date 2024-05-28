@@ -132,7 +132,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -280,7 +280,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplet
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -431,7 +431,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -557,7 +557,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -691,7 +691,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTask_Rejected() {
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -808,7 +808,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTa
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Rejected() {
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1232,7 +1232,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 
@@ -1321,7 +1321,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -1446,7 +1446,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1574,7 +1574,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Reject() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1672,7 +1672,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Re
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1788,7 +1788,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject()
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1910,7 +1910,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1stComplete() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2082,7 +2082,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2234,7 +2234,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2412,7 +2412,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTaskToNormal_BecauseOfBufferedSignal() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2529,7 +2529,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTa
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflowTaskToNormal_BecauseOfSignal() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2650,7 +2650,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflow
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkflowTask() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           tv.Any().String(),
@@ -2790,7 +2790,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWorkflowTask() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2908,7 +2908,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWorkflowTask_NormalTaskQueue() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3037,7 +3037,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_TerminateWorkflow() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3157,7 +3157,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_TerminateWorkflow() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3311,7 +3311,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 
@@ -3417,7 +3417,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3547,7 +3547,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3675,7 +3675,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTask
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3813,7 +3813,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLo
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResurrectedAfterShardMove() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3944,7 +3944,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResur
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_DeduplicateID() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -4068,7 +4068,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_DeduplicateID() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -4208,7 +4208,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 
@@ -4356,7 +4356,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		The second speculative WT responds back and server completes it.
 	*/
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
@@ -4529,7 +4529,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		The first speculative WT respond back, server reject it because startTime is different.
 		The second speculative WT respond back, server accept it.
 	*/
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
@@ -4699,7 +4699,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 		The second speculative WT responds back, server accepted it.
 	*/
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	testCtx := NewContext()
@@ -4901,7 +4901,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 		The second speculative WT responds back, server reject it.
 	*/
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	testCtx := NewContext()
@@ -5064,7 +5064,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSkippedProcessing_RejectByServer() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -5194,7 +5194,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
 	}
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	messageId := "my-message-id"
@@ -5248,7 +5248,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -5405,7 +5405,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_AdmittedUpdatesAreSentToWorkerInOrd
 	nUpdates := 20
 	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowExecutionMaxInFlightUpdates, nUpdates)
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 	for i := 0; i < nUpdates; i++ {
 		updateId := fmt.Sprint(i)
