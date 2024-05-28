@@ -452,13 +452,13 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 	}
 
 	baseURL, err := url.JoinPath(
-		httpClient.Address,
+		httpClient.BaseURL(),
 		commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(commonnexus.NamespaceAndTaskQueue{
 			Namespace: oc.namespaceName,
 			TaskQueue: oc.taskQueue,
 		}))
 	if err != nil {
-		oc.logger.Error(fmt.Sprintf("failed to forward Nexus request. error constructing ServiceBaseURL. address=%s namespace=%s task_queue=%s", httpClient.Address, oc.namespaceName, oc.taskQueue), tag.Error(err))
+		oc.logger.Error(fmt.Sprintf("failed to forward Nexus request. error constructing ServiceBaseURL. baseURL=%s namespace=%s task_queue=%s", httpClient.BaseURL(), oc.namespaceName, oc.taskQueue), tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarding_failed"))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}

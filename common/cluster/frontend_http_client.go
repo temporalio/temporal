@@ -25,8 +25,8 @@ package cluster
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
-	"net/url"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -39,7 +39,13 @@ type tlsConfigProvider interface {
 
 type FrontendHTTPClient struct {
 	http.Client
-	Address string
+	address   string
+	urlScheme string
+}
+
+// BaseURL is the scheme and address of this HTTP client.
+func (c *FrontendHTTPClient) BaseURL() string {
+	return c.urlScheme + "://" + c.address
 }
 
 type FrontendHTTPClientCache struct {
@@ -72,24 +78,32 @@ func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) 
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find cluster metadata for cluster %s", targetClusterName))
 	}
 
-	address, err := url.Parse(targetInfo.HTTPAddress)
+	if targetInfo.HTTPAddress == "" {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("HTTPAddress not configured for cluster: %s", targetClusterName))
+	}
+	host, _, err := net.SplitHostPort(targetInfo.HTTPAddress)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", serviceerror.NewInternal("invalid frontend address"), err)
 	}
 
 	client := http.Client{}
 
+	urlScheme := "http"
 	if c.tlsProvider != nil {
-		tlsClientConfig, err := c.tlsProvider.GetRemoteClusterClientConfig(address.Hostname())
+		tlsClientConfig, err := c.tlsProvider.GetRemoteClusterClientConfig(host)
 		if err != nil {
 			return nil, err
 		}
 		client.Transport = &http.Transport{TLSClientConfig: tlsClientConfig}
+		if tlsClientConfig != nil {
+			urlScheme = "https"
+		}
 	}
 
 	return &FrontendHTTPClient{
-		Address: targetInfo.HTTPAddress,
-		Client:  client,
+		address:   targetInfo.HTTPAddress,
+		Client:    client,
+		urlScheme: urlScheme,
 	}, nil
 }
 

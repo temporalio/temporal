@@ -126,7 +126,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	s.testCluster.host.dcClient.OverrideValue(
 		s.T(),
 		nexusoperations.CallbackURLTemplate,
-		"http://"+s.httpAPIAddress+"/api/v1/namespaces/{{.NamespaceName}}/nexus/callback")
+		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
