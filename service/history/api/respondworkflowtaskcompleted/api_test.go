@@ -41,6 +41,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/maps"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -52,8 +55,6 @@ import (
 	"go.temporal.io/server/internal/effect"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
-	"golang.org/x/exp/maps"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -277,7 +278,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 	}
 
 	s.Run("Accept Complete", func() {
-		tv := testvars.New(s.T().Name())
+		tv := testvars.New(s.T())
 		mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		_, serializedTaskToken := createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
@@ -308,7 +309,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 	})
 
 	s.Run("Reject", func() {
-		tv := testvars.New(s.T().Name())
+		tv := testvars.New(s.T())
 		mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		_, serializedTaskToken := createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
@@ -336,7 +337,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 	})
 
 	s.Run("Write Failed", func() {
-		tv := testvars.New(s.T().Name())
+		tv := testvars.New(s.T())
 		mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		_, serializedTaskToken := createStartedWorkflow(tv)
 
@@ -364,7 +365,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 	})
 
 	s.Run("GetHistory Failed", func() {
-		tv := testvars.New(s.T().Name())
+		tv := testvars.New(s.T())
 		mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		_, serializedTaskToken := createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
