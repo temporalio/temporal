@@ -118,6 +118,7 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:   c.apiName,
 		Namespace: c.namespaceName,
+		NexusEndpointName: c.endpointName,
 		Request:   request,
 	})
 	if err != nil {
