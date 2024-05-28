@@ -148,8 +148,8 @@ type circularTaskBuffer struct {
 	currentPos int
 }
 
-func newCircularTaskBuffer(size int) *circularTaskBuffer {
-	return &circularTaskBuffer{
+func newCircularTaskBuffer(size int) circularTaskBuffer {
+	return circularTaskBuffer{
 		buffer:     make([]int, size), // Initialize the buffer with the given size
 		currentPos: 0,
 	}
@@ -174,67 +174,66 @@ func (cb *circularTaskBuffer) totalTasks() int {
 }
 
 type taskTracker struct {
-	mutex             sync.RWMutex
+	lock              sync.Mutex
 	clock             clock.TimeSource
 	startTime         time.Time     // time when taskTracker was initialized
-	startIntervalTime time.Time     // the starting time of a window in the buffer
-	interval          time.Duration // the duration of each mini- in the buffer
-	totalIntervalSize int           // the number over which rate of tasks added/dispatched would be determined
-	tasksInInterval   *circularTaskBuffer
+	bucketStartTime   time.Time     // the starting time of a bucket in the buffer
+	bucketSize        time.Duration // the duration of each bucket in the buffer
+	totalIntervalSize time.Duration // the number of seconds over which rate of tasks are added/dispatched
+	tasksInInterval   circularTaskBuffer
 }
 
-func newTaskTracker(timeSource clock.TimeSource, intervalSize int, totalIntervalSize int) *taskTracker {
+func newTaskTracker(timeSource clock.TimeSource, bucketSize int, totalIntervalSize int) *taskTracker {
 	return &taskTracker{
 		clock:             timeSource,
 		startTime:         timeSource.Now(),
-		startIntervalTime: timeSource.Now(),
-		interval:          time.Duration(intervalSize) * time.Second, // Todo: Shivam - replace with config value
-		totalIntervalSize: totalIntervalSize,
+		bucketStartTime:   timeSource.Now(),
+		bucketSize:        time.Duration(intervalSize) * time.Second, // Todo: Shivam - replace with config value
+		totalIntervalSize: time.Duration(totalIntervalSize) * time.Second,
 		tasksInInterval:   newCircularTaskBuffer((totalIntervalSize / intervalSize) + 1),
 	}
 }
 
 // advanceAndResetTracker is a helper to advance the trackers position and clear out any expired intervals
+// This method must be called with taskTracker's lock held.
 func (s *taskTracker) advanceAndResetTracker(elapsed time.Duration) {
 	// Calculate the number of intervals elapsed since the start interval time
-	intervalsElapsed := int(elapsed / s.interval)
+	intervalsElapsed := int(elapsed / s.bucketSize)
 
-	if intervalsElapsed != 0 {
-		for i := 0; i < intervalsElapsed; i++ {
-			s.tasksInInterval.advance() // advancing our circular buffer's position until we land on the right interval
-		}
-		s.startIntervalTime = s.startIntervalTime.Add(time.Duration(intervalsElapsed) * s.interval)
+	for i := 0; i < intervalsElapsed; i++ {
+		s.tasksInInterval.advance() // advancing our circular buffer's position until we land on the right interval
 	}
+	s.bucketStartTime = s.bucketStartTime.Add(time.Duration(intervalsElapsed) * s.bucketSize)
 }
 
-// trackTasks is responsible for adding/removing tasks from the current time that falls in the appropriate interval
-func (s *taskTracker) trackTasks() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+// incrementTaskCount is responsible for adding/removing tasks from the current time that falls in the appropriate interval
+func (s *taskTracker) incrementTaskCount() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	currentTime := s.clock.Now()
 
 	// Calculate elapsed time from the latest start interval time
-	elapsed := currentTime.Sub(s.startIntervalTime)
+	elapsed := currentTime.Sub(s.bucketStartTime)
 	s.advanceAndResetTracker(elapsed)
 	s.tasksInInterval.incrementTaskCount()
 }
 
 // rate is responsible for returning the rate of tasks added/dispatched in a given interval
 func (s *taskTracker) rate() float32 {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	currentTime := s.clock.Now()
 
 	// Calculate elapsed time from the latest start interval time
-	elapsed := currentTime.Sub(s.startIntervalTime)
+	elapsed := currentTime.Sub(s.bucketStartTime)
 	s.advanceAndResetTracker(elapsed)
 	totalTasks := s.tasksInInterval.totalTasks()
 
-	// time passed since start of the current window + totalIntervalSize in milliseconds
-	elapsedTime := min(currentTime.Sub(s.startIntervalTime).Milliseconds()+int64(s.totalIntervalSize*1000),
-		currentTime.Sub(s.startTime).Milliseconds())
+	elapsedTime := min(currentTime.Sub(s.bucketStartTime)+s.totalIntervalSize,
+		currentTime.Sub(s.startTime))
+
 	// rate per second
-	return (float32(totalTasks) / float32(elapsedTime)) * 1000
+	return float32(totalTasks) / float32(elapsedTime.Seconds())
 }
 
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
@@ -350,7 +349,7 @@ func (c *physicalTaskQueueManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
-	c.TasksAddedInIntervals.trackTasks()
+	c.TasksAddedInIntervals.incrementTaskCount()
 	if params.forwardedFrom == "" {
 		// request sent by history service
 		c.liveness.markAlive()
@@ -431,7 +430,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 	task.namespace = c.partitionMgr.ns.Name()
 	task.backlogCountHint = c.backlogMgr.db.getApproximateBacklogCount
-	c.TasksDispatchedInIntervals.trackTasks()
+	c.TasksDispatchedInIntervals.incrementTaskCount()
 	return task, nil
 }
 
