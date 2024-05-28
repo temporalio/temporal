@@ -164,12 +164,15 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 						return tc.caller
 					},
 				},
+				callbacks.StandbyExecutorOptions{},
 				&callbacks.Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 				},
 			))
 
-			err = hsm.Execute(context.Background(), reg, env,
+			err = reg.ExecuteActiveTask(
+				context.Background(),
+				env,
 				hsm.Ref{
 					WorkflowKey: key,
 					StateMachineRef: &persistencespb.StateMachineRef{
@@ -226,12 +229,15 @@ func TestProcessBackoffTask(t *testing.T) {
 				return nil
 			},
 		},
+		callbacks.StandbyExecutorOptions{},
 		&callbacks.Config{
 			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 		},
 	))
 
-	err = hsm.Execute(context.Background(), reg, env,
+	err = reg.ExecuteActiveTask(
+		context.Background(),
+		env,
 		hsm.Ref{
 			StateMachineRef: &persistencespb.StateMachineRef{
 				Path: []*persistencespb.StateMachineKey{
