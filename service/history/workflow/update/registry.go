@@ -46,8 +46,6 @@ import (
 	"go.temporal.io/server/internal/effect"
 )
 
-var _ Registry = (*registry)(nil)
-
 type (
 	// Registry maintains a set of updates that have been admitted to run
 	// against a workflow execution.
@@ -115,6 +113,8 @@ type (
 
 	Option func(*registry)
 )
+
+var _ Registry = (*registry)(nil)
 
 // WithInFlightLimit provides an optional limit to the number of incomplete
 // updates that a Registry instance will allow.
