@@ -148,9 +148,6 @@ func setStateStatus(
 
 	e.State = state
 	e.Status = status
-	// set to nil here to denote state/status was updated in the transaction.
-	// upon closing this transaction, the field will be set to the right value.
-	e.LastUpdatedVersionedTransition = nil
 	return nil
 }
 
