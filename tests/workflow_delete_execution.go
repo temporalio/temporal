@@ -52,7 +52,7 @@ const (
 )
 
 func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	const numExecutions = 5
 
@@ -196,7 +196,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 }
 
 func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	const numExecutions = 5
 
@@ -311,7 +311,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 }
 
 func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	const numExecutions = 3
 

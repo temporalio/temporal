@@ -302,6 +302,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 					return authorization.Result{Decision: authorization.DecisionDeny, Reason: "unauthorized in test"}, nil
 				}
 				if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
+					if ct.NexusEndpointName != testEndpoint.Spec.Name {
+						panic("expected nexus endpoint name")
+					}
 					return authorization.Result{Decision: authorization.DecisionDeny, Reason: "unauthorized in test"}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -315,6 +318,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 					return authorization.Result{Decision: authorization.DecisionDeny}, nil
 				}
 				if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
+					if ct.NexusEndpointName != testEndpoint.Spec.Name {
+						panic("expected nexus endpoint name")
+					}
 					return authorization.Result{Decision: authorization.DecisionDeny}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -328,6 +334,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 					return authorization.Result{}, errors.New("some generic error")
 				}
 				if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
+					if ct.NexusEndpointName != testEndpoint.Spec.Name {
+						panic("expected nexus endpoint name")
+					}
 					return authorization.Result{}, errors.New("some generic error")
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil

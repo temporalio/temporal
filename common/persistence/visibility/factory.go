@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/sql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -56,7 +55,6 @@ func NewManager(
 	persistenceResolver resolver.ServiceResolver,
 	customVisibilityStoreFactory VisibilityStoreFactory,
 
-	esClient esclient.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -77,7 +75,6 @@ func NewManager(
 		persistenceCfg.GetVisibilityStoreConfig(),
 		persistenceResolver,
 		customVisibilityStoreFactory,
-		esClient,
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
@@ -101,7 +98,6 @@ func NewManager(
 		persistenceCfg.GetSecondaryVisibilityStoreConfig(),
 		persistenceResolver,
 		customVisibilityStoreFactory,
-		esClient,
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
@@ -192,7 +188,6 @@ func newVisibilityManagerFromDataStoreConfig(
 	persistenceResolver resolver.ServiceResolver,
 	customVisibilityStoreFactory VisibilityStoreFactory,
 
-	esClient esclient.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -210,7 +205,6 @@ func newVisibilityManagerFromDataStoreConfig(
 		dsConfig,
 		persistenceResolver,
 		customVisibilityStoreFactory,
-		esClient,
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
@@ -241,7 +235,6 @@ func newVisibilityStoreFromDataStoreConfig(
 	persistenceResolver resolver.ServiceResolver,
 	customVisibilityStoreFactory VisibilityStoreFactory,
 
-	esClient esclient.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -265,9 +258,8 @@ func newVisibilityStoreFromDataStoreConfig(
 			metricsHandler,
 		)
 	} else if dsConfig.Elasticsearch != nil {
-		visStore = newElasticsearchVisibilityStore(
-			dsConfig.Elasticsearch.GetVisibilityIndex(),
-			esClient,
+		visStore, err = elasticsearch.NewVisibilityStore(
+			dsConfig.Elasticsearch,
 			esProcessorConfig,
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
@@ -285,41 +277,4 @@ func newVisibilityStoreFromDataStoreConfig(
 		)
 	}
 	return visStore, err
-}
-
-func newElasticsearchVisibilityStore(
-	defaultIndexName string,
-	esClient esclient.Client,
-	esProcessorConfig *elasticsearch.ProcessorConfig,
-	searchAttributesProvider searchattribute.Provider,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
-	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	metricsHandler metrics.Handler,
-	logger log.Logger,
-) store.VisibilityStore {
-	if esClient == nil {
-		return nil
-	}
-
-	var (
-		esProcessor           elasticsearch.Processor
-		esProcessorAckTimeout dynamicconfig.DurationPropertyFn
-	)
-	if esProcessorConfig != nil {
-		esProcessor = elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, metricsHandler)
-		esProcessor.Start()
-		esProcessorAckTimeout = esProcessorConfig.ESProcessorAckTimeout
-	}
-	s := elasticsearch.NewVisibilityStore(
-		esClient,
-		defaultIndexName,
-		searchAttributesProvider,
-		searchAttributesMapperProvider,
-		esProcessor,
-		esProcessorAckTimeout,
-		visibilityDisableOrderByClause,
-		visibilityEnableManualPagination,
-		metricsHandler)
-	return s
 }

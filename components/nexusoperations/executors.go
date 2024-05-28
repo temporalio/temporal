@@ -73,19 +73,44 @@ func RegisterExecutor(
 	options ActiveExecutorOptions,
 ) error {
 	exec := activeExecutor{options}
-	if err := hsm.RegisterExecutor(registry, TaskTypeInvocation.ID, exec.executeInvocationTask); err != nil {
+	if err := hsm.RegisterExecutors(
+		registry,
+		TaskTypeInvocation.ID,
+		exec.executeInvocationTask,
+		nil,
+	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutor(registry, TaskTypeBackoff.ID, exec.executeBackoffTask); err != nil {
+	if err := hsm.RegisterExecutors(
+		registry,
+		TaskTypeBackoff.ID,
+		exec.executeBackoffTask,
+		nil,
+	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutor(registry, TaskTypeTimeout.ID, exec.executeTimeoutTask); err != nil {
+	if err := hsm.RegisterExecutors(
+		registry,
+		TaskTypeTimeout.ID,
+		exec.executeTimeoutTask,
+		nil,
+	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutor(registry, TaskTypeCancelation.ID, exec.executeCancelationTask); err != nil {
+	if err := hsm.RegisterExecutors(
+		registry,
+		TaskTypeCancelation.ID,
+		exec.executeCancelationTask,
+		nil,
+	); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutor(registry, TaskTypeCancelationBackoff.ID, exec.executeCancelationBackoffTask)
+	return hsm.RegisterExecutors(
+		registry,
+		TaskTypeCancelationBackoff.ID,
+		exec.executeCancelationBackoffTask,
+		nil,
+	)
 }
 
 type activeExecutor struct {

@@ -75,6 +75,9 @@ func (d *plugin) CreateDB(
 	metricsHandler metrics.Handler,
 ) (sqlplugin.DB, error) {
 	connect := func() (*sqlx.DB, error) {
+		if cfg.Connect != nil {
+			return cfg.Connect(cfg)
+		}
 		return d.createDBConnection(cfg, r)
 	}
 	needsRefresh := d.d.IsConnNeedsRefreshError
@@ -92,6 +95,9 @@ func (d *plugin) CreateAdminDB(
 	metricsHandler metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
 	connect := func() (*sqlx.DB, error) {
+		if cfg.Connect != nil {
+			return cfg.Connect(cfg)
+		}
 		return d.createDBConnection(cfg, r)
 	}
 	needsRefresh := d.d.IsConnNeedsRefreshError

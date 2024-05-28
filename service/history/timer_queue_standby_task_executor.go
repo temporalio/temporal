@@ -94,14 +94,40 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskType := queues.GetStandbyTimerTaskTypeTagValue(task)
-	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType), // for backward compatibility
+	taskTypeTagValue := "TimerStandbyUnknown"
+	smRef, smt, isAStateMachineTask, err := t.stateMachineTask(task)
+	if err == nil {
+		if isAStateMachineTask {
+			taskTypeTagValue = "TimerStandby." + smt.Type().Name
+		} else {
+			taskTypeTagValue = queues.GetStandbyTimerTaskTypeTagValue(task)
+		}
 	}
 
-	var err error
+	metricsTags := []metrics.Tag{
+		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskTypeTagValue),
+		metrics.OperationTag(taskTypeTagValue), // for backward compatibility
+	}
+
+	if err != nil {
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        err,
+		}
+	}
+
+	if isAStateMachineTask {
+		smRegistry := t.shardContext.StateMachineRegistry()
+		err = smRegistry.ExecuteStandbyTask(ctx, t, smRef, smt)
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        err,
+		}
+	}
+
 	switch task := task.(type) {
 	case *tasks.UserTimerTask:
 		err = t.executeUserTimerTimeoutTask(ctx, task)
