@@ -33,7 +33,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -133,7 +132,6 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	esHttpClient *http.Client,
 	cfg *client.Config,
 	processorConfig *ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
@@ -142,10 +140,19 @@ func NewVisibilityStore(
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) *visibilityStore {
+) (*visibilityStore, error) {
+	esHttpClient := cfg.GetHttpClient()
+	if esHttpClient == nil {
+		esHttpClient, err := client.NewAwsHttpClient(cfg.AWSRequestSigning)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
+		}
+		cfg.SetHttpClient(esHttpClient)
+	}
 	esClient, err := client.NewClient(cfg, esHttpClient, logger)
-	if esClient == nil || err != nil {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
+			cfg.URL.Redacted(), cfg.Username, err)
 	}
 	var (
 		processor           Processor
@@ -166,7 +173,7 @@ func NewVisibilityStore(
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
-	}
+	}, nil
 }
 
 func (s *visibilityStore) Close() {

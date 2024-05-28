@@ -26,7 +26,6 @@ package history
 
 import (
 	"net"
-	"net/http"
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -274,7 +273,6 @@ func VisibilityManagerProvider(
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
-	esHttpClient *http.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -283,7 +281,6 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esHttpClient,
 		esProcessorConfig,
 		saProvider,
 		searchAttributesMapperProvider,

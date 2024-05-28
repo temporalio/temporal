@@ -25,8 +25,6 @@
 package matching
 
 import (
-	"net/http"
-
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
@@ -155,7 +153,6 @@ func VisibilityManagerProvider(
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	esHttpClient *http.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -164,7 +161,6 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esHttpClient,
 		nil, // matching visibility never writes
 		saProvider,
 		searchAttributesMapperProvider,

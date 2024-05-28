@@ -26,7 +26,6 @@ package worker
 
 import (
 	"context"
-	"net/http"
 
 	"go.uber.org/fx"
 
@@ -155,7 +154,6 @@ func VisibilityManagerProvider(
 	persistenceConfig *config.Persistence,
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	serviceConfig *Config,
-	esHttpClient *http.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -164,7 +162,6 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esHttpClient,
 		nil, // worker visibility never write
 		saProvider,
 		searchAttributesMapperProvider,

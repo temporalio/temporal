@@ -25,8 +25,6 @@
 package visibility
 
 import (
-	"net/http"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -57,7 +55,6 @@ func NewManager(
 	persistenceResolver resolver.ServiceResolver,
 	customVisibilityStoreFactory VisibilityStoreFactory,
 
-	esHttpClient *http.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -78,7 +75,6 @@ func NewManager(
 		persistenceCfg.GetVisibilityStoreConfig(),
 		persistenceResolver,
 		customVisibilityStoreFactory,
-		esHttpClient,
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
@@ -102,7 +98,6 @@ func NewManager(
 		persistenceCfg.GetSecondaryVisibilityStoreConfig(),
 		persistenceResolver,
 		customVisibilityStoreFactory,
-		esHttpClient,
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
@@ -193,7 +188,6 @@ func newVisibilityManagerFromDataStoreConfig(
 	persistenceResolver resolver.ServiceResolver,
 	customVisibilityStoreFactory VisibilityStoreFactory,
 
-	esHttpClient *http.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -211,7 +205,6 @@ func newVisibilityManagerFromDataStoreConfig(
 		dsConfig,
 		persistenceResolver,
 		customVisibilityStoreFactory,
-		esHttpClient,
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
@@ -242,7 +235,6 @@ func newVisibilityStoreFromDataStoreConfig(
 	persistenceResolver resolver.ServiceResolver,
 	customVisibilityStoreFactory VisibilityStoreFactory,
 
-	esHttpClient *http.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -266,8 +258,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			metricsHandler,
 		)
 	} else if dsConfig.Elasticsearch != nil {
-		visStore = elasticsearch.NewVisibilityStore(
-			esHttpClient,
+		visStore, err = elasticsearch.NewVisibilityStore(
 			dsConfig.Elasticsearch,
 			esProcessorConfig,
 			searchAttributesProvider,

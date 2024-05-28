@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 
 	"github.com/pborman/uuid"
@@ -140,7 +139,6 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsConfig              *esclient.Config
 		EsClient              esclient.Client
-		EsHttpClient          *http.Client
 		MetricsHandler        metrics.Handler
 	}
 )
@@ -247,7 +245,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// EsConfig / EsClient
 	var esConfig *esclient.Config
 	var esClient esclient.Client
-	var esHttpClient *http.Client
 
 	if persistenceConfig.VisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
@@ -260,14 +257,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	if esConfig != nil {
-		esHttpClient = so.elasticsearchHttpClient
-		if esHttpClient == nil {
-			var err error
-			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
-			if err != nil {
-				return serverOptionsProvider{}, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
-			}
-		}
+		esHttpClient := so.elasticsearchHttpClient
+		esConfig.SetHttpClient(esHttpClient)
 	}
 
 	// check that when static hosts are defined, they are defined for all required hosts
@@ -309,7 +300,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsConfig:              esConfig,
 		EsClient:              esClient,
-		EsHttpClient:          esHttpClient,
 		MetricsHandler:        metricHandler,
 	}, nil
 }
@@ -358,7 +348,6 @@ type (
 		MetricsHandler             metrics.Handler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
-		EsHttpClient               *http.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
 		PersistenceConfig          config.Persistence
 		ClusterMetadata            *cluster.Config
@@ -442,9 +431,6 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() esclient.Client {
 				return params.EsClient
-			},
-			func() *http.Client {
-				return params.EsHttpClient
 			},
 			func() resource.NamespaceLogger {
 				return params.NamespaceLogger
