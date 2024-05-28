@@ -66,9 +66,9 @@ const (
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
 
-	// denotes the duration of each mini-interval in the circularTaskBuffer
+	// The duration of each mini-bucket in the circularTaskBuffer
 	intervalSize = 5
-	// denotes the total duration which shall be used to calculate the rate of tasks added/dispatched
+	// The total duration which shall be used to calculate the rate of tasks added/dispatched
 	totalIntervalSize = 30
 )
 
@@ -183,7 +183,7 @@ type taskTracker struct {
 	tasksInInterval   circularTaskBuffer
 }
 
-func newTaskTracker(timeSource clock.TimeSource, bucketSize int, totalIntervalSize int) *taskTracker {
+func newTaskTracker(timeSource clock.TimeSource) *taskTracker {
 	return &taskTracker{
 		clock:             timeSource,
 		startTime:         timeSource.Now(),
@@ -267,8 +267,8 @@ func newPhysicalTaskQueueManager(
 		throttledLogger:            throttledLogger,
 		config:                     config,
 		taggedMetricsHandler:       taggedMetricsHandler,
-		TasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource(), intervalSize, totalIntervalSize),
-		TasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource(), intervalSize, totalIntervalSize),
+		TasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
+		TasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
 	}
 	pqMgr.pollerHistory = newPollerHistory()
 
