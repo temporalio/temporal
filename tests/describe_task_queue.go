@@ -86,6 +86,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 
 	expectedBacklogCount := make(map[enumspb.TaskQueueType]int64)
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = 0
+	nullBacklogHeadCreateTime := true
 
 	tl := "backlog-counter-task-queue"
 	tq := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -113,7 +114,10 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 	}
 
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(workflows)
-	s.validateDescribeTaskQueue(tl, expectedBacklogCount, isEnhancedMode)
+	if workflows > 0 {
+		nullBacklogHeadCreateTime = false
+	}
+	s.validateDescribeTaskQueue(tl, expectedBacklogCount, isEnhancedMode, nullBacklogHeadCreateTime)
 
 	// Polling the tasks
 	for i := 0; i < workflows; {
@@ -131,11 +135,11 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 
 	// call describeTaskQueue to verify if the backlog decreased
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(0)
-	s.validateDescribeTaskQueue(tl, expectedBacklogCount, isEnhancedMode)
+	s.validateDescribeTaskQueue(tl, expectedBacklogCount, isEnhancedMode, true)
 }
 
 func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBacklogCount map[enumspb.TaskQueueType]int64,
-	isEnhancedMode bool) {
+	isEnhancedMode bool, nullBacklogHeadCreateTime bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -165,8 +169,24 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBa
 			validator := true
 			for qT, t := range types {
 				queueType := enumspb.TaskQueueType(qT)
+				backlogHeadCreateTime := t.BacklogInfo.ApproximateBacklogAge.AsDuration()
+
 				if t.BacklogInfo.ApproximateBacklogCount != expectedBacklogCount[queueType] {
 					validator = false
+				}
+
+				if queueType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+					if backlogHeadCreateTime != time.Duration(0) {
+						validator = false
+					}
+				} else if nullBacklogHeadCreateTime {
+					if backlogHeadCreateTime != time.Duration(0) {
+						validator = false
+					}
+				} else {
+					if backlogHeadCreateTime == time.Duration(0) {
+						validator = false
+					}
 				}
 			}
 			return validator == true

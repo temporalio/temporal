@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -419,7 +421,7 @@ func (c *physicalTaskQueueManagerImpl) GetBacklogInfo(ctx context.Context) (*tas
 	}
 	return &taskqueuepb.BacklogInfo{
 		ApproximateBacklogCount: approximateBacklogCount,
-		ApproximateBacklogAge:   nil,        // TODO: Shivam - add this feature
+		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.taskReader.getBacklogHeadCreateTime()),
 		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
 		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature
 	}, nil
