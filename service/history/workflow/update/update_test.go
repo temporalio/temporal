@@ -52,14 +52,6 @@ const (
 	testSequencingEventID int64 = 2203
 )
 
-func successOutcome(t *testing.T, s string) *updatepb.Outcome {
-	return &updatepb.Outcome{
-		Value: &updatepb.Outcome_Success{
-			Success: payloads.EncodeString(t.Name() + s),
-		},
-	}
-}
-
 func TestNilMessage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1106,6 +1098,14 @@ func TestCompletedWorkflow(t *testing.T) {
 		require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
 		require.Nil(t, status)
 	})
+}
+
+func successOutcome(t *testing.T, s string) *updatepb.Outcome {
+	return &updatepb.Outcome{
+		Value: &updatepb.Outcome_Success{
+			Success: payloads.EncodeString(t.Name() + s),
+		},
+	}
 }
 
 // TODO: test aborting an Update in various states

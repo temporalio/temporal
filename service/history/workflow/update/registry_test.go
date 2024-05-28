@@ -71,6 +71,7 @@ func TestNewRegistry(t *testing.T) {
 					})
 			},
 		})
+		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
 
 		require.Equal(t, 1, reg.Len())
 		require.True(t, reg.Contains(tv.UpdateID()))
@@ -81,6 +82,10 @@ func TestNewRegistry(t *testing.T) {
 		s, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
+
+		// ensure update can complete its lifecycle
+		testAcceptUpdate(t, reg, evStore, upd)
+		testCompleteUpdate(t, reg, evStore, upd)
 	})
 
 	t.Run("registry created from store with update in stateAccepted contains accepted update", func(t *testing.T) {
@@ -95,6 +100,7 @@ func TestNewRegistry(t *testing.T) {
 					})
 			},
 		})
+		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
 
 		require.Equal(t, 1, reg.Len())
 		require.True(t, reg.Contains(tv.UpdateID()))
@@ -105,6 +111,9 @@ func TestNewRegistry(t *testing.T) {
 		s, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, s.Stage)
+
+		// ensure update can complete its lifecycle
+		testCompleteUpdate(t, reg, evStore, upd)
 	})
 
 	t.Run("registry created from store with update in stateAccepted but non-running workflow contains aborted update", func(t *testing.T) {
@@ -227,6 +236,7 @@ func TestFindOrCreate(t *testing.T) {
 
 	t.Run("create update if not found", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
+		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
 
 		upd, found, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
 		require.NoError(t, err)
@@ -237,6 +247,11 @@ func TestFindOrCreate(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found, "second lookup for same updateID should find previous")
 		require.NotNil(t, upd)
+
+		// ensure update can complete its lifecycle
+		testAdmitUpdate(t, reg, evStore, upd)
+		testAcceptUpdate(t, reg, evStore, upd)
+		testCompleteUpdate(t, reg, evStore, upd)
 	})
 
 	t.Run("enforce in-flight update limit", func(t *testing.T) {
@@ -305,16 +320,7 @@ func TestFindOrCreate(t *testing.T) {
 		})
 
 		t.Run("rejecting 1st update allows new update to be created", func(t *testing.T) {
-			rej := protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
-				RejectedRequestMessageId: "update1/request",
-				RejectedRequest: &updatepb.Request{
-					Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-					Input: &updatepb.Input{Name: "not_empty"},
-				},
-				Failure: &failurepb.Failure{Message: "intentional failure in " + t.Name()},
-			})}
-			require.NoError(t, upd1.OnProtocolMessage(context.Background(), &rej, evStore))
-			require.Equal(t, 1, reg.Len(), "update #1 should be removed from registry")
+			testRejectUpdate(t, reg, evStore, upd1)
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("3"))
 			require.NoError(t, err, "update #3 should be created after #1 completed")
@@ -349,29 +355,8 @@ func TestFindOrCreate(t *testing.T) {
 		})
 
 		t.Run("completing 1st update still denies new update to be created", func(t *testing.T) {
-			err = upd1.Admit(
-				context.Background(),
-				&updatepb.Request{
-					Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-					Input: &updatepb.Input{Name: "not_empty"},
-				},
-				evStore)
-			require.NoError(t, err, "update #1 should be admitted")
-
-			err = upd1.OnProtocolMessage(
-				context.Background(),
-				&protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
-					RejectedRequestMessageId: "update1/request",
-					RejectedRequest: &updatepb.Request{
-						Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-						Input: &updatepb.Input{Name: "not_empty"},
-					},
-					Failure: &failurepb.Failure{
-						Message: "intentional failure in " + t.Name(),
-					},
-				})},
-				evStore)
-			require.NoError(t, err, "update #1 should be completed")
+			testAdmitUpdate(t, reg, evStore, upd1)
+			testRejectUpdate(t, reg, evStore, upd1)
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var failedPrecon *serviceerror.FailedPrecondition
@@ -413,14 +398,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 	})
 
 	t.Run("registry with admitted update", func(t *testing.T) {
-		err := upd.Admit(
-			context.Background(),
-			&updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
-				Input: &updatepb.Input{Name: "not_empty"},
-			},
-			evStore)
-		require.NoError(t, err)
+		testAdmitUpdate(t, reg, evStore, upd)
 
 		require.True(t, reg.HasOutgoingMessages(false))
 		require.True(t, reg.HasOutgoingMessages(true))
@@ -435,14 +413,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 	})
 
 	t.Run("registry with accepted update", func(t *testing.T) {
-		err := upd.OnProtocolMessage(
-			context.Background(),
-			&protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
-				AcceptedRequestMessageId:         tv.MessageID(),
-				AcceptedRequestSequencingEventId: testSequencingEventID,
-			})},
-			evStore)
-		require.NoError(t, err)
+		testAcceptUpdate(t, reg, evStore, upd)
 
 		require.False(t, reg.HasOutgoingMessages(false))
 		require.False(t, reg.HasOutgoingMessages(true))
@@ -478,20 +449,13 @@ func TestSendMessages(t *testing.T) {
 	})
 
 	t.Run("registry with 1 admitted update has 1 message to send", func(t *testing.T) {
-		err := upd1.Admit(
-			context.Background(),
-			&updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-				Input: &updatepb.Input{Name: "not_empty"},
-			},
-			evStore)
-		require.NoError(t, err)
+		testAdmitUpdate(t, reg, evStore, upd1)
 
 		msgs := reg.Send(context.Background(), false, testSequencingEventID)
 		require.Len(t, msgs, 1)
 		require.True(t, upd1.IsSent())
 		require.False(t, upd2.IsSent())
-		require.Equal(t, tv.UpdateID("1"), msgs[0].ProtocolInstanceId)
+		require.Equal(t, upd1.ID(), msgs[0].ProtocolInstanceId)
 		require.Equal(t, testSequencingEventID-1, msgs[0].GetEventId())
 
 		// no more to send as update #1 is already sent
@@ -508,14 +472,7 @@ func TestSendMessages(t *testing.T) {
 	})
 
 	t.Run("registry with 2 admitted updates returns messages sorted by admission time", func(t *testing.T) {
-		err := upd2.Admit(
-			context.Background(),
-			&updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("2")},
-				Input: &updatepb.Input{Name: "not_empty"},
-			},
-			evStore)
-		require.NoError(t, err)
+		testAdmitUpdate(t, reg, evStore, upd2)
 
 		msgs := reg.Send(context.Background(), false, testSequencingEventID)
 		require.Len(t, msgs, 1)
@@ -533,8 +490,8 @@ func TestSendMessages(t *testing.T) {
 		require.Len(t, msgs, 2)
 		require.True(t, upd1.IsSent())
 		require.True(t, upd2.IsSent())
-		require.Equal(t, tv.UpdateID("1"), msgs[0].ProtocolInstanceId)
-		require.Equal(t, tv.UpdateID("2"), msgs[1].ProtocolInstanceId)
+		require.Equal(t, upd1.ID(), msgs[0].ProtocolInstanceId)
+		require.Equal(t, upd2.ID(), msgs[1].ProtocolInstanceId)
 	})
 }
 
@@ -568,22 +525,8 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 
 	t.Run("registry with updates [#1, #2] in stateAdmitted rejects nothing", func(t *testing.T) {
-		err := upd1.Admit(
-			context.Background(),
-			&updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-				Input: &updatepb.Input{Name: "not_empty"},
-			},
-			evStore)
-		require.NoError(t, err)
-		err = upd2.Admit(
-			context.Background(),
-			&updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("2")},
-				Input: &updatepb.Input{Name: "not_empty"},
-			},
-			evStore)
-		require.NoError(t, err)
+		testAdmitUpdate(t, reg, evStore, upd1)
+		testAdmitUpdate(t, reg, evStore, upd2)
 
 		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
@@ -596,7 +539,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
 		require.Len(t, rejectedIDs, 1, "only update #1 in stateSent should be rejected")
-		require.Equal(t, rejectedIDs[0], tv.UpdateID("1"), "update #1 should be rejected")
+		require.Equal(t, rejectedIDs[0], upd1.ID(), "update #1 should be rejected")
 
 		rejectedIDs, err = reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
@@ -605,14 +548,7 @@ func TestRejectUnprocessed(t *testing.T) {
 
 	t.Run("registry with update #2 in stateAccepted rejects nothing", func(t *testing.T) {
 		_ = upd2.Send(context.Background(), false, sequencingID)
-		err := upd2.OnProtocolMessage(
-			context.Background(),
-			&protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
-				AcceptedRequestMessageId:         tv.String(),
-				AcceptedRequestSequencingEventId: testSequencingEventID,
-			})},
-			evStore)
-		require.NoError(t, err)
+		testAcceptUpdate(t, reg, evStore, upd2)
 
 		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
@@ -623,7 +559,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		err := upd2.OnProtocolMessage(
 			context.Background(),
 			&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{
-				Meta:    &updatepb.Meta{UpdateId: tv.UpdateID("2")},
+				Meta:    &updatepb.Meta{UpdateId: upd2.ID()},
 				Outcome: successOutcome(t, tv.String())}),
 			},
 			evStore)
@@ -741,11 +677,12 @@ func TestTryResurrect(t *testing.T) {
 
 	t.Run("add acceptance message as new update with stateAdmitted", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
+		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
 		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
 			AcceptedRequestMessageId:         tv.MessageID(),
 			AcceptedRequestSequencingEventId: testSequencingEventID,
 			AcceptedRequest:                  &updatepb.Request{},
-		})}
+		}), ProtocolInstanceId: tv.UpdateID()}
 
 		upd, err := reg.TryResurrect(context.Background(), msg)
 		require.NoError(t, err)
@@ -754,15 +691,20 @@ func TestTryResurrect(t *testing.T) {
 		s, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
+
+		// ensure update can complete its lifecycle
+		testAcceptUpdate(t, reg, evStore, upd)
+		testCompleteUpdate(t, reg, evStore, upd)
 	})
 
 	t.Run("add rejection message as new update with stateAdmitted", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
+		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
 		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
 			RejectedRequestMessageId:         tv.MessageID(),
 			RejectedRequestSequencingEventId: testSequencingEventID,
 			RejectedRequest:                  &updatepb.Request{},
-		})}
+		}), ProtocolInstanceId: tv.UpdateID()}
 
 		upd, err := reg.TryResurrect(context.Background(), msg)
 		require.NoError(t, err)
@@ -771,6 +713,10 @@ func TestTryResurrect(t *testing.T) {
 		s, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
+
+		// ensure update can complete its lifecycle
+		testAcceptUpdate(t, reg, evStore, upd)
+		testCompleteUpdate(t, reg, evStore, upd)
 	})
 
 	t.Run("ignore nil messages", func(t *testing.T) {
@@ -839,4 +785,85 @@ func TestTryResurrect(t *testing.T) {
 		require.ErrorAs(t, err, &failedPrecon)
 		require.Equal(t, 0, reg.Len())
 	})
+}
+
+func testAdmitUpdate(
+	t *testing.T,
+	reg update.Registry,
+	evStore mockEventStore,
+	upd *update.Update,
+) {
+	t.Helper()
+	err := upd.Admit(
+		context.Background(),
+		&updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: upd.ID()},
+			Input: &updatepb.Input{Name: "not_empty"},
+		},
+		evStore)
+	require.NoError(t, err)
+}
+
+func testRejectUpdate(
+	t *testing.T,
+	reg update.Registry,
+	evStore mockEventStore,
+	upd *update.Update,
+) {
+	t.Helper()
+	startRegistryLen := reg.Len()
+
+	err := upd.OnProtocolMessage(
+		context.Background(),
+		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
+			RejectedRequestMessageId: "update1/request",
+			RejectedRequest: &updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: upd.ID()},
+				Input: &updatepb.Input{Name: "not_empty"},
+			},
+			Failure: &failurepb.Failure{Message: "intentional failure in " + t.Name()},
+		})},
+		evStore)
+	require.NoError(t, err)
+	require.Equal(t, startRegistryLen-1, reg.Len(), "update should have be removed")
+}
+
+func testAcceptUpdate(
+	t *testing.T,
+	reg update.Registry,
+	evStore mockEventStore,
+	upd *update.Update,
+) {
+	t.Helper()
+	tv := testvars.New(t.Name())
+
+	err := upd.OnProtocolMessage(
+		context.Background(),
+		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         tv.MessageID(),
+			AcceptedRequestSequencingEventId: testSequencingEventID,
+		})},
+		evStore)
+	require.NoError(t, err)
+}
+
+func testCompleteUpdate(
+	t *testing.T,
+	reg update.Registry,
+	evStore mockEventStore,
+	upd *update.Update,
+) {
+	t.Helper()
+	startRegistryLen := reg.Len()
+
+	err := upd.OnProtocolMessage(
+		context.Background(),
+		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
+			Outcome: successOutcome(t, "success!"),
+		})},
+		evStore,
+	)
+	require.NoError(t, err)
+	require.Equal(t, startRegistryLen-1, reg.Len(), "update should have be removed")
 }

@@ -41,4 +41,6 @@ func (u *Update) NeedToSend(includeAlreadySent bool) bool { return u.needToSend(
 
 func (u *Update) IsSent() bool { return u.isSent() }
 
+func (u *Update) ID() string { return u.id }
+
 func CompletedCount(r Registry) int { return r.(*registry).completedCount }
