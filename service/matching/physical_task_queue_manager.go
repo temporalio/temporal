@@ -108,7 +108,6 @@ type (
 		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
-		Matcher() *TaskMatcher
 	}
 
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
@@ -484,10 +483,6 @@ func newChildContext(
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
-}
-
-func (c *physicalTaskQueueManagerImpl) Matcher() *TaskMatcher {
-	return c.matcher
 }
 
 func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
