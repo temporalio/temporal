@@ -29,14 +29,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/workflowservice/v1"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -102,8 +102,6 @@ type (
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		// Describe returns information about the physical task queue
-		Describe() *taskqueuespb.PhysicalTaskQueueInfo
 		GetStats() *taskqueuepb.TaskQueueStats
 		UnloadFromPartitionManager(unloadCause)
 		String() string
@@ -388,17 +386,10 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
-	return &taskqueuespb.PhysicalTaskQueueInfo{
-		Pollers:        c.GetAllPollerInfo(),
-		TaskQueueStats: c.GetStats(),
-	}
-}
-
 func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
 	return &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
-		ApproximateBacklogAge:   nil,        // TODO: Shivam - add this feature
+		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.taskReader.getBacklogHeadCreateTime()),
 		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
 		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature
 	}

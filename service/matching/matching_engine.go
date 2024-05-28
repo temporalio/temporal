@@ -39,6 +39,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"github.com/pborman/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -960,7 +962,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							// Aggregate counts; for now, we only aggregate approximateBacklogCount
 							mergedStats = &taskqueuepb.TaskQueueStats{
 								ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-								ApproximateBacklogAge:   nil,
+								ApproximateBacklogAge:   e.largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),,
 								TasksAddRate:            float32(0),
 								TasksDispatchRate:       float32(0),
 							}
@@ -2203,4 +2205,12 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
+}
+
+// largerBacklogAge returns the larger BacklogAge
+func (e *matchingEngineImpl) largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *durationpb.Duration) *durationpb.Duration {
+	if rootBacklogAge.AsDuration() > currentPartitionAge.AsDuration() {
+		return rootBacklogAge
+	}
+	return currentPartitionAge
 }
