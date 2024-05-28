@@ -56,19 +56,21 @@ func (notRegisteredError) IsTerminalTaskError() bool {
 type Registry struct {
 	machines map[int32]StateMachineDefinition
 	tasks    map[int32]TaskSerializer
-	// This is mapped to any because of Go's limited generics support.
+	// The executor maps are mapped to any because of Go's limited generics support.
 	// The actual value is Executor[T].
-	executors map[int32]any
-	events    map[enumspb.EventType]EventDefinition
+	activeExecutors  map[int32]any
+	standbyExecutors map[int32]any
+	events           map[enumspb.EventType]EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
 func NewRegistry() *Registry {
 	return &Registry{
-		machines:  make(map[int32]StateMachineDefinition),
-		tasks:     make(map[int32]TaskSerializer),
-		executors: make(map[int32]any),
-		events:    make(map[enumspb.EventType]EventDefinition),
+		machines:         make(map[int32]StateMachineDefinition),
+		tasks:            make(map[int32]TaskSerializer),
+		activeExecutors:  make(map[int32]any),
+		standbyExecutors: make(map[int32]any),
+		events:           make(map[enumspb.EventType]EventDefinition),
 	}
 }
 
@@ -105,25 +107,78 @@ func (r *Registry) TaskSerializer(t int32) (d TaskSerializer, ok bool) {
 	return
 }
 
-// RegisterExecutor registers an [Executor] for the given task type.
+// RegisterExecutors registers an active and a standby [Executor] for the given task type.
 // Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
-func RegisterExecutor[T Task](r *Registry, t int32, exec Executor[T]) error {
-	if existing, ok := r.executors[t]; ok {
-		return fmt.Errorf("%w: executor already registered for %v: %v", ErrDuplicateRegistration, t, existing)
+func RegisterExecutors[T Task](
+	r *Registry,
+	t int32,
+	activeExecutor Executor[T],
+	standbyExecutor Executor[T],
+) error {
+	// The executors are registered in pairs, so only need to check in one map.
+	if existing, ok := r.activeExecutors[t]; ok {
+		return fmt.Errorf(
+			"%w: executor already registered for %v: %v",
+			ErrDuplicateRegistration,
+			t,
+			existing,
+		)
 	}
-	r.executors[t] = exec
+	r.activeExecutors[t] = activeExecutor
+	r.standbyExecutors[t] = standbyExecutor
 	return nil
 }
 
-// Execute gets an [Executor] from the registry and invokes it.
+// ExecuteActiveTask gets an [Executor] from the registry and invokes it.
 // Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
-func Execute(ctx context.Context, r *Registry, env Environment, ref Ref, task Task) error {
-	executor, ok := r.executors[task.Type().ID]
+func (r *Registry) ExecuteActiveTask(
+	ctx context.Context,
+	env Environment,
+	ref Ref,
+	task Task,
+) error {
+	executor, ok := r.activeExecutors[task.Type().ID]
 	if !ok {
 		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
 	}
+	return r.execute(ctx, executor, env, ref, task)
+}
+
+// ExecuteStandbyTask gets an [Executor] from the registry and invokes it.
+// Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
+func (r *Registry) ExecuteStandbyTask(
+	ctx context.Context,
+	env Environment,
+	ref Ref,
+	task Task,
+) error {
+	executor, ok := r.standbyExecutors[task.Type().ID]
+	if !ok {
+		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
+	}
+	return r.execute(ctx, executor, env, ref, task)
+}
+
+// execute invokes the [Executor].
+func (r *Registry) execute(
+	ctx context.Context,
+	executor any,
+	env Environment,
+	ref Ref,
+	task Task,
+) error {
+	if executor == nil {
+		return nil
+	}
 	fn := reflect.ValueOf(executor)
-	values := fn.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(env), reflect.ValueOf(ref), reflect.ValueOf(task)})
+	values := fn.Call(
+		[]reflect.Value{
+			reflect.ValueOf(ctx),
+			reflect.ValueOf(env),
+			reflect.ValueOf(ref),
+			reflect.ValueOf(task),
+		},
+	)
 	if !values[0].IsNil() {
 		//nolint:revive // type cast result is unchecked
 		return values[0].Interface().(error)
