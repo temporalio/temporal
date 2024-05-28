@@ -117,7 +117,7 @@ issues:
       linters:
         - revive
     - path: _test\.go|tests/.+\.go
-      text: "dot-imports"  # false positives when using subtests
+      text: "dot-imports"  # helpful in tests
       linters:
         - revive
     - path: _test\.go|tests/.+\.go
