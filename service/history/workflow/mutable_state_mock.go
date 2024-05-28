@@ -3044,3 +3044,15 @@ func (mr *MockMutableStateMockRecorder) VisitUpdates(visitor interface{}) *gomoc
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VisitUpdates", reflect.TypeOf((*MockMutableState)(nil).VisitUpdates), visitor)
 }
+
+func (m *MockMutableState) RefreshExpirationTimeoutTask(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshExpirationTimeoutTask", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (mr *MockMutableStateMockRecorder) RefreshExpirationTimeoutTask(ctx context.Context) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshExpirationTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).RefreshExpirationTimeoutTask), ctx)
+}

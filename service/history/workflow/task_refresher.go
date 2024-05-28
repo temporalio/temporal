@@ -154,7 +154,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	)
 }
 
-func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
+func RefreshTasksForWorkflowStart(
 	ctx context.Context,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
@@ -191,6 +191,15 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	return nil
+
+}
+
+func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
+	ctx context.Context,
+	mutableState MutableState,
+	taskGenerator TaskGenerator,
+) error {
+	return RefreshTasksForWorkflowStart(ctx, mutableState, taskGenerator)
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(

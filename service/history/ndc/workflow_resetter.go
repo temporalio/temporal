@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -272,21 +271,12 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	// Reset expiration time
 	resetMutableState := resetWorkflow.GetMutableState()
-	executionInfo := resetMutableState.GetExecutionInfo()
-
-	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
-	if weTimeout > 0 {
-		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
-	}
 
 	// if workflow was reset after it was expired - at this point expiration task will
 	// already be fired since it is (re)created from the event, and event has old expiration time
 	// generate workflow execution task. again. this time with proper expiration time
-	taskRefresher := workflow.NewTaskRefresher(
-		r.shardContext,
-		r.logger,
-	)
-	if err := taskRefresher.RefreshTasks(ctx, resetMutableState); err != nil {
+
+	if err := resetMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
 		return nil, err
 	}
 

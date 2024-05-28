@@ -189,8 +189,7 @@ func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
 	// meaning start version check will always pass.
 	// Also there's no way we can perform version check before first run may already be deleted due to retention
 
-	// fix for https://github.com/temporalio/temporal/issues/1913
-	// workflow timeout is not expired
+	// Check if workflow timeout is not expired
 	// This can happen if the workflow is reset since reset re-calculates
 	// the execution timeout but shares the same firstRunID as the base run
 
