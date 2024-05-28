@@ -396,7 +396,6 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		fx.Supply(
 			serviceName,
 			params.EsConfig,
-			params.EsHttpClient,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
@@ -443,6 +442,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() esclient.Client {
 				return params.EsClient
+			},
+			func() *http.Client {
+				return params.EsHttpClient
 			},
 			func() resource.NamespaceLogger {
 				return params.NamespaceLogger

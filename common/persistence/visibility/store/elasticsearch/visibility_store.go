@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -144,7 +143,7 @@ func NewVisibilityStore(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *visibilityStore {
-	esClient, err := esclient.NewClient(cfg, esHttpClient, logger)
+	esClient, err := client.NewClient(cfg, esHttpClient, logger)
 	if esClient == nil || err != nil {
 		return nil
 	}

@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"strconv"
 	"sync"
 	"testing"
@@ -126,6 +127,7 @@ type (
 		historyConfig                    *HistoryConfig
 		esConfig                         *esclient.Config
 		esClient                         esclient.Client
+		esHttpClient                     *http.Client
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
@@ -174,6 +176,7 @@ type (
 		HistoryConfig                    *HistoryConfig
 		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
+		ESHttpClient                     *http.Client
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
@@ -211,6 +214,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		clusterNo:                        params.ClusterNo,
 		esConfig:                         params.ESConfig,
 		esClient:                         params.ESClient,
+		esHttpClient:                     params.ESHttpClient,
 		archiverMetadata:                 params.ArchiverMetadata,
 		archiverProvider:                 params.ArchiverProvider,
 		historyConfig:                    params.HistoryConfig,
@@ -459,6 +463,7 @@ func (c *temporalImpl) startFrontend(
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Provide(func() *http.Client { return c.esHttpClient }),
 		fx.Provide(c.GetTLSConfigProvider),
 		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
@@ -553,6 +558,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
+			fx.Provide(func() *http.Client { return c.esHttpClient }),
 			fx.Provide(workflow.NewTaskGeneratorProvider),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
@@ -646,6 +652,7 @@ func (c *temporalImpl) startMatching(
 		fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Provide(func() *http.Client { return c.esHttpClient }),
 		fx.Provide(c.GetTLSConfigProvider),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
@@ -743,6 +750,7 @@ func (c *temporalImpl) startWorker(
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Provide(func() *http.Client { return c.esHttpClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(c.GetTLSConfigProvider),
 		fx.Provide(c.GetTaskCategoryRegistry),
