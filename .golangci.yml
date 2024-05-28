@@ -117,6 +117,10 @@ issues:
       linters:
         - revive
     - path: _test\.go|tests/.+\.go
+      text: "dot-imports"  # helpful in tests
+      linters:
+        - revive
+    - path: _test\.go|tests/.+\.go
       linters:
         - goerr113  # like err = errors.New("test error")
     - path: ^tools\/.+\.go
