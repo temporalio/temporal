@@ -258,6 +258,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 
 	if esConfig != nil {
 		esHttpClient := so.elasticsearchHttpClient
+		esConfig.SetHttpClient(esHttpClient)
 		if esHttpClient == nil {
 			var err error
 			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
