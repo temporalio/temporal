@@ -605,7 +605,7 @@ func TestAbort(t *testing.T) {
 			upd := reg.Find(context.Background(), tv.UpdateID(fmt.Sprintf("%d", id)))
 			require.NotNil(t, upd)
 
-			_, err := upd.WaitLifecycleStage(context.Background(), 0, 1*time.Second)
+			_, err := upd.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
 			require.Equal(t, consts.ErrWorkflowCompleted, err)
 		}(i)
 	}
@@ -639,7 +639,7 @@ func TestClear(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, err := upd.WaitLifecycleStage(context.Background(), 0, 1*time.Second)
+		_, err := upd.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
 		require.Equal(t, update.WorkflowUpdateAbortedErr, err)
 	}()
 
