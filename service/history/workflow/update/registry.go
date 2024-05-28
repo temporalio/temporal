@@ -105,7 +105,7 @@ type (
 
 	registry struct {
 		updates         map[string]*Update
-		store           Store
+		store           UpdateStore
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
@@ -156,7 +156,7 @@ func WithTracerProvider(t trace.TracerProvider) Option {
 }
 
 func NewRegistry(
-	store Store,
+	store UpdateStore,
 	opts ...Option,
 ) Registry {
 	r := &registry{

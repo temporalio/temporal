@@ -60,54 +60,6 @@ func successOutcome(t *testing.T, s string) *updatepb.Outcome {
 	}
 }
 
-var eventStoreUnused update.EventStore
-
-type mockEventStore struct {
-	effect.Controller
-	AddWorkflowExecutionUpdateAcceptedEventFunc func(
-		updateID string,
-		acceptedRequestMessageId string,
-		acceptedRequestSequencingEventId int64,
-		acceptedRequest *updatepb.Request,
-	) (*historypb.HistoryEvent, error)
-
-	AddWorkflowExecutionUpdateCompletedEventFunc func(
-		acceptedEventID int64,
-		resp *updatepb.Response,
-	) (*historypb.HistoryEvent, error)
-
-	CanAddEventFunc func() bool
-}
-
-func (m mockEventStore) AddWorkflowExecutionUpdateAcceptedEvent(
-	updateID string,
-	acceptedRequestMessageId string,
-	acceptedRequestSequencingEventId int64,
-	acceptedRequest *updatepb.Request,
-) (*historypb.HistoryEvent, error) {
-	if m.AddWorkflowExecutionUpdateAcceptedEventFunc != nil {
-		return m.AddWorkflowExecutionUpdateAcceptedEventFunc(updateID, acceptedRequestMessageId, acceptedRequestSequencingEventId, acceptedRequest)
-	}
-	return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
-}
-
-func (m mockEventStore) AddWorkflowExecutionUpdateCompletedEvent(
-	acceptedEventID int64,
-	resp *updatepb.Response,
-) (*historypb.HistoryEvent, error) {
-	if m.AddWorkflowExecutionUpdateCompletedEventFunc != nil {
-		return m.AddWorkflowExecutionUpdateCompletedEventFunc(acceptedEventID, resp)
-	}
-	return &historypb.HistoryEvent{}, nil
-}
-
-func (m mockEventStore) CanAddEvent() bool {
-	if m.CanAddEventFunc != nil {
-		return m.CanAddEventFunc()
-	}
-	return true
-}
-
 func TestNilMessage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
