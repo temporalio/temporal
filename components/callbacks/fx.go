@@ -34,13 +34,14 @@ import (
 var Module = fx.Module(
 	"component.callbacks",
 	fx.Provide(ConfigProvider),
-	fx.Provide(CallbackExecutorOptionsProvider),
+	fx.Provide(ActiveExecutorOptionsProvider),
+	fx.Provide(StandbyExecutorOptionsProvider),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterStateMachine),
 	fx.Invoke(RegisterExecutor),
 )
 
-func CallbackExecutorOptionsProvider(
+func ActiveExecutorOptionsProvider(
 	namespaceRegistry namespace.Registry,
 ) ActiveExecutorOptions {
 	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
@@ -52,4 +53,8 @@ func CallbackExecutorOptionsProvider(
 		NamespaceRegistry: namespaceRegistry,
 		CallerProvider:    m.Get,
 	}
+}
+
+func StandbyExecutorOptionsProvider() StandbyExecutorOptions {
+	return StandbyExecutorOptions{}
 }

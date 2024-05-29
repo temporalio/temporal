@@ -35,12 +35,12 @@ func ExampleRouteDispatchNexusTaskByNamespaceAndTaskQueue() {
 			TaskQueue: "TEST-TASK-QUEUE",
 		})
 	fmt.Println(path)
-	// Output: api/v1/namespaces/TEST-NAMESPACE/task-queues/TEST-TASK-QUEUE/nexus-services
+	// Output: namespaces/TEST-NAMESPACE/task-queues/TEST-TASK-QUEUE/nexus-services
 }
 
 func ExampleRouteDispatchNexusTaskByEndpoint() {
 	path := nexus.RouteDispatchNexusTaskByEndpoint.
 		Path("TEST-ENDPOINT")
 	fmt.Println(path)
-	// Output: api/v1/nexus/endpoints/TEST-ENDPOINT/services
+	// Output: nexus/endpoints/TEST-ENDPOINT/services
 }

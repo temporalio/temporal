@@ -32,7 +32,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/temporalio/ringpop-go v0.0.0-20231122191827-aece62eb7bc7
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
-	github.com/temporalio/tchannel-go v1.22.1-0.20231116015023-bd4fb7678499
+	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
 	github.com/temporalio/tctl-kit v0.0.0-20230328153839-577f95d16fa0
 	github.com/uber-go/tally/v4 v4.1.17-0.20240412215630-22fe011f5ff0
 	github.com/urfave/cli v1.22.14

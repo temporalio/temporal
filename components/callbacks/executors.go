@@ -49,31 +49,41 @@ type CanGetNexusCompletion interface {
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
 
-type ActiveExecutorOptions struct {
-	NamespaceRegistry namespace.Registry
-	CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
-}
-
 func RegisterExecutor(
 	registry *hsm.Registry,
-	options ActiveExecutorOptions,
+	activeExecutorOptions ActiveExecutorOptions,
+	standbyExecutorOptions StandbyExecutorOptions,
 	config *Config,
 ) error {
-	exec := activeExecutor{options: options, config: config}
-	if err := hsm.RegisterExecutor(
+	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
+	standbyExec := standbyExecutor{options: standbyExecutorOptions}
+	if err := hsm.RegisterExecutors(
 		registry,
 		TaskTypeInvocation.ID,
-		exec.executeInvocationTask,
+		activeExec.executeInvocationTask,
+		standbyExec.executeInvocationTask,
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutor(registry, TaskTypeBackoff.ID, exec.executeBackoffTask)
+	return hsm.RegisterExecutors(
+		registry,
+		TaskTypeBackoff.ID,
+		activeExec.executeBackoffTask,
+		standbyExec.executeBackoffTask,
+	)
 }
 
-type activeExecutor struct {
-	options ActiveExecutorOptions
-	config  *Config
-}
+type (
+	ActiveExecutorOptions struct {
+		NamespaceRegistry namespace.Registry
+		CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
+	}
+
+	activeExecutor struct {
+		options ActiveExecutorOptions
+		config  *Config
+	}
+)
 
 func (e activeExecutor) executeInvocationTask(
 	ctx context.Context,
@@ -215,6 +225,32 @@ func (e activeExecutor) executeBackoffTask(
 			return TransitionRescheduled.Apply(callback, EventRescheduled{})
 		})
 	})
+}
+
+type (
+	StandbyExecutorOptions struct{}
+
+	standbyExecutor struct {
+		options StandbyExecutorOptions
+	}
+)
+
+func (e standbyExecutor) executeInvocationTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task InvocationTask,
+) error {
+	panic("unimplemented")
+}
+
+func (e standbyExecutor) executeBackoffTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task BackoffTask,
+) error {
+	panic("unimplemented")
 }
 
 func isRetryableHTTPResponse(response *http.Response) bool {

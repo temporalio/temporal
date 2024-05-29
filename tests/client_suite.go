@@ -126,7 +126,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	s.testCluster.host.dcClient.OverrideValue(
 		s.T(),
 		nexusoperations.CallbackURLTemplate,
-		"http://"+s.httpAPIAddress+"/api/v1/namespaces/{{.NamespaceName}}/nexus/callback")
+		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -1224,7 +1224,7 @@ func (s *ClientFunctionalSuite) Test_ActivityTimeouts() {
 func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue)
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue)
 
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
@@ -1316,7 +1316,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue)
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue)
 
 	readyToSendUpdate := make(chan bool, 1)
 	updateHasBeenAdmitted := make(chan bool)

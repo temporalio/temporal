@@ -152,8 +152,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				// TODO: nexus should export this
-				require.Equal(t, 520, unexpectedError.Response.StatusCode)
+				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
@@ -172,8 +171,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				// TODO: nexus should export this
-				require.Equal(t, 521, unexpectedError.Response.StatusCode)
+				require.Equal(t, nexus.StatusDownstreamTimeout, unexpectedError.Response.StatusCode)
 				require.Equal(t, "downstream timeout", unexpectedError.Failure.Message)
 			},
 		},
@@ -304,6 +302,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 					return authorization.Result{Decision: authorization.DecisionDeny, Reason: "unauthorized in test"}, nil
 				}
 				if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
+					if ct.NexusEndpointName != testEndpoint.Spec.Name {
+						panic("expected nexus endpoint name")
+					}
 					return authorization.Result{Decision: authorization.DecisionDeny, Reason: "unauthorized in test"}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -317,6 +318,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 					return authorization.Result{Decision: authorization.DecisionDeny}, nil
 				}
 				if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
+					if ct.NexusEndpointName != testEndpoint.Spec.Name {
+						panic("expected nexus endpoint name")
+					}
 					return authorization.Result{Decision: authorization.DecisionDeny}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -330,6 +334,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 					return authorization.Result{}, errors.New("some generic error")
 				}
 				if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
+					if ct.NexusEndpointName != testEndpoint.Spec.Name {
+						panic("expected nexus endpoint name")
+					}
 					return authorization.Result{}, errors.New("some generic error")
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -532,8 +539,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 			assertion: func(t *testing.T, err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				// TODO: nexus should export this
-				require.Equal(t, 520, unexpectedError.Response.StatusCode)
+				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
@@ -552,8 +558,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 			assertion: func(t *testing.T, err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				// TODO: nexus should export this
-				require.Equal(t, 521, unexpectedError.Response.StatusCode)
+				require.Equal(t, nexus.StatusDownstreamTimeout, unexpectedError.Response.StatusCode)
 				require.Equal(t, "downstream timeout", unexpectedError.Failure.Message)
 			},
 		},

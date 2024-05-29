@@ -223,7 +223,7 @@ func (s *sqlNexusEndpointStore) DeleteNexusEndpoint(
 			return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error: %v", err))
 		}
 		if nRows != 1 {
-			return p.ErrNexusEndpointNotFound
+			return serviceerror.NewNotFound(fmt.Sprintf("nexus endpoint not found for ID: %v", request.ID))
 		}
 
 		return nil

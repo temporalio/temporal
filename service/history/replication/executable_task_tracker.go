@@ -38,6 +38,8 @@ import (
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_tracker_mock.go
 
+const MarkPoisonPillMaxAttempts = 3
+
 type (
 	TrackableExecutableTask interface {
 		ctasks.Task

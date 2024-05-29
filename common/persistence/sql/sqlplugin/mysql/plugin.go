@@ -58,6 +58,9 @@ func (p *plugin) CreateDB(
 	metricsHandler metrics.Handler,
 ) (sqlplugin.DB, error) {
 	connect := func() (*sqlx.DB, error) {
+		if cfg.Connect != nil {
+			return cfg.Connect(cfg)
+		}
 		return p.createDBConnection(dbKind, cfg, r)
 	}
 	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler)
@@ -74,6 +77,9 @@ func (p *plugin) CreateAdminDB(
 	metricsHandler metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
 	connect := func() (*sqlx.DB, error) {
+		if cfg.Connect != nil {
+			return cfg.Connect(cfg)
+		}
 		return p.createDBConnection(dbKind, cfg, r)
 	}
 	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler)
