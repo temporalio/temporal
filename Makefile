@@ -187,6 +187,14 @@ $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(MOCKGEN),github.com/golang/mock/mockgen,$(MOCKGEN_VER))
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
+
+STRINGER_VER := v0.21.0
+STRINGER := $(LOCALBIN)/stringer
+$(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
+	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
+	@touch $@
+$(STRINGER): $(STAMPDIR)/stringer-$(STRINGER_VER)
+
 PROTOC_GEN_GO_VER := v1.33.0
 PROTOC_GEN_GO := $(LOCALBIN)/protoc-gen-go
 $(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER): | $(STAMPDIR) $(LOCALBIN)
@@ -581,7 +589,7 @@ update-dependencies:
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
-go-generate: $(MOCKGEN)
+go-generate: $(MOCKGEN) $(STRINGER)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
 

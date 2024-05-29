@@ -22,6 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate stringer -type loadCause -trimprefix loadCause -output loadcause_string_gen.go
+//go:generate stringer -type unloadCause -trimprefix unloadCause -output unloadcause_string_gen.go
+
 package matching
 
 import (
@@ -176,29 +179,6 @@ const (
 	unloadCauseShuttingDown
 	unloadCauseForce
 	unloadCauseOther
-)
-
-var (
-	loadCauseToString = map[loadCause]string{
-		loadCauseUnspecified: "Unspecified",
-		loadCauseTask:        "Task",
-		loadCauseQuery:       "Query",
-		loadCauseDescribe:    "Describe",
-		loadCauseUserData:    "UserData",
-		loadCauseNexusTask:   "NexusTask",
-		loadCausePoll:        "Poll",
-		loadCauseOther:       "Other",
-	}
-	unloadCauseToString = map[unloadCause]string{
-		unloadCauseUnspecified:  "Unspecified",
-		unloadCauseInitError:    "InitError",
-		unloadCauseIdle:         "Idle",
-		unloadCauseMembership:   "Membership",
-		unloadCauseConflict:     "Conflict",
-		unloadCauseShuttingDown: "ShuttingDown",
-		unloadCauseForce:        "Force",
-		unloadCauseOther:        "Other",
-	}
 )
 
 // NewConfig returns new service config with default values
