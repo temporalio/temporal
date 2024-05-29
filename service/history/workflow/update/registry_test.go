@@ -33,7 +33,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -49,7 +48,6 @@ import (
 )
 
 func TestNewRegistry(t *testing.T) {
-	t.Parallel()
 	tv := testvars.New(t)
 
 	t.Run("registry created from empty store has no updates", func(t *testing.T) {
@@ -84,8 +82,8 @@ func TestNewRegistry(t *testing.T) {
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
 
 		// ensure update can complete its lifecycle
-		testAcceptUpdate(t, reg, evStore, upd)
-		testCompleteUpdate(t, reg, evStore, upd)
+		mustAccept(t, evStore, upd)
+		assertCompleteUpdateInRegistry(t, reg, evStore, upd)
 	})
 
 	t.Run("registry created from store with update in stateAccepted contains accepted update", func(t *testing.T) {
@@ -113,7 +111,7 @@ func TestNewRegistry(t *testing.T) {
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, s.Stage)
 
 		// ensure update can complete its lifecycle
-		testCompleteUpdate(t, reg, evStore, upd)
+		assertCompleteUpdateInRegistry(t, reg, evStore, upd)
 	})
 
 	t.Run("registry created from store with update in stateAccepted but non-running workflow contains aborted update", func(t *testing.T) {
@@ -159,7 +157,6 @@ func TestNewRegistry(t *testing.T) {
 }
 
 func TestFind(t *testing.T) {
-	t.Parallel()
 	tv := testvars.New(t)
 
 	t.Run("return update when found in registry", func(t *testing.T) {
@@ -213,7 +210,6 @@ func TestFind(t *testing.T) {
 }
 
 func TestFindOrCreate(t *testing.T) {
-	t.Parallel()
 	tv := testvars.New(t)
 
 	t.Run("find stored update", func(t *testing.T) {
@@ -249,9 +245,9 @@ func TestFindOrCreate(t *testing.T) {
 		require.NotNil(t, upd)
 
 		// ensure update can complete its lifecycle
-		testAdmitUpdate(t, reg, evStore, upd)
-		testAcceptUpdate(t, reg, evStore, upd)
-		testCompleteUpdate(t, reg, evStore, upd)
+		mustAdmit(t, evStore, upd)
+		mustAccept(t, evStore, upd)
+		assertCompleteUpdateInRegistry(t, reg, evStore, upd)
 	})
 
 	t.Run("enforce in-flight update limit", func(t *testing.T) {
@@ -280,14 +276,7 @@ func TestFindOrCreate(t *testing.T) {
 		})
 
 		t.Run("admitting 1st update still denies new update to be created", func(t *testing.T) {
-			err = upd1.Admit(
-				context.Background(),
-				&updatepb.Request{
-					Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-					Input: &updatepb.Input{Name: "not_empty"},
-				},
-				evStore)
-			require.NoError(t, err, "update #1 should be admitted")
+			mustAdmit(t, evStore, upd1)
 
 			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var resExh *serviceerror.ResourceExhausted
@@ -296,8 +285,8 @@ func TestFindOrCreate(t *testing.T) {
 		})
 
 		t.Run("sending 1st update still denies new update to be created", func(t *testing.T) {
-			_ = upd1.Send(
-				context.Background(), false, &protocolpb.Message_EventId{EventId: testSequencingEventID})
+			t.Helper()
+			require.NotNil(t, send(t, upd1, includeAlreadySent), "update should be sent")
 
 			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var resExh *serviceerror.ResourceExhausted
@@ -320,7 +309,7 @@ func TestFindOrCreate(t *testing.T) {
 		})
 
 		t.Run("rejecting 1st update allows new update to be created", func(t *testing.T) {
-			testRejectUpdate(t, reg, evStore, upd1)
+			assertRejectUpdateInRegistry(t, reg, evStore, upd1)
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("3"))
 			require.NoError(t, err, "update #3 should be created after #1 completed")
@@ -355,8 +344,8 @@ func TestFindOrCreate(t *testing.T) {
 		})
 
 		t.Run("completing 1st update still denies new update to be created", func(t *testing.T) {
-			testAdmitUpdate(t, reg, evStore, upd1)
-			testRejectUpdate(t, reg, evStore, upd1)
+			mustAdmit(t, evStore, upd1)
+			assertRejectUpdateInRegistry(t, reg, evStore, upd1)
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var failedPrecon *serviceerror.FailedPrecondition
@@ -386,7 +375,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 	)
 
 	t.Run("empty registry", func(t *testing.T) {
-		require.False(t, reg.HasOutgoingMessages(false))
+		require.False(t, reg.HasOutgoingMessages(skipAlreadySent))
 	})
 
 	t.Run("registry with created update", func(t *testing.T) {
@@ -394,29 +383,29 @@ func TestHasOutgoingMessages(t *testing.T) {
 		upd, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID())
 		require.NoError(t, err)
 
-		require.False(t, reg.HasOutgoingMessages(false))
+		require.False(t, reg.HasOutgoingMessages(skipAlreadySent))
 	})
 
 	t.Run("registry with admitted update", func(t *testing.T) {
-		testAdmitUpdate(t, reg, evStore, upd)
+		mustAdmit(t, evStore, upd)
 
-		require.True(t, reg.HasOutgoingMessages(false))
-		require.True(t, reg.HasOutgoingMessages(true))
+		require.True(t, reg.HasOutgoingMessages(skipAlreadySent))
+		require.True(t, reg.HasOutgoingMessages(includeAlreadySent))
 	})
 
 	t.Run("registry with sent update", func(t *testing.T) {
-		msg := reg.Send(context.Background(), false, testSequencingEventID)
+		msg := reg.Send(context.Background(), skipAlreadySent, testSequencingEventID)
 		require.Len(t, msg, 1)
 
-		require.False(t, reg.HasOutgoingMessages(false))
-		require.True(t, reg.HasOutgoingMessages(true))
+		require.False(t, reg.HasOutgoingMessages(skipAlreadySent))
+		require.True(t, reg.HasOutgoingMessages(includeAlreadySent))
 	})
 
 	t.Run("registry with accepted update", func(t *testing.T) {
-		testAcceptUpdate(t, reg, evStore, upd)
+		mustAccept(t, evStore, upd)
 
-		require.False(t, reg.HasOutgoingMessages(false))
-		require.False(t, reg.HasOutgoingMessages(true))
+		require.False(t, reg.HasOutgoingMessages(skipAlreadySent))
+		require.False(t, reg.HasOutgoingMessages(includeAlreadySent))
 	})
 }
 
@@ -431,7 +420,7 @@ func TestSendMessages(t *testing.T) {
 	)
 
 	t.Run("empty registry has no messages to send", func(t *testing.T) {
-		msgs := reg.Send(context.Background(), true, testSequencingEventID)
+		msgs := reg.Send(context.Background(), includeAlreadySent, testSequencingEventID)
 		require.Empty(t, msgs)
 	})
 
@@ -442,16 +431,16 @@ func TestSendMessages(t *testing.T) {
 		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 		require.NoError(t, err)
 
-		msgs := reg.Send(context.Background(), true, testSequencingEventID)
+		msgs := reg.Send(context.Background(), includeAlreadySent, testSequencingEventID)
 		require.Empty(t, msgs)
 		require.False(t, upd1.IsSent())
 		require.False(t, upd2.IsSent())
 	})
 
 	t.Run("registry with 1 admitted update has 1 message to send", func(t *testing.T) {
-		testAdmitUpdate(t, reg, evStore, upd1)
+		mustAdmit(t, evStore, upd1)
 
-		msgs := reg.Send(context.Background(), false, testSequencingEventID)
+		msgs := reg.Send(context.Background(), includeAlreadySent, testSequencingEventID)
 		require.Len(t, msgs, 1)
 		require.True(t, upd1.IsSent())
 		require.False(t, upd2.IsSent())
@@ -459,34 +448,34 @@ func TestSendMessages(t *testing.T) {
 		require.Equal(t, testSequencingEventID-1, msgs[0].GetEventId())
 
 		// no more to send as update #1 is already sent
-		msgs = reg.Send(context.Background(), false, testSequencingEventID)
+		msgs = reg.Send(context.Background(), skipAlreadySent, testSequencingEventID)
 		require.Empty(t, msgs)
 		require.True(t, upd1.IsSent())
 		require.False(t, upd2.IsSent())
 
 		// including already sent updates returns update #1 message again
-		msgs = reg.Send(context.Background(), true, testSequencingEventID)
+		msgs = reg.Send(context.Background(), includeAlreadySent, testSequencingEventID)
 		require.Len(t, msgs, 1)
 		require.True(t, upd1.IsSent())
 		require.False(t, upd2.IsSent())
 	})
 
 	t.Run("registry with 2 admitted updates returns messages sorted by admission time", func(t *testing.T) {
-		testAdmitUpdate(t, reg, evStore, upd2)
+		mustAdmit(t, evStore, upd2)
 
-		msgs := reg.Send(context.Background(), false, testSequencingEventID)
+		msgs := reg.Send(context.Background(), skipAlreadySent, testSequencingEventID)
 		require.Len(t, msgs, 1)
 		require.True(t, upd1.IsSent())
 		require.True(t, upd2.IsSent())
 
 		// no more to send as update #1 and #2 are already sent
-		msgs = reg.Send(context.Background(), false, testSequencingEventID)
+		msgs = reg.Send(context.Background(), skipAlreadySent, testSequencingEventID)
 		require.Empty(t, msgs)
 		require.True(t, upd1.IsSent())
 		require.True(t, upd2.IsSent())
 
 		// including already sent updates returns update #1 and #2 message again
-		msgs = reg.Send(context.Background(), true, testSequencingEventID)
+		msgs = reg.Send(context.Background(), includeAlreadySent, testSequencingEventID)
 		require.Len(t, msgs, 2)
 		require.True(t, upd1.IsSent())
 		require.True(t, upd2.IsSent())
@@ -499,11 +488,10 @@ func TestRejectUnprocessed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		tv           = testvars.New(t)
-		upd1, upd2   *update.Update
-		reg          = update.NewRegistry(emptyUpdateStore)
-		evStore      = mockEventStore{Controller: effect.Immediate(context.Background())}
-		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
+		tv         = testvars.New(t)
+		upd1, upd2 *update.Update
+		reg        = update.NewRegistry(emptyUpdateStore)
+		evStore    = mockEventStore{Controller: effect.Immediate(context.Background())}
 	)
 
 	t.Run("empty registry has no updates to reject", func(t *testing.T) {
@@ -525,8 +513,8 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 
 	t.Run("registry with updates [#1, #2] in stateAdmitted rejects nothing", func(t *testing.T) {
-		testAdmitUpdate(t, reg, evStore, upd1)
-		testAdmitUpdate(t, reg, evStore, upd2)
+		mustAdmit(t, evStore, upd1)
+		mustAdmit(t, evStore, upd2)
 
 		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
@@ -534,7 +522,8 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 
 	t.Run("registry with update #1 in stateSent rejects it", func(t *testing.T) {
-		_ = upd1.Send(context.Background(), false, sequencingID)
+		t.Helper()
+		require.NotNil(t, send(t, upd1, includeAlreadySent), "update should be sent")
 
 		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
@@ -547,8 +536,9 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 
 	t.Run("registry with update #2 in stateAccepted rejects nothing", func(t *testing.T) {
-		_ = upd2.Send(context.Background(), false, sequencingID)
-		testAcceptUpdate(t, reg, evStore, upd2)
+		t.Helper()
+		require.NotNil(t, send(t, upd2, includeAlreadySent), "update should be sent")
+		mustAccept(t, evStore, upd2)
 
 		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
@@ -556,14 +546,9 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 
 	t.Run("registry with update #2 in stateCompleted rejects nothing", func(t *testing.T) {
-		err := upd2.OnProtocolMessage(
-			context.Background(),
-			&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{
-				Meta:    &updatepb.Meta{UpdateId: upd2.ID()},
-				Outcome: successOutcome(t, tv.String())}),
-			},
-			evStore)
-		require.NoError(t, err)
+		t.Helper()
+		require.NoError(t, respondSuccess(t, evStore, upd2), "update should be completed")
+		assertCompleted(t, upd2, successOutcome)
 
 		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
 		require.NoError(t, err)
@@ -573,7 +558,6 @@ func TestRejectUnprocessed(t *testing.T) {
 
 // NOTE: tests for various update states can be found in the update tests
 func TestAbort(t *testing.T) {
-	t.Parallel()
 	tv := testvars.New(t)
 
 	reg := update.NewRegistry(&mockUpdateStore{
@@ -617,7 +601,6 @@ func TestAbort(t *testing.T) {
 }
 
 func TestClear(t *testing.T) {
-	t.Parallel()
 	tv := testvars.New(t)
 
 	reg := update.NewRegistry(&mockUpdateStore{
@@ -672,7 +655,6 @@ func TestFailoverVersion(t *testing.T) {
 }
 
 func TestTryResurrect(t *testing.T) {
-	t.Parallel()
 	tv := testvars.New(t)
 
 	t.Run("add acceptance message as new update with stateAdmitted", func(t *testing.T) {
@@ -693,8 +675,8 @@ func TestTryResurrect(t *testing.T) {
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
 
 		// ensure update can complete its lifecycle
-		testAcceptUpdate(t, reg, evStore, upd)
-		testCompleteUpdate(t, reg, evStore, upd)
+		mustAccept(t, evStore, upd)
+		assertCompleteUpdateInRegistry(t, reg, evStore, upd)
 	})
 
 	t.Run("add rejection message as new update with stateAdmitted", func(t *testing.T) {
@@ -715,8 +697,8 @@ func TestTryResurrect(t *testing.T) {
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, s.Stage)
 
 		// ensure update can complete its lifecycle
-		testAcceptUpdate(t, reg, evStore, upd)
-		testCompleteUpdate(t, reg, evStore, upd)
+		mustAccept(t, evStore, upd)
+		assertCompleteUpdateInRegistry(t, reg, evStore, upd)
 	})
 
 	t.Run("ignore nil messages", func(t *testing.T) {
@@ -787,24 +769,7 @@ func TestTryResurrect(t *testing.T) {
 	})
 }
 
-func testAdmitUpdate(
-	t *testing.T,
-	reg update.Registry,
-	evStore mockEventStore,
-	upd *update.Update,
-) {
-	t.Helper()
-	err := upd.Admit(
-		context.Background(),
-		&updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: upd.ID()},
-			Input: &updatepb.Input{Name: "not_empty"},
-		},
-		evStore)
-	require.NoError(t, err)
-}
-
-func testRejectUpdate(
+func assertRejectUpdateInRegistry(
 	t *testing.T,
 	reg update.Registry,
 	evStore mockEventStore,
@@ -812,42 +777,12 @@ func testRejectUpdate(
 ) {
 	t.Helper()
 	startRegistryLen := reg.Len()
-
-	err := upd.OnProtocolMessage(
-		context.Background(),
-		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
-			RejectedRequestMessageId: "update1/request",
-			RejectedRequest: &updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: upd.ID()},
-				Input: &updatepb.Input{Name: "not_empty"},
-			},
-			Failure: &failurepb.Failure{Message: "intentional failure in " + t.Name()},
-		})},
-		evStore)
-	require.NoError(t, err)
-	require.Equal(t, startRegistryLen-1, reg.Len(), "update should have be removed")
+	require.NoError(t, reject(t, evStore, upd), "update should be rejected")
+	assertCompleted(t, upd, rejectionOutcome)
+	require.Equal(t, startRegistryLen-1, reg.Len(), "update should have been removed")
 }
 
-func testAcceptUpdate(
-	t *testing.T,
-	reg update.Registry,
-	evStore mockEventStore,
-	upd *update.Update,
-) {
-	t.Helper()
-	tv := testvars.New(t)
-
-	err := upd.OnProtocolMessage(
-		context.Background(),
-		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
-			AcceptedRequestMessageId:         tv.MessageID(),
-			AcceptedRequestSequencingEventId: testSequencingEventID,
-		})},
-		evStore)
-	require.NoError(t, err)
-}
-
-func testCompleteUpdate(
+func assertCompleteUpdateInRegistry(
 	t *testing.T,
 	reg update.Registry,
 	evStore mockEventStore,
@@ -855,15 +790,7 @@ func testCompleteUpdate(
 ) {
 	t.Helper()
 	startRegistryLen := reg.Len()
-
-	err := upd.OnProtocolMessage(
-		context.Background(),
-		&protocolpb.Message{Body: MarshalAny(t, &updatepb.Response{
-			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
-			Outcome: successOutcome(t, "success!"),
-		})},
-		evStore,
-	)
-	require.NoError(t, err)
-	require.Equal(t, startRegistryLen-1, reg.Len(), "update should have be removed")
+	require.NoError(t, respondSuccess(t, evStore, upd), "update should be completed")
+	assertCompleted(t, upd, successOutcome)
+	require.Equal(t, startRegistryLen-1, reg.Len(), "update should have been removed")
 }

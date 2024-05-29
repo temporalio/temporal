@@ -297,7 +297,7 @@ func (r *registry) RejectUnprocessed(
 
 	var rejectedUpdateIDs []string
 	for _, upd := range updatesToReject {
-		if err := upd.reject(ctx, unprocessedUpdateFailure, effects); err != nil {
+		if err := upd.reject(unprocessedUpdateFailure, effects); err != nil {
 			return nil, err
 		}
 		rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
@@ -345,7 +345,7 @@ func (r *registry) Send(
 	slices.SortStableFunc(sortedUpdates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
 
 	for _, upd := range sortedUpdates {
-		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID)
+		outgoingMessage := upd.Send(includeAlreadySent, sequencingEventID)
 		if outgoingMessage != nil {
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
 		}

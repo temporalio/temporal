@@ -242,11 +242,11 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 		eventStore := workflow.WithEffects(effect.Immediate(ctx), ms)
 
-		err = upd.Admit(ctx, updReq, eventStore)
+		err = upd.Admit(updReq, eventStore)
 		s.NoError(err)
 
 		seqID := &protocolpb.Message_EventId{EventId: tv.Any().EventID()}
-		msg := upd.Send(ctx, false, seqID)
+		msg := upd.Send(false, seqID)
 		s.NotNil(msg)
 
 		updRequestMsg := &protocolpb.Message{
