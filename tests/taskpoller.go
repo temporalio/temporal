@@ -119,6 +119,7 @@ func WithExpectedAttemptCount(c int) PollAndProcessWorkflowTaskOptionFunc {
 func WithRetries(c int) PollAndProcessWorkflowTaskOptionFunc {
 	return func(o *PollAndProcessWorkflowTaskOptions) { o.Retries = c }
 }
+func WithoutRetries(o *PollAndProcessWorkflowTaskOptions)           { o.Retries = 1 }
 func WithForceNewWorkflowTask(o *PollAndProcessWorkflowTaskOptions) { o.ForceNewWorkflowTask = true }
 func WithQueryResult(r *querypb.WorkflowQueryResult) PollAndProcessWorkflowTaskOptionFunc {
 	return func(o *PollAndProcessWorkflowTaskOptions) { o.QueryResult = r }
