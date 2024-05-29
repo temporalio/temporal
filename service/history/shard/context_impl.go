@@ -37,8 +37,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/locks"
 	"golang.org/x/exp/maps"
-	"golang.org/x/sync/semaphore"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -142,7 +142,7 @@ type (
 		// For cassandra, this basically means requests that use LWT.
 		// It's ok to use semaphore by its own or lock rwLock within the semaphore.
 		// But DO NOT try to acquire ioSemaphore while holding rwLock, as it may cause deadlock.
-		ioSemaphore *semaphore.Weighted
+		ioSemaphore locks.PrioritySemaphore
 
 		// state is protected by stateLock
 		stateLock  sync.Mutex
@@ -265,8 +265,8 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			// of 10 sec.
 			Timeout: 10 * time.Second,
 			Ping: func() []common.Pingable {
-				_ = s.ioSemaphore.Acquire(context.Background(), 1)
-				s.ioSemaphore.Release(1)
+				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
+				s.ioSemaphore.Release(locks.PriorityHigh, 1)
 				return nil
 			},
 			MetricsName: metrics.DDShardIOSemaphoreLatency.Name(),
@@ -283,10 +283,10 @@ func (s *ContextImpl) GetEngine(
 func (s *ContextImpl) AssertOwnership(
 	ctx context.Context,
 ) error {
-	if err := s.ioSemaphoreAcquire(ctx); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
 		return err
 	}
-	defer s.ioSemaphoreRelease()
+	defer s.ioSemaphoreRelease(locks.PriorityHigh)
 
 	s.wLock()
 
@@ -539,10 +539,10 @@ func (s *ContextImpl) AddTasks(
 		return err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
 		return err
 	}
-	defer s.ioSemaphoreRelease()
+	defer s.ioSemaphoreRelease(locks.PriorityHigh)
 
 	err = s.addTasksSemaphoreAcquired(ctx, request)
 	if OperationPossiblySucceeded(err) {
@@ -581,10 +581,10 @@ func (s *ContextImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphoreRelease()
+	defer s.ioSemaphoreRelease(locks.PriorityHigh)
 
 	s.wLock()
 
@@ -639,10 +639,10 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphoreRelease()
+	defer s.ioSemaphoreRelease(locks.PriorityHigh)
 
 	s.wLock()
 
@@ -716,10 +716,10 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphoreRelease()
+	defer s.ioSemaphoreRelease(locks.PriorityHigh)
 
 	s.wLock()
 
@@ -778,10 +778,10 @@ func (s *ContextImpl) SetWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphoreRelease()
+	defer s.ioSemaphoreRelease(locks.PriorityHigh)
 
 	s.wLock()
 
@@ -944,6 +944,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	stage *tasks.DeleteWorkflowExecutionStage,
+	priority locks.Priority,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete,
@@ -1004,10 +1005,10 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		// Wrap stage 1, 2, and 3 with function to release io semaphore with defer after stage 3.
 		if err = func() error {
 
-			if err := s.ioSemaphoreAcquire(ctx); err != nil {
+			if err := s.ioSemaphoreAcquire(ctx, priority); err != nil {
 				return err
 			}
-			defer s.ioSemaphoreRelease()
+			defer s.ioSemaphoreRelease(priority)
 
 			// Stage 1. Delete visibility.
 			if deleteVisibilityRecord && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
@@ -1261,10 +1262,10 @@ func (s *ContextImpl) updateShardInfo(
 	}
 	s.wUnlock()
 
-	if err := s.ioSemaphoreAcquire(s.lifecycleCtx); err != nil {
+	if err := s.ioSemaphoreAcquire(s.lifecycleCtx, locks.PriorityHigh); err != nil {
 		return err
 	}
-	defer s.ioSemaphoreRelease()
+	defer s.ioSemaphoreRelease(locks.PriorityHigh)
 
 	ctx, cancel := s.newIOContext()
 	defer cancel()
@@ -1523,6 +1524,7 @@ func (s *ContextImpl) rUnlock() {
 
 func (s *ContextImpl) ioSemaphoreAcquire(
 	ctx context.Context,
+	priority locks.Priority,
 ) (retErr error) {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 	metrics.SemaphoreRequests.With(handler).Record(1)
@@ -1534,11 +1536,11 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
-	return s.ioSemaphore.Acquire(ctx, 1)
+	return s.ioSemaphore.Acquire(ctx, priority, 1)
 }
 
-func (s *ContextImpl) ioSemaphoreRelease() {
-	s.ioSemaphore.Release(1)
+func (s *ContextImpl) ioSemaphoreRelease(priority locks.Priority) {
+	s.ioSemaphore.Release(priority, 1)
 }
 
 func (s *ContextImpl) transition(request contextRequest) error {
@@ -2098,7 +2100,7 @@ func newContext(
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
 		queueMetricEmitter:      sync.Once{},
-		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
+		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
