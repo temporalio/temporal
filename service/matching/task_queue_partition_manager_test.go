@@ -171,7 +171,7 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 	s.Assert().NotNil(sourceQ)
 
 	// unload sourceQ
-	s.partitionMgr.unloadPhysicalQueue(sourceQ)
+	s.partitionMgr.unloadPhysicalQueue(sourceQ, unloadCauseUnspecified)
 
 	// poll from target
 	s.validatePollTask(target, true)

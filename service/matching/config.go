@@ -148,6 +148,56 @@ type (
 
 		// Retry policy for fetching user data from root partition. Should retry forever.
 		GetUserDataRetryPolicy backoff.RetryPolicy
+
+		loadCause loadCause
+	}
+
+	loadCause   int
+	unloadCause int
+)
+
+const (
+	loadCauseUnspecified loadCause = iota
+	loadCauseTask
+	loadCauseQuery
+	loadCauseDescribe
+	loadCauseUserData
+	loadCauseNexusTask
+	loadCausePoll
+	loadCauseOther
+)
+
+const (
+	unloadCauseUnspecified unloadCause = iota
+	unloadCauseInitError
+	unloadCauseIdle
+	unloadCauseMembership
+	unloadCauseConflict
+	unloadCauseShuttingDown
+	unloadCauseForce
+	unloadCauseOther
+)
+
+var (
+	loadCauseToString = map[loadCause]string{
+		loadCauseUnspecified: "Unspecified",
+		loadCauseTask:        "Task",
+		loadCauseQuery:       "Query",
+		loadCauseDescribe:    "Describe",
+		loadCauseUserData:    "UserData",
+		loadCauseNexusTask:   "NexusTask",
+		loadCausePoll:        "Poll",
+		loadCauseOther:       "Other",
+	}
+	unloadCauseToString = map[unloadCause]string{
+		unloadCauseUnspecified:  "Unspecified",
+		unloadCauseInitError:    "InitError",
+		unloadCauseIdle:         "Idle",
+		unloadCauseMembership:   "Membership",
+		unloadCauseConflict:     "Conflict",
+		unloadCauseShuttingDown: "ShuttingDown",
+		unloadCauseForce:        "Force",
+		unloadCauseOther:        "Other",
 	}
 )
 

@@ -65,6 +65,8 @@ const (
 )
 
 type (
+	taskQueueManagerOpt func(*physicalTaskQueueManagerImpl)
+
 	addTaskParams struct {
 		taskInfo    *persistencespb.TaskInfo
 		directive   *taskqueuespb.TaskVersionDirective
@@ -73,7 +75,7 @@ type (
 
 	physicalTaskQueueManager interface {
 		Start()
-		Stop()
+		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
@@ -102,7 +104,7 @@ type (
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		// Describe returns information about the physical task queue
 		Describe() *taskqueuespb.PhysicalTaskQueueInfo
-		UnloadFromPartitionManager()
+		UnloadFromPartitionManager(unloadCause)
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
 	}
@@ -171,7 +173,7 @@ func newPhysicalTaskQueueManager(
 	pqMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
 		config.MaxTaskQueueIdleTime,
-		pqMgr.UnloadFromPartitionManager,
+		func() { pqMgr.UnloadFromPartitionManager(unloadCauseIdle) },
 	)
 
 	pqMgr.taskValidator = newTaskValidator(pqMgr.newIOContext, pqMgr.clusterMeta, pqMgr.namespaceRegistry, pqMgr.partitionMgr.engine.historyClient)
@@ -212,14 +214,14 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	}
 	c.liveness.Start()
 	c.backlogMgr.Start()
-	c.logger.Info("", tag.LifeCycleStarted)
+	c.logger.Info("", tag.LifeCycleStarted, tag.Cause(loadCauseToString[c.config.loadCause]))
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
 }
 
 // Stop does not unload the queue from its partition. It is intended to be called by the partition manager when
-// unloading a queues. For stopping and unloading a queue call unloadFromPartitionManager instead.
-func (c *physicalTaskQueueManagerImpl) Stop() {
+// unloading a queues. For stopping and unloading a queue call UnloadFromPartitionManager instead.
+func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusStarted,
@@ -230,7 +232,7 @@ func (c *physicalTaskQueueManagerImpl) Stop() {
 	c.backlogMgr.Stop()
 	c.matcher.Stop()
 	c.liveness.Stop()
-	c.logger.Info("", tag.LifeCycleStopped)
+	c.logger.Info("", tag.LifeCycleStopped, tag.Cause(unloadCauseToString[unloadCause]))
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
 }
@@ -451,6 +453,6 @@ func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.
 	return c.partitionMgr.callerInfoContext(ctx), cancel
 }
 
-func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager() {
-	c.partitionMgr.unloadPhysicalQueue(c)
+func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
+	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
 }
