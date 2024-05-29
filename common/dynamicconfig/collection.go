@@ -220,17 +220,43 @@ func precedenceTaskType(taskType enumsspb.TaskType) []Constraints {
 }
 
 func convertInt(val any) (int, error) {
-	if intVal, ok := val.(int); ok {
-		return intVal, nil
+	switch val := val.(type) {
+	case int:
+		return int(val), nil
+	case int8:
+		return int(val), nil
+	case int16:
+		return int(val), nil
+	case int32:
+		return int(val), nil
+	case int64:
+		return int(val), nil
+	case uint:
+		return int(val), nil
+	case uint8:
+		return int(val), nil
+	case uint16:
+		return int(val), nil
+	case uint32:
+		return int(val), nil
+	case uint64:
+		return int(val), nil
+	case uintptr:
+		return int(val), nil
+	default:
+		return 0, errors.New("value type is not int")
 	}
-	return 0, errors.New("value type is not int")
 }
 
 func convertFloat(val any) (float64, error) {
-	if floatVal, ok := val.(float64); ok {
-		return floatVal, nil
-	} else if intVal, ok := val.(int); ok {
-		return float64(intVal), nil
+	switch val := val.(type) {
+	case float32:
+		return float64(val), nil
+	case float64:
+		return float64(val), nil
+	}
+	if ival, err := convertInt(val); err == nil {
+		return float64(ival), nil
 	}
 	return 0, errors.New("value type is not float64")
 }
@@ -239,15 +265,18 @@ func convertDuration(val any) (time.Duration, error) {
 	switch v := val.(type) {
 	case time.Duration:
 		return v, nil
-	case int:
-		// treat plain int as seconds
-		return time.Duration(v) * time.Second, nil
 	case string:
 		d, err := timestamp.ParseDurationDefaultSeconds(v)
 		if err != nil {
 			return 0, fmt.Errorf("failed to parse duration: %v", err)
 		}
 		return d, nil
+	}
+	// treat numeric values as seconds
+	if ival, err := convertInt(val); err == nil {
+		return time.Duration(ival) * time.Second, nil
+	} else if fval, err := convertFloat(val); err == nil {
+		return time.Duration(fval * float64(time.Second)), nil
 	}
 	return 0, errors.New("value not convertible to Duration")
 }
