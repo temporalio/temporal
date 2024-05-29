@@ -47,19 +47,20 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/service/history/hsm"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -67,7 +68,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -81,9 +81,11 @@ type (
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
-		controller    *gomock.Controller
-		workflowCache wcache.Cache
-		mockShard     *shard.ContextTest
+		controller         *gomock.Controller
+		mockEventsCache    *events.MockCache
+		mockExecutionMgr   *persistence.MockExecutionManager
+		workflowCache      wcache.Cache
+		mockNamespaceCache *namespace.MockRegistry
 
 		logger log.Logger
 
@@ -95,7 +97,7 @@ func TestWorkflowTaskCompletedHandlerSuite(t *testing.T) {
 	suite.Run(t, new(WorkflowTaskCompletedHandlerSuite))
 }
 
-func (s *WorkflowTaskCompletedHandlerSuite) SetupTest() {
+func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
@@ -103,7 +105,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	config := tests.NewDynamicConfig()
-	s.mockShard = shard.NewTestContext(
+	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
 			ShardId: 1,
@@ -112,16 +114,41 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupTest() {
 		config,
 	)
 
-	s.logger = s.mockShard.GetLogger()
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	mockShard.SetStateMachineRegistry(reg)
+
+	mockEngine := shard.NewMockEngine(s.controller)
+	mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
+	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	mockShard.SetEngineForTesting(mockEngine)
+
+	s.mockNamespaceCache = mockShard.Resource.NamespaceCache
+	s.mockExecutionMgr = mockShard.Resource.ExecutionMgr
+
+	mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
+	mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	mockClusterMetadata := mockShard.Resource.ClusterMetadata
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(nil).AnyTimes()
+
+	s.mockEventsCache = mockShard.MockEventsCache
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.logger = mockShard.GetLogger()
+
+	s.workflowCache = wcache.NewHostLevelCache(mockShard.GetConfig(), metrics.NoopMetricsHandler)
 	s.workflowTaskCompletedHandler = NewWorkflowTaskCompletedHandler(
-		s.mockShard,
+		mockShard,
 		common.NewProtoTaskTokenSerializer(),
 		events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		nil,
 		nil,
 		nil,
-		api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache))
+		api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache))
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) TearDownTest() {
@@ -129,30 +156,8 @@ func (s *WorkflowTaskCompletedHandlerSuite) TearDownTest() {
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
-	mockEngine := shard.NewMockEngine(s.controller)
-	mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
-	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
-	s.mockShard.SetEngineForTesting(mockEngine)
-
-	mockEventsCache := s.mockShard.MockEventsCache
-	mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
-
-	reg := hsm.NewRegistry()
-	err := workflow.RegisterStateMachine(reg)
-	s.NoError(err)
-	s.mockShard.SetStateMachineRegistry(reg)
-	s.mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-
-	mockNamespaceCache := s.mockShard.Resource.NamespaceCache
-	mockExecutionMgr := s.mockShard.Resource.ExecutionMgr
-
-	mockClusterMetadata := s.mockShard.Resource.ClusterMetadata
-	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
-	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(nil).AnyTimes()
-
 	createStartedWorkflow := func(tv *testvars.TestVars) (*workflow.MutableStateImpl, []byte) {
-		ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, mockEventsCache, tv.Namespace(),
+		ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
 			tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
 
 		var workflowExecution *commonpb.WorkflowExecution = tv.WorkflowExecution()
@@ -188,7 +193,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 			nil,
 		)
 
-		mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
 				return &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil
 			}).AnyTimes()
@@ -257,7 +262,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 	createWrittenHistoryCh := func(expectedUpdateWorkflowExecutionCalls int) <-chan []*historypb.HistoryEvent {
 		writtenHistoryCh := make(chan []*historypb.HistoryEvent, expectedUpdateWorkflowExecutionCalls)
 		var historyEvents []*historypb.HistoryEvent
-		mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 			var wfEvents []*persistence.WorkflowEvents
 			if len(request.UpdateWorkflowEvents) > 0 {
 				wfEvents = request.UpdateWorkflowEvents
@@ -279,7 +284,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Accept Complete", func() {
 		tv := testvars.New(s.T())
-		mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		_, serializedTaskToken := createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
 
@@ -310,7 +315,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Reject", func() {
 		tv := testvars.New(s.T())
-		mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		_, serializedTaskToken := createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
 
@@ -338,11 +343,11 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Write Failed", func() {
 		tv := testvars.New(s.T())
-		mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		_, serializedTaskToken := createStartedWorkflow(tv)
 
 		writeErr := errors.New("write failed")
-		mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, writeErr)
+		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, writeErr)
 
 		updRequestMsg, upd := createSentUpdate(tv, "1")
 		s.NotNil(upd)
@@ -366,7 +371,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("GetHistory Failed", func() {
 		tv := testvars.New(s.T())
-		mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		_, serializedTaskToken := createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
 
@@ -374,7 +379,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.NotNil(upd)
 
 		readHistoryErr := errors.New("get history failed")
-		mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, readHistoryErr)
+		s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, readHistoryErr)
 
 		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
