@@ -27,9 +27,8 @@ package queues
 import (
 	"math"
 	"math/rand"
+	"slices"
 	"time"
-
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"

@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,7 +37,6 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.uber.org/multierr"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
