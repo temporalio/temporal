@@ -29,10 +29,10 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1236,7 +1236,8 @@ func (s *scheduler) processBuffer() bool {
 		}
 		result, err := s.startWorkflow(start, req)
 		metricsWithTag := s.metrics.WithTags(map[string]string{
-			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
+			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow,
+		})
 		if err != nil {
 			s.logger.Error("Failed to start workflow", "error", err)
 			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)

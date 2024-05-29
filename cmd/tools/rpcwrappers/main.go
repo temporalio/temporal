@@ -30,12 +30,12 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"text/template"
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
