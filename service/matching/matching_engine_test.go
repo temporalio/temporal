@@ -3089,7 +3089,6 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	s.pollWorkflowTasks(true, workflowType, numWorkers, tasksToPoll, ptq, taskQueue, &wg)
 
 	wg.Wait()
-	time.Sleep(1 * time.Second)
 
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())

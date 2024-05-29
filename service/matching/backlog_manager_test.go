@@ -182,13 +182,11 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(0))
 
 	backlogMgr.taskWriter.Start()
-	time.Sleep(30 * time.Second) // let go routine run first
-	backlogMgr.taskWriter.Stop()
-
 	// Adding tasks to the buffer shall increase the in-memory counter by 1
 	// and this shall be written to persistence
-	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(1))
-
+	require.Eventually(t, func() bool { return backlogMgr.db.getApproximateBacklogCount() == int64(1) },
+		time.Second*30, time.Millisecond)
+	backlogMgr.taskWriter.Stop()
 }
 
 func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
