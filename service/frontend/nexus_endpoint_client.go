@@ -30,11 +30,14 @@ import (
 	"regexp"
 
 	"github.com/google/uuid"
-	"go.temporal.io/api/nexus/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -106,15 +109,24 @@ func (c *NexusEndpointClient) Create(
 		return nil, err
 	}
 
+	spec, err := c.apiSpecToPersistenceSpec(request.GetSpec())
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.matchingClient.CreateNexusEndpoint(ctx, &matchingservice.CreateNexusEndpointRequest{
-		Spec: request.Spec,
+		Spec: spec,
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	endpoint, err := c.endpointPersistedEntryToExternalAPI(resp.Entry)
+	if err != nil {
+		return nil, err
+	}
+
 	return &operatorservice.CreateNexusEndpointResponse{
-		Endpoint: resp.Endpoint,
+		Endpoint: endpoint,
 	}, nil
 }
 
@@ -126,17 +138,27 @@ func (c *NexusEndpointClient) Update(
 		return nil, err
 	}
 
+	spec, err := c.apiSpecToPersistenceSpec(request.GetSpec())
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := c.matchingClient.UpdateNexusEndpoint(ctx, &matchingservice.UpdateNexusEndpointRequest{
 		Id:      request.Id,
 		Version: request.Version,
-		Spec:    request.Spec,
+		Spec:    spec,
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	endpoint, err := c.endpointPersistedEntryToExternalAPI(resp.Entry)
+	if err != nil {
+		return nil, c.transformServiceError(err, "internal error")
+	}
+
 	return &operatorservice.UpdateNexusEndpointResponse{
-		Endpoint: resp.Endpoint,
+		Endpoint: endpoint,
 	}, nil
 }
 
@@ -170,16 +192,16 @@ func (c *NexusEndpointClient) Get(
 		ID: request.Id,
 	})
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return nil, err
-		}
-		c.logger.Error(fmt.Sprintf("error looking up Nexus endpoint with ID `%v` from persistence", request.Id), tag.Error(err))
-		return nil, serviceerror.NewInternal(fmt.Sprintf("error looking up Nexus endpoint with ID `%v`", request.Id))
+		return nil, c.transformServiceError(err, fmt.Sprintf("error looking up Nexus endpoint with ID `%v`", request.Id))
+	}
+
+	endpoint, err := c.endpointPersistedEntryToExternalAPI(entry)
+	if err != nil {
+		return nil, c.transformServiceError(err, fmt.Sprintf("error looking up Nexus endpoint with ID `%v`", request.Id))
 	}
 
 	return &operatorservice.GetNexusEndpointResponse{
-		Endpoint: cnexus.EndpointPersistedEntryToExternalAPI(entry),
+		Endpoint: endpoint,
 	}, nil
 }
 
@@ -208,15 +230,59 @@ func (c *NexusEndpointClient) List(
 		return nil, serviceerror.NewInternal("error listing Nexus endpoints")
 	}
 
-	endpoints := make([]*nexus.Endpoint, len(resp.Entries))
+	endpoints := make([]*nexuspb.Endpoint, len(resp.Entries))
 	for i, entry := range resp.Entries {
-		endpoints[i] = cnexus.EndpointPersistedEntryToExternalAPI(entry)
+		endpoint, err := c.endpointPersistedEntryToExternalAPI(entry)
+		if err != nil {
+			return nil, c.transformServiceError(err, "error listing Nexus endpoints")
+		}
+		endpoints[i] = endpoint
 	}
 
 	return &operatorservice.ListNexusEndpointsResponse{
 		NextPageToken: resp.NextPageToken,
 		Endpoints:     endpoints,
 	}, nil
+}
+
+func (c *NexusEndpointClient) apiSpecToPersistenceSpec(source *nexuspb.EndpointSpec) (*persistencespb.NexusEndpointSpec, error) {
+	target, err := c.apiTargetToPersistenceTarget(source.GetTarget())
+	if err != nil {
+		return nil, err
+	}
+	return &persistencespb.NexusEndpointSpec{
+		Name:        source.GetName(),
+		Description: source.GetDescription(),
+		Target:      target,
+	}, nil
+}
+
+func (c *NexusEndpointClient) apiTargetToPersistenceTarget(source *nexuspb.EndpointTarget) (*persistencespb.NexusEndpointTarget, error) {
+	switch v := source.GetVariant().(type) {
+	case *nexuspb.EndpointTarget_External_:
+		return &persistencespb.NexusEndpointTarget{
+			Variant: &persistencespb.NexusEndpointTarget_External_{
+				External: &persistencespb.NexusEndpointTarget_External{
+					Url: v.External.GetUrl(),
+				},
+			},
+		}, nil
+	case *nexuspb.EndpointTarget_Worker_:
+		nsID, err := c.namespaceRegistry.GetNamespaceID(namespace.Name(v.Worker.GetNamespace()))
+		if err != nil {
+			return nil, c.transformServiceError(err, "internal error")
+		}
+		return &persistencespb.NexusEndpointTarget{
+			Variant: &persistencespb.NexusEndpointTarget_Worker_{
+				Worker: &persistencespb.NexusEndpointTarget_Worker{
+					NamespaceId: nsID.String(),
+					TaskQueue:   v.Worker.GetTaskQueue(),
+				},
+			},
+		}, nil
+	default:
+		return nil, serviceerror.NewInvalidArgument("unknown endpoint target variant")
+	}
 }
 
 // listAndFilterByName paginates over all endpoints returned by persistence layer to find the endpoint name
@@ -226,7 +292,7 @@ func (c *NexusEndpointClient) listAndFilterByName(
 	ctx context.Context,
 	request *operatorservice.ListNexusEndpointsRequest,
 ) (*operatorservice.ListNexusEndpointsResponse, error) {
-	result := &operatorservice.ListNexusEndpointsResponse{Endpoints: []*nexus.Endpoint{}}
+	result := &operatorservice.ListNexusEndpointsResponse{Endpoints: []*nexuspb.Endpoint{}}
 	pageSize := c.config.listDefaultPageSize()
 	var currentPageToken []byte
 
@@ -243,7 +309,11 @@ func (c *NexusEndpointClient) listAndFilterByName(
 
 		for _, entry := range resp.Entries {
 			if request.Name == entry.Endpoint.Spec.Name {
-				result.Endpoints = []*nexus.Endpoint{cnexus.EndpointPersistedEntryToExternalAPI(entry)}
+				endpoint, err := c.endpointPersistedEntryToExternalAPI(entry)
+				if err != nil {
+					return nil, c.transformServiceError(err, "error listing Nexus endpoints")
+				}
+				result.Endpoints = []*nexuspb.Endpoint{endpoint}
 				return result, nil
 			}
 		}
@@ -278,7 +348,7 @@ func (c *NexusEndpointClient) getEndpointNameIssues(name string) rpc.RequestIssu
 	return issues
 }
 
-func (c *NexusEndpointClient) validateUpsertSpec(spec *nexus.EndpointSpec) error {
+func (c *NexusEndpointClient) validateUpsertSpec(spec *nexuspb.EndpointSpec) error {
 	issues := c.getEndpointNameIssues(spec.GetName())
 	if spec.GetTarget().GetVariant() == nil {
 		issues.Append("empty target variant")
@@ -286,7 +356,7 @@ func (c *NexusEndpointClient) validateUpsertSpec(spec *nexus.EndpointSpec) error
 	}
 
 	switch variant := spec.Target.Variant.(type) {
-	case *nexus.EndpointTarget_Worker_:
+	case *nexuspb.EndpointTarget_Worker_:
 		if variant.Worker.GetNamespace() == "" {
 			issues.Append("target namespace not set")
 		} else if _, nsErr := c.namespaceRegistry.GetNamespace(namespace.Name(variant.Worker.GetNamespace())); nsErr != nil {
@@ -296,7 +366,7 @@ func (c *NexusEndpointClient) validateUpsertSpec(spec *nexus.EndpointSpec) error
 		if err := validateTaskQueueName(variant.Worker.GetTaskQueue(), c.config.maxTaskQueueLength()); err != nil {
 			issues.Appendf("invalid target task queue: %q", err.Error())
 		}
-	case *nexus.EndpointTarget_External_:
+	case *nexuspb.EndpointTarget_External_:
 		if variant.External.GetUrl() == "" {
 			issues.Append("empty target URL")
 		} else if len(variant.External.GetUrl()) > c.config.maxExternalEndpointURLLength() {
@@ -358,4 +428,69 @@ func (c *NexusEndpointClient) validatePageSize(pageSize int32) error {
 	}
 
 	return nil
+}
+
+func (c *NexusEndpointClient) transformServiceError(err error, message string) error {
+	if err == nil {
+		return nil
+	}
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
+		return err
+	}
+	c.logger.Error(message, tag.Error(err))
+	return serviceerror.NewInternal(message)
+}
+
+func (c *NexusEndpointClient) endpointPersistedEntryToExternalAPI(entry *persistencespb.NexusEndpointEntry) (*nexuspb.Endpoint, error) {
+	persistedSpec := entry.GetEndpoint().GetSpec()
+	if persistedSpec == nil {
+		return nil, serviceerror.NewInternal("empty endpoint spec")
+	}
+	var target *nexuspb.EndpointTarget
+	switch v := persistedSpec.GetTarget().GetVariant().(type) {
+	case *persistencespb.NexusEndpointTarget_External_:
+		target = &nexuspb.EndpointTarget{
+			Variant: &nexuspb.EndpointTarget_External_{
+				External: &nexuspb.EndpointTarget_External{
+					Url: v.External.Url,
+				},
+			},
+		}
+	case *persistencespb.NexusEndpointTarget_Worker_:
+		name, err := c.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.NamespaceId))
+		if err != nil {
+			return nil, err
+		}
+
+		target = &nexuspb.EndpointTarget{
+			Variant: &nexuspb.EndpointTarget_Worker_{
+				Worker: &nexuspb.EndpointTarget_Worker{
+					Namespace: name.String(),
+					TaskQueue: v.Worker.TaskQueue,
+				},
+			},
+		}
+	}
+
+	var lastModifiedTime *timestamppb.Timestamp
+	// Only set last modified if there were modifications as stated in the UI contract.
+	if entry.Version > 1 {
+		lastModifiedTime = timestamppb.New(hlc.UTC(entry.Endpoint.Clock))
+	}
+
+	spec := nexuspb.EndpointSpec{
+		Name:        persistedSpec.Name,
+		Description: persistedSpec.Description,
+		Target:      target,
+	}
+
+	return &nexuspb.Endpoint{
+		Version:          entry.Version,
+		Id:               entry.Id,
+		Spec:             &spec,
+		CreatedTime:      entry.Endpoint.CreatedTime,
+		LastModifiedTime: lastModifiedTime,
+		UrlPrefix:        "/" + cnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id),
+	}, nil
 }
