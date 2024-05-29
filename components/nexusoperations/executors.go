@@ -73,7 +73,7 @@ func RegisterExecutor(
 	options ActiveExecutorOptions,
 ) error {
 	exec := activeExecutor{options}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterImmediateExecutors(
 		registry,
 		TaskTypeInvocation.ID,
 		exec.executeInvocationTask,
@@ -81,7 +81,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterTimerExecutors(
 		registry,
 		TaskTypeBackoff.ID,
 		exec.executeBackoffTask,
@@ -89,7 +89,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterTimerExecutors(
 		registry,
 		TaskTypeTimeout.ID,
 		exec.executeTimeoutTask,
@@ -97,7 +97,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterImmediateExecutors(
 		registry,
 		TaskTypeCancelation.ID,
 		exec.executeCancelationTask,
@@ -105,7 +105,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutors(
+	return hsm.RegisterTimerExecutors(
 		registry,
 		TaskTypeCancelationBackoff.ID,
 		exec.executeCancelationBackoffTask,
@@ -369,56 +369,52 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 	})
 }
 
-func (e activeExecutor) executeBackoffTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task BackoffTask) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := checkParentIsRunning(node); err != nil {
-			return err
-		}
-		return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
-			return TransitionRescheduled.Apply(op, EventRescheduled{
-				Node: node,
-			})
+func (e activeExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
+	if err := checkParentIsRunning(node); err != nil {
+		return err
+	}
+	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
+		return TransitionRescheduled.Apply(op, EventRescheduled{
+			Node: node,
 		})
 	})
 }
 
-func (e activeExecutor) executeTimeoutTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task TimeoutTask) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := task.Validate(node); err != nil {
-			return err
+func (e activeExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
+	if err := task.Validate(node); err != nil {
+		return err
+	}
+	if err := checkParentIsRunning(node); err != nil {
+		return err
+	}
+	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
+		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
+		if err != nil {
+			return hsm.TransitionOutput{}, err
 		}
-		if err := checkParentIsRunning(node); err != nil {
-			return err
-		}
-		return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
-			eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
-			if err != nil {
-				return hsm.TransitionOutput{}, err
-			}
-			node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
-				// nolint:revive
-				e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-					NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-						Failure: nexusOperationFailure(
-							op,
-							eventID,
-							&failurepb.Failure{
-								Message: "operation timed out",
-								FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-									TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-										TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-									},
+		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
+			// nolint:revive
+			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
+					Failure: nexusOperationFailure(
+						op,
+						eventID,
+						&failurepb.Failure{
+							Message: "operation timed out",
+							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+									TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 								},
 							},
-						),
-						ScheduledEventId: eventID,
-					},
-				}
-			})
+						},
+					),
+					ScheduledEventId: eventID,
+				},
+			}
+		})
 
-			return TransitionTimedOut.Apply(op, EventTimedOut{
-				Node: node,
-			})
+		return TransitionTimedOut.Apply(op, EventTimedOut{
+			Node: node,
 		})
 	})
 }
@@ -533,15 +529,13 @@ func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Envir
 	})
 }
 
-func (e activeExecutor) executeCancelationBackoffTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationBackoffTask) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := checkParentIsRunning(node.Parent); err != nil {
-			return err
-		}
-		return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {
-			return TransitionCancelationRescheduled.Apply(c, EventCancelationRescheduled{
-				Node: node,
-			})
+func (e activeExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
+	if err := checkParentIsRunning(node.Parent); err != nil {
+		return err
+	}
+	return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {
+		return TransitionCancelationRescheduled.Apply(c, EventCancelationRescheduled{
+			Node: node,
 		})
 	})
 }

@@ -57,7 +57,7 @@ func RegisterExecutor(
 ) error {
 	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
 	standbyExec := standbyExecutor{options: standbyExecutorOptions}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterImmediateExecutors(
 		registry,
 		TaskTypeInvocation.ID,
 		activeExec.executeInvocationTask,
@@ -65,7 +65,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutors(
+	return hsm.RegisterTimerExecutors(
 		registry,
 		TaskTypeBackoff.ID,
 		activeExec.executeBackoffTask,
@@ -215,15 +215,12 @@ func (e activeExecutor) saveResult(
 }
 
 func (e activeExecutor) executeBackoffTask(
-	ctx context.Context,
 	env hsm.Environment,
-	ref hsm.Ref,
+	node *hsm.Node,
 	task BackoffTask,
 ) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
-			return TransitionRescheduled.Apply(callback, EventRescheduled{})
-		})
+	return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
+		return TransitionRescheduled.Apply(callback, EventRescheduled{})
 	})
 }
 
@@ -245,9 +242,8 @@ func (e standbyExecutor) executeInvocationTask(
 }
 
 func (e standbyExecutor) executeBackoffTask(
-	ctx context.Context,
 	env hsm.Environment,
-	ref hsm.Ref,
+	node *hsm.Node,
 	task BackoffTask,
 ) error {
 	panic("unimplemented")

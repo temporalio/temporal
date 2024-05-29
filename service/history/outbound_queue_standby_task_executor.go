@@ -77,7 +77,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 
 	if err == nil {
 		smRegistry := e.shardContext.StateMachineRegistry()
-		err = smRegistry.ExecuteStandbyTask(ctx, e, ref, smt)
+		err = smRegistry.ExecuteStandbyImmediateTask(ctx, e, ref, smt)
 	}
 
 	return queues.ExecuteResponse{

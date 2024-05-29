@@ -300,7 +300,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				},
 			}))
 
-			err := reg.ExecuteActiveTask(
+			err := reg.ExecuteActiveImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -335,10 +335,9 @@ func TestProcessBackoffTask(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = reg.ExecuteActiveTask(
-		context.Background(),
+	err = reg.ExecuteActiveTimerTask(
 		env,
-		hsm.Ref{},
+		node,
 		nexusoperations.BackoffTask{},
 	)
 	require.NoError(t, err)
@@ -356,10 +355,9 @@ func TestProcessTimeoutTask(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
 
-	err := reg.ExecuteActiveTask(
-		context.Background(),
+	err := reg.ExecuteActiveTimerTask(
 		env,
-		hsm.Ref{},
+		node,
 		nexusoperations.TimeoutTask{},
 	)
 	require.NoError(t, err)
@@ -515,7 +513,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				},
 			}))
 
-			err = reg.ExecuteActiveTask(
+			err = reg.ExecuteActiveImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -577,7 +575,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		},
 	}))
 
-	err = reg.ExecuteActiveTask(
+	err = reg.ExecuteActiveImmediateTask(
 		context.Background(),
 		env,
 		hsm.Ref{
@@ -622,10 +620,9 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
 
-	err = reg.ExecuteActiveTask(
-		context.Background(),
+	err = reg.ExecuteActiveTimerTask(
 		env,
-		hsm.Ref{},
+		node,
 		nexusoperations.CancelationBackoffTask{},
 	)
 	require.NoError(t, err)
