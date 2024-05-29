@@ -29,13 +29,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/api/history/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
