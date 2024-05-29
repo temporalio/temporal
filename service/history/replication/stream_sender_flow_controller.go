@@ -123,13 +123,13 @@ func (s *SenderFlowControllerImpl) Wait(priority enums.TaskPriority) {
 		waitForRateLimiter(s.defaultRateLimiter)
 		return
 	}
+
 	state.mu.Lock()
-	defer state.mu.Unlock()
-	if state.resume {
-		waitForRateLimiter(state.rateLimiter)
-		return
+	if !state.resume {
+		state.waiters++
+		state.cond.Wait()
+		state.waiters--
 	}
-	state.waiters++
-	state.cond.Wait()
-	state.waiters--
+	state.mu.Unlock()
+	waitForRateLimiter(state.rateLimiter)
 }
