@@ -952,7 +952,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
 						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
-						var bInfo *taskqueuepb.TaskQueueStats
+						var mergedStats *taskqueuepb.TaskQueueStats
 
 						// only report BacklogInformation if requested.
 						if req.GetReportStats() {
@@ -960,7 +960,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 
 							// Aggregating counts; for now, we only aggregate approximateBacklogCount
-							bInfo = &taskqueuepb.TaskQueueStats{
+							mergedStats = &taskqueuepb.TaskQueueStats{
 								ApproximateBacklogCount: rootStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
 								ApproximateBacklogAge:   nil,
 								TasksAddRate:            float32(0),
@@ -969,7 +969,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						}
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
 							Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
-							TaskQueueStats: bInfo,
+							TaskQueueStats: mergedStats,
 						}
 						physicalInfoByBuildId[buildId][taskQueueType] = merged
 					}
