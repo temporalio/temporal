@@ -59,8 +59,8 @@ func (s *senderFlowControllerSuite) SetupTest() {
 	s.mockRateLimiter = quotas.NewMockRateLimiter(s.controller)
 	s.logger = log.NewTestLogger()
 	s.config = &configs.Config{
-		ReplicationStreamSenderHighPriorityMaxQPS: func() int { return 10 },
-		ReplicationStreamSenderLowPriorityMaxQPS:  func() int { return 5 },
+		ReplicationStreamSenderHighPriorityQPS: func() int { return 10 },
+		ReplicationStreamSenderLowPriorityQPS:  func() int { return 5 },
 	}
 	s.senderFlowCtrlImpl = NewSenderFlowController(s.config, s.logger)
 }

@@ -66,7 +66,7 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 	}
 	highPriorityState.cond = sync.NewCond(&highPriorityState.mu)
 	highPriorityState.rateLimiter = quotas.NewDynamicRateLimiter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-		return float64(config.ReplicationStreamSenderHighPriorityMaxQPS())
+		return float64(config.ReplicationStreamSenderHighPriorityQPS())
 	}), 1*time.Minute)
 
 	lowPriorityState := &flowControlState{
@@ -74,13 +74,13 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 	}
 	lowPriorityState.cond = sync.NewCond(&lowPriorityState.mu)
 	lowPriorityState.rateLimiter = quotas.NewDynamicRateLimiter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-		return float64(config.ReplicationStreamSenderLowPriorityMaxQPS())
+		return float64(config.ReplicationStreamSenderLowPriorityQPS())
 	}), 1*time.Minute)
 	flowControlStates[enums.TASK_PRIORITY_HIGH] = highPriorityState
 	flowControlStates[enums.TASK_PRIORITY_LOW] = lowPriorityState
 	return &SenderFlowControllerImpl{
 		flowControlStates:  flowControlStates,
-		defaultRateLimiter: quotas.NewRateLimiter(float64(config.ReplicationStreamSenderHighPriorityMaxQPS()), config.ReplicationStreamSenderHighPriorityMaxQPS()),
+		defaultRateLimiter: quotas.NewRateLimiter(float64(config.ReplicationStreamSenderHighPriorityQPS()), config.ReplicationStreamSenderHighPriorityQPS()),
 		logger:             logger,
 	}
 }
