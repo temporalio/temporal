@@ -44,7 +44,7 @@ persistence:
         default:
             sql:
                 pluginName: "{{ $db }}"
-                databaseName: "{{ default (or .Env.DB_NAME .Env.DBNAME) "temporal") }}"
+                databaseName: "{{ default (or .Env.DB_NAME .Env.DBNAME) "temporal" }}"
                 connectAddr: "{{ default (or .Env.DB_HOST .Env.MYSQL_SEEDS) "" }}:{{ default .Env.DB_PORT "3306" }}"
                 connectProtocol: "tcp"
                 user: "{{ default (or .Env.DB_USER .Env.MYSQL_USER) "" }}"
