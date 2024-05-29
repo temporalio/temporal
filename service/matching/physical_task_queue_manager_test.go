@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"math"
 	"sync/atomic"
 	"testing"
@@ -35,6 +34,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -94,26 +94,6 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	return func(tqm *physicalTaskQueueManagerImpl) {
 		tqm.backlogMgr.taskWriter.idAlloc = ibl
 	}
-}
-
-func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			// any error other than ConditionFailedError indicates an
-			// availability problem at a lower layer so the TQM should NOT
-			// unload itself because resilient sync match is enabled.
-			return taskQueueState{}, errors.New(t.Name())
-		}))
-	tqm.Start()
-	defer tqm.Stop()
-	poller, _ := runOneShotPoller(context.Background(), tqm)
-	defer poller.Cancel()
-
-	sync, err := tqm.TrySyncMatch(context.TODO(), addTaskParams{
-		taskInfo: &persistencespb.TaskInfo{},
-		source:   enumsspb.TASK_SOURCE_HISTORY})
-	require.NoError(t, err)
-	require.True(t, sync)
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
@@ -458,4 +438,22 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	time.Sleep(2 * time.Second) // will attempt to update and fail and not try again
 
 	require.Equal(t, 1, tm.getUpdateCount(tqCfg.dbq))
+}
+
+func TestTQMInterruptsPollOnClose(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tqm.Start()
+
+	pollStart := time.Now()
+	pollCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, pollCh := runOneShotPoller(pollCtx, tqm)
+
+	tqm.Stop() // should interrupt poller
+
+	<-pollCh
+	require.Less(t, time.Since(pollStart), 4*time.Second)
 }

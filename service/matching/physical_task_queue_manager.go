@@ -229,6 +229,7 @@ func (c *physicalTaskQueueManagerImpl) Stop() {
 		return
 	}
 	c.backlogMgr.Stop()
+	c.matcher.Stop()
 	c.liveness.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
