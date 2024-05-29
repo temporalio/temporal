@@ -144,6 +144,7 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 	state.mu.Lock()
 	state.resume = false
 	state.mu.Unlock()
+	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -164,7 +165,6 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 
 	// Transition from paused to resumed
 	s.senderFlowCtrlImpl.setState(state, enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME)
-	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
 	wg.Wait()
 
 	s.Equal(0, state.waiters)
