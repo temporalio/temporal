@@ -46,8 +46,8 @@ type (
 func (s *DescribeTaskQueueSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// this is overridden for tests using testWithMatchingBehavior
-		dynamicconfig.MatchingNumTaskqueueReadPartitions:  4,
-		dynamicconfig.MatchingNumTaskqueueWritePartitions: 4,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
 	}
 	s.setupSuite("testdata/es_cluster.yaml")
 }
@@ -142,7 +142,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBa
 			TaskQueueTypes:         nil, // both types
 			ReportPollers:          true,
 			ReportTaskReachability: true,
-			ReportBacklogInfo:      true,
+			ReportStats:            true,
 		})
 		s.NoError(err)
 		s.NotNil(resp)
@@ -155,7 +155,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBa
 		validator := true
 		for qT, t := range types {
 			queueType := enumspb.TaskQueueType(qT)
-			if t.BacklogInfo.ApproximateBacklogCount != expectedBacklogCount[queueType] {
+			if t.Stats.ApproximateBacklogCount != expectedBacklogCount[queueType] {
 				validator = false
 			}
 		}
