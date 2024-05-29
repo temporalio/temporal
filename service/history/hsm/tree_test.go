@@ -117,6 +117,10 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 	// Cache when a new child is added.
 	child, err := root.AddChild(key, hsmtest.NewData(hsmtest.State1))
 	require.NoError(t, err)
+
+	require.True(t, root.Dirty()) // As soon as we mutate the tree, it should be marked dirty.
+	root.ClearTransactionState()  // Reset and check later that we're dirty after applying the transition.
+
 	// Verify this doesn't panic and the backend is propagated to the new child.
 	child.AddHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED, func(e *historypb.HistoryEvent) {})
 
@@ -129,7 +133,7 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 		return hsm.TransitionOutput{}, nil
 	})
 	require.NoError(t, err)
-	require.True(t, root.Dirty())
+	require.True(t, root.Dirty()) // Should now be dirty again.
 	require.Equal(t, 1, len(root.Outputs()))
 	require.Equal(t, []hsm.Key{key}, root.Outputs()[0].Path)
 
