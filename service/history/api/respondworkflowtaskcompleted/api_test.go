@@ -126,12 +126,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 
 	s.mockNamespaceCache = mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = mockShard.Resource.ExecutionMgr
+
 	mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
+	mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	mockClusterMetadata := mockShard.Resource.ClusterMetadata
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(nil).AnyTimes()
 
 	s.mockEventsCache = mockShard.MockEventsCache
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
