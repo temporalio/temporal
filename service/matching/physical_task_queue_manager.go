@@ -114,7 +114,6 @@ type (
 		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
-		Matcher() *TaskMatcher
 	}
 
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
@@ -137,8 +136,8 @@ type (
 		pollerHistory              *pollerHistory
 		currentPolls               atomic.Int64
 		taskValidator              taskValidator
-		TasksAddedInIntervals      *taskTracker
-		TasksDispatchedInIntervals *taskTracker
+		tasksAddedInIntervals      *taskTracker
+		tasksDispatchedInIntervals *taskTracker
 	}
 )
 
@@ -267,8 +266,8 @@ func newPhysicalTaskQueueManager(
 		throttledLogger:            throttledLogger,
 		config:                     config,
 		taggedMetricsHandler:       taggedMetricsHandler,
-		TasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
-		TasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
+		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
+		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
 	}
 	pqMgr.pollerHistory = newPollerHistory()
 
@@ -349,7 +348,7 @@ func (c *physicalTaskQueueManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
-	c.TasksAddedInIntervals.incrementTaskCount()
+	c.tasksAddedInIntervals.incrementTaskCount()
 	if params.forwardedFrom == "" {
 		// request sent by history service
 		c.liveness.markAlive()
@@ -430,7 +429,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 	task.namespace = c.partitionMgr.ns.Name()
 	task.backlogCountHint = c.backlogMgr.BacklogCountHint
-	c.TasksDispatchedInIntervals.incrementTaskCount()
+	c.tasksDispatchedInIntervals.incrementTaskCount()
 	return task, nil
 }
 
@@ -529,8 +528,8 @@ func (c *physicalTaskQueueManagerImpl) GetBacklogInfo(ctx context.Context) (*tas
 	return &taskqueuepb.BacklogInfo{
 		ApproximateBacklogCount: approximateBacklogCount,
 		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.taskReader.getBacklogHeadCreateTime()),
-		TasksAddRate:            c.TasksAddedInIntervals.rate(),
-		TasksDispatchRate:       c.TasksDispatchedInIntervals.rate(),
+		TasksAddRate:            c.tasksAddedInIntervals.rate(),
+		TasksDispatchRate:       c.tasksDispatchedInIntervals.rate(),
 	}, nil
 }
 
@@ -590,10 +589,6 @@ func newChildContext(
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
-}
-
-func (c *physicalTaskQueueManagerImpl) Matcher() *TaskMatcher {
-	return c.matcher
 }
 
 func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
