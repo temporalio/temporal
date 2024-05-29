@@ -67,7 +67,8 @@ type (
 	nexusEndpointClientConfig struct {
 		maxNameLength                dynamicconfig.IntPropertyFn
 		maxTaskQueueLength           dynamicconfig.IntPropertyFn
-		maxDescriptionSize           dynamicconfig.IntPropertyFn
+		maxDetailsSize               dynamicconfig.IntPropertyFn
+		maxSummarySize               dynamicconfig.IntPropertyFn
 		maxExternalEndpointURLLength dynamicconfig.IntPropertyFn
 		listDefaultPageSize          dynamicconfig.IntPropertyFn
 		listMaxPageSize              dynamicconfig.IntPropertyFn
@@ -75,10 +76,18 @@ type (
 )
 
 func newNexusEndpointClientConfig(dc *dynamicconfig.Collection) *nexusEndpointClientConfig {
+	maxDetailsSizeFn := dynamicconfig.MaxUserMetadataDetailsSize.Get(dc)
+	maxSummarySizeFn := dynamicconfig.MaxUserMetadataSummarySize.Get(dc)
+
 	return &nexusEndpointClientConfig{
-		maxNameLength:                dynamicconfig.NexusEndpointNameMaxLength.Get(dc),
-		maxTaskQueueLength:           dynamicconfig.MaxIDLengthLimit.Get(dc),
-		maxDescriptionSize:           dynamicconfig.NexusEndpointDescriptionMaxSize.Get(dc),
+		maxNameLength:      dynamicconfig.NexusEndpointNameMaxLength.Get(dc),
+		maxTaskQueueLength: dynamicconfig.MaxIDLengthLimit.Get(dc),
+		maxDetailsSize: func() int {
+			return maxDetailsSizeFn("") // Ignore namespace for endpoints since they are global resources.
+		},
+		maxSummarySize: func() int {
+			return maxSummarySizeFn("") // Ignore namespace for endpoints since they are global resources.
+		},
 		maxExternalEndpointURLLength: dynamicconfig.NexusEndpointExternalURLMaxLength.Get(dc),
 		listDefaultPageSize:          dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc),
 		listMaxPageSize:              dynamicconfig.NexusEndpointListMaxPageSize.Get(dc),
@@ -251,9 +260,9 @@ func (c *NexusEndpointClient) apiSpecToPersistenceSpec(source *nexuspb.EndpointS
 		return nil, err
 	}
 	return &persistencespb.NexusEndpointSpec{
-		Name:        source.GetName(),
-		Description: source.GetDescription(),
-		Target:      target,
+		Name:     source.GetName(),
+		Metadata: source.GetMetadata(),
+		Target:   target,
 	}, nil
 }
 
@@ -383,9 +392,13 @@ func (c *NexusEndpointClient) validateUpsertSpec(spec *nexuspb.EndpointSpec) err
 		issues.Append("empty endpoint target")
 	}
 
-	maxSize := c.config.maxDescriptionSize()
-	if spec.GetDescription().Size() > maxSize {
-		issues.Appendf("description length exceeds limit of %d", maxSize)
+	maxSize := c.config.maxSummarySize()
+	if spec.GetMetadata().GetSummary().Size() > maxSize {
+		issues.Appendf("summary size exceeds limit of %d", maxSize)
+	}
+	maxSize = c.config.maxDetailsSize()
+	if spec.GetMetadata().GetDetails().Size() > maxSize {
+		issues.Appendf("details size exceeds limit of %d", maxSize)
 	}
 
 	return issues.GetError()
@@ -480,9 +493,9 @@ func (c *NexusEndpointClient) endpointPersistedEntryToExternalAPI(entry *persist
 	}
 
 	spec := nexuspb.EndpointSpec{
-		Name:        persistedSpec.Name,
-		Description: persistedSpec.Description,
-		Target:      target,
+		Name:     persistedSpec.Name,
+		Metadata: persistedSpec.Metadata,
+		Target:   target,
 	}
 
 	return &nexuspb.Endpoint{
