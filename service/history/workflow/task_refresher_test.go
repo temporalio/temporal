@@ -116,6 +116,8 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	s.NoError(err)
 	_, err = hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_2"}, hsmtest.NewData(hsmtest.State3))
 	s.NoError(err)
+	// Clear the dirty flag so we can test it later.
+	hsmRoot.ClearTransactionState()
 
 	err = s.taskRefresher.refreshTasksForSubStateMachines(s.mutableState)
 	s.NoError(err)
