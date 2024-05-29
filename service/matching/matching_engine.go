@@ -959,12 +959,11 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							totalStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats
 							partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 
-							// Aggregate counts; for now, we only aggregate approximateBacklogCount
 							mergedStats = &taskqueuepb.TaskQueueStats{
 								ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
 								ApproximateBacklogAge:   e.largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
-								TasksAddRate:            float32(0),
-								TasksDispatchRate:       float32(0),
+								TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
+								TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
 							}
 						}
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
