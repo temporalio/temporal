@@ -4083,7 +4083,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 			TaskQueueTypes:         nil, // both types
 			ReportPollers:          true,
 			ReportTaskReachability: true,
-			ReportBacklogInfo:      false,
+			ReportStats:            false,
 		})
 		s.NoError(err)
 		s.NotNil(resp)

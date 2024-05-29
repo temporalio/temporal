@@ -82,7 +82,7 @@ type (
 		HasAnyPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		Describe(buildIds map[string]bool, includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
+		Describe(buildIds map[string]bool, includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
@@ -469,7 +469,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	buildIds map[string]bool,
-	includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
@@ -497,8 +497,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			if reportPollers {
 				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 			}
-			if reportBacklogInfo {
-				vInfo.PhysicalTaskQueueInfo.BacklogInfo = physicalQueue.GetBacklogInfo()
+			if reportStats {
+				vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
 			}
 		}
 		versionsInfo[bid] = vInfo

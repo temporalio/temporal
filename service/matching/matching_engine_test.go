@@ -2901,7 +2901,7 @@ func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQ
 }
 
 func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCount int, numWorkers int, numPollers int) {
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 
@@ -2937,8 +2937,8 @@ func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors
 }
 
 func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int) {
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
-	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Millisecond)
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
@@ -3022,9 +3022,9 @@ func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklog
 	// This test should fail since we are not persisting the ack level with every write.
 	s.T().Skip("Skipping this until AckLevel is persisted with task creation")
 
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 	// Increasing the UpdateAckInterval so that it does not get fired
-	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Minute)
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Minute)
 
 	_, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
@@ -3079,8 +3079,8 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
-	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Millisecond)
 
 	var wg sync.WaitGroup
 	wg.Add(2 * numWorkers)

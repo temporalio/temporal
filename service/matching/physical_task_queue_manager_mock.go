@@ -36,7 +36,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/taskqueue/v1"
 	v10 "go.temporal.io/server/api/matchingservice/v1"
-	v11 "go.temporal.io/server/api/taskqueue/v1"
+	v11 "go.temporal.io/server/api/persistence/v1"
+	v12 "go.temporal.io/server/api/taskqueue/v1"
 )
 
 // MockphysicalTaskQueueManager is a mock of physicalTaskQueueManager interface.
@@ -62,26 +63,11 @@ func (m *MockphysicalTaskQueueManager) EXPECT() *MockphysicalTaskQueueManagerMoc
 	return m.recorder
 }
 
-// AddTask mocks base method.
-func (m *MockphysicalTaskQueueManager) AddTask(ctx context.Context, params addTaskParams) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddTask", ctx, params)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddTask indicates an expected call of AddTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) AddTask(ctx, params interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddTask), ctx, params)
-}
-
 // Describe mocks base method.
-func (m *MockphysicalTaskQueueManager) Describe() *v11.PhysicalTaskQueueInfo {
+func (m *MockphysicalTaskQueueManager) Describe() *v12.PhysicalTaskQueueInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Describe")
-	ret0, _ := ret[0].(*v11.PhysicalTaskQueueInfo)
+	ret0, _ := ret[0].(*v12.PhysicalTaskQueueInfo)
 	return ret0
 }
 
@@ -149,18 +135,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetAllPollerInfo() *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllPollerInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetAllPollerInfo))
 }
 
-// GetBacklogInfo mocks base method.
-func (m *MockphysicalTaskQueueManager) GetBacklogInfo() *v1.BacklogInfo {
+// GetStats mocks base method.
+func (m *MockphysicalTaskQueueManager) GetStats() *v1.TaskQueueStats {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBacklogInfo")
-	ret0, _ := ret[0].(*v1.BacklogInfo)
+	ret := m.ctrl.Call(m, "GetStats")
+	ret0, _ := ret[0].(*v1.TaskQueueStats)
 	return ret0
 }
 
-// GetBacklogInfo indicates an expected call of GetBacklogInfo.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) GetBacklogInfo() *gomock.Call {
+// GetStats indicates an expected call of GetStats.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) GetStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBacklogInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetBacklogInfo))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStats", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetStats))
 }
 
 // HasPollerAfter mocks base method.
@@ -247,17 +233,17 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 }
 
 // SpoolTask mocks base method.
-func (m *MockphysicalTaskQueueManager) SpoolTask(params addTaskParams) error {
+func (m *MockphysicalTaskQueueManager) SpoolTask(taskInfo *v11.TaskInfo) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SpoolTask", params)
+	ret := m.ctrl.Call(m, "SpoolTask", taskInfo)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SpoolTask indicates an expected call of SpoolTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) SpoolTask(params interface{}) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) SpoolTask(taskInfo interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SpoolTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).SpoolTask), params)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SpoolTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).SpoolTask), taskInfo)
 }
 
 // Start mocks base method.
@@ -296,6 +282,21 @@ func (m *MockphysicalTaskQueueManager) String() string {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) String() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).String))
+}
+
+// TrySyncMatch mocks base method.
+func (m *MockphysicalTaskQueueManager) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TrySyncMatch", ctx, task)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TrySyncMatch indicates an expected call of TrySyncMatch.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) TrySyncMatch(ctx, task interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrySyncMatch", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).TrySyncMatch), ctx, task)
 }
 
 // UnloadFromPartitionManager mocks base method.
