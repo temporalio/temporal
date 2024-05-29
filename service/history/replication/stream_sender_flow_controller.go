@@ -101,7 +101,7 @@ func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControl
 		defer state.mu.Unlock()
 		state.resume = true
 		if state.waiters > 0 {
-			state.cond.Signal()
+			state.cond.Broadcast()
 		}
 	case enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE:
 		state.mu.Lock()
