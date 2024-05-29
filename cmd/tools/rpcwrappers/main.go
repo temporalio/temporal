@@ -539,7 +539,7 @@ func readLicenseFile(path string) string {
 
 func main() {
 	serviceFlag := flag.String("service", "", "which service to generate rpc client wrappers for")
-	licenseFlag := flag.String("licence_file", "../../LICENSE", "path to license to copy into header")
+	licenseFlag := flag.String("license_file", "../../LICENSE", "path to license to copy into header")
 	flag.Parse()
 
 	i := slices.IndexFunc(services, func(s service) bool { return s.name == *serviceFlag })
