@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"math"
 	"sync/atomic"
 	"testing"
@@ -93,25 +92,6 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	return func(tqm *physicalTaskQueueManagerImpl) {
 		tqm.backlogMgr.taskWriter.idAlloc = ibl
 	}
-}
-
-func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			// any error other than ConditionFailedError indicates an
-			// availability problem at a lower layer so the TQM should NOT
-			// unload itself because resilient sync match is enabled.
-			return taskQueueState{}, errors.New(t.Name())
-		}))
-	tqm.Start()
-	defer tqm.Stop()
-	poller, _ := runOneShotPoller(context.Background(), tqm)
-	defer poller.Cancel()
-
-	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{}, nil)
-	sync, err := tqm.TrySyncMatch(context.TODO(), task)
-	require.NoError(t, err)
-	require.True(t, sync)
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
@@ -443,4 +423,22 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	time.Sleep(2 * time.Second) // will attempt to update and fail and not try again
 
 	require.Equal(t, 1, tm.getUpdateCount(tqCfg.dbq))
+}
+
+func TestTQMInterruptsPollOnClose(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tqm.Start()
+
+	pollStart := time.Now()
+	pollCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, pollCh := runOneShotPoller(pollCtx, tqm)
+
+	tqm.Stop() // should interrupt poller
+
+	<-pollCh
+	require.Less(t, time.Since(pollStart), 4*time.Second)
 }

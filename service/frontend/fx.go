@@ -530,7 +530,6 @@ func VisibilityManagerProvider(
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -539,7 +538,6 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esClient,
 		nil, // frontend visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
@@ -729,7 +727,7 @@ func RegisterNexusHTTPHandler(
 	clusterMetadata cluster.Metadata,
 	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
-	endpointRegistry *nexus.EndpointRegistry,
+	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
@@ -838,7 +836,7 @@ func NexusEndpointRegistryProvider(
 	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
-) *nexus.EndpointRegistry {
+) nexus.EndpointRegistry {
 	registryConfig := nexus.NewEndpointRegistryConfig(dc)
 	return nexus.NewEndpointRegistry(
 		registryConfig,
@@ -848,7 +846,7 @@ func NexusEndpointRegistryProvider(
 	)
 }
 
-func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry *nexus.EndpointRegistry) {
+func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegistry) {
 	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
 }
 

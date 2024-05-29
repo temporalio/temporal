@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -131,20 +132,40 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	esClient client.Client,
-	index string,
+	cfg *client.Config,
+	processorConfig *ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
-	processor Processor,
-	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
-) *visibilityStore {
-
+	logger log.Logger,
+) (*visibilityStore, error) {
+	esHttpClient := cfg.GetHttpClient()
+	if esHttpClient == nil {
+		var err error
+		esHttpClient, err = client.NewAwsHttpClient(cfg.AWSRequestSigning)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
+		}
+	}
+	esClient, err := client.NewClient(cfg, esHttpClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
+			cfg.URL.Redacted(), cfg.Username, err)
+	}
+	var (
+		processor           Processor
+		processorAckTimeout dynamicconfig.DurationPropertyFn
+	)
+	if processorConfig != nil {
+		processor = NewProcessor(processorConfig, esClient, logger, metricsHandler)
+		processor.Start()
+		processorAckTimeout = processorConfig.ESProcessorAckTimeout
+	}
 	return &visibilityStore{
 		esClient:                       esClient,
-		index:                          index,
+		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		processor:                      processor,
@@ -152,11 +173,10 @@ func NewVisibilityStore(
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
-	}
+	}, nil
 }
 
 func (s *visibilityStore) Close() {
-	// TODO (alex): visibilityStore shouldn't Stop processor. Processor should be stopped where it is created.
 	if s.processor != nil {
 		s.processor.Stop()
 	}

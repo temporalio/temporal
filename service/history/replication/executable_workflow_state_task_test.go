@@ -34,6 +34,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -262,5 +263,32 @@ func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill() {
 	}).Return(nil)
 
 	err := s.task.MarkPoisonPill()
+	s.NoError(err)
+}
+
+func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
+	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
+	shardID := rand.Int31()
+	shardContext := shard.NewMockContext(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.task.NamespaceID),
+		s.task.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.sourceClusterName,
+		TaskInfo: &persistencepb.ReplicationTaskInfo{
+			NamespaceId: s.task.NamespaceID,
+			WorkflowId:  s.task.WorkflowID,
+			RunId:       s.task.RunID,
+			TaskId:      s.task.ExecutableTask.TaskID(),
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		},
+	}).Return(serviceerror.NewInternal("failed"))
+
+	err := s.task.MarkPoisonPill()
+	s.Error(err)
+	err = s.task.MarkPoisonPill()
 	s.NoError(err)
 }

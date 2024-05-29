@@ -85,7 +85,6 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		resolver.NewNoopResolver(),
 		s.CustomVisibilityStoreFactory,
 		nil,
-		nil,
 		s.SearchAttributesProvider,
 		s.SearchAttributesMapperProvider,
 		dynamicconfig.GetIntPropertyFn(1000),
