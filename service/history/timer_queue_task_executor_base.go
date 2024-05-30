@@ -293,8 +293,9 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimerTask(
 		return nil
 	}
 
-	// Update processed timers, when we close the transaction, the next timer will be scheduled by the task generator.
+	// Update processed timers and ensure the next timer task is scheduled.
 	ms.GetExecutionInfo().StateMachineTimers = timers
+	workflow.AddNextStateMachineTimerTask(ms)
 
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
