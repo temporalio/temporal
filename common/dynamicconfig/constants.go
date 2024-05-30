@@ -2104,6 +2104,21 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderHighPriorityQPS",
+		100,
+		`Maximum number of high priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamSenderLowPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLowPriorityQPS",
+		100,
+		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxOutstandingTaskCount",
+		50,
+		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
 
 	// keys for worker
 

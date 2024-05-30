@@ -69,8 +69,9 @@ type (
 		clientShardKey ClusterShardKey
 		serverShardKey ClusterShardKey
 
-		streamSender *StreamSenderImpl
-		config       *configs.Config
+		streamSender         *StreamSenderImpl
+		senderFlowController *MockSenderFlowController
+		config               *configs.Config
 	}
 )
 
@@ -112,6 +113,8 @@ func (s *streamSenderSuite) SetupTest() {
 		s.serverShardKey,
 		s.config,
 	)
+	s.senderFlowController = NewMockSenderFlowController(s.controller)
+	s.streamSender.flowController = s.senderFlowController
 }
 
 func (s *streamSenderSuite) TearDownTest() {
@@ -119,6 +122,7 @@ func (s *streamSenderSuite) TearDownTest() {
 }
 
 func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
+	s.streamSender.isTieredStackEnabled = false
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
@@ -158,6 +162,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 }
 
 func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Error() {
+	s.streamSender.isTieredStackEnabled = false
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
@@ -219,6 +224,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Success() {
 			InclusiveLowWatermarkTime: timestamp,
 		},
 	}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Return().Times(1)
 
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
 		readerID,
@@ -306,6 +312,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Error() {
 	} else {
 		ownershipLost = serviceerrors.NewShardOwnershipLost("", "")
 	}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Return().Times(1)
 
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
 		readerID,
@@ -755,6 +762,7 @@ func (s *streamSenderSuite) TestSendTasks_WithoutTasks() {
 }
 
 func (s *streamSenderSuite) TestSendTasks_WithTasks() {
+	s.streamSender.isTieredStackEnabled = false
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 100
 	item0 := tasks.NewMockTask(s.controller)
@@ -838,6 +846,7 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 }
 
 func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
+	s.streamSender.isTieredStackEnabled = true
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 100
 	item0 := &tasks.SyncWorkflowStateTask{
@@ -878,6 +887,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 			return []tasks.Task{item0, item1, item2}, nil, nil
 		},
 	)
+	s.senderFlowController.EXPECT().Wait(enumsspb.TASK_PRIORITY_HIGH).Return().Times(1)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
 		string(s.clientShardKey.ClusterID),
@@ -914,6 +924,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 }
 
 func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
+	s.streamSender.isTieredStackEnabled = true
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 100
 	item0 := &tasks.SyncWorkflowStateTask{
@@ -959,6 +970,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 			return []tasks.Task{item0, item1, item2}, nil, nil
 		},
 	)
+	s.senderFlowController.EXPECT().Wait(enumsspb.TASK_PRIORITY_LOW).Return().Times(2)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
 		string(s.clientShardKey.ClusterID),

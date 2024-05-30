@@ -73,6 +73,7 @@ type (
 		stream                  Stream
 		taskConverter           ExecutableTaskConverter
 		receiverMode            ReceiverMode
+		flowController          ReceiverFlowController
 	}
 )
 
@@ -98,14 +99,27 @@ func NewStreamReceiver(
 		tag.SourceShardID(serverShardKey.ShardID),
 		tag.ShardID(clientShardKey.ShardID), // client is the local cluster (target cluster, passive cluster)
 	)
+	highPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
+	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
+	taskTrackerMap := make(map[enums.TaskPriority]FlowControlSignalProvider)
+	taskTrackerMap[enums.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
+		return &FlowControlSignal{
+			taskTrackingCount: highPriorityTaskTracker.Size(),
+		}
+	}
+	taskTrackerMap[enums.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
+		return &FlowControlSignal{
+			taskTrackingCount: lowPriorityTaskTracker.Size(),
+		}
+	}
 	return &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
 		status:                  common.DaemonStatusInitialized,
 		clientShardKey:          clientShardKey,
 		serverShardKey:          serverShardKey,
-		highPriorityTaskTracker: NewExecutableTaskTracker(logger, processToolBox.MetricsHandler),
-		lowPriorityTaskTracker:  NewExecutableTaskTracker(logger, processToolBox.MetricsHandler),
+		highPriorityTaskTracker: highPriorityTaskTracker,
+		lowPriorityTaskTracker:  lowPriorityTaskTracker,
 		shutdownChan:            channel.NewShutdownOnce(),
 		logger:                  logger,
 		stream: newStream(
@@ -113,8 +127,9 @@ func NewStreamReceiver(
 			clientShardKey,
 			serverShardKey,
 		),
-		taskConverter: taskConverter,
-		receiverMode:  ReceiverModeUnset,
+		taskConverter:  taskConverter,
+		receiverMode:   ReceiverModeUnset,
+		flowController: NewReceiverFlowControl(taskTrackerMap, processToolBox.Config),
 	}
 }
 
@@ -250,10 +265,12 @@ func (r *StreamReceiverImpl) ackMessage(
 		highPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
+			FlowControlCommand:        r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_HIGH),
 		}
 		lowPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
+			FlowControlCommand:        r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_LOW),
 		}
 		if highPriorityWaterMarkInfo.Watermark <= lowPriorityWaterMarkInfo.Watermark {
 			inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
