@@ -91,6 +91,8 @@ func SetupSQLiteDatabase(t *testing.T, cfg *config.SQL) {
 		t.Fatalf("unable to create SQLite database: %v", err)
 	}
 
+	defer func() { _ = db.DropDatabase(cfg.DatabaseName) }()
+
 	LoadSchema(t, db, path.Join(testSQLiteSchemaDir, "temporal", "schema.sql"))
 	LoadSchema(t, db, path.Join(testSQLiteSchemaDir, "visibility", "schema.sql"))
 }
