@@ -56,7 +56,8 @@ type (
 		stream                  *mockStream
 		taskScheduler           *mockScheduler
 
-		streamReceiver *StreamReceiverImpl
+		streamReceiver         *StreamReceiverImpl
+		receiverFlowController *MockReceiverFlowController
 	}
 
 	mockStream struct {
@@ -127,6 +128,8 @@ func (s *streamReceiverSuite) SetupTest() {
 	s.streamReceiver.highPriorityTaskTracker = s.highPriorityTaskTracker
 	s.streamReceiver.lowPriorityTaskTracker = s.lowPriorityTaskTracker
 	s.stream.requests = []*adminservice.StreamWorkflowReplicationMessagesRequest{}
+	s.receiverFlowController = NewMockReceiverFlowController(s.controller)
+	s.streamReceiver.flowController = s.receiverFlowController
 }
 
 func (s *streamReceiverSuite) TearDownTest() {
@@ -256,6 +259,8 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 	}
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(highWatermarkInfo)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(lowWatermarkInfo)
+	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH).Return(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME)
+	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW).Return(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE)
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
@@ -268,10 +273,12 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 				HighPriorityState: &repicationpb.ReplicationState{
 					InclusiveLowWatermark:     highWatermarkInfo.Watermark,
 					InclusiveLowWatermarkTime: timestamppb.New(highWatermarkInfo.Timestamp),
+					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 				},
 				LowPriorityState: &repicationpb.ReplicationState{
 					InclusiveLowWatermark:     lowWatermarkInfo.Watermark,
 					InclusiveLowWatermarkTime: timestamppb.New(lowWatermarkInfo.Timestamp),
+					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
 				},
 			},
 		},

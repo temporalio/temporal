@@ -29,6 +29,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
@@ -60,7 +61,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      "default",
+		DatabaseName:      uuid.New(),
 		ConnectAttributes: map[string]string{"mode": "memory", "cache": "private"},
 	}
 }

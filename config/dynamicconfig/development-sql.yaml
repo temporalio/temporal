@@ -43,10 +43,6 @@ frontend.enableUpdateWorkflowExecution:
   - value: true
 frontend.enableUpdateWorkflowExecutionAsyncAccepted:
   - value: true
-frontend.accessHistoryFraction:
-  - value: 1.0
-frontend.adminDeleteAccessHistoryFraction:
-  - value: 1.0
 system.enableNexus:
   - value: true
 component.nexusoperations.callback.endpoint.template:

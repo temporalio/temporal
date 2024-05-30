@@ -356,6 +356,7 @@ BackfillLoop:
 				BranchId:  branchID,
 				Ancestors: ancestors,
 			},
+			runID,
 		)
 		if err != nil {
 			return common.EmptyEventTaskID, err
