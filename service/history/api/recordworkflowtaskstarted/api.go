@@ -39,7 +39,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -197,19 +196,17 @@ func Invoke(
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(config.FrontendAccessHistoryFraction, shardContext.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceEntry.Name().String()), metrics.OperationTag(metrics.HistoryHandleWorkflowTaskStartedTag))) {
-		maxHistoryPageSize := int32(config.HistoryMaxPageSize(namespaceEntry.Name().String()))
-		err = setHistoryForRecordWfTaskStartedResp(
-			ctx,
-			shardContext,
-			workflowKey,
-			maxHistoryPageSize,
-			workflowConsistencyChecker,
-			eventNotifier,
-			persistenceVisibilityMgr,
-			resp,
-		)
-	}
+	maxHistoryPageSize := int32(config.HistoryMaxPageSize(namespaceEntry.Name().String()))
+	err = setHistoryForRecordWfTaskStartedResp(
+		ctx,
+		shardContext,
+		workflowKey,
+		maxHistoryPageSize,
+		workflowConsistencyChecker,
+		eventNotifier,
+		persistenceVisibilityMgr,
+		resp,
+	)
 	if err != nil {
 		return nil, err
 	}

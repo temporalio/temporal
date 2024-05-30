@@ -188,7 +188,6 @@ func NewDynamicConfig() *configs.Config {
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableEagerWorkflowStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
-	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	config.EnableNexus = dynamicconfig.GetBoolPropertyFn(true)
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
 	config.ShardOwnershipAssertionEnabled = dynamicconfig.GetBoolPropertyFn(true)
