@@ -861,20 +861,6 @@ server hosts for it to take effect.`,
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
 	)
-	FrontendAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.accessHistoryFraction",
-		1.0,
-		`FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
-service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
-	)
-	FrontendAdminDeleteAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.adminDeleteAccessHistoryFraction",
-		1.0,
-		`FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
-that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
-	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",

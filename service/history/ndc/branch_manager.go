@@ -29,7 +29,6 @@ package ndc
 import (
 	"context"
 
-	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -223,13 +222,15 @@ func (r *BranchMgrImpl) createNewBranch(
 	executionInfo := r.mutableState.GetExecutionInfo()
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
+	runID := r.mutableState.GetExecutionState().RunId
 
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseBranchLastEventID + 1,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID),
 		ShardID:         shardID,
 		NamespaceID:     namespaceID,
+		NewRunID:        runID,
 	})
 	if err != nil {
 		return 0, err

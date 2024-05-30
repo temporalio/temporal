@@ -141,13 +141,13 @@ func (s *branchMgrSuite) TestCreateNewBranch() {
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
-			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
 				ForkBranchToken: baseBranchToken,
 				ForkNodeID:      baseBranchLCAEventID + 1,
-				Info:            "",
+				Info:            input.Info,
 				ShardID:         shardID,
 				NamespaceID:     s.namespaceID,
+				NewRunID:        input.NewRunID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,
@@ -270,13 +270,13 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_NoMissingEventInBet
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
-			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
 				ForkBranchToken: baseBranchToken,
 				ForkNodeID:      baseBranchLCAEventID + 1,
-				Info:            "",
+				Info:            input.Info,
 				ShardID:         shardID,
 				NamespaceID:     s.namespaceID,
+				NewRunID:        input.NewRunID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,
@@ -366,13 +366,13 @@ func (s *branchMgrSuite) TestCreate_NoMissingEventInBetween() {
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
-			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
 				ForkBranchToken: baseBranchToken,
 				ForkNodeID:      baseBranchLCAEventID + 1,
-				Info:            "",
+				Info:            input.Info,
 				ShardID:         shardID,
 				NamespaceID:     s.namespaceID,
+				NewRunID:        input.NewRunID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,

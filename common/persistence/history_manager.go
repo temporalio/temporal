@@ -105,7 +105,11 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	// The above newBranchInfo is a lossy construction of the forked branch token from the original opaque branch token.
 	// It only initializes with the fields it understands, which may inadvertently discard other misc fields. The
 	// following is the replacement logic to correctly apply the updated fields into the original opaque branch token.
-	newBranchToken, err := m.GetHistoryBranchUtil().UpdateHistoryBranchInfo(request.ForkBranchToken, newBranchInfo)
+	newBranchToken, err := m.GetHistoryBranchUtil().UpdateHistoryBranchInfo(
+		request.ForkBranchToken,
+		newBranchInfo,
+		request.NewRunID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -123,13 +127,13 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 
 	req := &InternalForkHistoryBranchRequest{
-		ForkBranchToken: request.ForkBranchToken,
-		ForkBranchInfo:  forkBranch,
-		TreeInfo:        treeInfoBlob,
-		ForkNodeID:      request.ForkNodeID,
-		NewBranchID:     newBranchInfo.BranchId,
-		Info:            request.Info,
-		ShardID:         request.ShardID,
+		NewBranchToken: newBranchToken,
+		ForkBranchInfo: forkBranch,
+		TreeInfo:       treeInfoBlob,
+		ForkNodeID:     request.ForkNodeID,
+		NewBranchID:    newBranchInfo.BranchId,
+		Info:           request.Info,
+		ShardID:        request.ShardID,
 	}
 
 	err = m.persistence.ForkHistoryBranch(ctx, req)
