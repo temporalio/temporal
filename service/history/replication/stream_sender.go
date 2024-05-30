@@ -364,7 +364,6 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	var catchupBeginInclusiveWatermark int64
-
 	queueState, ok := s.shardContext.GetQueueState(
 		tasks.CategoryReplication,
 	)
