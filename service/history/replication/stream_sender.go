@@ -355,7 +355,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	}
 
 	if s.isTieredStackEnabled {
-		// RemoteReaderInfo is used to for failover ns. It is to determine if remote cluster has caught up on replication tasks.
+		// RemoteReaderInfo is used for failover. It is to determine if remote cluster has caught up on replication tasks.
 		// In tiered stack, we will use high priority watermark to do failover as High Priority channel is supposed to be used for live traffic
 		// and Low Priority channel is used for force replication closed workflow.
 		return s.shardContext.UpdateRemoteReaderInfo(
