@@ -64,7 +64,7 @@ func (s *rateLimitInterceptorSuite) TearDownTest() {
 func (s *rateLimitInterceptorSuite) TestInterceptWithTokenConfig() {
 	methodName := "TEST/METHOD"
 	interceptor := NewRateLimitInterceptor(s.mockRateLimiter, map[string]int{methodName: 0})
-	// mack rate limiter should not be called.
+	// mock rate limiter should not be called.
 	s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).MaxTimes(0).Return(false)
 
 	handlerCalled := false
@@ -79,7 +79,7 @@ func (s *rateLimitInterceptorSuite) TestInterceptWithTokenConfig() {
 
 func (s *rateLimitInterceptorSuite) TestInterceptWithNoTokenConfig() {
 	interceptor := NewRateLimitInterceptor(s.mockRateLimiter, nil)
-	// mack rate limiter is set to blocking.
+	// mock rate limiter is set to blocking.
 	s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).MaxTimes(1).Return(false)
 
 	handlerCalled := false
@@ -95,7 +95,7 @@ func (s *rateLimitInterceptorSuite) TestInterceptWithNoTokenConfig() {
 func (s *rateLimitInterceptorSuite) TestInterceptWithNonZeroTokenConfig() {
 	methodName := "TEST/METHOD"
 	interceptor := NewRateLimitInterceptor(s.mockRateLimiter, map[string]int{methodName: 100})
-	// mack rate limiter is set to non-blocking.
+	// mock rate limiter is set to non-blocking.
 	s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).MaxTimes(1).Return(true)
 
 	handlerCalled := false
