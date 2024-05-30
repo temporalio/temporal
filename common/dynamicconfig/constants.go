@@ -507,11 +507,6 @@ is currently processing a task.
 		200,
 		`NexusEndpointNameMaxLength is the maximum length of a Nexus endpoint name.`,
 	)
-	NexusEndpointDescriptionMaxSize = NewGlobalIntSetting(
-		"limit.endpointDescriptionMaxSize",
-		4*1024,
-		`NexusEndpointDescriptionMaxSize is the maximum size of a Nexus endpoint description in bytes.`,
-	)
 	NexusEndpointExternalURLMaxLength = NewGlobalIntSetting(
 		"limit.endpointExternalURLMaxLength",
 		4*1024,
@@ -2347,5 +2342,16 @@ close to or more than the workflow task timeout)`,
 		map[string]any{},
 		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
 settings for controlling remote activity concurrency for delete namespace workflows.`,
+	)
+
+	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
+		"limit.userMetadataSummarySize",
+		400,
+		`MaxUserMetadataSummarySize is the maximum size of user metadata summary payloads in bytes.`,
+	)
+	MaxUserMetadataDetailsSize = NewNamespaceIntSetting(
+		"limit.userMetadataDetailsSize",
+		20000,
+		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
 )
