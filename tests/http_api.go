@@ -331,8 +331,10 @@ func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
 	s.Require().NoError(err)
 	req.Header.Set("Authorization", "my-auth-token")
 	req.Header.Set("X-Forwarded-For", "1.2.3.4:5678")
-	// The header is set to forward deep in the onebox config
+	// These headers are set to forward deep in the onebox config
 	req.Header.Set("This-Header-Forwarded", "some-value")
+	req.Header.Set("This-Header-Prefix-Forwarded-Foo", "foo")
+	req.Header.Set("This-Header-Prefix-Forwarded-Bar", "bar")
 	req.Header.Set("This-Header-Not-Forwarded", "some-value")
 	s.httpRequest(http.StatusOK, req)
 
@@ -345,6 +347,8 @@ func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
 	s.Require().Equal("my-auth-token", listWorkflowMetadata["authorization"][0])
 	s.Require().Contains(listWorkflowMetadata["x-forwarded-for"][0], "1.2.3.4:5678")
 	s.Require().Equal("some-value", listWorkflowMetadata["this-header-forwarded"][0])
+	s.Require().Equal("foo", listWorkflowMetadata["this-header-prefix-forwarded-foo"][0])
+	s.Require().Equal("bar", listWorkflowMetadata["this-header-prefix-forwarded-bar"][0])
 	s.Require().NotContains(listWorkflowMetadata, "this-header-not-forwarded")
 	s.Require().Equal(headers.ClientNameServerHTTP, listWorkflowMetadata[headers.ClientNameHeaderName][0])
 	s.Require().Equal(headers.ServerVersion, listWorkflowMetadata[headers.ClientVersionHeaderName][0])
