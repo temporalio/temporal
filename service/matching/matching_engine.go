@@ -1124,7 +1124,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOther)
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1275,7 +1275,7 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 	if err != nil {
 		return nil, err
 	}
-	userData, err := e.getUserDataClone(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), loadCauseOther)
+	userData, err := e.getUserDataClone(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), loadCauseOtherRead)
 	if err != nil {
 		return nil, err
 	}
@@ -1320,7 +1320,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueue.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOther)
+	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueue.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1411,7 +1411,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOther)
+	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherRead)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil

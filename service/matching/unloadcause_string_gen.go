@@ -15,12 +15,12 @@ func _() {
 	_ = x[unloadCauseConflict-4]
 	_ = x[unloadCauseShuttingDown-5]
 	_ = x[unloadCauseForce-6]
-	_ = x[unloadCauseOther-7]
+	_ = x[unloadCauseOtherError-7]
 }
 
-const _unloadCause_name = "UnspecifiedInitErrorIdleMembershipConflictShuttingDownForceOther"
+const _unloadCause_name = "UnspecifiedInitErrorIdleMembershipConflictShuttingDownForceOtherError"
 
-var _unloadCause_index = [...]uint8{0, 11, 20, 24, 34, 42, 54, 59, 64}
+var _unloadCause_index = [...]uint8{0, 11, 20, 24, 34, 42, 54, 59, 69}
 
 func (i unloadCause) String() string {
 	if i < 0 || i >= unloadCause(len(_unloadCause_index)-1) {

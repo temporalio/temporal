@@ -167,18 +167,19 @@ const (
 	loadCauseUserData
 	loadCauseNexusTask
 	loadCausePoll
-	loadCauseOther
+	loadCauseOtherRead  // any other read-only rpc
+	loadCauseOtherWrite // any other mutating rpc
 )
 
 const (
 	unloadCauseUnspecified unloadCause = iota
 	unloadCauseInitError
 	unloadCauseIdle
-	unloadCauseMembership
-	unloadCauseConflict
+	unloadCauseMembership // proactive unload due to ownership change
+	unloadCauseConflict   // reactive unload due to other node stealing ownership
 	unloadCauseShuttingDown
 	unloadCauseForce
-	unloadCauseOther
+	unloadCauseOtherError
 )
 
 // NewConfig returns new service config with default values

@@ -247,7 +247,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 				tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
 			// Skip final update since persistence is having problems.
 			c.skipFinalUpdate.Store(true)
-			c.pqMgr.UnloadFromPartitionManager(unloadCauseOther)
+			c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 			return
 		}
 		c.taskReader.Signal()

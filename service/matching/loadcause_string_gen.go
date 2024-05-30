@@ -15,12 +15,13 @@ func _() {
 	_ = x[loadCauseUserData-4]
 	_ = x[loadCauseNexusTask-5]
 	_ = x[loadCausePoll-6]
-	_ = x[loadCauseOther-7]
+	_ = x[loadCauseOtherRead-7]
+	_ = x[loadCauseOtherWrite-8]
 }
 
-const _loadCause_name = "UnspecifiedTaskQueryDescribeUserDataNexusTaskPollOther"
+const _loadCause_name = "UnspecifiedTaskQueryDescribeUserDataNexusTaskPollOtherReadOtherWrite"
 
-var _loadCause_index = [...]uint8{0, 11, 15, 20, 28, 36, 45, 49, 54}
+var _loadCause_index = [...]uint8{0, 11, 15, 20, 28, 36, 45, 49, 58, 68}
 
 func (i loadCause) String() string {
 	if i < 0 || i >= loadCause(len(_loadCause_index)-1) {
