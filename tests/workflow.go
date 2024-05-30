@@ -160,9 +160,6 @@ func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 			we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 			s.NoError(err0)
 
-			// don't call too soon
-			//time.Sleep(2 * time.Second)
-
 			request.RequestId = uuid.New()
 			request.WorkflowIdReusePolicy = tc.WorkflowIdReusePolicy
 			request.WorkflowIdConflictPolicy = tc.WorkflowIdConflictPolicy
