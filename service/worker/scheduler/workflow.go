@@ -82,7 +82,7 @@ const (
 	UpdateFromPrevious = 6
 	// do continue-as-new after pending signals
 	CANAfterSignals = 7
-	// set LastProcessedTime to last action instesad of now
+	// set LastProcessedTime to last action instead of now
 	UseLastAction = 8
 )
 
