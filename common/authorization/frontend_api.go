@@ -24,10 +24,13 @@
 
 package authorization
 
-import "go.temporal.io/server/common/api"
+import (
+	"go.temporal.io/server/common/api"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+)
 
 var healthCheckAPI = map[string]struct{}{
-	"/grpc.health.v1.Health/Check":                                   {},
+	healthpb.Health_Check_FullMethodName:                             {},
 	"/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo": {},
 }
 

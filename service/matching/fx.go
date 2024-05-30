@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var Module = fx.Options(
@@ -101,7 +102,9 @@ func RateLimitInterceptorProvider(
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
-		map[string]int{},
+		map[string]int{
+			healthpb.Health_Check_FullMethodName: 0,
+		},
 	)
 }
 
