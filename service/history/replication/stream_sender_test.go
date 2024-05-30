@@ -210,17 +210,19 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Success() {
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
 	)
-	inclusiveWatermark := int64(1234)
+	lowPriorityInclusiveWatermark := int64(1234)
+	highPriorityInclusiveWatermark := lowPriorityInclusiveWatermark + 10
+
 	timestamp := timestamppb.New(time.Unix(0, rand.Int63()))
 	replicationState := &replicationspb.SyncReplicationState{
-		InclusiveLowWatermark:     inclusiveWatermark,
+		InclusiveLowWatermark:     lowPriorityInclusiveWatermark,
 		InclusiveLowWatermarkTime: timestamp,
 		HighPriorityState: &replicationspb.ReplicationState{
-			InclusiveLowWatermark:     inclusiveWatermark,
+			InclusiveLowWatermark:     highPriorityInclusiveWatermark,
 			InclusiveLowWatermarkTime: timestamp,
 		},
 		LowPriorityState: &replicationspb.ReplicationState{
-			InclusiveLowWatermark:     inclusiveWatermark + 10,
+			InclusiveLowWatermark:     lowPriorityInclusiveWatermark,
 			InclusiveLowWatermarkTime: timestamp,
 		},
 	}
@@ -277,7 +279,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Success() {
 	).Return(nil)
 	s.shardContext.EXPECT().UpdateRemoteReaderInfo(
 		readerID,
-		replicationState.InclusiveLowWatermark-1,
+		replicationState.HighPriorityState.InclusiveLowWatermark-1,
 		replicationState.InclusiveLowWatermarkTime.AsTime(),
 	).Return(nil)
 

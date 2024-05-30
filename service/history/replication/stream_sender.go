@@ -131,6 +131,8 @@ func (s *StreamSenderImpl) Start() {
 	}
 
 	if s.isTieredStackEnabled {
+		// High Priority sender is used for live traffic
+		// Low Priority sender is used for force replication closed workflow
 		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
 		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
 	} else {
@@ -350,6 +352,17 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		readerState,
 	); err != nil {
 		return err
+	}
+
+	if s.isTieredStackEnabled {
+		// RemoteReaderInfo is used for failover. It is to determine if remote cluster has caught up on replication tasks.
+		// In tiered stack, we will use high priority watermark to do failover as High Priority channel is supposed to be used for live traffic
+		// and Low Priority channel is used for force replication closed workflow.
+		return s.shardContext.UpdateRemoteReaderInfo(
+			readerID,
+			attr.HighPriorityState.InclusiveLowWatermark-1,
+			attr.HighPriorityState.InclusiveLowWatermarkTime.AsTime(),
+		)
 	}
 	return s.shardContext.UpdateRemoteReaderInfo(
 		readerID,
