@@ -49,7 +49,8 @@ type SetupTask struct {
 	logger log.Logger
 }
 
-func newSetupSchemaTask(db DB, config *SetupConfig, logger log.Logger) *SetupTask {
+// NewSetupSchemaTask returns a new instance of SetupTask
+func NewSetupSchemaTask(db DB, config *SetupConfig, logger log.Logger) *SetupTask {
 	return &SetupTask{
 		db:     db,
 		config: config,

@@ -47,6 +47,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -59,8 +62,6 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/tests"
-	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // This suite contains tests of scenarios in which conflicting histories arise during history replication. To do that we
@@ -173,7 +174,7 @@ func (s *hrsuTestSuite) TearDownSuite() {
 
 func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	ns := tv.NamespaceName().String()
 	t := hrsuTest{
 		tv:                        tv,

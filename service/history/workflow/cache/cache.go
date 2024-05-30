@@ -153,7 +153,7 @@ func newCache(
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:                     cache.New(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
+		Cache:                     cache.NewWithMetrics(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }
@@ -439,7 +439,7 @@ func GetCurrentRunID(
 	if err != nil {
 		return "", err
 	}
-	defer currentRelease(retErr)
+	defer func() { currentRelease(retErr) }()
 
 	resp, err := shardContext.GetCurrentExecution(
 		ctx,

@@ -37,7 +37,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -67,9 +66,9 @@ const (
 
 type (
 	addTaskParams struct {
-		taskInfo      *persistencespb.TaskInfo
-		source        enumsspb.TaskSource
-		forwardedFrom string
+		taskInfo    *persistencespb.TaskInfo
+		directive   *taskqueuespb.TaskVersionDirective
+		forwardInfo *taskqueuespb.TaskForwardInfo
 	}
 
 	physicalTaskQueueManager interface {
@@ -83,9 +82,9 @@ type (
 		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()
 		// TrySyncMatch tries to match task to a local or remote poller. If not possible, returns false.
-		TrySyncMatch(ctx context.Context, params addTaskParams) (bool, error)
+		TrySyncMatch(ctx context.Context, task *internalTask) (bool, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
-		SpoolTask(params addTaskParams) error
+		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		ProcessSpooledTask(ctx context.Context, task *internalTask) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
@@ -147,9 +146,13 @@ func newPhysicalTaskQueueManager(
 	config := partitionMgr.config
 	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(queue.VersionSet()))
 	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(queue.VersionSet()))
+	buildIdTagValue := queue.VersionSet()
+	if buildIdTagValue == "" {
+		buildIdTagValue = queue.BuildId()
+	}
 	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(queue.VersionSet()))
+		metrics.WorkerBuildIdTag(buildIdTagValue))
 	pqMgr := &physicalTaskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
 		partitionMgr:         partitionMgr,
@@ -225,6 +228,7 @@ func (c *physicalTaskQueueManagerImpl) Stop() {
 		return
 	}
 	c.backlogMgr.Stop()
+	c.matcher.Stop()
 	c.liveness.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
@@ -235,12 +239,9 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 	return c.backlogMgr.WaitUntilInitialized(ctx)
 }
 
-func (c *physicalTaskQueueManagerImpl) SpoolTask(params addTaskParams) error {
-	if params.forwardedFrom == "" {
-		// request sent by history service
-		c.liveness.markAlive()
-	}
-	return c.backlogMgr.SpoolTask(params.taskInfo)
+func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
+	c.liveness.markAlive()
+	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
 // PollTask blocks waiting for a task.
@@ -402,8 +403,8 @@ func (c *physicalTaskQueueManagerImpl) String() string {
 	return buf.String()
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
-	if params.forwardedFrom == "" {
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
+	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
 		if c.config.TestDisableSyncMatch() {
@@ -413,13 +414,6 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, params 
 	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
-	// Use fake TaskId for sync match as it hasn't been allocated yet
-	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
-		Data:   params.taskInfo,
-		TaskId: syncMatchTaskId,
-	}
-
-	task := newInternalTask(fakeTaskIdWrapper, nil, params.source, params.forwardedFrom, true)
 	return c.matcher.Offer(childCtx, task)
 }
 

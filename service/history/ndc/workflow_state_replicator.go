@@ -317,6 +317,12 @@ BackfillLoop:
 
 		if historyBlob.nodeID <= lastBatchNodeID {
 			// The history batch already in DB.
+			currentAncestor := sortedAncestors[sortedAncestorsIdx]
+			if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
+				// update ancestor
+				ancestors = append(ancestors, currentAncestor)
+				sortedAncestorsIdx++
+			}
 			continue BackfillLoop
 		}
 
@@ -350,6 +356,7 @@ BackfillLoop:
 				BranchId:  branchID,
 				Ancestors: ancestors,
 			},
+			runID,
 		)
 		if err != nil {
 			return common.EmptyEventTaskID, err

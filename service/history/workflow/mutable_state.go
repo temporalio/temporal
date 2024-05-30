@@ -40,6 +40,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -48,7 +49,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -129,11 +129,11 @@ type (
 		// in history.
 		SuggestContinueAsNew bool
 		HistorySizeBytes     int64
-		// BuildIdRedirectCounter tracks the started build id redirect counter for transient/speculative WFT. This
+		// BuildIdRedirectCounter tracks the started build ID redirect counter for transient/speculative WFT. This
 		// info is to make sure the right redirect counter is used in the WFT started event created later
 		// for a transient/speculative WFT.
 		BuildIdRedirectCounter int64
-		// BuildId tracks the started build id for transient/speculative WFT. This info is used for two purposes:
+		// BuildId tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
 		// - verify WFT completes by the same Build ID that started in the latest attempt
 		// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
 		BuildId string
@@ -154,7 +154,7 @@ type (
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)
 		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes, bool) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
-		AddActivityTaskStartedEvent(*persistencespb.ActivityInfo, int64, string, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)
+		AddActivityTaskStartedEvent(*persistencespb.ActivityInfo, int64, string, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCompletedEventAttributes) (*historypb.HistoryEvent, error)
@@ -170,7 +170,7 @@ type (
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *timestamppb.Timestamp, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
+		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
 		AddWorkflowTaskTimedOutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, namespace.Name, namespace.ID, string, string) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, namespace.Name, namespace.ID, string, string, string) (*historypb.HistoryEvent, error)
@@ -209,7 +209,7 @@ type (
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
 		AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
-		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 
 		CheckResettable() error
@@ -237,14 +237,17 @@ type (
 		GetFirstRunID(ctx context.Context) (string, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetCurrentVersion() int64
+		GetStartVersion() (int64, error)
+		GetCloseVersion() (int64, error)
+		GetLastWriteVersion() (int64, error)
+		GetLastEventVersion() (int64, error)
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetStartedWorkflowTask() *WorkflowTaskInfo
 		GetPendingWorkflowTask() *WorkflowTaskInfo
 		GetLastFirstEventIDTxnID() (int64, int64)
-		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
-		GetLastWorkflowTaskStartedEventID() int64
+		GetLastCompletedWorkflowTaskStartedEventId() int64
 		GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistencespb.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
@@ -254,7 +257,6 @@ type (
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() time.Duration
 		GetSignalInfo(int64) (*persistencespb.SignalInfo, bool)
-		GetStartVersion() (int64, error)
 		GetUserTimerInfoByEventID(int64) (*persistencespb.TimerInfo, bool)
 		GetUserTimerInfo(string) (*persistencespb.TimerInfo, bool)
 		GetWorkflowType() *commonpb.WorkflowType
@@ -347,7 +349,7 @@ type (
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 		UpdateBuildIdAssignment(buildId string) error
-		ApplyBuildIdRedirect(buildId string, redirectCounter int64) error
+		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)
@@ -372,6 +374,7 @@ type (
 		// If current backoff comply with minimal ContinueAsNew interval requirement, current backoff will be returned.
 		// Current backoff could be nil which means it does not have a backoff.
 		ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration
+		HasCompletedAnyWorkflowTask() bool
 
 		HSM() *hsm.Node
 	}

@@ -142,7 +142,7 @@ jobs:
           make update-dependencies
           make go-generate
           BRANCH="temporal-data/update-dependencies-$(git rev-parse --short HEAD)"
-          git checkout -b "${BRANCH}"
+          git checkout -b "${BRANCH}" main
           git add .
           git commit -m "Update dependencies" --author ${{ github.actor }}
           git push origin "${BRANCH}"

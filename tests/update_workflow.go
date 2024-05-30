@@ -132,7 +132,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -280,7 +280,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplet
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -431,7 +431,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -557,7 +557,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -691,7 +691,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTask_Rejected() {
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -808,7 +808,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTa
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Rejected() {
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -937,10 +937,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		CommandFn                func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command
 	}{
 		{
-			Name:                     "message-update-id-not-found",
+			Name:                     "message-update-id-not-found-and-accepted-request-not-set",
 			RespondWorkflowTaskError: "wasn't found",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.MessageID("update-accepted"),
@@ -949,7 +948,36 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
-							AcceptedRequest:                  updRequest,
+							AcceptedRequest:                  nil, // Important not to pass original request back.
+						}),
+					},
+				}
+			},
+			CommandFn: func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command {
+				return []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
+						Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
+							MessageId: tv.MessageID("update-accepted"),
+						}},
+					},
+				}
+			},
+		},
+		{
+			Name:                     "message-update-id-not-found-and-accepted-request-is-set",
+			RespondWorkflowTaskError: "",
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 tv.MessageID("update-accepted"),
+						ProtocolInstanceId: tv.WithUpdateID("lost-update-id").UpdateID(),
+						SequencingId:       nil,
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest, // Update will be resurrected from original request.
 						}),
 					},
 				}
@@ -1204,7 +1232,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 
@@ -1293,7 +1321,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -1418,7 +1446,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1546,7 +1574,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Reject() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1644,7 +1672,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Re
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1760,7 +1788,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject()
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -1882,7 +1910,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1stComplete() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2054,7 +2082,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2206,7 +2234,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2384,7 +2412,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTaskToNormal_BecauseOfBufferedSignal() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2501,7 +2529,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTa
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflowTaskToNormal_BecauseOfSignal() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2622,7 +2650,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflow
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkflowTask() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           tv.Any().String(),
@@ -2762,7 +2790,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWorkflowTask() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -2880,7 +2908,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWorkflowTask_NormalTaskQueue() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3009,7 +3037,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_TerminateWorkflow() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3129,7 +3157,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_TerminateWorkflow() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3283,7 +3311,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 
@@ -3389,7 +3417,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3519,7 +3547,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3647,7 +3675,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTask
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3784,8 +3812,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLo
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_BecauseOfShardMove() {
-	tv := testvars.New(s.T().Name())
+func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResurrectedAfterShardMove() {
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -3799,17 +3827,16 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
 `, task.History)
-			// Close shard. InvalidArgument error will be returned to RespondWorkflowTaskCompleted.
+			// Close shard. Update registry is lost but update will be resurrected in registry from acceptance message.
 			s.closeShard(tv.WorkflowID())
-			return nil, nil
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 2:
 			s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // New WT is scheduled after previous WT has failed. It doesn't have new events and messages.
-  6 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
 `, task.History)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -3831,7 +3858,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 
 			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 2:
-			s.Empty(task.Messages, "update must be lost due to shard reload")
+			s.Empty(task.Messages, "update must be processed and not delivered again")
 			return nil, nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
@@ -3866,6 +3893,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 				},
 			},
 		})
+
+		// Even if update was resurrected on server and completed, original initiator
+		// lost connection to it and times out. Following poll for update results returns them right away.
 		assert.Error(s.T(), err1)
 		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
 		assert.Nil(s.T(), updateResponse)
@@ -3874,16 +3904,24 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 	}
 	go updateWorkflowFn()
 
-	// Process update in workflow. Update won't be found on server due to shard reload and server will fail WT.
-	_, err := poller.PollAndProcessWorkflowTask()
-	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
-	s.ErrorContains(err, fmt.Sprintf("update %s wasn't found", tv.UpdateID("1")))
+	// To make sure that first WFT has update message.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
+	// Process update in workflow. Update won't be found on server but will be resurrected from acceptance message and completed.
+	res, err := poller.PollAndProcessWorkflowTask(WithForceNewWorkflowTask)
+	s.NoError(err)
+	s.NotNil(res)
+
+	updateResp := res.NewTask
 	<-updateResultCh
+	pollResult, err := s.pollUpdate(tv, "1", &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	s.NoError(err)
+	s.NotNil(pollResult)
+	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, pollResult.GetOutcome().GetSuccess()))
+	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask()
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 
@@ -3896,15 +3934,17 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted
-  7 WorkflowTaskCompleted
-  8 WorkflowExecutionCompleted`, events)
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionCompleted`, events)
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_DeduplicateID() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -4028,7 +4068,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_DeduplicateID() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -4168,7 +4208,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			tv = s.startWorkflow(tv)
 
@@ -4316,7 +4356,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		The second speculative WT responds back and server completes it.
 	*/
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
@@ -4489,7 +4529,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		The first speculative WT respond back, server reject it because startTime is different.
 		The second speculative WT respond back, server accept it.
 	*/
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	wtHandlerCalls := 0
@@ -4659,7 +4699,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 		The second speculative WT responds back, server accepted it.
 	*/
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	testCtx := NewContext()
@@ -4861,7 +4901,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 		The second speculative WT responds back, server reject it.
 	*/
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	testCtx := NewContext()
@@ -5024,7 +5064,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSkippedProcessing_RejectByServer() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -5154,7 +5194,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
 	}
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
 	messageId := "my-message-id"
@@ -5208,7 +5248,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
 
@@ -5365,7 +5405,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_AdmittedUpdatesAreSentToWorkerInOrd
 	nUpdates := 20
 	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowExecutionMaxInFlightUpdates, nUpdates)
 
-	tv := testvars.New(s.T().Name())
+	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 	for i := 0; i < nUpdates; i++ {
 		updateId := fmt.Sprint(i)

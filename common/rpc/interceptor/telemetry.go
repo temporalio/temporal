@@ -394,6 +394,7 @@ func (ti *TelemetryInterceptor) handleError(
 	default:
 		// Also skip emitting ServiceFailures for non serviceerrors returned from handlers for certain error
 		// codes.
+
 		if st, ok := status.FromError(err); ok {
 			switch st.Code() {
 			case codes.InvalidArgument,
@@ -404,8 +405,13 @@ func (ti *TelemetryInterceptor) handleError(
 				codes.Unauthenticated,
 				codes.NotFound:
 				return
+			case codes.Internal,
+				codes.Unknown:
+				errorHash := common.ErrorHash(err)
+				logTags = append(logTags, tag.NewStringTag("hash", errorHash))
 			}
 		}
+
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
 		logTags = append(logTags, ti.getWorkflowTags(req)...)
 		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)

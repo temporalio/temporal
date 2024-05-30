@@ -20,29 +20,72 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nexus
+package hsmtest
 
 import (
-	"go.temporal.io/api/nexus/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"encoding/json"
+	"fmt"
 
-	persistencepb "go.temporal.io/server/api/persistence/v1"
-	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/service/history/hsm"
 )
 
-func EndpointPersistedEntryToExternalAPI(entry *persistencepb.NexusEndpointEntry) *nexus.Endpoint {
-	var lastModifiedTime *timestamppb.Timestamp
-	// Only set last modified if there were modifications as stated in the UI contract.
-	if entry.Version > 1 {
-		lastModifiedTime = timestamppb.New(hlc.UTC(entry.Endpoint.Clock))
-	}
+const (
+	TaskTypeID   = int32(4321)
+	TaskTypeName = "test-task-type-name"
+)
 
-	return &nexus.Endpoint{
-		Version:          entry.Version,
-		Id:               entry.Id,
-		Spec:             entry.Endpoint.Spec,
-		CreatedTime:      entry.Endpoint.CreatedTime,
-		LastModifiedTime: lastModifiedTime,
-		UrlPrefix:        "/" + RouteDispatchNexusTaskByEndpoint.Path(entry.Id),
+var (
+	errInvalidTaskType = fmt.Errorf("invalid task type")
+)
+
+var (
+	TaskType = hsm.TaskType{
+		ID:   TaskTypeID,
+		Name: TaskTypeName,
 	}
+)
+
+type Task struct {
+	kind         hsm.TaskKind
+	IsConcurrent bool
+}
+
+func NewTask(
+	kind hsm.TaskKind,
+	concurrent bool,
+) *Task {
+	return &Task{
+		kind:         kind,
+		IsConcurrent: concurrent,
+	}
+}
+
+func (t *Task) Type() hsm.TaskType {
+	return TaskType
+}
+
+func (t *Task) Kind() hsm.TaskKind {
+	return t.kind
+}
+
+func (t *Task) Concurrent() bool {
+	return t.IsConcurrent
+}
+
+type TaskSerializer struct{}
+
+func (s TaskSerializer) Serialize(t hsm.Task) ([]byte, error) {
+	if t.Type() != TaskType {
+		return nil, errInvalidTaskType
+	}
+	return json.Marshal(t)
+}
+
+func (s TaskSerializer) Deserialize(b []byte, kind hsm.TaskKind) (hsm.Task, error) {
+	var t Task
+	if err := json.Unmarshal(b, &t); err != nil {
+		return nil, err
+	}
+	t.kind = kind
+	return &t, nil
 }

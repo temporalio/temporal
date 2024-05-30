@@ -36,12 +36,14 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	updatespb "go.temporal.io/server/api/update/v1"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
@@ -57,6 +59,13 @@ type (
 		// Find finds an existing update in this Registry but does not create a
 		// new update if no update is found.
 		Find(ctx context.Context, protocolInstanceID string) *Update
+
+		// TryResurrect tries to resurrect the update from the protocol message,
+		// whose body contains Acceptance or Rejection message.
+		// It returns an error if some unexpected error happened, but if there is not
+		// enough data in the message, it just returns a nil update.
+		// If the update was successfully resurrected it is added to the registry in stateAdmitted.
+		TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error)
 
 		// HasOutgoingMessages returns true if the registry has any Updates
 		// for which outgoing message can be generated.
@@ -92,17 +101,9 @@ type (
 		FailoverVersion() int64
 	}
 
-	// Store represents the update package's requirements for reading updates from the store.
-	Store interface {
-		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
-		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-		GetCurrentVersion() int64
-		IsWorkflowExecutionRunning() bool
-	}
-
 	registry struct {
 		updates         map[string]*Update
-		store           Store
+		store           UpdateStore
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
@@ -112,6 +113,8 @@ type (
 
 	Option func(*registry)
 )
+
+var _ Registry = (*registry)(nil)
 
 // WithInFlightLimit provides an optional limit to the number of incomplete
 // updates that a Registry instance will allow.
@@ -152,10 +155,8 @@ func WithTracerProvider(t trace.TracerProvider) Option {
 	}
 }
 
-var _ Registry = (*registry)(nil)
-
 func NewRegistry(
-	store Store,
+	store UpdateStore,
 	opts ...Option,
 ) Registry {
 	r := &registry{
@@ -170,7 +171,7 @@ func NewRegistry(
 		opt(r)
 	}
 
-	r.store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+	r.store.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
 			// An update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
@@ -180,10 +181,9 @@ func NewRegistry(
 			// UpdateAdmitted event in history; and when there is an UpdateAdmitted event in history, we will not
 			// attempt to write the request payload to the UpdateAccepted event, since the request payload is
 			// already present in the UpdateAdmitted event.
-			var request *anypb.Any
 			r.updates[updID] = newAdmitted(
 				updID,
-				request,
+				nil,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
@@ -211,12 +211,62 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	if upd := r.Find(ctx, id); upd != nil {
 		return upd, true, nil
 	}
-	if err := r.checkLimits(ctx); err != nil {
+	if err := r.checkLimits(); err != nil {
 		return nil, false, err
 	}
 	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
+}
+
+func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error) {
+	if acptOrRejMsg == nil || acptOrRejMsg.Body == nil {
+		return nil, nil
+	}
+
+	// Check only total limit here. This might add more than maxInFlight updates to registry,
+	// but provides better developer experience.
+	if err := r.checkTotalLimit(); err != nil {
+		return nil, err
+	}
+
+	body, err := acptOrRejMsg.Body.UnmarshalNew()
+	if err != nil {
+		return nil, invalidArgf("unable to unmarshal request: %v", err)
+	}
+
+	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
+	if err != nil {
+		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
+	}
+
+	var reqMsg *updatepb.Request
+	switch updMsg := body.(type) {
+	case *updatepb.Acceptance:
+		reqMsg = updMsg.GetAcceptedRequest()
+	case *updatepb.Rejection:
+		reqMsg = updMsg.GetRejectedRequest()
+	default:
+		// Ignore all other message types.
+	}
+	if reqMsg == nil {
+		return nil, nil
+	}
+	reqAny, err := anypb.New(reqMsg)
+	if err != nil {
+		return nil, invalidArgf("unable to marshal request: %v", err)
+	}
+
+	updateID := acptOrRejMsg.ProtocolInstanceId
+	upd := newAdmitted(
+		updateID,
+		reqAny,
+		r.remover(updateID),
+		withInstrumentation(&r.instrumentation),
+	)
+	r.updates[updateID] = upd
+
+	return upd, nil
 }
 
 // Abort all incomplete updates in the registry.
@@ -231,18 +281,18 @@ func (r *registry) Contains(id string) bool {
 	return r.updates[id] != nil
 }
 
-// RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
+// RejectUnprocessed rejects all updates that are waiting for workflow task to be completed.
 // This method should be called after all messages from worker are handled to make sure
 // that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
 func (r *registry) RejectUnprocessed(
 	ctx context.Context,
 	effects effect.Controller,
 ) ([]string, error) {
-
-	updatesToReject := r.filter(func(u *Update) bool { return u.isSent() })
-
-	if len(updatesToReject) == 0 {
-		return nil, nil
+	var updatesToReject []*Update
+	for _, upd := range r.updates {
+		if upd.isSent() {
+			updatesToReject = append(updatesToReject, upd)
+		}
 	}
 
 	var rejectedUpdateIDs []string
@@ -276,6 +326,7 @@ func (r *registry) Send(
 	includeAlreadySent bool,
 	workflowTaskStartedEventID int64,
 ) []*protocolpb.Message {
+	var outgoingMessages []*protocolpb.Message
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the
 	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
@@ -286,8 +337,7 @@ func (r *registry) Send(
 	//  and events reordering in some SDKs.
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
-	var outgoingMessages []*protocolpb.Message
-
+	// sort updates by the time they were admitted
 	var sortedUpdates []*Update
 	for _, upd := range r.updates {
 		sortedUpdates = append(sortedUpdates, upd)
@@ -300,6 +350,7 @@ func (r *registry) Send(
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
 		}
 	}
+
 	return outgoingMessages
 }
 
@@ -324,7 +375,7 @@ func (r *registry) remover(id string) updateOpt {
 	)
 }
 
-func (r *registry) checkLimits(_ context.Context) error {
+func (r *registry) checkLimits() error {
 	if len(r.updates) >= r.maxInFlight() {
 		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
@@ -333,14 +384,16 @@ func (r *registry) checkLimits(_ context.Context) error {
 			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
 		}
 	}
+	return r.checkTotalLimit()
+}
 
+func (r *registry) checkTotalLimit() error {
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
 	}
-
 	return nil
 }
 
@@ -370,18 +423,6 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 		fut,
 		withInstrumentation(&r.instrumentation),
 	)
-}
-
-// filter returns a slice of all updates in the registry for which the
-// provided predicate function returns true.
-func (r *registry) filter(predicate func(u *Update) bool) []*Update {
-	var res []*Update
-	for _, upd := range r.updates {
-		if predicate(upd) {
-			res = append(res, upd)
-		}
-	}
-	return res
 }
 
 func (r *registry) GetSize() int {

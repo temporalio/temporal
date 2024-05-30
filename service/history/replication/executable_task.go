@@ -32,6 +32,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/shard"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/backoff"
@@ -56,8 +57,6 @@ const (
 )
 
 const (
-	applyReplicationTimeout = 20 * time.Second
-
 	ResendAttempt = 2
 )
 
@@ -233,6 +232,9 @@ func (e *ExecutableTaskImpl) Reschedule() {
 }
 
 func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
+	if shard.IsShardOwnershipLostError(err) {
+		return false
+	}
 	switch err.(type) {
 	case *serviceerror.InvalidArgument, *serviceerror.DataLoss:
 		return false
@@ -452,11 +454,12 @@ FilterLoop:
 
 func newTaskContext(
 	namespaceName string,
+	timeout time.Duration,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemPreemptableCallerInfo,
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
-	return context.WithTimeout(ctx, applyReplicationTimeout)
+	return context.WithTimeout(ctx, timeout)
 }

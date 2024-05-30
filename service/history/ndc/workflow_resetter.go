@@ -352,7 +352,7 @@ func (r *workflowResetterImpl) persistToDB(
 
 	currentMutableState := currentWorkflow.GetMutableState()
 	currentRunID := currentMutableState.GetExecutionState().GetRunId()
-	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
+	currentCloseVersion, err := currentMutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
@@ -362,7 +362,7 @@ func (r *workflowResetterImpl) persistToDB(
 		r.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
-		currentLastWriteVersion,
+		currentCloseVersion,
 		resetWorkflow.GetMutableState(),
 		resetWorkflowSnapshot,
 		resetWorkflowEventsSeq,
@@ -472,6 +472,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			// Passing nil versioning stamp means we want to skip versioning considerations because this task
 			// is not actually dispatched but will fail immediately.
 			nil,
+			nil,
 		)
 		if err != nil {
 			return err
@@ -545,6 +546,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, resetRunID),
 		ShardID:         shardID,
 		NamespaceID:     namespaceID.String(),
+		NewRunID:        resetRunID,
 	})
 	if err != nil {
 		return nil, err

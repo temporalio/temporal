@@ -31,8 +31,10 @@ import (
 	"fmt"
 	"math"
 	"sync/atomic"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -514,34 +516,48 @@ Loop:
 			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
-		task, err := s.taskConverter.Convert(item)
-		if err != nil {
-			return err
-		}
-		if task == nil {
-			continue Loop
-		}
-		task.Priority = priority
-		s.logger.Debug(fmt.Sprintf("StreamSender send replication task, priority %v, task: %+v", priority, task), tag.TaskID(task.SourceTaskId))
-		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{task},
-					ExclusiveHighWatermark:     task.SourceTaskId + 1,
-					ExclusiveHighWatermarkTime: task.VisibilityTime,
-					Priority:                   priority,
+
+		operation := func() error {
+			task, err := s.taskConverter.Convert(item)
+			if err != nil {
+				return err
+			}
+			if task == nil {
+				return nil
+			}
+			task.Priority = priority
+			s.logger.Debug(fmt.Sprintf("StreamSender send replication task, priority %v, task: %+v", priority, task), tag.TaskID(task.SourceTaskId))
+			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+					Messages: &replicationspb.WorkflowReplicationMessages{
+						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
+						ExclusiveHighWatermark:     task.SourceTaskId + 1,
+						ExclusiveHighWatermarkTime: task.VisibilityTime,
+						Priority:                   priority,
+					},
 				},
-			},
-		}); err != nil {
+			}); err != nil {
+				return err
+			}
+			skipCount = 0
+			metrics.ReplicationTasksSend.With(s.metrics).Record(
+				int64(1),
+				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+				metrics.OperationTag(TaskOperationTag(task)),
+			)
+			return nil
+		}
+
+		retryPolicy := backoff.NewExponentialRetryPolicy(1 * time.Second).
+			WithBackoffCoefficient(1.2).
+			WithMaximumInterval(3 * time.Second).
+			WithMaximumAttempts(80).
+			WithExpirationInterval(3 * time.Minute)
+
+		if err := backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError); err != nil {
 			return err
 		}
-		skipCount = 0
-		metrics.ReplicationTasksSend.With(s.metrics).Record(
-			int64(1),
-			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTag(task)),
-		)
 	}
 	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{

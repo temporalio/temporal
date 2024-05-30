@@ -48,7 +48,8 @@ func WaitGoRoutineWithFn(t testing.TB, fn any, maxDuration time.Duration) {
 	attempt := 1
 	require.Eventually(t,
 		func() bool {
-			stackRecords := make([]runtime.StackRecord, runtime.NumGoroutine()+10)
+			// 20 is a buffer for go routines that might be created between next 2 lines. 10 is not enough!
+			stackRecords := make([]runtime.StackRecord, runtime.NumGoroutine()+20)
 			stackRecordsLen, ok := runtime.GoroutineProfile(stackRecords)
 			if !ok {
 				t.Errorf("Size %d is too small for stack records. Need %d", len(stackRecords), stackRecordsLen)

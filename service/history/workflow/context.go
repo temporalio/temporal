@@ -642,6 +642,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
 		ctx,
 		updateMode,
+
 		c.MutableState.GetCurrentVersion(),
 		updateWorkflow,
 		updateWorkflowEventsSeq,

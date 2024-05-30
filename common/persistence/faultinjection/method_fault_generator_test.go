@@ -81,14 +81,14 @@ func (s *methodFaultGeneratorSuite) Test_Generate() {
 	s.EqualValues(12, math.Round(gen.faultsMetadata[1].threshold*100))
 	s.EqualValues(34, math.Round(gen.faultsMetadata[2].threshold*100))
 
-	f1 := gen.generate()
+	f1 := gen.generate("")
 	s.Nil(f1)
-	f2 := gen.generate()
+	f2 := gen.generate("")
 	s.NotNil(f2)
 	s.Equal(faults[2], *f2)
-	f3 := gen.generate()
+	f3 := gen.generate("")
 	s.NotNil(f3)
 	s.Equal(faults[2], *f3)
-	f4 := gen.generate()
+	f4 := gen.generate("")
 	s.Nil(f4)
 }

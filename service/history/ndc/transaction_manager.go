@@ -324,7 +324,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.New()
-		baseRebuildLastEventID := baseMutableState.GetLastWorkflowTaskStartedEventID()
+		baseRebuildLastEventID := baseMutableState.GetLastCompletedWorkflowTaskStartedEventId()
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {

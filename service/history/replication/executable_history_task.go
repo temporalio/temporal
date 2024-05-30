@@ -64,7 +64,8 @@ type (
 		deserializeLock   sync.Mutex
 		eventsDesResponse *eventsDeserializeResponse
 
-		batchable bool
+		batchable              bool
+		markPoisonPillAttempts int
 	}
 	eventsDeserializeResponse struct {
 		events       [][]*historypb.HistoryEvent
@@ -97,12 +98,13 @@ func NewExecutableHistoryTask(
 			sourceClusterName,
 		),
 
-		baseExecutionInfo:   task.BaseExecutionInfo,
-		versionHistoryItems: task.VersionHistoryItems,
-		eventsBlob:          task.GetEvents(),
-		newRunEventsBlob:    task.GetNewRunEvents(),
-		newRunID:            task.GetNewRunId(),
-		batchable:           true,
+		baseExecutionInfo:      task.BaseExecutionInfo,
+		versionHistoryItems:    task.VersionHistoryItems,
+		eventsBlob:             task.GetEvents(),
+		newRunEventsBlob:       task.GetNewRunEvents(),
+		newRunID:               task.GetNewRunId(),
+		batchable:              true,
+		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -135,7 +137,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 		)
 		return nil
 	}
-	ctx, cancel := newTaskContext(namespaceName)
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
@@ -191,7 +193,7 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName)
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 		defer cancel()
 
 		if doContinue, resendErr := e.Resend(
@@ -216,6 +218,41 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableHistoryTask) MarkPoisonPill() error {
+	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
+
+		events, newRunEvents, err := e.getDeserializedEvents()
+		taskInfo := &persistencespb.ReplicationTaskInfo{
+			NamespaceId: e.NamespaceID,
+			WorkflowId:  e.WorkflowID,
+			RunId:       e.RunID,
+			TaskId:      e.ExecutableTask.TaskID(),
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+			NewRunId:    e.newRunID,
+		}
+		if err != nil {
+			taskInfo.FirstEventId = -1
+			taskInfo.NextEventId = -1
+			taskInfo.Version = -1
+			e.Logger.Error("MarkPoisonPill reached max attempts, deserialize failed",
+				tag.SourceCluster(e.SourceClusterName()),
+				tag.ReplicationTask(taskInfo),
+				tag.Error(err),
+			)
+			return nil
+		}
+		taskInfo.FirstEventId = events[0][0].GetEventId()
+		taskInfo.NextEventId = events[len(events)-1][len(events[len(events)-1])-1].GetEventId() + 1
+		taskInfo.Version = events[0][0].GetVersion()
+		e.Logger.Error("MarkPoisonPill reached max attempts",
+			tag.SourceCluster(e.SourceClusterName()),
+			tag.ReplicationTask(taskInfo),
+			tag.NewAnyTag("NewRunFirstEventId", newRunEvents[0].GetEventId()),
+			tag.NewAnyTag("NewRunLastEventId", newRunEvents[len(newRunEvents)-1].GetEventId()),
+		)
+		return nil
+	}
+	e.markPoisonPillAttempts++
+
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
@@ -266,7 +303,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 		tag.TaskID(e.ExecutableTask.TaskID()),
 	)
 
-	ctx, cancel := newTaskContext(e.NamespaceID)
+	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
 	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)

@@ -3864,7 +3864,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	}
 
 	if len(request.GetBuildIds()) == 0 {
-		return nil, serviceerror.NewInvalidArgument("Must query at least one build id (or empty string for unversioned worker)")
+		return nil, serviceerror.NewInvalidArgument("Must query at least one build ID (or empty string for unversioned worker)")
 	}
 	if len(request.GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Too many build ids queried at once, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
@@ -3879,7 +3879,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 		}
 	}
 	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
-		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build id is interpereted as unversioned)")
+		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build ID is interpereted as unversioned)")
 	}
 
 	for _, taskQueue := range request.GetTaskQueues() {
@@ -4505,7 +4505,7 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	ns namespace.Name,
 	callbacks []*commonpb.Callback,
 ) error {
-	if len(callbacks) > 0 && !wh.config.EnableCallbackAttachment(ns.String()) {
+	if len(callbacks) > 0 && !wh.config.EnableNexusAPIs() {
 		return status.Error(
 			codes.InvalidArgument,
 			"attaching workflow callbacks is disabled for this namespace",
@@ -4543,6 +4543,19 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 			}
 			// TODO: check in dynamic config that address is valid and that http is only accepted
 			// if "insecure" is allowed for address.
+			headerSize := 0
+			for k, v := range cb.Nexus.GetHeader() {
+				headerSize += len(k) + len(v)
+			}
+			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
+				return status.Error(
+					codes.InvalidArgument,
+					fmt.Sprintf(
+						"invalid header: header size longer than max allowed size of %d",
+						wh.config.CallbackHeaderMaxSize(ns.String()),
+					),
+				)
+			}
 
 		default:
 			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
@@ -4576,7 +4589,7 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
 	req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) error {
-	errDeets := []string{"request to update worker build id compatability requires: "}
+	errDeets := []string{"request to update worker build ID compatability requires: "}
 
 	checkIdLen := func(id string) {
 		if len(id) > wh.config.WorkerBuildIdSizeLimit() {

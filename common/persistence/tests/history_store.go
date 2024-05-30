@@ -800,6 +800,7 @@ func (s *HistoryEventsSuite) forkHistoryBranch(
 		ForkBranchToken: branchToken,
 		ForkNodeID:      newNodeID,
 		Info:            "",
+		NewRunID:        uuid.New(),
 	})
 	s.NoError(err)
 	return resp.NewBranchToken

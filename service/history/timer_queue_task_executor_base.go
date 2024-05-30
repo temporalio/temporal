@@ -133,11 +133,11 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return nil
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	closeVersion, err := mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
-	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
+	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task); err != nil {
 		return err
 	}
 

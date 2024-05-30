@@ -75,6 +75,11 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
+	// Check if the remote worker sent an application failure indicating a custom backoff duration.
+	delayedRetryDuration := nextRetryDelayFrom(failure)
+	if delayedRetryDuration != nil {
+		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, makeBackoffAlgorithm(delayedRetryDuration))
+	}
 	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
 }
 

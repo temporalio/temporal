@@ -90,6 +90,7 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 	cases := []struct {
 		name    string
 		urls    []string
+		header  map[string]string
 		message string
 		allow   bool
 	}{
@@ -112,6 +113,13 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 			message: "invalid url: url length longer than max length allowed of 50",
 		},
 		{
+			name:    "header-size-too-large",
+			urls:    []string{"http://some-ignored-address"},
+			header:  map[string]string{"too": "long"},
+			allow:   true,
+			message: "invalid header: header size longer than max allowed size of 6",
+		},
+		{
 			name:    "too many callbacks",
 			urls:    []string{"http://url-1", "http://url-2", "http://url-3"},
 			allow:   true,
@@ -121,20 +129,22 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.FrontendCallbackURLMaxLength, 50)
-	dc.OverrideValue(s.T(), dynamicconfig.FrontendMaxCallbacksPerWorkflow, 2)
-	defer dc.RemoveOverride(dynamicconfig.FrontendEnableCallbackAttachment)
+	dc.OverrideValue(s.T(), dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
+	dc.OverrideValue(s.T(), dynamicconfig.MaxCallbacksPerWorkflow, 2)
+	defer dc.RemoveOverride(dynamicconfig.EnableNexus)
 	defer dc.RemoveOverride(dynamicconfig.FrontendCallbackURLMaxLength)
-	defer dc.RemoveOverride(dynamicconfig.FrontendMaxCallbacksPerWorkflow)
+	defer dc.RemoveOverride(dynamicconfig.MaxCallbacksPerWorkflow)
 
 	for _, tc := range cases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			dc.OverrideValue(s.T(), dynamicconfig.FrontendEnableCallbackAttachment, tc.allow)
+			dc.OverrideValue(s.T(), dynamicconfig.EnableNexus, tc.allow)
 			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
 			for _, url := range tc.urls {
 				cbs = append(cbs, &commonpb.Callback{
 					Variant: &commonpb.Callback_Nexus_{
 						Nexus: &commonpb.Callback_Nexus{
-							Url: url,
+							Url:    url,
+							Header: tc.header,
 						},
 					},
 				})
@@ -161,8 +171,8 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 
 func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOverContinueAsNew() {
 	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.FrontendEnableCallbackAttachment, true)
-	defer dc.RemoveOverride(dynamicconfig.FrontendEnableCallbackAttachment)
+	dc.OverrideValue(s.T(), dynamicconfig.EnableNexus, true)
+	defer dc.RemoveOverride(dynamicconfig.EnableNexus)
 
 	ctx := NewContext()
 	sdkClient, err := client.Dial(client.Options{

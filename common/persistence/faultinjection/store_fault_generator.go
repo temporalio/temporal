@@ -25,9 +25,6 @@
 package faultinjection
 
 import (
-	"runtime"
-	"strings"
-
 	"go.temporal.io/server/common/config"
 )
 
@@ -56,26 +53,13 @@ func newStoreFaultGenerator(cfg *config.FaultInjectionDataStoreConfig) *storeFau
 }
 
 // Generate returns an error from the configured error types and rates for this method.
-// This method infers the fault injection target's method name from the function name of the caller.
-// As a result, this method should only be called from the persistence layer.
-// This method will panic if the method name cannot be inferred.
 // If no errors are configured for the method, or if there are some errors configured for this method,
 // but no error is sampled, then this method returns nil.
 // When this method returns nil, this causes the persistence layer to use the real implementation.
-func (d *storeFaultGenerator) generate() *fault {
-	pc, _, _, ok := runtime.Caller(1)
-	if !ok {
-		panic("failed to get caller info")
-	}
-	runtimeFunc := runtime.FuncForPC(pc)
-	if runtimeFunc == nil {
-		panic("failed to get runtime function")
-	}
-	parts := strings.Split(runtimeFunc.Name(), ".")
-	methodName := parts[len(parts)-1]
+func (d *storeFaultGenerator) generate(methodName string) *fault {
 	methodGenerator, ok := d.methodFaultGenerators[methodName]
 	if !ok {
 		return nil
 	}
-	return methodGenerator.generate()
+	return methodGenerator.generate(methodName)
 }

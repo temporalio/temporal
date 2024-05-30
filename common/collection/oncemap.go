@@ -95,3 +95,13 @@ func (p *FallibleOnceMap[K, T]) Get(key K) (T, error) {
 
 	return value, nil
 }
+
+func (p *FallibleOnceMap[K, T]) Pop(key K) (T, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	val, ok := p.inner[key]
+	if ok {
+		delete(p.inner, key)
+	}
+	return val, ok
+}

@@ -49,7 +49,8 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req *historyservice.ReplicateWorkflowStateRequest
+		req                    *historyservice.ReplicateWorkflowStateRequest
+		markPoisonPillAttempts int
 	}
 )
 
@@ -85,6 +86,7 @@ func NewExecutableWorkflowStateTask(
 			WorkflowState: task.GetWorkflowState(),
 			RemoteCluster: sourceClusterName,
 		},
+		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -117,7 +119,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 		)
 		return nil
 	}
-	ctx, cancel := newTaskContext(namespaceName)
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
@@ -146,7 +148,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName)
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 		defer cancel()
 
 		if doContinue, resendErr := e.Resend(
@@ -171,6 +173,22 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
+	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
+		replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
+			NamespaceId: e.NamespaceID,
+			WorkflowId:  e.WorkflowID,
+			RunId:       e.RunID,
+			TaskId:      e.ExecutableTask.TaskID(),
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		}
+		e.Logger.Error("MarkPoisonPill reached max attempts",
+			tag.SourceCluster(e.SourceClusterName()),
+			tag.ReplicationTask(replicationTaskInfo),
+		)
+		return nil
+	}
+	e.markPoisonPillAttempts++
+
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
@@ -196,7 +214,7 @@ func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
 		tag.TaskID(e.ExecutableTask.TaskID()),
 	)
 
-	ctx, cancel := newTaskContext(e.NamespaceID)
+	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
 	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)

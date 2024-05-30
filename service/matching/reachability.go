@@ -27,8 +27,6 @@ package matching
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"slices"
 	"strings"
 	"time"
@@ -40,6 +38,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -193,7 +193,7 @@ func getCacheExitPoint(open, hit bool) reachabilityExitPoint {
 }
 
 // getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph
-// of redirect rules and adds the given build id to that list.
+// of redirect rules and adds the given build ID to that list.
 // It considers rules if the deletion time is nil or within the given deletedRuleInclusionPeriod.
 func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	buildId string,
@@ -279,7 +279,7 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 		}
 	} else {
 		statusFilter = fmt.Sprintf(` AND %s != "Running"`, searchattribute.ExecutionStatus)
-		// want: closed AT that build id, and once used that build id
+		// want: closed AT that build ID, and once used that build ID
 		// (b1, b2) --> (versioned:b1, versioned:b2)
 		// (b1, b2, "") --> (versioned:b1, versioned:b2, unversioned, null)
 		// ("") --> (unversioned, null)
@@ -299,7 +299,7 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }
 
-// getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
+// getDefaultBuildId gets the build ID mentioned in the first unconditional Assignment Rule.
 // If there is no default Build ID, the result for the unversioned queue will be returned.
 // This should only be called on the root.
 func getDefaultBuildId(assignmentRules []*persistencespb.AssignmentRule) string {
@@ -329,8 +329,8 @@ func newReachabilityCache(
 	reachabilityCacheClosedWFExecutionTTL time.Duration,
 ) reachabilityCache {
 	return reachabilityCache{
-		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}, handler),
-		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}, handler),
+		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}),
+		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}),
 		metricsHandler: handler,
 		visibilityMgr:  visibilityMgr,
 	}
