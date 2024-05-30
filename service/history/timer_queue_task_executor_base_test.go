@@ -309,7 +309,6 @@ func (s *timerQueueTaskExecutorBaseSuite) TestExecuteStateMachineTimerTask_Execu
 	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
-	ms.EXPECT().AddTasks(gomock.Any())
 
 	_, err = callbacks.MachineCollection(root).Add("callback", callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), nil))
 	s.NoError(err)
@@ -363,5 +362,4 @@ func (s *timerQueueTaskExecutorBaseSuite) TestExecuteStateMachineTimerTask_Execu
 	s.NoError(err)
 	s.Equal(2, numInvocations) // two valid tasks within the deadline.
 	s.Equal(1, len(info.StateMachineTimers))
-	s.True(info.StateMachineTimers[0].Scheduled)
 }

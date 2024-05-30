@@ -297,7 +297,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	tree := r.mutableState.HSM()
 	// Early return here to avoid accessing the transition history. It may be disabled via dynamic config.
 	outputs := tree.Outputs()
-	if len(outputs) == 0 {
+	if !r.config.EnableNexus() {
 		return nil
 	}
 	transitionHistory := r.mutableState.GetExecutionInfo().TransitionHistory
