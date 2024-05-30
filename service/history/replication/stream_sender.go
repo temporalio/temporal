@@ -63,13 +63,12 @@ type (
 		Stop()
 	}
 	StreamSenderImpl struct {
-		server        historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
-		shardContext  shard.Context
-		historyEngine shard.Engine
-		taskConverter SourceTaskConverter
-		metrics       metrics.Handler
-		logger        log.Logger
-
+		server                  historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
+		shardContext            shard.Context
+		historyEngine           shard.Engine
+		taskConverter           SourceTaskConverter
+		metrics                 metrics.Handler
+		logger                  log.Logger
 		status                  int32
 		clientClusterName       string
 		clientShardKey          ClusterShardKey
@@ -78,6 +77,7 @@ type (
 		shutdownChan            channel.ShutdownOnce
 		config                  *configs.Config
 		isTieredStackEnabled    bool
+		flowController          SenderFlowController
 	}
 )
 
@@ -98,13 +98,12 @@ func NewStreamSender(
 		tag.TargetShardID(clientShardKey.ShardID),
 	)
 	return &StreamSenderImpl{
-		server:        server,
-		shardContext:  shardContext,
-		historyEngine: historyEngine,
-		taskConverter: taskConverter,
-		metrics:       shardContext.GetMetricsHandler(),
-		logger:        logger,
-
+		server:                  server,
+		shardContext:            shardContext,
+		historyEngine:           historyEngine,
+		taskConverter:           taskConverter,
+		metrics:                 shardContext.GetMetricsHandler(),
+		logger:                  logger,
 		status:                  common.DaemonStatusInitialized,
 		clientClusterName:       clientClusterName,
 		clientShardKey:          clientShardKey,
@@ -113,6 +112,7 @@ func NewStreamSender(
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
+		flowController:          NewSenderFlowController(config, logger),
 	}
 }
 
@@ -341,6 +341,9 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
 	)
+	if s.isTieredStackEnabled {
+		s.flowController.RefreshReceiverFlowControlInfo(attr)
+	}
 
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
 		readerID,
@@ -467,7 +470,7 @@ func (s *StreamSenderImpl) sendTasks(
 	}
 
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
-	ctx, cancel := context.WithTimeout(ctx, replicationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
@@ -515,7 +518,6 @@ Loop:
 			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
-
 		operation := func() error {
 			task, err := s.taskConverter.Convert(item)
 			if err != nil {
@@ -525,7 +527,9 @@ Loop:
 				return nil
 			}
 			task.Priority = priority
-			s.logger.Debug("StreamSender send replication task", tag.TaskID(task.SourceTaskId))
+			if s.isTieredStackEnabled {
+				s.flowController.Wait(priority)
+			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 					Messages: &replicationspb.WorkflowReplicationMessages{
