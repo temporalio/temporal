@@ -98,7 +98,7 @@ func (s *PrioritySemaphoreImpl) TryAcquire(priority Priority, n int) bool {
 		s.highCount += n
 		s.totalHeld += n
 		return true
-	} else { // Low priority
+	} else {
 		s.lowCount += n
 		s.totalHeld += n
 		return true
