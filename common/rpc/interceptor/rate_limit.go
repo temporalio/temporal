@@ -91,6 +91,11 @@ func (i *RateLimitInterceptor) Allow(
 		token = RateLimitDefaultToken
 	}
 
+	// we don't want to apply rate limiter if a method is configured with 0 tokens.
+	if token == 0 {
+		return nil
+	}
+
 	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,
