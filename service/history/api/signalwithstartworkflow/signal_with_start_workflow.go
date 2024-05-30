@@ -144,7 +144,7 @@ func startAndSignalWorkflow(
 }
 
 func createWorkflowMutationFunction(
-	shard shard.Context,
+	shardContext shard.Context,
 	currentWorkflowLease api.WorkflowLease,
 	newRunID string,
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
@@ -157,7 +157,7 @@ func createWorkflowMutationFunction(
 	currentExecutionState := currentMutableState.GetExecutionState()
 	currentWorfklowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
 	workflowMutationFunc, err := api.ResolveDuplicateWorkflowID(
-		shard,
+		shardContext,
 		currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
 		newRunID,
 		currentExecutionState.RunId,

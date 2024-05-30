@@ -51,7 +51,7 @@ var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
 //
 // An action (ie "mitigate and allow"), an error (ie "deny") or neither (ie "allow") is returned.
 func ResolveDuplicateWorkflowID(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowID,
 	newRunID,
 	currentRunID string,
@@ -73,7 +73,7 @@ func ResolveDuplicateWorkflowID(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			return nil, ErrUseCurrentExecution
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return resolveJustStartedDuplicatedWorfklows(shard, currentWorkflowStartTime, newRunID, workflowID)
+			return resolveJustStartedDuplicatedWorfklows(shardContext, currentWorkflowStartTime, newRunID, workflowID)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
 		}
@@ -105,7 +105,7 @@ func ResolveDuplicateWorkflowID(
 }
 
 func resolveJustStartedDuplicatedWorfklows(
-	shard shard.Context,
+	shardContext shard.Context,
 	currentWorkflowStartTime time.Time,
 	newRunID string,
 	workflowID string,
@@ -115,8 +115,8 @@ func resolveJustStartedDuplicatedWorfklows(
 	// if new workflow is starting earlier then that period - we will not terminate old worklfow,
 	// but rather didn't start the new one
 
-	gracePeriod := shard.GetConfig().WorkflowDeduplicationGracePeriod()
-	now := shard.GetTimeSource().Now()
+	gracePeriod := shardContext.GetConfig().WorkflowDeduplicationGracePeriod()
+	now := shardContext.GetTimeSource().Now()
 	if gracePeriod == 0 || now.After(currentWorkflowStartTime.Add(gracePeriod)) {
 		return terminateWorkflowAction(newRunID)
 	}
