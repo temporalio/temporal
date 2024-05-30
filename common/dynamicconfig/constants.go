@@ -508,11 +508,6 @@ is currently processing a task.
 		200,
 		`NexusEndpointNameMaxLength is the maximum length of a Nexus endpoint name.`,
 	)
-	NexusEndpointDescriptionMaxSize = NewGlobalIntSetting(
-		"limit.endpointDescriptionMaxSize",
-		4*1024,
-		`NexusEndpointDescriptionMaxSize is the maximum size of a Nexus endpoint description in bytes.`,
-	)
 	NexusEndpointExternalURLMaxLength = NewGlobalIntSetting(
 		"limit.endpointExternalURLMaxLength",
 		4*1024,
@@ -2110,6 +2105,21 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderHighPriorityQPS",
+		100,
+		`Maximum number of high priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamSenderLowPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLowPriorityQPS",
+		100,
+		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxOutstandingTaskCount",
+		50,
+		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
 
 	// keys for worker
 
@@ -2338,5 +2348,16 @@ close to or more than the workflow task timeout)`,
 		map[string]any{},
 		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
 settings for controlling remote activity concurrency for delete namespace workflows.`,
+	)
+
+	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
+		"limit.userMetadataSummarySize",
+		400,
+		`MaxUserMetadataSummarySize is the maximum size of user metadata summary payloads in bytes.`,
+	)
+	MaxUserMetadataDetailsSize = NewNamespaceIntSetting(
+		"limit.userMetadataDetailsSize",
+		20000,
+		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
 )
