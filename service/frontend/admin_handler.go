@@ -127,7 +127,10 @@ type (
 		saManager                  searchattribute.Manager
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
-		taskCategoryRegistry       tasks.TaskCategoryRegistry
+
+		// DEPRECATED: only history service on server side is supposed to
+		// use the following components.
+		taskCategoryRegistry tasks.TaskCategoryRegistry
 	}
 
 	NewAdminHandlerArgs struct {
@@ -156,7 +159,10 @@ type (
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
-		CategoryRegistry                    tasks.TaskCategoryRegistry
+
+		// DEPRECATED: only history service on server side is supposed to
+		// use the following components.
+		CategoryRegistry tasks.TaskCategoryRegistry
 	}
 )
 
