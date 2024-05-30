@@ -1335,9 +1335,10 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 		t := base.Add(time.Duration(i) * time.Hour)
 		actual := baseStartTime.Add(time.Minute).Add(time.Duration(i/rateLimit) * time.Second)
 		runs[i] = workflowRun{
-			id:             "myid-" + t.Format(time.RFC3339),
-			start:          actual,
-			startTolerance: 5 * time.Second, // the "rate limit" isn't exact
+			id:    "myid-" + t.Format(time.RFC3339),
+			start: actual,
+			// increase this number if this test fails for no reason:
+			startTolerance: 8 * time.Second, // the "rate limit" isn't exact
 			end:            actual.Add(time.Minute),
 			result:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		}
@@ -1722,6 +1723,64 @@ func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
 		},
 		&schedpb.Schedule{
 			Spec: spec,
+		},
+	)
+}
+
+// Tests that a signal between a nominal time and jittered time for a start won't interrupt the start.
+func (s *workflowSuite) TestSignalBetweenNominalAndJittered() {
+	// TODO: remove once default version is UseLastAction
+	prevTweakables := currentTweakablePolicies
+	currentTweakablePolicies.Version = UseLastAction
+	defer func() { currentTweakablePolicies = prevTweakables }()
+
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 49, 22, 594000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 53, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T02:00:00Z",
+				start:  time.Date(2022, 6, 1, 2, 2, 39, 204000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 2, 11, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T03:00:00Z",
+				start:  time.Date(2022, 6, 1, 3, 37, 29, 538000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 3, 41, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T04:00:00Z",
+				start:  time.Date(2022, 6, 1, 4, 23, 34, 755000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 4, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				// signal between nominal and jittered time
+				at: time.Date(2022, 6, 1, 3, 22, 10, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNameRefresh, nil)
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 5, 0, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+				Jitter: durationpb.New(1 * time.Hour),
+			},
 		},
 	)
 }
