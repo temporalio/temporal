@@ -955,7 +955,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					} else {
 						var mergedStats *taskqueuepb.TaskQueueStats
 
-						// only report BacklogInformation if requested.
+						// only report Task Queue Statistics if requested.
 						if req.GetReportStats() {
 							rootStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats // BacklogInfo of the previous partition
 							partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats

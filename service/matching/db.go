@@ -223,9 +223,7 @@ func (db *taskQueueDB) updateApproximateBacklogCount(
 
 	// Preventing under-counting
 	if db.approximateBacklogCount.Load()+delta < 0 {
-		// logging as an error here since our counter is becoming negative which means it's undercounting
-		// Undercounting should never happen.
-		db.logger.Error("ApproximateBacklogCounter could have under-counted. This should never happen",
+		db.logger.Info("ApproximateBacklogCounter could have under-counted.",
 			tag.WorkerBuildId(db.queue.BuildId()), tag.WorkerBuildId(db.queue.Partition().NamespaceId().String()))
 		db.approximateBacklogCount.Store(0)
 	} else {
