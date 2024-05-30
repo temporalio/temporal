@@ -54,13 +54,6 @@ var (
 )
 
 type (
-	taskQueueManagerOpt func(*physicalTaskQueueManagerImpl)
-
-	idBlockAllocator interface {
-		RenewLease(context.Context) (taskQueueState, error)
-		RangeID() int64
-	}
-
 	// backlogManagerImpl manages the backlog and persistence of a physical task queue
 	backlogManager interface {
 		Start()
@@ -136,7 +129,7 @@ func (c *backlogManagerImpl) signalIfFatal(err error) bool {
 	if errors.As(err, &condfail) {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
-		c.pqMgr.UnloadFromPartitionManager()
+		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
 		return true
 	}
 	return false
@@ -172,7 +165,7 @@ func (c *backlogManagerImpl) SetInitializedError(err error) {
 		// We can't recover from here without starting over, so unload the whole task queue.
 		// Skip final update since we never initialized.
 		c.skipFinalUpdate.Store(true)
-		c.pqMgr.UnloadFromPartitionManager()
+		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 	}
 }
 
@@ -254,7 +247,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 				tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
 			// Skip final update since persistence is having problems.
 			c.skipFinalUpdate.Store(true)
-			c.pqMgr.UnloadFromPartitionManager()
+			c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 			return
 		}
 		c.taskReader.Signal()
