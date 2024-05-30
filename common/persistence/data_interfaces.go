@@ -877,6 +877,8 @@ type (
 		ForkNodeID int64
 		// the info for clean up data in background
 		Info string
+		// the new run ID
+		NewRunID string
 	}
 
 	// ForkHistoryBranchResponse is the response to ForkHistoryBranchRequest

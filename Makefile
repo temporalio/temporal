@@ -581,7 +581,7 @@ update-dependencies:
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
-go-generate: $(MOCKGEN)
+go-generate: $(MOCKGEN) $(GOIMPORTS)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
 
