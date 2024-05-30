@@ -20,44 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package callbacks
+package nexusoperations
 
-import (
-	"net/http"
+import "go.temporal.io/server/common/metrics"
 
-	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/queues"
-	"go.uber.org/fx"
+var OutboundRequestCounter = metrics.NewCounterDef(
+	"nexus_outbound_requests",
+	metrics.WithDescription("The number of Nexus outbound requests made by the history service."),
 )
-
-var Module = fx.Module(
-	"component.callbacks",
-	fx.Provide(ConfigProvider),
-	fx.Provide(ActiveExecutorOptionsProvider),
-	fx.Provide(StandbyExecutorOptionsProvider),
-	fx.Invoke(RegisterTaskSerializers),
-	fx.Invoke(RegisterStateMachine),
-	fx.Invoke(RegisterExecutor),
+var OutboundRequestLatencyHistogram = metrics.NewTimerDef(
+	"nexus_outbound_latency",
+	metrics.WithDescription("Latency histogram of outbound Nexus requests made by the history service."),
 )
-
-func ActiveExecutorOptionsProvider(
-	namespaceRegistry namespace.Registry,
-	metricsHandler metrics.Handler,
-) ActiveExecutorOptions {
-	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
-		// In the future, we'll want to support HTTP2 clients as well and inject headers and certs here.
-		client := &http.Client{}
-		return client.Do
-	})
-	return ActiveExecutorOptions{
-		NamespaceRegistry: namespaceRegistry,
-		MetricsHandler:    metricsHandler,
-		CallerProvider:    m.Get,
-	}
-}
-
-func StandbyExecutorOptionsProvider() StandbyExecutorOptions {
-	return StandbyExecutorOptions{}
-}

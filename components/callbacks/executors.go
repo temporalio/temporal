@@ -28,10 +28,12 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -76,6 +78,7 @@ func RegisterExecutor(
 type (
 	ActiveExecutorOptions struct {
 		NamespaceRegistry namespace.Registry
+		MetricsHandler    metrics.Handler
 		CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
 	}
 
@@ -124,7 +127,16 @@ func (e activeExecutor) executeInvocationTask(
 		NamespaceID: ref.WorkflowKey.GetNamespaceID(),
 		Destination: task.Destination,
 	})
+	// Make the call and record metrics.
+	startTime := time.Now()
 	response, callErr := caller(request)
+
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(task.Destination)
+	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(callCtx, response, callErr))
+	e.options.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
+	e.options.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+
 	if callErr == nil {
 		// Body is not read but should be discarded to keep the underlying TCP connection alive.
 		// Just in case something unexpected happens while discarding or closing the body,
@@ -255,4 +267,14 @@ func (e standbyExecutor) executeBackoffTask(
 
 func isRetryableHTTPResponse(response *http.Response) bool {
 	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
+}
+
+func outcomeTag(callCtx context.Context, response *http.Response, callErr error) string {
+	if callErr != nil {
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		return "unknown-error"
+	}
+	return fmt.Sprintf("status:%d", response.StatusCode)
 }

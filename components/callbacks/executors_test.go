@@ -38,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/components/callbacks"
@@ -70,17 +71,19 @@ func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationC
 
 func TestProcessInvocationTask_Outcomes(t *testing.T) {
 	cases := []struct {
-		name            string
-		caller          callbacks.HTTPCaller
-		destinationDown bool
-		assertOutcome   func(*testing.T, callbacks.Callback)
+		name                  string
+		caller                callbacks.HTTPCaller
+		destinationDown       bool
+		expectedMetricOutcome string
+		assertOutcome         func(*testing.T, callbacks.Callback)
 	}{
 		{
 			name: "success",
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
-			destinationDown: false,
+			destinationDown:       false,
+			expectedMetricOutcome: "status:200",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, cb.PublicInfo.State)
 			},
@@ -90,7 +93,8 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return nil, errors.New("fake failure")
 			},
-			destinationDown: true,
+			destinationDown:       true,
+			expectedMetricOutcome: "unknown-error",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
 			},
@@ -100,7 +104,8 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
-			destinationDown: true,
+			destinationDown:       true,
+			expectedMetricOutcome: "status:500",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
 			},
@@ -110,7 +115,8 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
-			destinationDown: false,
+			destinationDown:       false,
+			expectedMetricOutcome: "status:400",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_FAILED, cb.PublicInfo.State)
 			},
@@ -133,6 +139,19 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				}),
 				nil,
 			)
+			metricsHandler := metrics.NewMockHandler(ctrl)
+			counter := metrics.NewMockCounterIface(ctrl)
+			timer := metrics.NewMockTimerIface(ctrl)
+			metricsHandler.EXPECT().Counter(callbacks.RequestCounter.Name()).Return(counter)
+			counter.EXPECT().Record(int64(1),
+				metrics.NamespaceTag("namespace-name"),
+				metrics.DestinationTag("http://localhost"),
+				metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+			metricsHandler.EXPECT().Timer(callbacks.RequestLatencyHistogram.Name()).Return(timer)
+			timer.EXPECT().Record(gomock.Any(),
+				metrics.NamespaceTag("namespace-name"),
+				metrics.DestinationTag("http://localhost"),
+				metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
 
 			root := newRoot(t)
 			cb := callbacks.Callback{
@@ -160,6 +179,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				reg,
 				callbacks.ActiveExecutorOptions{
 					NamespaceRegistry: namespaceRegistryMock,
+					MetricsHandler:    metricsHandler,
 					CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
@@ -184,7 +204,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 						},
 					},
 				},
-				callbacks.InvocationTask{Destination: "dont-care"},
+				callbacks.InvocationTask{Destination: "http://localhost"},
 			)
 
 			if tc.destinationDown {
