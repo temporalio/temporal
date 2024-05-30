@@ -371,8 +371,14 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
+	currentMutableState, err := s.getMutableState(ctx, currentWorkflowConditionFailed.RunID)
+	if err != nil {
+		return nil, err
+	}
 
+	currentWorfklowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
+		s.shardContext,
 		workflowID,
 		creationParams.runID,
 		currentWorkflowConditionFailed.RunID,
@@ -381,7 +387,9 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.RequestID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
+		currentWorfklowStartTime,
 	)
+
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
 		return &historyservice.StartWorkflowExecutionResponse{
@@ -501,6 +509,14 @@ func (s *Starter) respondToRetriedRequest(
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
 // workflow cache and managing the cache lease.
 func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutableStateInfo, error) {
+	mutableState, err := s.getMutableState(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	return extractMutableStateInfo(mutableState)
+}
+
+func (s *Starter) getMutableState(ctx context.Context, runID string) (workflow.MutableState, error) {
 	// We technically never want to create a new execution but in practice this should not happen.
 	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
 		ctx,
@@ -520,7 +536,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 
 	var mutableState workflow.MutableState
 	mutableState, releaseErr = workflowContext.LoadMutableState(ctx, s.shardContext)
-	return extractMutableStateInfo(mutableState)
+	return mutableState, nil
 }
 
 // extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task.

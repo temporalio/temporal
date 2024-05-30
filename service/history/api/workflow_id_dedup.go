@@ -27,6 +27,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -34,6 +35,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -49,6 +51,7 @@ var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
 //
 // An action (ie "mitigate and allow"), an error (ie "deny") or neither (ie "allow") is returned.
 func ResolveDuplicateWorkflowID(
+	shard shard.Context,
 	workflowID,
 	newRunID,
 	currentRunID string,
@@ -57,6 +60,7 @@ func ResolveDuplicateWorkflowID(
 	currentStartRequestID string,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	wfIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
+	currentWorkflowStartTime time.Time,
 ) (UpdateWorkflowActionFunc, error) {
 
 	switch currentState {
@@ -69,7 +73,7 @@ func ResolveDuplicateWorkflowID(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			return nil, ErrUseCurrentExecution
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return terminateWorkflowAction(newRunID)
+			return resolveJustStartedDuplicatedWorfklows(shard, currentWorkflowStartTime, newRunID, workflowID)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
 		}
@@ -98,6 +102,33 @@ func ResolveDuplicateWorkflowID(
 
 	// ie "allow"
 	return nil, nil
+}
+
+func resolveJustStartedDuplicatedWorfklows(
+	shard shard.Context,
+	currentWorkflowStartTime time.Time,
+	newRunID string,
+	workflowID string,
+) (UpdateWorkflowActionFunc, error) {
+	// we are going to use "grace period"
+	// to prevent multiple calls to start worklfows with the same ID
+	// if new workflow is starting earlier then that period - we will not terminate old worklfow,
+	// but rather didn't start the new one
+
+	gracePeriod := shard.GetConfig().WorkflowDeduplicationGracePeriod()
+	now := shard.GetTimeSource().Now()
+	if gracePeriod == 0 || now.After(currentWorkflowStartTime.Add(gracePeriod)) {
+		return terminateWorkflowAction(newRunID)
+	}
+
+	// there is a grace period, and old worklfow start time is within that period
+	// do not start new worklfow
+	msg := fmt.Sprintf("Too many restarts for worklfow %s with run ID %s", workflowID, newRunID)
+	return nil, &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED,
+		Message: msg,
+	}
 }
 
 func terminateWorkflowAction(
