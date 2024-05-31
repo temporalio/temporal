@@ -89,8 +89,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 
 func TestBacklogManager_BacklogAge(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(controller, false)
 
 	require.Equal(t, time.Duration(0), backlogMgr.taskReader.getBacklogHeadCreateTime()) // no tasks have been read
 

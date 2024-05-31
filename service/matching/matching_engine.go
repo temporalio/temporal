@@ -962,7 +962,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							// Aggregate counts; for now, we only aggregate approximateBacklogCount
 							mergedStats = &taskqueuepb.TaskQueueStats{
 								ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-								ApproximateBacklogAge:   e.largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),,
+								ApproximateBacklogAge:   e.largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
 								TasksAddRate:            float32(0),
 								TasksDispatchRate:       float32(0),
 							}
