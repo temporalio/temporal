@@ -167,6 +167,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -581,6 +582,7 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 		time.Unix(0, rand.Int63()),
 		replicationTaskAttribute,
 		sourceCluster,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	executableHistoryTask.ExecutableTask = executableTask
 	return executableHistoryTask
