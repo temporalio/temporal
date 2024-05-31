@@ -397,7 +397,7 @@ func (u *Update) needToSend(includeAlreadySent bool) bool {
 // If update is not in expected stateAdmitted, Send does nothing and returns nil.
 // If includeAlreadySent is set to true then Send will return message even if update was already sent but not processed by worker.
 // If update lacks a request then return nil; the request will be communicated to the worker via an UpdateAdmitted event.
-// Note: once update moved to stateSent it never moves back to stateCreated.
+// Note: once update moved to stateSent it never moves back to stateAdmitted.
 func (u *Update) Send(
 	includeAlreadySent bool,
 	sequencingID *protocolpb.Message_EventId,
