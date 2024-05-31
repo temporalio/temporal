@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -91,15 +92,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
-	taskTypeTagValue := "TimerActiveUnknown"
-	smRef, smt, isAStateMachineTask, err := t.stateMachineTask(executable.GetTask())
-	if err == nil {
-		if isAStateMachineTask {
-			taskTypeTagValue = "TimerActive." + smt.Type().Name
-		} else {
-			taskTypeTagValue = queues.GetActiveTimerTaskTypeTagValue(executable)
-		}
-	}
+	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable)
 
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
@@ -110,15 +103,6 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		metrics.TaskTypeTag(taskTypeTagValue),
 		metrics.OperationTag(taskTypeTagValue), // for backward compatibility
 	}
-
-	if err != nil {
-		return queues.ExecuteResponse{
-			ExecutionMetricTags: metricsTags,
-			ExecutedAsActive:    true,
-			ExecutionErr:        err,
-		}
-	}
-
 	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
 		// TODO: exclude task types here if we believe it's safe & necessary to execute
 		//  them during namespace handover.
@@ -131,15 +115,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		}
 	}
 
-	if isAStateMachineTask {
-		smRegistry := t.shardContext.StateMachineRegistry()
-		err = smRegistry.ExecuteActiveTask(ctx, t, smRef, smt)
-		return queues.ExecuteResponse{
-			ExecutionMetricTags: metricsTags,
-			ExecutedAsActive:    true,
-			ExecutionErr:        err,
-		}
-	}
+	var err error
 
 	switch task := executable.GetTask().(type) {
 	case *tasks.UserTimerTask:
@@ -158,6 +134,10 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
+	case *tasks.StateMachineTimerTask:
+		err = t.executeStateMachineTimerTask(ctx, task, func(node *hsm.Node, task hsm.Task) error {
+			return t.shardContext.StateMachineRegistry().ExecuteActiveTimerTask(t, node, task)
+		})
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}

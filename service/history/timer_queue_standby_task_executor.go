@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -94,15 +95,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskTypeTagValue := "TimerStandbyUnknown"
-	smRef, smt, isAStateMachineTask, err := t.stateMachineTask(task)
-	if err == nil {
-		if isAStateMachineTask {
-			taskTypeTagValue = "TimerStandby." + smt.Type().Name
-		} else {
-			taskTypeTagValue = queues.GetStandbyTimerTaskTypeTagValue(task)
-		}
-	}
+	taskTypeTagValue := queues.GetStandbyTimerTaskTypeTagValue(task)
 
 	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
@@ -110,23 +103,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		metrics.OperationTag(taskTypeTagValue), // for backward compatibility
 	}
 
-	if err != nil {
-		return queues.ExecuteResponse{
-			ExecutionMetricTags: metricsTags,
-			ExecutedAsActive:    true,
-			ExecutionErr:        err,
-		}
-	}
-
-	if isAStateMachineTask {
-		smRegistry := t.shardContext.StateMachineRegistry()
-		err = smRegistry.ExecuteStandbyTask(ctx, t, smRef, smt)
-		return queues.ExecuteResponse{
-			ExecutionMetricTags: metricsTags,
-			ExecutedAsActive:    true,
-			ExecutionErr:        err,
-		}
-	}
+	var err error
 
 	switch task := task.(type) {
 	case *tasks.UserTimerTask:
@@ -145,6 +122,10 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeWorkflowExecutionTimeoutTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
+	case *tasks.StateMachineTimerTask:
+		err = t.executeStateMachineTimerTask(ctx, task, func(node *hsm.Node, task hsm.Task) error {
+			return t.shardContext.StateMachineRegistry().ExecuteStandbyTimerTask(t, node, task)
+		})
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
