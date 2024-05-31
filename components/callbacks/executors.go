@@ -219,8 +219,9 @@ func (e activeExecutor) saveResult(
 				}
 			}
 			return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
-				Time: env.Now(),
-				Err:  callErr,
+				Time:        env.Now(),
+				Err:         callErr,
+				RetryPolicy: e.config.RetryPolicy(),
 			})
 		})
 	})

@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -313,6 +314,9 @@ func TestProcessInvocationTask(t *testing.T) {
 					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					CallbackURLTemplate: dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
 				},
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
@@ -358,6 +362,7 @@ func TestProcessBackoffTask(t *testing.T) {
 				Time: time.Now(),
 				Err:  errors.New("test"),
 			},
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})
 	require.NoError(t, err)
@@ -552,6 +557,9 @@ func TestProcessCancelationTask(t *testing.T) {
 				Config: &nexusoperations.Config{
 					Enabled:        dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
 				},
 				NamespaceRegistry: namespaceRegistry,
 				MetricsHandler:    metricsHandler,
@@ -617,6 +625,9 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		Config: &nexusoperations.Config{
 			Enabled:        dynamicconfig.GetBoolPropertyFn(true),
 			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
+			RetryPolicy: func() backoff.RetryPolicy {
+				return backoff.NewExponentialRetryPolicy(time.Second)
+			},
 		},
 		NamespaceRegistry: namespaceRegistry,
 		EndpointChecker: func(ctx context.Context, namespaceName, endpointName string) error {
@@ -661,9 +672,10 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 
 	err = hsm.MachineTransition(node, func(c nexusoperations.Cancelation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionCancelationAttemptFailed.Apply(c, nexusoperations.EventCancelationAttemptFailed{
-			Time: time.Now(),
-			Err:  fmt.Errorf("test attempt failed"),
-			Node: node,
+			Time:        time.Now(),
+			Err:         fmt.Errorf("test attempt failed"),
+			Node:        node,
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})
 	require.NoError(t, err)

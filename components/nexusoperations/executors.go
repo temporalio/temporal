@@ -378,7 +378,8 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 			Time: env.Now(),
 			Err:  callErr,
 		},
-		Node: node,
+		Node:        node,
+		RetryPolicy: e.Config.RetryPolicy(),
 	})
 }
 
@@ -540,9 +541,10 @@ func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Envir
 					}
 				}
 				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
-					Time: env.Now(),
-					Err:  callErr,
-					Node: n,
+					Time:        env.Now(),
+					Err:         callErr,
+					Node:        n,
+					RetryPolicy: e.Config.RetryPolicy(),
 				})
 			}
 			// Cancelation request transmitted successfully.

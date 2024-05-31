@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -187,6 +188,9 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				callbacks.StandbyExecutorOptions{},
 				&callbacks.Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
 				},
 			))
 
@@ -252,6 +256,9 @@ func TestProcessBackoffTask(t *testing.T) {
 		callbacks.StandbyExecutorOptions{},
 		&callbacks.Config{
 			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+			RetryPolicy: func() backoff.RetryPolicy {
+				return backoff.NewExponentialRetryPolicy(time.Second)
+			},
 		},
 	))
 
