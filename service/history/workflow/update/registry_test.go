@@ -576,6 +576,7 @@ func TestAbort(t *testing.T) {
 	t.Parallel()
 	tv := testvars.New(t)
 
+	// new registry with 1 admitted update and 1 accepted update
 	reg := update.NewRegistry(&mockUpdateStore{
 		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 			visitor(
@@ -588,31 +589,23 @@ func TestAbort(t *testing.T) {
 			visitor(
 				tv.UpdateID("2"),
 				&persistencespb.UpdateInfo{
-					Value: &persistencespb.UpdateInfo_Admission{
-						Admission: &persistencespb.UpdateAdmissionInfo{},
+					Value: &persistencespb.UpdateInfo_Acceptance{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
 					},
 				})
 		},
 	})
 
-	// both updates are aborted now
-	var wg sync.WaitGroup
-	for i := 1; i <= 2; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-
-			upd := reg.Find(context.Background(), tv.UpdateID(fmt.Sprintf("%d", id)))
-			require.NotNil(t, upd)
-
-			_, err := upd.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
-			require.Equal(t, consts.ErrWorkflowCompleted, err)
-		}(i)
-	}
-
+	// abort both updates
 	reg.Abort(update.AbortReasonWorkflowCompleted)
-	wg.Wait()
 
+	for i := 1; i <= 2; i++ {
+		upd := reg.Find(context.Background(), tv.UpdateID(fmt.Sprintf("%d", i)))
+		require.NotNil(t, upd)
+
+		_, err := upd.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
+		require.Equal(t, consts.ErrWorkflowCompleted, err)
+	}
 	require.Equal(t, 2, reg.Len(), "registry should still contain both updates")
 }
 

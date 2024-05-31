@@ -60,6 +60,11 @@ type (
 		end   int64
 	}
 
+	idBlockAllocator interface {
+		RenewLease(context.Context) (taskQueueState, error)
+		RangeID() int64
+	}
+
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
 		status      int32
