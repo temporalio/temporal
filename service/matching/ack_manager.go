@@ -27,10 +27,10 @@ package matching
 import (
 	"sync"
 
-	"go.uber.org/atomic"
-
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
+	"go.uber.org/atomic"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
