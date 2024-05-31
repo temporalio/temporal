@@ -143,9 +143,10 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 		// remove this "if" case when that is done.
 		if operation == metrics.FrontendGetWorkflowExecutionHistoryScope {
-			request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
-			if request.GetWaitNewEvent() {
-				return metrics.FrontendPollWorkflowExecutionHistoryScope
+			if request, ok := req.(*workflowservice.GetWorkflowExecutionHistoryRequest); ok {
+				if request.GetWaitNewEvent() {
+					return metrics.FrontendPollWorkflowExecutionHistoryScope
+				}
 			}
 		}
 		return operation
@@ -154,9 +155,10 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 		// remove this "if" case when that is done.
 		if operation == metrics.HistoryGetWorkflowExecutionHistoryScope {
-			request := req.(*historyservice.GetWorkflowExecutionHistoryRequest)
-			if r := request.GetRequest(); r != nil && r.GetWaitNewEvent() {
-				return metrics.HistoryPollWorkflowExecutionHistoryScope
+			if request, ok := req.(*historyservice.GetWorkflowExecutionHistoryRequest); ok {
+				if r := request.GetRequest(); r != nil && r.GetWaitNewEvent() {
+					return metrics.HistoryPollWorkflowExecutionHistoryScope
+				}
 			}
 		}
 	}
