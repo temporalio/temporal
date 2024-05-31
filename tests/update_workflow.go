@@ -444,6 +444,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
 			go func() {
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
+			// To make sure that update gets to the server before WFT is polled.
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 			// Process update in workflow.
 			res, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
