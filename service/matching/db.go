@@ -193,7 +193,7 @@ func (db *taskQueueDB) UpdateState(
 	db.Lock()
 	defer db.Unlock()
 
-	// Resetting approximateBacklogCounter to fix the count divergence issue
+	// Reset approximateBacklogCounter to fix the count divergence issue
 	maxReadLevel := db.GetMaxReadLevel()
 	if ackLevel == maxReadLevel {
 		db.approximateBacklogCount.Store(0)
@@ -348,8 +348,9 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
+// emitApproximateBacklogCount gets and emits the db's approximateBacklogCount to the metrics handler.
+// It is called after persisting the updated BacklogCount
 func (db *taskQueueDB) emitApproximateBacklogCount() {
-	// note: this metric is called after persisting the updated BacklogCount
 	approximateBacklogCount := db.getApproximateBacklogCount()
 	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
 }
