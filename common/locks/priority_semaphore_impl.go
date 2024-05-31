@@ -35,43 +35,48 @@ const (
 )
 
 type PrioritySemaphoreImpl struct {
-	capacity     int
-	highWaiting  int         // Current number of high priority requests waiting.
-	highCount    int         // Current count of high-priority holds
-	lowCount     int         // Current count of low-priority holds
-	totalHeld    int         // Total number of holds (high + low)
-	mu           *sync.Mutex // Mutex to protect conditional variable and changes to the counts
-	highPriority *sync.Cond  // Condition variable for high-priority tasks
-	lowPriority  *sync.Cond  // Condition variable for low-priority tasks
+	capacity    int
+	highWaiting int         // Current number of high priority requests waiting.
+	highCount   int         // Current count of high-priority holds
+	lowCount    int         // Current count of low-priority holds
+	lock        sync.Locker // Mutex to protect conditional variable and changes to the counts
+	highCV      *sync.Cond  // Condition variable for high-priority tasks
+	lowCV       *sync.Cond  // Condition variable for low-priority tasks
 }
 
 var _ PrioritySemaphore = (*PrioritySemaphoreImpl)(nil)
 
 // NewPrioritySemaphore creates a new PrioritySemaphoreImpl with specified capacity
 func NewPrioritySemaphore(capacity int) PrioritySemaphore {
-	mu := sync.Mutex{}
+	mu := &sync.Mutex{}
+	highCV := sync.NewCond(mu)
+	lowCV := sync.NewCond(mu)
 	return &PrioritySemaphoreImpl{
-		capacity:     capacity,
-		highCount:    0,
-		lowCount:     0,
-		totalHeld:    0,
-		mu:           &mu,
-		highPriority: sync.NewCond(&mu),
-		lowPriority:  sync.NewCond(&mu),
+		capacity:  capacity,
+		highCount: 0,
+		lowCount:  0,
+		lock:      mu,
+		highCV:    highCV,
+		lowCV:     lowCV,
 	}
 }
 
 func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, n int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	for s.totalHeld+n > s.capacity {
-		if priority == PriorityHigh {
-			s.highWaiting++
-			s.highPriority.Wait()
-			s.highWaiting--
-		} else {
-			s.lowPriority.Wait()
+	for s.lowCount+s.highCount+n > s.capacity {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if priority == PriorityHigh {
+				s.highWaiting++
+				s.highCV.Wait()
+				s.highWaiting--
+			} else {
+				s.lowCV.Wait()
+			}
 		}
 	}
 	if ctx.Err() != nil {
@@ -82,31 +87,28 @@ func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, 
 	} else {
 		s.lowCount += n
 	}
-	s.totalHeld += n
 	return nil
 }
 
 func (s *PrioritySemaphoreImpl) TryAcquire(priority Priority, n int) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	if s.totalHeld+n > s.capacity {
+	if s.lowCount+s.highCount+n > s.capacity {
 		return false
 	}
 
 	if priority == PriorityHigh {
 		s.highCount += n
-		s.totalHeld += n
 	} else {
 		s.lowCount += n
-		s.totalHeld += n
 	}
 	return true
 }
 
 func (s *PrioritySemaphoreImpl) Release(priority Priority, n int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	if priority == PriorityHigh {
 		if n > s.highCount {
@@ -120,11 +122,15 @@ func (s *PrioritySemaphoreImpl) Release(priority Priority, n int) {
 		}
 		s.lowCount -= n
 	}
-	s.totalHeld -= n
 
 	if s.highWaiting != 0 {
-		s.highPriority.Signal()
+		// If n > 1, more than one caller could potentially make progress.
+		for ; n > 0; n-- {
+			s.highCV.Signal()
+		}
 	} else {
-		s.lowPriority.Signal()
+		for ; n > 0; n-- {
+			s.lowCV.Signal()
+		}
 	}
 }
