@@ -146,8 +146,8 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 		}
 		m.ackLevel = min.(int64)
 		m.outstandingTasks.Remove(min)
-		// reducing our backlog since a task gets acked
-		m.backlogMgr.db.updateApproximateBacklogCount(int64(-1))
+		// decrement backlog as each task gets acked
+		m.backlogMgr.db.updateApproximateBacklogCount(-1)
 	}
 
 }

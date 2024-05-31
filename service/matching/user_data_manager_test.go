@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -54,7 +55,8 @@ func createUserDataManager(
 
 	logger := log.NewTestLogger()
 	ns := namespace.Name("ns-name")
-	tm := newTestTaskManager(logger)
+	generator := rand.New(rand.NewSource(time.Now().UnixNano()))
+	tm := newTestTaskManager(logger, generator)
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()

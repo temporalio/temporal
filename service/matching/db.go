@@ -31,8 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/metrics"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -40,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -58,7 +57,7 @@ type (
 		ackLevel                int64
 		store                   persistence.TaskManager
 		logger                  log.Logger
-		approximateBacklogCount atomic.Int64
+		approximateBacklogCount atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
 		maxReadLevel            atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
 	}
 	taskQueueState struct {
@@ -186,7 +185,7 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 	return nil
 }
 
-// UpdateState updates the queue state with the given values
+// UpdateState updates the queue state with the given value
 func (db *taskQueueDB) UpdateState(
 	ctx context.Context,
 	ackLevel int64,
@@ -221,7 +220,7 @@ func (db *taskQueueDB) updateApproximateBacklogCount(
 	db.Lock()
 	defer db.Unlock()
 
-	// Preventing under-counting
+	// Prevent under-counting
 	if db.approximateBacklogCount.Load()+delta < 0 {
 		db.logger.Info("ApproximateBacklogCounter could have under-counted.",
 			tag.WorkerBuildId(db.queue.BuildId()), tag.WorkerBuildId(db.queue.Partition().NamespaceId().String()))

@@ -44,11 +44,10 @@ type (
 )
 
 func (s *DescribeTaskQueueSuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		// this is overridden for tests using testWithMatchingBehavior
-		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
-		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
-	}
+	//s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+	//	dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
+	//	dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+	//}
 	s.setupSuite("testdata/es_cluster.yaml")
 }
 
@@ -74,7 +73,7 @@ func (s *DescribeTaskQueueSuite) TestAddMultipleTasksMultiplePartitions_Validate
 }
 
 func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(partitions int, workflows int) {
-	// overriding the ReadPartitions and WritePartitions
+	// Override the ReadPartitions and WritePartitions
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, partitions)
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, partitions)
@@ -111,7 +110,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(workflows)
 	s.validateDescribeTaskQueue(tl, expectedBacklogCount)
 
-	// Polling the tasks
+	// Poll the tasks
 	for i := 0; i < workflows; {
 		resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.namespace,

@@ -26,24 +26,23 @@ package matching
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 	"time"
-
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/tqid"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/primitives/timestamp"
-)
+	enumspb "go.temporal.io/api/enums/v1"
 
-// TODO Shivam: Make a test-suite, backlogManagerSuite, for this file
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tqid"
+)
 
 func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
@@ -170,7 +169,7 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 
 	backlogMgr := newBacklogMgr(controller)
 
-	// Adding tasks on the taskWriters channel
+	// Add tasks on the taskWriters channel
 	backlogMgr.taskWriter.appendCh <- &writeTaskRequest{
 		taskInfo: &persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
@@ -182,8 +181,8 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(0))
 
 	backlogMgr.taskWriter.Start()
-	// Adding tasks to the buffer shall increase the in-memory counter by 1
-	// and this shall be written to persistence
+	// Adding tasks to the buffer will increase the in-memory counter by 1
+	// and this will be written to persistence
 	require.Eventually(t, func() bool { return backlogMgr.db.getApproximateBacklogCount() == int64(1) },
 		time.Second*30, time.Millisecond)
 	backlogMgr.taskWriter.Stop()
@@ -196,7 +195,7 @@ func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 	backlogMgr := newBacklogMgr(controller)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
-	// Manually updating the backlog size since adding tasks to the outstanding map does not increment the counter
+	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
 	backlogMgr.db.updateApproximateBacklogCount(int64(1))
 	require.Equal(t, int64(1), backlogMgr.db.getApproximateBacklogCount(), "1 task in the backlog")
 	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
@@ -225,7 +224,7 @@ func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
 	require.Equal(t, int64(3), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
 
-	// Completing tasks
+	// Complete tasks
 	require.Equal(t, int64(-1), backlogMgr.taskAckManager.completeTask(2), "should not move the ack level")
 	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "should not decrease the backlog counter as ack level has not gone up")
 
@@ -237,14 +236,14 @@ func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 
 }
 
-// TestAddTasksValidateBacklogCounter shall use the "backlogManager methods" to add a task to the backlog.
+// TestAddTasksValidateBacklogCounter uses the "backlogManager methods" to add a task to the backlog.
 func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
 	backlogMgr := newBacklogMgr(controller)
 
-	// only starting the taskWriter for now!
+	// only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
 	task := &persistencespb.TaskInfo{
 		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
@@ -262,11 +261,11 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 
 	backlogMgr := newBacklogMgr(controller)
 
-	// only starting the taskWriter for now!
+	// Only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
 	taskCount := 10
 	for i := 0; i < taskCount; i++ {
-		// Creating new tasks and spooling them
+		// Create new tasks and spool them
 		task := &persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
@@ -280,7 +279,8 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 
 func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
 	logger := log.NewMockLogger(controller)
-	tm := newTestTaskManager(logger)
+	generator := rand.New(rand.NewSource(time.Now().UnixNano()))
+	tm := newTestTaskManager(logger, generator)
 
 	pqMgr := NewMockphysicalTaskQueueManager(controller)
 
@@ -293,7 +293,7 @@ func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
 	queue := UnversionedQueueKey(prtn)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
 
-	// Expected calls
+	// Set expected calls
 	pqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
 	pqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	handler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()

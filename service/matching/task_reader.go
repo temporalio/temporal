@@ -239,7 +239,7 @@ func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse,
 	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
 
-	// counter i is used to break and let caller check whether taskqueue is still alive and need resume read.
+	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
 		upper := readLevel + tr.backlogMgr.config.RangeSize
 		if upper > maxReadLevel {
@@ -301,9 +301,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
 	tr.emitTaskLagMetric(ackLevel)
-	err := tr.backlogMgr.db.UpdateState(ctx, ackLevel)
-
-	return err
+	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
 }
 
 func (tr *taskReader) logger() log.Logger {

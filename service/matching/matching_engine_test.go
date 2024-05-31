@@ -106,6 +106,7 @@ type (
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
 		logger         log.Logger
+		generator      *rand.Rand
 		sync.Mutex
 	}
 )
@@ -120,7 +121,8 @@ func createTestMatchingEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	namespaceRegistry namespace.Registry) *matchingEngineImpl {
 	logger := log.NewTestLogger()
-	tm := newTestTaskManager(logger)
+	generator := rand.New(rand.NewSource(time.Now().UnixNano()))
+	tm := newTestTaskManager(logger, generator)
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
@@ -169,7 +171,8 @@ func (s *matchingEngineSuite) SetupTest() {
 		Return(&matchingservice.UpdateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
-	s.taskManager = newTestTaskManager(s.logger)
+	s.generator = rand.New(rand.NewSource(time.Now().UnixNano()))
+	s.taskManager = newTestTaskManager(s.logger, s.generator)
 	s.taskManager.dbError = false // set to true when you want db to throw errors randomly
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
@@ -239,9 +242,7 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
-	controller := gomock.NewController(s.T())
-	defer controller.Finish()
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(s.controller)
 	m := newAckManager(backlogMgr)
 
 	m.setAckLevel(100)
@@ -255,7 +256,7 @@ func (s *matchingEngineSuite) TestAckManager() {
 	const t6 = 380
 
 	m.addTask(t1)
-	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
+	// Increment the backlog so that we don't under-count
 	// this happens since we decrease the counter on completion of a task
 	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(100, m.getAckLevel())
@@ -306,9 +307,7 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
-	controller := gomock.NewController(s.T())
-	defer controller.Finish()
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(s.controller)
 	m := newAckManager(backlogMgr)
 
 	const t0 = 100
@@ -327,7 +326,7 @@ func (s *matchingEngineSuite) TestAckManager_Sort() {
 	m.addTask(t4)
 	m.addTask(t5)
 
-	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
+	// Increment the backlog so that we don't under-count
 	// this happens since we decrease the counter on completion of a task
 	backlogMgr.db.updateApproximateBacklogCount(5)
 
@@ -2766,7 +2765,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 
 }
 
-// generateWorkflowExecution is a helper to make a sample workflowExecution and WorkflowType for the required tests
+// generateWorkflowExecution makes a sample workflowExecution and WorkflowType for the required tests
 func (s *matchingEngineSuite) generateWorkflowExecution() (*commonpb.WorkflowType, *commonpb.WorkflowExecution) {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
@@ -2847,7 +2846,7 @@ func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *ta
 	}
 }
 
-// addWorkflowTasks is a helper that adds taskCount number of tasks for each numWorker
+// addWorkflowTasks adds taskCount number of tasks for each numWorker
 func (s *matchingEngineSuite) addWorkflowTasks(concurrently bool, numWorkers int, taskCount int,
 	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution, wg *sync.WaitGroup) {
 	if concurrently {
@@ -2903,7 +2902,6 @@ func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQ
 }
 
 func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCount int, numWorkers int, numPollers int) {
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 
@@ -2911,7 +2909,7 @@ func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCoun
 	s.EqualValues(taskCount*numWorkers, s.taskManager.getCreateTaskCount(ptq))
 	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 
-	// Extracting the pgMgr for validating approximateBacklogCounter
+	// Extract the pgMgr for validating approximateBacklogCounter
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 	s.EqualValues(int64(taskCount*numWorkers), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 
@@ -2958,20 +2956,21 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 
-	// Checking the maxReadLevel with the value of task stored in db
-	maxTaskId, _ := s.taskManager.maxTaskID(ptq)
+	// Check the maxReadLevel with the value of task stored in db
+	maxTaskId, ok := s.taskManager.maxTaskID(ptq)
+	s.True(ok)
 	s.EqualValues(maxTaskId, pgMgr.backlogMgr.db.maxReadLevel.Load())
 
-	// validating the approximateBacklogCounter
+	// validate the approximateBacklogCounter
 	s.EqualValues(taskCount*numWorkers, pgMgr.backlogMgr.db.getApproximateBacklogCount())
 
-	// Unloading the PQM
+	// Unload the PQM
 	s.matchingEngine.unloadTaskQueuePartition(partitionManager)
 
-	// Simulating a TTL'ed task in Cassandra by removing it from the DB
+	// Simulate a TTL'ed task in Cassandra by removing it from the DB
 	// Remove the task from testTaskManager but not from db/AckManager
 
-	// Stopping the backlogManager so that we TTL and the taskReader does not catch this
+	// Stop the backlogManager so that we TTL and the taskReader does not catch this
 	request := &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        namespaceId,
 		TaskQueueName:      taskQueue.Name,
@@ -2983,13 +2982,13 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.NoError(err)
 	s.EqualValues((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
 
-	// adding pollers which shall also load the fresher version of tqm
+	// Add pollers which shall also load the fresher version of tqm
 	s.pollWorkflowTasks(false, workflowType, 1, (taskCount*numWorkers)-1, ptq, taskQueue, nil)
 
-	// Updating pgMgr to have the latest pgMgr
+	// Update pgMgr to have the latest pgMgr
 	pgMgr = s.getPhysicalTaskQueueManagerImpl(ptq)
 
-	// overwriting the maxReadLevel since it could have increased if the previous taskWriter was stopped (which would not result in resetting);
+	// Overwrite the maxReadLevel since it could have increased if the previous taskWriter was stopped (which would not result in resetting);
 	// This should never be called and is only being done here for test purposes
 	pgMgr.backlogMgr.db.SetMaxReadLevel(maxTaskId)
 
@@ -3018,61 +3017,6 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 	s.taskManager.dbError = true
 	s.resetBacklogCounter(10, 50, 5)
-}
-
-func (s *matchingEngineSuite) TestPersistAckLevelWithTaskCreationValidateBacklogCounter() {
-	// This test should fail since we are not persisting the ack level with every write.
-	s.T().Skip("Skipping this until AckLevel is persisted with task creation")
-
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
-	// Increasing the UpdateAckInterval so that it does not get fired
-	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Minute)
-
-	_, workflowExecution := s.generateWorkflowExecution()
-	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
-	const taskCount = 20
-
-	s.addWorkflowTasks(false, 1, taskCount, taskQueue, workflowExecution, nil)
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
-
-	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), taskCount)
-
-	// Completing the workflow tasks by directly calling AckManager.CompleteTask(TaskID) - doing this for the purpose of
-	// this test case. We shall complete all tasks that were added except the first one so that the AckLevel does not
-	// increase and remains equal to config.RangeSize.
-	firstTaskID := s.matchingEngine.config.RangeSize + 1
-	for i := int64(0); i < taskCount-1; i++ {
-		taskID := i + firstTaskID
-		pgMgr.backlogMgr.taskAckManager.completeTask(taskID)
-	}
-
-	// Only one task remains and the AckLevel should also have gone up
-	s.EqualValues(int64(1), pgMgr.backlogMgr.db.getApproximateBacklogCount())
-
-	// Adding a new task which should persist the backlog count and the ackLevel
-	s.addWorkflowTasks(false, 1, 1, taskQueue, workflowExecution, nil)
-
-	// unloading the TQM which also stops the backlogManager; set backlogManager.skipFinalUpdate to true to not persist
-	// the latest ackLevel
-	pgMgr.backlogMgr.skipFinalUpdate.Store(true)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), false)
-	s.NoError(err)
-	s.matchingEngine.unloadTaskQueuePartition(tqm)
-
-	// Loading the TQM for the same TQ partition
-	tqm_loaded, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), true)
-	s.NoError(err)
-	tqm_loaded_Impl, ok := tqm_loaded.(*taskQueuePartitionManagerImpl)
-	s.True(ok)
-
-	pgMgr, ok = tqm_loaded_Impl.defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok)
-
-	s.EqualValues(int64(2), pgMgr.backlogMgr.db.getApproximateBacklogCount()) // since there are 2 tasks in the backlog
-	// AckLevel must move to the second last task (taskID 29 in this case) since ackLevel has been persisted with task creation
-	s.EqualValues(firstTaskID+taskCount-2, pgMgr.backlogMgr.taskAckManager.getAckLevel()) // this check will be modified since ackLevel will move inside of db
-
 }
 
 // Concurrent tests for testing approximateBacklogCounter
@@ -3210,9 +3154,10 @@ var _ persistence.TaskManager = (*testTaskManager)(nil) // Asserts that interfac
 
 type testTaskManager struct {
 	sync.Mutex
-	queues  map[dbTaskQueueKey]*testPhysicalTaskQueueManager
-	logger  log.Logger
-	dbError bool
+	queues    map[dbTaskQueueKey]*testPhysicalTaskQueueManager
+	logger    log.Logger
+	dbError   bool
+	generator *rand.Rand
 }
 
 type dbTaskQueueKey struct {
@@ -3225,8 +3170,8 @@ func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
 	return dbTaskQueueKey{dbq.partition.Key(), dbq.versionSet, dbq.buildId}
 }
 
-func newTestTaskManager(logger log.Logger) *testTaskManager {
-	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger}
+func newTestTaskManager(logger log.Logger, generator *rand.Rand) *testTaskManager {
+	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger, generator: generator}
 }
 
 func (m *testTaskManager) GetName() string {
@@ -3369,30 +3314,24 @@ func (m *testTaskManager) GetTaskQueue(
 	}, nil
 }
 
-// minTaskID is a helper to return the minimum value of the TaskID present in testTaskManager
+// minTaskID returns the minimum value of the TaskID present in testTaskManager
 func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
 	tlm := m.getQueueManager(dbq)
 	tlm.Lock()
 	defer tlm.Unlock()
 	minKey, _ := tlm.tasks.Min()
 	key, ok := minKey.(int64)
-	if ok == false {
-		return -1, ok
-	}
-	return key, true
+	return key, ok
 }
 
-// minTaskID is a helper to return the maximum value of the TaskID present in testTaskManager
+// maxTaskID returns the maximum value of the TaskID present in testTaskManager
 func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
 	tlm := m.getQueueManager(dbq)
 	tlm.Lock()
 	defer tlm.Unlock()
 	maxKey, _ := tlm.tasks.Max()
 	key, ok := maxKey.(int64)
-	if ok == false {
-		return -1, ok
-	}
-	return key, true
+	return key, ok
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(
@@ -3439,10 +3378,8 @@ func (m *testTaskManager) generateErrorRandomly() bool {
 	if m.dbError {
 		threshold := 10
 
-		// Seed the random number generator
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		// Generate a random number between 0 and 99
-		randomNumber := r.Intn(100)
+		randomNumber := m.generator.Intn(100)
 		if randomNumber < threshold {
 			return true
 		}
@@ -3460,7 +3397,7 @@ func (m *testTaskManager) CreateTasks(
 	taskType := request.TaskQueueInfo.Data.TaskType
 	rangeID := request.TaskQueueInfo.RangeID
 
-	// randomly returning an error
+	// Randomly returns an error
 	if m.generateErrorRandomly() {
 		return nil, &persistence.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
