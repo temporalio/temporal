@@ -3,6 +3,8 @@
 # Consider running this script to generate a new history for TestReplays
 # whenever there's some change to the scheduler workflow.
 # To use it, run a local server (any backend) and run this script.
+#
+# Note: this requires temporal cli >= 0.12
 
 set -x
 
@@ -12,19 +14,19 @@ id=sched1
 trap "temporal schedule delete -s '$id'" EXIT
 
 temporal schedule create -s "$id" \
-  --overlap-policy bufferall \
+  --overlap-policy BufferAll \
   --interval 10s \
   --jitter 8s \
   -w mywf \
   -t mytq \
-  --workflow-type mywf \
-  --execution-timeout 5
+  --type mywf \
+  --execution-timeout 5s
 
 sleep 50 # ~5 normal actions, some may be buffered
 
 # backfill 3 actions
 temporal schedule backfill -s "$id"  \
-  --overlap-policy allowall  \
+  --overlap-policy AllowAll  \
   --start-time 2022-05-09T11:22:22Z  \
   --end-time   2022-05-09T11:22:55Z
 
@@ -46,8 +48,8 @@ temporal schedule update -s "$id"  \
   --remaining-actions 1 \
   -w mywf \
   -t mytq \
-  --workflow-type mywf \
-  --execution-timeout 3
+  --type mywf \
+  --execution-timeout 3s
 
 sleep 12
 # should have used one action and be idle now
