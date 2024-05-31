@@ -813,8 +813,11 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 		Services: map[string]config.Service{
 			string(primitives.FrontendService): {
 				RPC: config.RPC{
-					HTTPPort:                       httpPort,
-					HTTPAdditionalForwardedHeaders: []string{"this-header-forwarded"},
+					HTTPPort: httpPort,
+					HTTPAdditionalForwardedHeaders: []string{
+						"this-header-forwarded",
+						"this-header-prefix-forwarded-*",
+					},
 				},
 			},
 		},
