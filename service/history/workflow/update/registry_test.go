@@ -285,7 +285,6 @@ func TestFindOrCreate(t *testing.T) {
 		})
 
 		t.Run("sending 1st update still denies new update to be created", func(t *testing.T) {
-			t.Helper()
 			require.NotNil(t, send(t, upd1, includeAlreadySent), "update should be sent")
 
 			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
