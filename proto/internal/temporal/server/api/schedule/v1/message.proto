@@ -152,5 +152,4 @@ message NextTimeCache {
 message HsmSchedulerState {
     StartScheduleArgs args = 1;
     temporal.server.api.enums.v1.SchedulerState hsm_state = 2;
-    google.protobuf.Timestamp last_invoked_time = 3;
 }

@@ -25,6 +25,7 @@
 package history
 
 import (
+	"go.temporal.io/server/components/scheduler"
 	"net"
 
 	"go.uber.org/fx"
@@ -95,6 +96,7 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
+	scheduler.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )

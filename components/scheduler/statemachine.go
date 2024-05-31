@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
 )
 
 // Unique type identifier for this state machine.
@@ -26,15 +28,24 @@ type Scheduler struct {
 	*schedspb.HsmSchedulerState
 }
 
-func (c Scheduler) State() enumsspb.SchedulerState {
-	return c.HsmState
+func (s Scheduler) State() enumsspb.SchedulerState {
+	return s.HsmState
 }
 
-func (c Scheduler) SetState(state enumsspb.SchedulerState) {
-	c.HsmState = state
+func (s Scheduler) SetState(state enumsspb.SchedulerState) {
+	s.HsmState = state
 }
 
-func (c Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
+func (s Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
+	switch s.HsmState {
+	case enumsspb.SCHEDULER_STATE_WAITING:
+		s.Args.State.LastProcessedTime = timestamppb.Now()
+		// TODO(Tianyu): Replace with actual scheduler work
+		fmt.Printf("Scheduler has been invoked")
+		// TODO(Tianyu): Replace with actual scheduling logic
+		nextInvokeTime := timestamppb.New(s.Args.State.LastProcessedTime.AsTime().Add(10 * time.Second))
+		return []hsm.Task{ScheduleTask{Deadline: nextInvokeTime.AsTime()}}, nil
+	}
 	return nil, nil
 }
 
@@ -59,6 +70,10 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	return nil, fmt.Errorf("invalid callback provided: %v", state) // nolint:goerr113
 }
 
+func RegisterStateMachine(r *hsm.Registry) error {
+	return r.RegisterMachine(stateMachineDefinition{})
+}
+
 // EventSchedulerActivate is triggered when the scheduler state machine should wake up and perform work
 type EventSchedulerActivate struct{}
 
@@ -66,5 +81,6 @@ var TransitionSchedulerActivate = hsm.NewTransition(
 	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_WAITING},
 	enumsspb.SCHEDULER_STATE_WAITING,
 	func(scheduler Scheduler, event EventSchedulerActivate) (hsm.TransitionOutput, error) {
-		return hsm.TransitionOutput{Tasks: []hsm.Task{}}, nil
+		tasks, err := scheduler.RegenerateTasks(nil)
+		return hsm.TransitionOutput{Tasks: tasks}, err
 	})
