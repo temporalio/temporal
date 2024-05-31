@@ -104,15 +104,14 @@ func ResolveDuplicateWorkflowID(
 	return nil, nil
 }
 
+// A minimal interval between workflow starts is used to prevent multiple starts with the same ID too rapidly.
+// If the new workflow is started before the interval elapsed, the workflow start is aborted.
 func resolveDuplicateWorkflowStart(
 	shardContext shard.Context,
 	currentWorkflowStartTime time.Time,
 	newRunID string,
 	workflowID string,
 ) (UpdateWorkflowActionFunc, error) {
-	// "Grace period" is used to prevent multiple calls to start workflows with the same ID,
-	// If new workflow is starting earlier then that period - current worklfow will not be terminated.
-	// Instead new worklfow will not start.
 
 	gracePeriod := shardContext.GetConfig().WorkflowIdReuseMinimalInterval()
 	now := shardContext.GetTimeSource().Now().UTC()
