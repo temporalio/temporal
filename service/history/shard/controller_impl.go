@@ -427,7 +427,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		defer engineCancel()
 		_, _ = shard.GetEngine(engineCtx)
 
-		assertCtx, assertCancel := context.WithTimeout(ctx, shardIOTimeout)
+		assertCtx, assertCancel := context.WithTimeout(ctx, c.config.ShardIOTimeout())
 		defer assertCancel()
 		// trust the AssertOwnership will handle shard ownership lost
 		_ = shard.AssertOwnership(assertCtx)
