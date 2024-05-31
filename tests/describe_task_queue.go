@@ -44,10 +44,6 @@ type (
 )
 
 func (s *DescribeTaskQueueSuite) SetupSuite() {
-	//s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-	//	dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
-	//	dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
-	//}
 	s.setupSuite("testdata/es_cluster.yaml")
 }
 
