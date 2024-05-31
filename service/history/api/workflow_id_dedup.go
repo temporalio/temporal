@@ -123,8 +123,8 @@ func resolveJustStartedDuplicatedWorkflows(
 		return terminateWorkflowAction(newRunID)
 	}
 
-	// there is a grace period, and old worklfow start time is within that period
-	// do not start new worklfow
+	// Since there is a grace period, and the current workflow's start time is within that period,
+	// abort the entire request.
 	msg := fmt.Sprintf(
 		"Too many restarts for worklfow %s. Time since last start: %d",
 		workflowID,
