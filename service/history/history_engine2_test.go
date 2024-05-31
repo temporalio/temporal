@@ -1241,7 +1241,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
-	prevRunID := "prevRunID"
+	prevRunID := uuid.New()
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
@@ -1275,6 +1275,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 		}
 	}
 
+	now := s.historyEngine.shardContext.GetTimeSource().Now()
+	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, workflowID, prevRunID)
+	ms.GetExecutionInfo().VersionHistories.Histories[0].Items = []*historyspb.VersionHistoryItem{{Version: 0, EventId: 0}}
+	ms.GetExecutionInfo().StartTime = timestamppb.New(now.Add(-2 * time.Second))
+
 	s.Run("when workflow is running", func() {
 		makeCurrentWorkflowConditionFailedError := func(
 			requestID string,
@@ -1306,6 +1311,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 			s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 				Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
 
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
+
 			resp, err := s.historyEngine.StartWorkflowExecution(
 				metrics.AddMetricsContext(context.Background()),
 				makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
@@ -1315,9 +1323,29 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 			s.Nil(resp)
 		})
 
+		s.Run("return error when id reuse policy is TERMINATE_IF_RUNNING but called too soon", func() {
+			s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
+				Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+
+			subtest_now := s.historyEngine.shardContext.GetTimeSource().Now()
+			ms.GetExecutionInfo().StartTime = timestamppb.New(subtest_now)
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
+
+			resp, err := s.historyEngine.StartWorkflowExecution(
+				metrics.AddMetricsContext(context.Background()),
+				makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING))
+			var expectedErr *serviceerror.ResourceExhausted
+			s.ErrorAs(err, &expectedErr)
+			s.Nil(resp)
+		})
+
 		s.Run("ignore error when id conflict policy is USE_EXISTING", func() {
 			s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 				Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
 
 			resp, err := s.historyEngine.StartWorkflowExecution(
 				metrics.AddMetricsContext(context.Background()),
@@ -1334,10 +1362,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 				failedError.RunID = uuid.New()
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 					Return(nil, failedError)
-
-				ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
-				ms.GetExecutionInfo().VersionHistories.Histories[0].Items = []*historyspb.VersionHistoryItem{{Version: 0, EventId: 0}}
-
+				ms.GetExecutionInfo().StartTime = timestamppb.New(now.Add(-2 * time.Second))
 				s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 					Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
 				s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(
@@ -1417,6 +1442,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
 					Return(tests.CreateWorkflowExecutionResponse, nil)
 
+				s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+					Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
+
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
 					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
@@ -1431,6 +1459,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
 					Return(tests.CreateWorkflowExecutionResponse, nil)
+				s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+					Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
 
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
@@ -1444,6 +1474,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 			s.Run("and id reuse policy ALLOW_DUPLICATE_FAILED_ONLY", func() {
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+				s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+					Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
 
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
@@ -1457,6 +1489,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 			s.Run("and id reuse policy REJECT_DUPLICATE", func() {
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+				s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+					Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
 
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
@@ -1495,6 +1529,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 						s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 							Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
 
+						s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+							Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
+
 						resp, err := s.historyEngine.StartWorkflowExecution(
 							metrics.AddMetricsContext(context.Background()),
 							makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
@@ -1509,6 +1546,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 							Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
 						s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
 							Return(tests.CreateWorkflowExecutionResponse, nil)
+						s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+							Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
 
 						resp, err := s.historyEngine.StartWorkflowExecution(
 							metrics.AddMetricsContext(context.Background()),
@@ -1522,6 +1561,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 					s.Run("and id reuse policy REJECT_DUPLICATE", func() {
 						s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 							Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+						s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+							Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
 
 						resp, err := s.historyEngine.StartWorkflowExecution(
 							metrics.AddMetricsContext(context.Background()),
