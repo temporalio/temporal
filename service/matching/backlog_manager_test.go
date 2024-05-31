@@ -260,7 +260,7 @@ func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 	backlogMgr.taskAckManager.addTask(int64(2))
 	backlogMgr.taskAckManager.addTask(int64(3))
 
-	// Manually updating the backlog size since adding tasks to the outstanding map does not increment the counter
+	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
 	backlogMgr.db.updateApproximateBacklogCount(int64(3))
 
 	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "1 task in the backlog")
