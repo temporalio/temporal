@@ -36,29 +36,26 @@ const (
 
 type PrioritySemaphoreImpl struct {
 	capacity    int
-	highWaiting int         // Current number of high priority requests waiting.
-	highCount   int         // Current count of high-priority holds
-	lowCount    int         // Current count of low-priority holds
-	lock        sync.Locker // Mutex to protect conditional variable and changes to the counts
-	highCV      *sync.Cond  // Condition variable for high-priority tasks
-	lowCV       *sync.Cond  // Condition variable for low-priority tasks
+	highWaiting int        // Current number of high priority requests waiting.
+	highCount   int        // Current count of high-priority holds
+	lowCount    int        // Current count of low-priority holds
+	lock        sync.Mutex // Mutex to protect conditional variable and changes to the counts
+	highCV      sync.Cond  // Condition variable for high-priority tasks
+	lowCV       sync.Cond  // Condition variable for low-priority tasks
 }
 
 var _ PrioritySemaphore = (*PrioritySemaphoreImpl)(nil)
 
 // NewPrioritySemaphore creates a new PrioritySemaphoreImpl with specified capacity
 func NewPrioritySemaphore(capacity int) PrioritySemaphore {
-	mu := &sync.Mutex{}
-	highCV := sync.NewCond(mu)
-	lowCV := sync.NewCond(mu)
-	return &PrioritySemaphoreImpl{
+	sem := &PrioritySemaphoreImpl{
 		capacity:  capacity,
 		highCount: 0,
 		lowCount:  0,
-		lock:      mu,
-		highCV:    highCV,
-		lowCV:     lowCV,
 	}
+	sem.highCV.L = &sem.lock
+	sem.lowCV.L = &sem.lock
+	return sem
 }
 
 func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, n int) error {
