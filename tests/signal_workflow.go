@@ -1598,7 +1598,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 
 func (s *FunctionalSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication() {
 
-	// setting this to 0 to be sure we are terminating old workflow
+	// setting this to 0 to be sure we are terminating the current workflow
 	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	id := "functional-signal-with-start-workflow-id-reuse-test"
