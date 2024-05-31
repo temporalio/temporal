@@ -113,20 +113,20 @@ func resolveDuplicateWorkflowStart(
 	workflowID string,
 ) (UpdateWorkflowActionFunc, error) {
 
-	gracePeriod := shardContext.GetConfig().WorkflowIdReuseMinimalInterval()
+	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval()
 	now := shardContext.GetTimeSource().Now().UTC()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
-	if gracePeriod == 0 || gracePeriod < timeSinceStart {
+	if minimalReuseInterval == 0 || minimalReuseInterval < timeSinceStart {
 		return terminateWorkflowAction(newRunID)
 	}
 
 	// Since there is a grace period, and the current workflow's start time is within that period,
 	// abort the entire request.
 	msg := fmt.Sprintf(
-		"Too many restarts for workflow %s. Time since last start: %d",
+		"Too many restarts for workflow %s. Time since last start: %d ms",
 		workflowID,
-		timeSinceStart.Microseconds(),
+		timeSinceStart.Milliseconds(),
 	)
 	return nil, &serviceerror.ResourceExhausted{
 		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
