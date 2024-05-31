@@ -379,3 +379,85 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeouts() {
 		s.Equal(tc.isValid, isValid)
 	}
 }
+
+func (s *timerQueueTaskExecutorBaseSuite) TestExecuteStateMachineTimerTask_ExecutesAllAvailableTimers() {
+	reg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(reg))
+	s.NoError(callbacks.RegisterTaskSerializers(reg))
+	s.NoError(callbacks.RegisterStateMachine(reg))
+	s.testShardContext.SetStateMachineRegistry(reg)
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	ms := workflow.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 2, MaxTransitionCount: 1},
+		},
+	}
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, ms, make(map[int32]*persistencespb.StateMachineMap), ms)
+	s.NoError(err)
+	ms.EXPECT().GetNextEventID().Return(int64(2))
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}).AnyTimes()
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().AddTasks(gomock.Any())
+
+	_, err = callbacks.MachineCollection(root).Add("callback", callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), nil))
+	s.NoError(err)
+
+	// Track some tasks.
+
+	// Invalid reference, should be dropped.
+	invalidTask := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			MutableStateNamespaceFailoverVersion: 1,
+			MutableStateTransitionCount:          1,
+		},
+		Type: callbacks.TaskTypeBackoff.ID,
+	}
+	validTask := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{Type: callbacks.StateMachineType.ID, Id: "callback"},
+			},
+			MutableStateNamespaceFailoverVersion: 2,
+			MutableStateTransitionCount:          1,
+		},
+		Type: callbacks.TaskTypeBackoff.ID,
+	}
+
+	// Past deadline, should get executed.
+	workflow.TrackStateMachineTimer(ms, s.testShardContext.GetTimeSource().Now().Add(-time.Hour), invalidTask)
+	workflow.TrackStateMachineTimer(ms, s.testShardContext.GetTimeSource().Now().Add(-time.Hour), validTask)
+	workflow.TrackStateMachineTimer(ms, s.testShardContext.GetTimeSource().Now().Add(-time.Minute), validTask)
+	// Future deadline, new task should be scheduled.
+	workflow.TrackStateMachineTimer(ms, s.testShardContext.GetTimeSource().Now().Add(time.Hour), validTask)
+
+	wfCtx := workflow.NewMockContext(s.controller)
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.testShardContext, tests.NamespaceID, we, workflow.LockPriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(ms, nil)
+	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any())
+
+	task := &tasks.StateMachineTimerTask{
+		WorkflowKey:                 tests.WorkflowKey,
+		Version:                     2,
+		MutableStateTransitionCount: 1,
+	}
+
+	numInvocations := 0
+	err = s.timerQueueTaskExecutorBase.executeStateMachineTimerTask(context.Background(), task, func(node *hsm.Node, task hsm.Task) error {
+		numInvocations++
+		return nil
+	})
+	s.NoError(err)
+	s.Equal(2, numInvocations) // two valid tasks within the deadline.
+	s.Equal(1, len(info.StateMachineTimers))
+	s.True(info.StateMachineTimers[0].Scheduled)
+}
