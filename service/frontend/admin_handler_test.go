@@ -43,14 +43,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/metadata"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/metadata"
 
 	commonspb "go.temporal.io/server/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1011,7 +1012,8 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServer
 	clientCluster := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesServer(s.controller)
 	clientCluster.EXPECT().Context().Return(ctx).AnyTimes()
 	serverCluster := historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesClient(s.controller)
-	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(ctx).Return(serverCluster, nil)
+	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(serverCluster, nil)
+	serverCluster.EXPECT().CloseSend().AnyTimes()
 
 	waitGroupStart := sync.WaitGroup{}
 	waitGroupStart.Add(2)
@@ -1056,7 +1058,8 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 	clientCluster := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesServer(s.controller)
 	clientCluster.EXPECT().Context().Return(ctx).AnyTimes()
 	serverCluster := historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesClient(s.controller)
-	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(ctx).Return(serverCluster, nil)
+	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(serverCluster, nil)
+	serverCluster.EXPECT().CloseSend().AnyTimes()
 
 	waitGroupStart := sync.WaitGroup{}
 	waitGroupStart.Add(2)
