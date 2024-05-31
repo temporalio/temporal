@@ -155,7 +155,7 @@ func createWorkflowMutationFunction(
 	}
 	currentMutableState := currentWorkflowLease.GetMutableState()
 	currentExecutionState := currentMutableState.GetExecutionState()
-	currentWorfklowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
+	currentWorkflowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
 	workflowMutationFunc, err := api.ResolveDuplicateWorkflowID(
 		shardContext,
 		currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
@@ -166,7 +166,7 @@ func createWorkflowMutationFunction(
 		currentExecutionState.CreateRequestId,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
-		currentWorfklowStartTime,
+		currentWorkflowStartTime,
 	)
 	return workflowMutationFunc, err
 }

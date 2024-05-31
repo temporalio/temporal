@@ -2347,9 +2347,9 @@ settings for controlling remote activity concurrency for delete namespace workfl
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
-	WorkflowDeduplicationGracePeriod = NewGlobalDurationSetting(
-		"system.workflowDeduplicationGracePeriod",
+	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
+		"system.workflowIdReuseMinimalInterval",
 		1*time.Second,
-		`WorkflowDeduplicationGracePeriod is used for timing how soon users can create new workflow with the same runID.`,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
 )

@@ -73,7 +73,7 @@ func ResolveDuplicateWorkflowID(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			return nil, ErrUseCurrentExecution
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return resolveJustStartedDuplicatedWorfklows(shardContext, currentWorkflowStartTime, newRunID, workflowID)
+			return resolveJustStartedDuplicatedWorkflows(shardContext, currentWorkflowStartTime, newRunID, workflowID)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
 		}
@@ -104,7 +104,7 @@ func ResolveDuplicateWorkflowID(
 	return nil, nil
 }
 
-func resolveJustStartedDuplicatedWorfklows(
+func resolveJustStartedDuplicatedWorkflows(
 	shardContext shard.Context,
 	currentWorkflowStartTime time.Time,
 	newRunID string,
@@ -115,18 +115,24 @@ func resolveJustStartedDuplicatedWorfklows(
 	// if new workflow is starting earlier then that period - we will not terminate old worklfow,
 	// but rather didn't start the new one
 
-	gracePeriod := shardContext.GetConfig().WorkflowDeduplicationGracePeriod()
-	now := shardContext.GetTimeSource().Now()
-	if gracePeriod == 0 || now.After(currentWorkflowStartTime.Add(gracePeriod)) {
+	gracePeriod := shardContext.GetConfig().WorkflowIdReuseMinimalInterval()
+	now := shardContext.GetTimeSource().Now().UTC()
+	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
+
+	if gracePeriod == 0 || gracePeriod < timeSinceStart {
 		return terminateWorkflowAction(newRunID)
 	}
 
 	// there is a grace period, and old worklfow start time is within that period
 	// do not start new worklfow
-	msg := fmt.Sprintf("Too many restarts for worklfow %s with run ID %s", workflowID, newRunID)
+	msg := fmt.Sprintf(
+		"Too many restarts for worklfow %s. Time since last start: %d",
+		workflowID,
+		timeSinceStart.Microseconds(),
+	)
 	return nil, &serviceerror.ResourceExhausted{
 		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
-		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 		Message: msg,
 	}
 }

@@ -376,7 +376,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		return nil, err
 	}
 
-	currentWorfklowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
+	currentWorkflowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
 		workflowID,
@@ -387,7 +387,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.RequestID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
-		currentWorfklowStartTime,
+		currentWorkflowStartTime,
 	)
 
 	switch {

@@ -38,28 +38,28 @@ import (
 	"go.temporal.io/server/service/history/tests"
 )
 
-func DisableTestResolveJustStartedDuplicatedWorfklows(t *testing.T) {
+func TestResolveJustStartedDuplicatedWorkflows(t *testing.T) {
 	timeSource := clock.NewEventTimeSource()
 	now := timeSource.Now()
 
 	testCases := []struct {
 		gracePeriod          time.Duration
-		currentWorfklowStart time.Time
+		currentWorkflowStart time.Time
 		expectError          bool
 	}{
 		{
 			gracePeriod:          time.Duration(0 * time.Second),
-			currentWorfklowStart: now,
+			currentWorkflowStart: now,
 			expectError:          false,
 		},
 		{
 			gracePeriod:          time.Duration(1 * time.Second),
-			currentWorfklowStart: now,
+			currentWorkflowStart: now,
 			expectError:          true,
 		},
 		{
 			gracePeriod:          time.Duration(1 * time.Second),
-			currentWorfklowStart: now.Add(-2 * time.Second),
+			currentWorkflowStart: now.Add(-2 * time.Second),
 			expectError:          false,
 		},
 	}
@@ -73,10 +73,10 @@ func DisableTestResolveJustStartedDuplicatedWorfklows(t *testing.T) {
 	)
 
 	for _, tc := range testCases {
-		config.WorkflowDeduplicationGracePeriod = dynamicconfig.GetDurationPropertyFn(tc.gracePeriod)
+		config.WorkflowIdReuseMinimalInterval = dynamicconfig.GetDurationPropertyFn(tc.gracePeriod)
 
-		_, err := resolveJustStartedDuplicatedWorfklows(
-			mockShard, tc.currentWorfklowStart, "newRunID", "workflowID",
+		_, err := resolveJustStartedDuplicatedWorkflows(
+			mockShard, tc.currentWorkflowStart, "newRunID", "workflowID",
 		)
 
 		if tc.expectError {
