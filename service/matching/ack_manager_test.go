@@ -37,7 +37,7 @@ func TestAckManager_AddingTasksIncreasesBacklogCounter(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(controller, false)
 
 	backlogMgr.taskAckManager.addTask(1)
 	require.Equal(t, backlogMgr.taskAckManager.getBacklogCountHint(), int64(1))
@@ -48,7 +48,7 @@ func TestAckManager_AddingTasksIncreasesBacklogCounter(t *testing.T) {
 func TestAckManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
 	t.Parallel()
 	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(controller, false)
 
 	backlogMgr.taskAckManager.addTask(1)
 
@@ -78,7 +78,7 @@ func BenchmarkAckManager_AddTask(b *testing.B) {
 		// Add 1000 tasks in order and complete them in a random order.
 		// This will cause our ack level to jump as we complete them
 		b.StopTimer()
-		backlogMgr := newBacklogMgr(controller)
+		backlogMgr := newBacklogMgr(controller, false)
 		rand.Shuffle(len(tasks), func(i, j int) {
 			tasks[i], tasks[j] = tasks[j], tasks[i]
 		})
@@ -99,7 +99,7 @@ func BenchmarkAckManager_CompleteTask(b *testing.B) {
 		// Add 1000 tasks in order and complete them in a random order.
 		// This will cause our ack level to jump as we complete them
 		b.StopTimer()
-		backlogMgr := newBacklogMgr(controller)
+		backlogMgr := newBacklogMgr(controller, false)
 		for i := 0; i < len(tasks); i++ {
 			tasks[i] = i
 			backlogMgr.taskAckManager.addTask(int64(i))

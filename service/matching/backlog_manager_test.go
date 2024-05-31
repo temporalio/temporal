@@ -45,7 +45,6 @@ import (
 
 func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	tests := []func(tlm *physicalTaskQueueManagerImpl){
 		func(tlm *physicalTaskQueueManagerImpl) { close(tlm.backlogMgr.taskReader.taskBuffer) },
@@ -73,7 +72,6 @@ func TestDeliverBufferTasks(t *testing.T) {
 
 func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	// TODO: do not create pq manager, directly create backlog manager
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
@@ -88,7 +86,6 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 
 func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	// TODO: do not create pq manager, directly create backlog manager
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
@@ -144,7 +141,6 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 
 func TestTaskWriterShutdown(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 	tlm.Start()
@@ -164,9 +160,7 @@ func TestTaskWriterShutdown(t *testing.T) {
 
 func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(controller, false)
 
 	// Add tasks on the taskWriters channel
 	backlogMgr.taskWriter.appendCh <- &writeTaskRequest{
@@ -189,9 +183,7 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 
 func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(controller, false)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
@@ -208,9 +200,7 @@ func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 
 func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(controller, false)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
 	backlogMgr.taskAckManager.addTask(int64(2))
@@ -238,9 +228,7 @@ func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 // TestAddTasksValidateBacklogCounter uses the "backlogManager methods" to add a task to the backlog.
 func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(controller, false)
 
 	// only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
@@ -254,11 +242,34 @@ func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 	backlogMgr.taskWriter.Stop()
 }
 
+func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
+	controller := gomock.NewController(t)
+	backlogMgr := newBacklogMgr(controller, true)
+
+	// mock error signals
+	logger, ok := backlogMgr.logger.(*log.MockLogger)
+	require.True(t, ok)
+	logger.EXPECT().Error("Persistent store operation failure", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// only start the taskWriter for now!
+	backlogMgr.taskWriter.Start()
+	taskCount := 10
+	for i := 0; i < taskCount; i++ {
+		// Create new tasks and spool them
+		task := &persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}
+		err := backlogMgr.SpoolTask(task)
+		require.Error(t, err)
+	}
+	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(10))
+	backlogMgr.taskWriter.Stop()
+}
+
 func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	backlogMgr := newBacklogMgr(controller)
+	backlogMgr := newBacklogMgr(controller, false)
 
 	// Only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
@@ -276,9 +287,12 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 	backlogMgr.taskWriter.Stop()
 }
 
-func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
+func newBacklogMgr(controller *gomock.Controller, serviceError bool) *backlogManagerImpl {
 	logger := log.NewMockLogger(controller)
 	tm := newTestTaskManager(logger)
+	if serviceError {
+		tm.dbServiceError = true
+	}
 
 	pqMgr := NewMockphysicalTaskQueueManager(controller)
 

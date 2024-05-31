@@ -170,7 +170,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
-	s.taskManager.dbError = false // set to true when you want db to throw errors randomly
+	s.taskManager.dbConditionalFailedError = false // set to true when you want db to throw ConditionalFailedErrors randomly
+	s.taskManager.dbServiceError = false           // set to true when you want db to throw ServiceErrors
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
@@ -239,7 +240,7 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
-	backlogMgr := newBacklogMgr(s.controller)
+	backlogMgr := newBacklogMgr(s.controller, false)
 	m := newAckManager(backlogMgr)
 
 	m.setAckLevel(100)
@@ -304,7 +305,7 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
-	backlogMgr := newBacklogMgr(s.controller)
+	backlogMgr := newBacklogMgr(s.controller, false)
 	m := newAckManager(backlogMgr)
 
 	const t0 = 100
@@ -2920,7 +2921,7 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
-	s.taskManager.dbError = true
+	s.taskManager.dbConditionalFailedError = true
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
 }
 
@@ -2929,7 +2930,7 @@ func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksNoDBErro
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors() {
-	s.taskManager.dbError = true
+	s.taskManager.dbConditionalFailedError = true
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
 }
 
@@ -3003,7 +3004,7 @@ func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
-	s.taskManager.dbError = true
+	s.taskManager.dbConditionalFailedError = true
 	s.resetBacklogCounter(2, 2, 2)
 }
 
@@ -3012,7 +3013,7 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
-	s.taskManager.dbError = true
+	s.taskManager.dbConditionalFailedError = true
 	s.resetBacklogCounter(10, 50, 5)
 }
 
@@ -3044,7 +3045,7 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
-	s.taskManager.dbError = true
+	s.taskManager.dbConditionalFailedError = true
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
 
@@ -3053,7 +3054,7 @@ func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
-	s.taskManager.dbError = true
+	s.taskManager.dbConditionalFailedError = true
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
@@ -3062,7 +3063,7 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
-	s.taskManager.dbError = true
+	s.taskManager.dbConditionalFailedError = true
 	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
 }
 
@@ -3073,7 +3074,7 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksN
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
-	s.taskManager.dbError = true
+	s.taskManager.dbConditionalFailedError = true
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
@@ -3151,9 +3152,10 @@ var _ persistence.TaskManager = (*testTaskManager)(nil) // Asserts that interfac
 
 type testTaskManager struct {
 	sync.Mutex
-	queues  map[dbTaskQueueKey]*testPhysicalTaskQueueManager
-	logger  log.Logger
-	dbError bool
+	queues                   map[dbTaskQueueKey]*testPhysicalTaskQueueManager
+	logger                   log.Logger
+	dbConditionalFailedError bool
+	dbServiceError           bool
 }
 
 type dbTaskQueueKey struct {
@@ -3371,7 +3373,7 @@ func (m *testTaskManager) DeleteTaskQueue(
 
 // generateErrorRandomly states if a taskManager's operation should return an error or not
 func (m *testTaskManager) generateErrorRandomly() bool {
-	if m.dbError {
+	if m.dbConditionalFailedError {
 		threshold := 10
 
 		// Generate a random number between 0 and 99
@@ -3399,6 +3401,10 @@ func (m *testTaskManager) CreateTasks(
 			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
 				taskQueue, taskType, rangeID, rangeID),
 		}
+	}
+
+	if m.dbServiceError {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", errors.New("failure")))
 	}
 
 	dbq, err := ParsePhysicalTaskQueueKey(taskQueue, namespaceId, taskType)
