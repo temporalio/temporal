@@ -68,18 +68,33 @@ func (c *Persistence) Validate() error {
 	// Valid dual visibility combinations (order: primary, secondary):
 	// - visibilityStore (advanced sql),  secondaryVisibilityStore (advanced sql)
 	// - visibilityStore (es),            visibilityStore (es) [via elasticsearch.indices config]
+	// - visibilityStore (es),            secondaryVisibilityStore (es)
 	//
 	// Invalid dual visibility combinations:
 	// - visibilityStore (advanced sql),  secondaryVisibilityStore (es)
-	// - visibilityStore (es),            secondaryVisibilityStore (any)
+	// - visibilityStore (es),            secondaryVisibilityStore (advanced sql)
 
 	if c.VisibilityStore == "" {
 		return errors.New("persistence config: visibilityStore must be specified")
 	}
-	if c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.SecondaryVisibilityStore != "" {
+	if c.SecondaryVisibilityStore != "" {
+		if c.DataStores[c.VisibilityStore].Elasticsearch == nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil {
+			return errors.New(
+				"persistence config: cannot set secondaryVisibilityStore elasticsearch datastore" +
+					"when visibilityStore is setting advanced sql datastore",
+			)
+		}
+		if c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch == nil {
+			return errors.New(
+				"persistence config: cannot set secondaryVisibilityStore advanced sql datastore" +
+					"when visibilityStore is setting elasticsearch datastore",
+			)
+		}
+	}
+	if c.DataStores[c.VisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" && c.SecondaryVisibilityStore != "" {
 		return errors.New(
 			"persistence config: cannot set secondaryVisibilityStore " +
-				"when visibilityStore is setting elasticsearch datastore",
+				"when visibilityStore is setting secondary visibility index",
 		)
 	}
 	if c.DataStores[c.SecondaryVisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" {
@@ -89,8 +104,6 @@ func (c *Persistence) Validate() error {
 			c.SecondaryVisibilityStore,
 		)
 	}
-
-	cntEsConfigs := 0
 	for _, st := range stores {
 		ds, ok := c.DataStores[st]
 		if !ok {
@@ -99,19 +112,24 @@ func (c *Persistence) Validate() error {
 		if err := ds.Validate(); err != nil {
 			return fmt.Errorf("persistence config: datastore %q: %s", st, err.Error())
 		}
-		if ds.Elasticsearch != nil {
-			cntEsConfigs++
+	}
+	// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
+	// `indices.visibility` config key and private fields - this is a restriction due to global ES client
+	if c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil {
+		visibilityStoreEsConfig := reflect.ValueOf(c.DataStores[c.VisibilityStore].Elasticsearch).Elem()
+		secondaryVisibilityStoreEsConfig := reflect.ValueOf(c.DataStores[c.SecondaryVisibilityStore].Elasticsearch).Elem()
+		for i := 0; i < max(visibilityStoreEsConfig.NumField(), secondaryVisibilityStoreEsConfig.NumField()); i++ {
+			if visibilityStoreEsConfig.Type().Field(i).Name == "Indices" || visibilityStoreEsConfig.Type().Field(i).PkgPath != "" {
+				continue
+			}
+			if !reflect.DeepEqual(visibilityStoreEsConfig.Field(i).Interface(), secondaryVisibilityStoreEsConfig.Field(i).Interface()) {
+				return fmt.Errorf(
+					"persistence config: Config mismatch for visibilityStore and secondaryVisibilityStore: %q",
+					visibilityStoreEsConfig.Type().Field(i).Name,
+				)
+			}
 		}
 	}
-
-	if cntEsConfigs > 1 {
-		return fmt.Errorf(
-			"persistence config: cannot have more than one Elasticsearch visibility store config " +
-				"(use `elasticsearch.indices.secondary_visibility` config key if you need to set a " +
-				"secondary Elasticsearch visibility store)",
-		)
-	}
-
 	return nil
 }
 
