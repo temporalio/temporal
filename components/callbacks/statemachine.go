@@ -169,8 +169,9 @@ var TransitionRescheduled = hsm.NewTransition(
 
 // EventAttemptFailed is triggered when an attempt is failed with a retryable error.
 type EventAttemptFailed struct {
-	Time time.Time
-	Err  error
+	Time        time.Time
+	Err         error
+	RetryPolicy backoff.RetryPolicy
 }
 
 var TransitionAttemptFailed = hsm.NewTransition(
@@ -179,8 +180,7 @@ var TransitionAttemptFailed = hsm.NewTransition(
 	func(cb Callback, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		cb.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		// TODO: Make the retry policy initial interval configurable.
-		nextDelay := backoff.NewExponentialRetryPolicy(time.Second).ComputeNextDelay(0, int(cb.PublicInfo.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.PublicInfo.Attempt))
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		cb.PublicInfo.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
 		cb.PublicInfo.LastAttemptFailure = &failurepb.Failure{
