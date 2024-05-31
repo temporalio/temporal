@@ -105,7 +105,8 @@ type (
 		// disabled. This setting only applies to the frontend service.
 		HTTPPort int `yaml:"httpPort"`
 		// HTTPAdditionalForwardedHeaders adds additional headers to the default set
-		// forwarded from HTTP to gRPC.
+		// forwarded from HTTP to gRPC. Any value with a trailing * will match the prefix before
+		// the asterisk (eg. `x-internal-*`)
 		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`
 	}
 

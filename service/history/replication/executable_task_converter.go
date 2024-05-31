@@ -108,6 +108,7 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskCreationTime,
 			replicationTask.GetSyncActivityTaskAttributes(),
 			taskClusterName,
+			replicationTask.GetPriority(),
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		return NewExecutableWorkflowStateTask(
@@ -116,6 +117,7 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskCreationTime,
 			replicationTask.GetSyncWorkflowStateTaskAttributes(),
 			taskClusterName,
+			replicationTask.GetPriority(),
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		return NewExecutableHistoryTask(
@@ -124,6 +126,7 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskCreationTime,
 			replicationTask.GetHistoryTaskAttributes(),
 			taskClusterName,
+			replicationTask.GetPriority(),
 		)
 	default:
 		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
