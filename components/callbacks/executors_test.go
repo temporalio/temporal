@@ -194,7 +194,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				},
 			))
 
-			err = reg.ExecuteActiveTask(
+			err = reg.ExecuteActiveImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -262,19 +262,9 @@ func TestProcessBackoffTask(t *testing.T) {
 		},
 	))
 
-	err = reg.ExecuteActiveTask(
-		context.Background(),
+	err = reg.ExecuteActiveTimerTask(
 		env,
-		hsm.Ref{
-			StateMachineRef: &persistencespb.StateMachineRef{
-				Path: []*persistencespb.StateMachineKey{
-					{
-						Type: callbacks.StateMachineType.ID,
-						Id:   "ID",
-					},
-				},
-			},
-		},
+		node,
 		callbacks.BackoffTask{},
 	)
 	require.NoError(t, err)

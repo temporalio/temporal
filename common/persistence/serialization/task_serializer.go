@@ -894,13 +894,14 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
 
 func (s *TaskSerializer) stateMachineTimerTaskToProto(task *tasks.StateMachineTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:      task.NamespaceID,
-		WorkflowId:       task.WorkflowID,
-		RunId:            task.RunID,
-		TaskId:           task.TaskID,
-		VisibilityTime:   timestamppb.New(task.VisibilityTimestamp),
-		StateMachineInfo: task.Info,
-		TaskType:         task.GetType(),
+		NamespaceId:                 task.NamespaceID,
+		WorkflowId:                  task.WorkflowID,
+		RunId:                       task.RunID,
+		TaskId:                      task.TaskID,
+		VisibilityTime:              timestamppb.New(task.VisibilityTimestamp),
+		Version:                     task.Version,
+		MutableStateTransitionCount: task.MutableStateTransitionCount,
+		TaskType:                    task.GetType(),
 	}
 }
 
@@ -924,16 +925,15 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskFromProto(
 
 func (s *TaskSerializer) stateMachineTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.StateMachineTimerTask {
 	return &tasks.StateMachineTimerTask{
-		StateMachineTask: tasks.StateMachineTask{
-			WorkflowKey: definition.NewWorkflowKey(
-				info.NamespaceId,
-				info.WorkflowId,
-				info.RunId,
-			),
-			VisibilityTimestamp: info.VisibilityTime.AsTime(),
-			TaskID:              info.TaskId,
-			Info:                info.StateMachineInfo,
-		},
+		WorkflowKey: definition.NewWorkflowKey(
+			info.NamespaceId,
+			info.WorkflowId,
+			info.RunId,
+		),
+		VisibilityTimestamp:         info.VisibilityTime.AsTime(),
+		TaskID:                      info.TaskId,
+		Version:                     info.Version,
+		MutableStateTransitionCount: info.MutableStateTransitionCount,
 	}
 }
 

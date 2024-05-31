@@ -68,6 +68,12 @@ type Environment interface {
 	Access(ctx context.Context, ref Ref, accessType AccessType, accessor func(*Node) error) error
 }
 
-// Executor is responsible for executing tasks.
-// Implementations should be registered via [RegisterExecutor] to handle specific task types.
-type Executor[T Task] func(ctx context.Context, env Environment, ref Ref, task T) error
+// ImmediateExecutor is responsible for executing immediate tasks (e.g: transfer, outbound).
+// Implementations should be registered via [RegisterImmediateExecutors] to handle specific task types.
+type ImmediateExecutor[T Task] func(ctx context.Context, env Environment, ref Ref, task T) error
+
+// TimerExecutor is responsible for executing timer tasks.
+// Implementations should be registered via [RegisterTimerExecutors] to handle specific task types.
+// Timers tasks are collapsed into a single task which will execute all timers that have hit their deadline while
+// holding a lock on the workflow.
+type TimerExecutor[T Task] func(env Environment, node *Node, task T) error
