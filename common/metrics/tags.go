@@ -56,6 +56,7 @@ const (
 	serviceName    = "service_name"
 	actionType     = "action_type"
 	workerBuildId  = "worker-build-id"
+	destination    = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
@@ -331,4 +332,12 @@ func ReasonTag(value ReasonString) Tag {
 // ReplicationTaskTypeTag returns a new replication task type tag.
 func ReplicationTaskTypeTag(value enumsspb.ReplicationTaskType) Tag {
 	return &tagImpl{key: replicationTaskType, value: value.String()}
+}
+
+// DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.
+func DestinationTag(value string) Tag {
+	return &tagImpl{
+		key:   destination,
+		value: value,
+	}
 }

@@ -30,6 +30,7 @@ import (
 	"slices"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/consts"
@@ -63,6 +65,7 @@ type ActiveExecutorOptions struct {
 
 	Config                 *Config
 	NamespaceRegistry      namespace.Registry
+	MetricsHandler         metrics.Handler
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
 	EndpointChecker        EndpointChecker
@@ -193,6 +196,8 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 	)
 	defer cancel()
 
+	// Make the call and record metrics.
+	startTime := time.Now()
 	rawResult, callErr := client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
 		Header:      header,
 		CallbackURL: callbackURL,
@@ -201,6 +206,14 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 			commonnexus.CallbackTokenHeader: token,
 		},
 	})
+
+	methodTag := metrics.NexusMethodTag("StartOperation")
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(task.Destination)
+	outcomeTag := metrics.NexusOutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
+	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
+	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
+
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
 		if rawResult.Pending != nil {
@@ -365,7 +378,8 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 			Time: env.Now(),
 			Err:  callErr,
 		},
-		Node: node,
+		Node:        node,
+		RetryPolicy: e.Config.RetryPolicy(),
 	})
 }
 
@@ -467,7 +481,17 @@ func (e activeExecutor) executeCancelationTask(ctx context.Context, env hsm.Envi
 	)
 	defer cancel()
 
+	// Make the call and record metrics.
+	startTime := time.Now()
 	callErr := handle.Cancel(callCtx, nexus.CancelOperationOptions{})
+
+	methodTag := metrics.NexusMethodTag("CancelOperation")
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(task.Destination)
+	statusCodeTag := metrics.NexusOutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
+	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
+	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
+
 	return e.saveCancelationResult(ctx, env, ref, callErr)
 }
 
@@ -517,9 +541,10 @@ func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Envir
 					}
 				}
 				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
-					Time: env.Now(),
-					Err:  callErr,
-					Node: n,
+					Time:        env.Now(),
+					Err:         callErr,
+					Node:        n,
+					RetryPolicy: e.Config.RetryPolicy(),
 				})
 			}
 			// Cancelation request transmitted successfully.
@@ -574,4 +599,39 @@ func checkParentIsRunning(node *hsm.Node) error {
 		}
 	}
 	return nil
+}
+
+func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOperationResult[*nexus.LazyValue], callErr error) string {
+	var unexpectedResponseError *nexus.UnexpectedResponseError
+	var opFailedError *nexus.UnsuccessfulOperationError
+
+	if callErr != nil {
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		if errors.As(callErr, &opFailedError) {
+			return "operation-unsuccessful:" + string(opFailedError.State)
+		} else if errors.As(callErr, &unexpectedResponseError) {
+			return fmt.Sprintf("request-error:%d", unexpectedResponseError.Response.StatusCode)
+		}
+		return "unknown-error"
+	}
+	if result.Pending != nil {
+		return "pending"
+	}
+	return "successful"
+}
+
+func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
+	var unexpectedResponseError *nexus.UnexpectedResponseError
+	if callErr != nil {
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		if errors.As(callErr, &unexpectedResponseError) {
+			return fmt.Sprintf("request-error:%d", unexpectedResponseError.Response.StatusCode)
+		}
+		return "unknown-error"
+	}
+	return "successful"
 }
