@@ -92,7 +92,7 @@ func (i *RateLimitInterceptor) Allow(
 	}
 
 	// we don't want to apply rate limiter if a method is configured with 0 tokens.
-	if token == 0 {
+	if token < 1 {
 		return nil
 	}
 

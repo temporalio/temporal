@@ -25,8 +25,9 @@
 package authorization
 
 import (
-	"go.temporal.io/server/common/api"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
+	"go.temporal.io/server/common/api"
 )
 
 var healthCheckAPI = map[string]struct{}{
