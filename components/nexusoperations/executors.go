@@ -30,6 +30,7 @@ import (
 	"slices"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/consts"
@@ -63,6 +65,7 @@ type ActiveExecutorOptions struct {
 
 	Config                 *Config
 	NamespaceRegistry      namespace.Registry
+	MetricsHandler         metrics.Handler
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
 	EndpointChecker        EndpointChecker
@@ -73,7 +76,7 @@ func RegisterExecutor(
 	options ActiveExecutorOptions,
 ) error {
 	exec := activeExecutor{options}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterImmediateExecutors(
 		registry,
 		TaskTypeInvocation.ID,
 		exec.executeInvocationTask,
@@ -81,7 +84,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterTimerExecutors(
 		registry,
 		TaskTypeBackoff.ID,
 		exec.executeBackoffTask,
@@ -89,7 +92,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterTimerExecutors(
 		registry,
 		TaskTypeTimeout.ID,
 		exec.executeTimeoutTask,
@@ -97,7 +100,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterExecutors(
+	if err := hsm.RegisterImmediateExecutors(
 		registry,
 		TaskTypeCancelation.ID,
 		exec.executeCancelationTask,
@@ -105,7 +108,7 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutors(
+	return hsm.RegisterTimerExecutors(
 		registry,
 		TaskTypeCancelationBackoff.ID,
 		exec.executeCancelationBackoffTask,
@@ -193,6 +196,8 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 	)
 	defer cancel()
 
+	// Make the call and record metrics.
+	startTime := time.Now()
 	rawResult, callErr := client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
 		Header:      header,
 		CallbackURL: callbackURL,
@@ -201,6 +206,14 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 			commonnexus.CallbackTokenHeader: token,
 		},
 	})
+
+	methodTag := metrics.NexusMethodTag("StartOperation")
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(task.Destination)
+	outcomeTag := metrics.NexusOutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
+	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
+	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
+
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
 		if rawResult.Pending != nil {
@@ -365,60 +378,57 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 			Time: env.Now(),
 			Err:  callErr,
 		},
-		Node: node,
+		Node:        node,
+		RetryPolicy: e.Config.RetryPolicy(),
 	})
 }
 
-func (e activeExecutor) executeBackoffTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task BackoffTask) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := checkParentIsRunning(node); err != nil {
-			return err
-		}
-		return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
-			return TransitionRescheduled.Apply(op, EventRescheduled{
-				Node: node,
-			})
+func (e activeExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
+	if err := checkParentIsRunning(node); err != nil {
+		return err
+	}
+	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
+		return TransitionRescheduled.Apply(op, EventRescheduled{
+			Node: node,
 		})
 	})
 }
 
-func (e activeExecutor) executeTimeoutTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task TimeoutTask) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := task.Validate(node); err != nil {
-			return err
+func (e activeExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
+	if err := task.Validate(node); err != nil {
+		return err
+	}
+	if err := checkParentIsRunning(node); err != nil {
+		return err
+	}
+	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
+		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
+		if err != nil {
+			return hsm.TransitionOutput{}, err
 		}
-		if err := checkParentIsRunning(node); err != nil {
-			return err
-		}
-		return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
-			eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
-			if err != nil {
-				return hsm.TransitionOutput{}, err
-			}
-			node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
-				// nolint:revive
-				e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-					NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-						Failure: nexusOperationFailure(
-							op,
-							eventID,
-							&failurepb.Failure{
-								Message: "operation timed out",
-								FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-									TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-										TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-									},
+		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
+			// nolint:revive
+			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
+					Failure: nexusOperationFailure(
+						op,
+						eventID,
+						&failurepb.Failure{
+							Message: "operation timed out",
+							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+									TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 								},
 							},
-						),
-						ScheduledEventId: eventID,
-					},
-				}
-			})
+						},
+					),
+					ScheduledEventId: eventID,
+				},
+			}
+		})
 
-			return TransitionTimedOut.Apply(op, EventTimedOut{
-				Node: node,
-			})
+		return TransitionTimedOut.Apply(op, EventTimedOut{
+			Node: node,
 		})
 	})
 }
@@ -467,7 +477,17 @@ func (e activeExecutor) executeCancelationTask(ctx context.Context, env hsm.Envi
 	)
 	defer cancel()
 
+	// Make the call and record metrics.
+	startTime := time.Now()
 	callErr := handle.Cancel(callCtx, nexus.CancelOperationOptions{})
+
+	methodTag := metrics.NexusMethodTag("CancelOperation")
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(task.Destination)
+	statusCodeTag := metrics.NexusOutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
+	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
+	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
+
 	return e.saveCancelationResult(ctx, env, ref, callErr)
 }
 
@@ -517,9 +537,10 @@ func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Envir
 					}
 				}
 				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
-					Time: env.Now(),
-					Err:  callErr,
-					Node: n,
+					Time:        env.Now(),
+					Err:         callErr,
+					Node:        n,
+					RetryPolicy: e.Config.RetryPolicy(),
 				})
 			}
 			// Cancelation request transmitted successfully.
@@ -533,15 +554,13 @@ func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Envir
 	})
 }
 
-func (e activeExecutor) executeCancelationBackoffTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationBackoffTask) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := checkParentIsRunning(node.Parent); err != nil {
-			return err
-		}
-		return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {
-			return TransitionCancelationRescheduled.Apply(c, EventCancelationRescheduled{
-				Node: node,
-			})
+func (e activeExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
+	if err := checkParentIsRunning(node.Parent); err != nil {
+		return err
+	}
+	return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {
+		return TransitionCancelationRescheduled.Apply(c, EventCancelationRescheduled{
+			Node: node,
 		})
 	})
 }
@@ -574,4 +593,39 @@ func checkParentIsRunning(node *hsm.Node) error {
 		}
 	}
 	return nil
+}
+
+func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOperationResult[*nexus.LazyValue], callErr error) string {
+	var unexpectedResponseError *nexus.UnexpectedResponseError
+	var opFailedError *nexus.UnsuccessfulOperationError
+
+	if callErr != nil {
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		if errors.As(callErr, &opFailedError) {
+			return "operation-unsuccessful:" + string(opFailedError.State)
+		} else if errors.As(callErr, &unexpectedResponseError) {
+			return fmt.Sprintf("request-error:%d", unexpectedResponseError.Response.StatusCode)
+		}
+		return "unknown-error"
+	}
+	if result.Pending != nil {
+		return "pending"
+	}
+	return "successful"
+}
+
+func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
+	var unexpectedResponseError *nexus.UnexpectedResponseError
+	if callErr != nil {
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		if errors.As(callErr, &unexpectedResponseError) {
+			return fmt.Sprintf("request-error:%d", unexpectedResponseError.Response.StatusCode)
+		}
+		return "unknown-error"
+	}
+	return "successful"
 }

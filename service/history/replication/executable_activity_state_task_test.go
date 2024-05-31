@@ -145,6 +145,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -372,6 +373,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		time.Unix(0, rand.Int63()),
 		replicationAttribute1,
 		s.sourceClusterName,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	task1.ExecutableTask = s.executableTask
 
@@ -392,6 +394,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		time.Unix(0, rand.Int63()),
 		replicationAttribute2,
 		s.sourceClusterName,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	task2.ExecutableTask = s.executableTask
 
@@ -444,6 +447,7 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		time.Unix(0, rand.Int63()),
 		replicationAttribute1,
 		s.sourceClusterName,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 
 	replicationAttribute2 := s.generateReplicationAttribute(namespaceId, "wf_2", runId) //
@@ -463,6 +467,7 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		time.Unix(0, rand.Int63()),
 		replicationAttribute2,
 		s.sourceClusterName,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	batchResult, batched := task1.BatchWith(task2)
 	s.False(batched)

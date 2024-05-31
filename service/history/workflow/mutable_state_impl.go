@@ -461,6 +461,9 @@ func NewSanitizedMutableState(
 	for _, childExecutionInfo := range mutableState.pendingChildExecutionInfoIDs {
 		childExecutionInfo.Clock = nil
 	}
+	// Timer tasks are generated locally, do not sync them.
+	mutableState.executionInfo.StateMachineTimers = nil
+
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
 }
@@ -5273,7 +5276,6 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 
-	// TODO(bergundy): Collapse timer tasks.
 	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
 		return err
 	}
