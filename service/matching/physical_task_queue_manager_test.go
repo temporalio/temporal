@@ -315,7 +315,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 		tlm.backlogMgr.taskAckManager.addTask(startTaskID + i)
 	}
 
-	// Manually increasing the backlog counter since it does not get incremented by taskAckManager.addTask
+	// Manually increase the backlog counter since it does not get incremented by taskAckManager.addTask
 	// Only doing this for the purpose of this test
 	tlm.backlogMgr.db.updateApproximateBacklogCount(taskCount)
 

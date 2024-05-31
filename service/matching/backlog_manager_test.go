@@ -93,7 +93,7 @@ func TestBacklogManager_BacklogAge(t *testing.T) {
 
 	require.Equal(t, time.Duration(0), backlogMgr.taskReader.getBacklogHeadCreateTime()) // no tasks have been read
 
-	// adding tasks
+	// add tasks
 	backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
 	backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Second, 2)
 
@@ -116,7 +116,7 @@ func TestBacklogManager_BacklogAge(t *testing.T) {
 	backlogMgr.taskReader.gorogrp.Cancel()
 	backlogMgr.taskReader.gorogrp.Wait()
 
-	// backlog age being reset cause of no tasks in the buffer
+	// backlog age being reset because of no tasks in the buffer
 	require.Equal(t, time.Duration(0), backlogMgr.taskReader.getBacklogHeadCreateTime())
 
 }
