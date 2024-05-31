@@ -73,7 +73,7 @@ func ResolveDuplicateWorkflowID(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			return nil, ErrUseCurrentExecution
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return resolveJustStartedDuplicatedWorkflows(shardContext, currentWorkflowStartTime, newRunID, workflowID)
+			return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, newRunID, workflowID)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
 		}
@@ -104,16 +104,15 @@ func ResolveDuplicateWorkflowID(
 	return nil, nil
 }
 
-func resolveJustStartedDuplicatedWorkflows(
+func resolveDuplicateWorkflowStart(
 	shardContext shard.Context,
 	currentWorkflowStartTime time.Time,
 	newRunID string,
 	workflowID string,
 ) (UpdateWorkflowActionFunc, error) {
-	// we are going to use "grace period"
-	// to prevent multiple calls to start worklfows with the same ID
-	// if new workflow is starting earlier then that period - we will not terminate old worklfow,
-	// but rather didn't start the new one
+	// "Grace period" is used to prevent multiple calls to start workflows with the same ID,
+	// If new workflow is starting earlier then that period - current worklfow will not be terminated.
+	// Instead new worklfow will not start.
 
 	gracePeriod := shardContext.GetConfig().WorkflowIdReuseMinimalInterval()
 	now := shardContext.GetTimeSource().Now().UTC()

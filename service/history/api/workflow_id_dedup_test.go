@@ -31,6 +31,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -38,7 +39,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 )
 
-func TestResolveJustStartedDuplicatedWorkflows(t *testing.T) {
+func TestResolveDuplicateWorkflowStart(t *testing.T) {
 	timeSource := clock.NewEventTimeSource()
 	now := timeSource.Now()
 
@@ -75,12 +76,15 @@ func TestResolveJustStartedDuplicatedWorkflows(t *testing.T) {
 	for _, tc := range testCases {
 		config.WorkflowIdReuseMinimalInterval = dynamicconfig.GetDurationPropertyFn(tc.gracePeriod)
 
-		_, err := resolveJustStartedDuplicatedWorkflows(
+		_, err := resolveDuplicateWorkflowStart(
 			mockShard, tc.currentWorkflowStart, "newRunID", "workflowID",
 		)
 
 		if tc.expectError {
 			assert.Error(t, err)
+			var resourceErr *serviceerror.ResourceExhausted
+			assert.ErrorAs(t, err, &resourceErr)
+
 		} else {
 			assert.NoError(t, err)
 		}
