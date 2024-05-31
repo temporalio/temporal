@@ -170,8 +170,6 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
-	s.taskManager.dbConditionalFailedError = false // set to true when you want db to throw ConditionalFailedErrors randomly
-	s.taskManager.dbServiceError = false           // set to true when you want db to throw ServiceErrors
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
@@ -3179,7 +3177,7 @@ func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
 }
 
 func newTestTaskManager(logger log.Logger) *testTaskManager {
-	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger, dbConditionalFailedError: false, dbServiceError: false}
+	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger}
 }
 
 func (m *testTaskManager) GetName() string {

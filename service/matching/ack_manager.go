@@ -139,17 +139,20 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 	m.backlogCountHint.Dec()
 
 	// Adjust the ack level as far as we can
+	var numberOfAckedTasks int64
 	for {
 		min, acked := m.outstandingTasks.Min()
 		if min == nil || !acked.(bool) {
-			return m.ackLevel
+			break
 		}
 		m.ackLevel = min.(int64)
 		m.outstandingTasks.Remove(min)
-		// decrement backlog as each task gets acked
-		m.backlogMgr.db.updateApproximateBacklogCount(-1)
+		numberOfAckedTasks += 1
 	}
-
+	if numberOfAckedTasks > 0 {
+		m.backlogMgr.db.updateApproximateBacklogCount(-numberOfAckedTasks)
+	}
+	return m.ackLevel
 }
 
 func (m *ackManager) getBacklogCountHint() int64 {

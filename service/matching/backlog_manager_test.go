@@ -225,7 +225,7 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 		responseCh: make(chan<- *writeTaskResponse),
 	}
 
-	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(0))
+	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount())
 
 	backlogMgr.taskWriter.Start()
 	defer backlogMgr.taskWriter.Stop()
@@ -293,7 +293,7 @@ func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 	}
 	err := backlogMgr.SpoolTask(task)
 	require.NoError(t, err)
-	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(1))
+	require.Equal(t, int64(1), backlogMgr.db.getApproximateBacklogCount())
 }
 
 func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
@@ -301,8 +301,7 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 	backlogMgr := newBacklogMgr(controller, true)
 
 	// mock error signals
-	logger, ok := backlogMgr.logger.(*log.MockLogger)
-	require.True(t, ok)
+	logger := backlogMgr.logger.(*log.MockLogger)
 	logger.EXPECT().Error("Persistent store operation failure", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// only start the taskWriter for now!
@@ -318,7 +317,7 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 		err := backlogMgr.SpoolTask(task)
 		require.Error(t, err)
 	}
-	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(10))
+	require.Equal(t, int64(10), backlogMgr.db.getApproximateBacklogCount())
 }
 
 func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
@@ -338,7 +337,7 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 		err := backlogMgr.SpoolTask(task)
 		require.NoError(t, err)
 	}
-	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(10))
+	require.Equal(t, int64(10), backlogMgr.db.getApproximateBacklogCount())
 }
 
 func newBacklogMgr(controller *gomock.Controller, serviceError bool) *backlogManagerImpl {
