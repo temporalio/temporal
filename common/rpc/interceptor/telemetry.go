@@ -39,6 +39,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
@@ -146,13 +147,18 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 			if request.GetWaitNewEvent() {
 				return metrics.FrontendPollWorkflowExecutionHistoryScope
 			}
-		} else if operation == metrics.HistoryGetWorkflowExecutionHistoryScope {
-			request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
-			if request.GetWaitNewEvent() {
+		}
+		return operation
+	} else if strings.HasPrefix(fullName, api.HistoryServicePrefix) {
+		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
+		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
+		// remove this "if" case when that is done.
+		if operation == metrics.HistoryGetWorkflowExecutionHistoryScope {
+			request := req.(*historyservice.GetWorkflowExecutionHistoryRequest)
+			if r := request.GetRequest(); r != nil && r.GetWaitNewEvent() {
 				return metrics.HistoryPollWorkflowExecutionHistoryScope
 			}
 		}
-		return operation
 	}
 	return ti.overrideOperationTag(fullName, operation)
 }
