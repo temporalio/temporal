@@ -29,10 +29,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
