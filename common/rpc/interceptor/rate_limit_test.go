@@ -57,10 +57,6 @@ func (s *rateLimitInterceptorSuite) SetupTest() {
 	s.mockRateLimiter = quotas.NewMockRequestRateLimiter(s.controller)
 }
 
-func (s *rateLimitInterceptorSuite) TearDownTest() {
-	s.controller.Finish()
-}
-
 func (s *rateLimitInterceptorSuite) TestInterceptWithTokenConfig() {
 	methodName := "TEST/METHOD"
 	interceptor := NewRateLimitInterceptor(s.mockRateLimiter, map[string]int{methodName: 0})

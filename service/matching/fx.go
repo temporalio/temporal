@@ -103,7 +103,7 @@ func RateLimitInterceptorProvider(
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{
-			healthpb.Health_Check_FullMethodName: 0,
+			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
 		},
 	)
 }
