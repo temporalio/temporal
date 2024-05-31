@@ -279,8 +279,6 @@ github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
-github.com/temporalio/api-go v1.34.1-0.20240530194730-a93660972bb3 h1:oTIf3zDMNloHUD+P21QtFjGSJgzaNt2ppLTtds9ZtaU=
-github.com/temporalio/api-go v1.34.1-0.20240530194730-a93660972bb3/go.mod h1:mkkFhjdQ+gc/kqMDvTvZgblFPgnpmZHFKwXwe16uzqg=
 github.com/temporalio/ringpop-go v0.0.0-20231122191827-aece62eb7bc7 h1:jPnQGPIgqxAzrPXsEtX/2VG3+h0sot9yns2j70G9qng=
 github.com/temporalio/ringpop-go v0.0.0-20231122191827-aece62eb7bc7/go.mod h1:RE+CHmY+kOZQk47AQaVzwrGmxpflnLgTd6EOK0853j4=
 github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb h1:YzHH/U/dN7vMP+glybzcXRTczTrgfdRisNTzAj7La04=
@@ -337,6 +335,8 @@ go.opentelemetry.io/otel/trace v1.26.0 h1:1ieeAUb4y0TE26jUFrCIXKpTuVK7uJGN9/Z/2L
 go.opentelemetry.io/otel/trace v1.26.0/go.mod h1:4iDxvGDQuUkHve82hJJ8UqrwswHYsZuWCBllGV2U2y0=
 go.opentelemetry.io/proto/otlp v1.2.0 h1:pVeZGk7nXDC9O2hncA6nHldxEjm6LByfA2aN8IOkz94=
 go.opentelemetry.io/proto/otlp v1.2.0/go.mod h1:gGpR8txAl5M03pDhMC79G6SdqNV26naRm/KDsgaHD8A=
+go.temporal.io/api v1.34.1-0.20240531204243-10273725c6ea h1:EbqSMAjepkhgXXgPehZPHkJx5SWBpenC3FJk735ZPFE=
+go.temporal.io/api v1.34.1-0.20240531204243-10273725c6ea/go.mod h1:1Q2owKQyz6Gdn7rbbSdbsC4Tmuk6uGIJp5oRJlUlyFE=
 go.temporal.io/sdk v1.26.1 h1:ggmFBythnuuW3yQRp0VzOTrmbOf+Ddbe00TZl+CQ+6U=
 go.temporal.io/sdk v1.26.1/go.mod h1:ph3K/74cry+JuSV9nJH+Q+Zeir2ddzoX2LjWL/e5yCo=
 go.temporal.io/version v0.3.0 h1:dMrei9l9NyHt8nG6EB8vAwDLLTwx2SvRyucCSumAiig=

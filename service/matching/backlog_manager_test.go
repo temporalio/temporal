@@ -228,11 +228,11 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(0))
 
 	backlogMgr.taskWriter.Start()
+	defer backlogMgr.taskWriter.Stop()
 	// Adding tasks to the buffer will increase the in-memory counter by 1
 	// and this will be written to persistence
 	require.Eventually(t, func() bool { return backlogMgr.db.getApproximateBacklogCount() == int64(1) },
 		time.Second*30, time.Millisecond)
-	backlogMgr.taskWriter.Stop()
 }
 
 func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
@@ -286,6 +286,7 @@ func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 
 	// only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
+	defer backlogMgr.taskWriter.Stop()
 	task := &persistencespb.TaskInfo{
 		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 		CreateTime: timestamp.TimeNowPtrUtc(),
@@ -293,7 +294,6 @@ func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 	err := backlogMgr.SpoolTask(task)
 	require.NoError(t, err)
 	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(1))
-	backlogMgr.taskWriter.Stop()
 }
 
 func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
@@ -301,12 +301,12 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 	backlogMgr := newBacklogMgr(controller, true)
 
 	// mock error signals
-	logger, ok := backlogMgr.logger.(*log.MockLogger)
-	require.True(t, ok)
+	logger := backlogMgr.logger.(*log.MockLogger)
 	logger.EXPECT().Error("Persistent store operation failure", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
+	defer backlogMgr.taskWriter.Stop()
 	taskCount := 10
 	for i := 0; i < taskCount; i++ {
 		// Create new tasks and spool them
@@ -318,7 +318,6 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 		require.Error(t, err)
 	}
 	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(10))
-	backlogMgr.taskWriter.Stop()
 }
 
 func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
@@ -327,6 +326,7 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 
 	// Only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
+	defer backlogMgr.taskWriter.Stop()
 	taskCount := 10
 	for i := 0; i < taskCount; i++ {
 		// Create new tasks and spool them
@@ -338,7 +338,6 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(10))
-	backlogMgr.taskWriter.Stop()
 }
 
 func newBacklogMgr(controller *gomock.Controller, serviceError bool) *backlogManagerImpl {
