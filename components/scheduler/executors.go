@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"context"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -13,7 +12,7 @@ func RegisterExecutor(
 ) error {
 	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
 	standbyExec := standbyExecutor{options: standbyExecutorOptions}
-	return hsm.RegisterExecutors(
+	return hsm.RegisterTimerExecutors(
 		registry,
 		TaskTypeSchedule.ID,
 		activeExec.executeScheduleTask,
@@ -32,17 +31,15 @@ type (
 )
 
 func (e activeExecutor) executeScheduleTask(
-	ctx context.Context,
 	env hsm.Environment,
-	ref hsm.Ref,
+	node *hsm.Node,
 	task ScheduleTask,
 ) error {
 	// TODO(Tianyu): Perform scheduler logic before scheduling self again
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		return hsm.MachineTransition(node, func(scheduler Scheduler) (hsm.TransitionOutput, error) {
-			return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
-		})
-	})}
+	return hsm.MachineTransition(node, func(scheduler Scheduler) (hsm.TransitionOutput, error) {
+		return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
+	})
+}
 
 type (
 	StandbyExecutorOptions struct{}
@@ -53,9 +50,8 @@ type (
 )
 
 func (e standbyExecutor) executeScheduleTask(
-	ctx context.Context,
 	env hsm.Environment,
-	ref hsm.Ref,
+	node *hsm.Node,
 	task ScheduleTask,
 ) error {
 	panic("unimplemented")
