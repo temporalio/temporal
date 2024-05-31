@@ -135,7 +135,7 @@ require (
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
-	golang.org/x/tools v0.20.0 // indirect
+	golang.org/x/tools v0.21.0 // indirect
 	google.golang.org/genproto v0.0.0-20240415180920-8c6c420018be // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
@@ -152,4 +152,4 @@ require (
 	modernc.org/token v1.1.0 // indirect
 )
 
-replace go.temporal.io/api => github.com/temporalio/api-go v1.34.1-0.20240528230324-f948449f09fc
+replace go.temporal.io/api => github.com/temporalio/api-go v1.34.1-0.20240530194730-a93660972bb3

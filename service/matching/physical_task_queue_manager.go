@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/api/workflowservice/v1"
 	"sync/atomic"
 	"time"
 
