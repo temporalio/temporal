@@ -103,7 +103,7 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 			return taskQueueState{rangeID: 1}, leaseErr
 		}))
 	tqm.Start()
-	defer tqm.Stop()
+	defer tqm.Stop(unloadCauseUnspecified)
 
 	// TQM started succesfully with an ID block of size 1. Perform one send
 	// without a poller to consume the one task ID from the reserved block.
@@ -137,7 +137,7 @@ func TestReaderSignaling(t *testing.T) {
 	tqm.backlogMgr.taskReader.notifyC = readerNotifications
 
 	tqm.Start()
-	defer tqm.Stop()
+	defer tqm.Stop(unloadCauseUnspecified)
 
 	// shut down the taskReader so it doesn't steal notifications from us
 	tqm.backlogMgr.taskReader.gorogrp.Cancel()
@@ -326,7 +326,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
-	tlm.Stop()
+	tlm.Stop(unloadCauseUnspecified)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 
 	// Active adding task
@@ -336,7 +336,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.backlogMgr.taskReader.Signal()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
-	tlm.Stop()
+	tlm.Stop(unloadCauseUnspecified)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 }
 
@@ -437,7 +437,7 @@ func TestTQMInterruptsPollOnClose(t *testing.T) {
 	defer cancel()
 	_, pollCh := runOneShotPoller(pollCtx, tqm)
 
-	tqm.Stop() // should interrupt poller
+	tqm.Stop(unloadCauseUnspecified) // should interrupt poller
 
 	<-pollCh
 	require.Less(t, time.Since(pollStart), 4*time.Second)
