@@ -981,6 +981,9 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 }
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
+	// reset reuse minimal interval to allow workflow termination
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+
 	runMultiOp := func(
 		tv *testvars.TestVars,
 		request *workflowservice.ExecuteMultiOperationRequest,
