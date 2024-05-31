@@ -3169,7 +3169,7 @@ func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
 }
 
 func newTestTaskManager(logger log.Logger) *testTaskManager {
-	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger}
+	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger, dbConditionalFailedError: false, dbServiceError: false}
 }
 
 func (m *testTaskManager) GetName() string {
