@@ -25,7 +25,6 @@
 package shard
 
 import (
-	"context"
 	"math"
 	"math/rand"
 	"testing"
@@ -33,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -87,35 +87,6 @@ func (s *contextUtilSuite) TestReplicationReaderIDConversion_Int32Max() {
 	)
 	s.Equal(expectedClusterID, actualClusterID)
 	s.Equal(expectedShardID, actualShardID)
-}
-
-func (s *contextUtilSuite) TestAssertShardOwnership_FirstTime() {
-	ctx := context.Background()
-	shardOwnershipAsserted := false
-
-	mockContext := s.newMockContext()
-	mockContext.EXPECT().AssertOwnership(ctx).Return(nil)
-
-	err := AssertShardOwnership(ctx, mockContext, &shardOwnershipAsserted)
-	s.NoError(err)
-}
-
-func (s *contextUtilSuite) TestAssertShardOwnership_Dedup() {
-	ctx := context.Background()
-	shardOwnershipAsserted := true
-
-	err := AssertShardOwnership(ctx, s.newMockContext(), &shardOwnershipAsserted)
-	s.NoError(err)
-}
-
-func (s *contextUtilSuite) TestAssertShardOwnership_NilPtr() {
-	ctx := context.Background()
-
-	mockContext := s.newMockContext()
-	mockContext.EXPECT().AssertOwnership(ctx).Return(nil)
-
-	err := AssertShardOwnership(ctx, mockContext, nil)
-	s.NoError(err)
 }
 
 func (s *contextUtilSuite) newMockContext() *MockContext {
