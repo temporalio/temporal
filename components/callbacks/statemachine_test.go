@@ -33,6 +33,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/callbacks"
 )
 
@@ -54,7 +55,11 @@ func TestValidTransitions(t *testing.T) {
 		},
 	}
 	// AttemptFailed
-	out, err := callbacks.TransitionAttemptFailed.Apply(callback, callbacks.EventAttemptFailed{Time: currentTime, Err: fmt.Errorf("test")})
+	out, err := callbacks.TransitionAttemptFailed.Apply(callback, callbacks.EventAttemptFailed{
+		Time:        currentTime,
+		Err:         fmt.Errorf("test"), // nolint:goerr113
+		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+	})
 	require.NoError(t, err)
 
 	// Assert info object is updated

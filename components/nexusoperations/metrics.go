@@ -20,29 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nexus
+package nexusoperations
 
-import (
-	"go.temporal.io/api/nexus/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
+import "go.temporal.io/server/common/metrics"
 
-	persistencepb "go.temporal.io/server/api/persistence/v1"
-	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+var OutboundRequestCounter = metrics.NewCounterDef(
+	"nexus_outbound_requests",
+	metrics.WithDescription("The number of Nexus outbound requests made by the history service."),
 )
-
-func EndpointPersistedEntryToExternalAPI(entry *persistencepb.NexusEndpointEntry) *nexus.Endpoint {
-	var lastModifiedTime *timestamppb.Timestamp
-	// Only set last modified if there were modifications as stated in the UI contract.
-	if entry.Version > 1 {
-		lastModifiedTime = timestamppb.New(hlc.UTC(entry.Endpoint.Clock))
-	}
-
-	return &nexus.Endpoint{
-		Version:          entry.Version,
-		Id:               entry.Id,
-		Spec:             entry.Endpoint.Spec,
-		CreatedTime:      entry.Endpoint.CreatedTime,
-		LastModifiedTime: lastModifiedTime,
-		UrlPrefix:        "/" + RouteDispatchNexusTaskByEndpoint.Path(entry.Id),
-	}
-}
+var OutboundRequestLatencyHistogram = metrics.NewTimerDef(
+	"nexus_outbound_latency",
+	metrics.WithDescription("Latency histogram of outbound Nexus requests made by the history service."),
+)

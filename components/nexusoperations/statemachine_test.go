@@ -32,6 +32,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -159,7 +160,8 @@ func TestRegenerateTasks(t *testing.T) {
 							Time: time.Now(),
 							Err:  fmt.Errorf("test"), // nolint:goerr113
 						},
-						Node: node,
+						Node:        node,
+						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))
 			}
@@ -184,6 +186,7 @@ func TestRetry(t *testing.T) {
 				Time: time.Now(),
 				Err:  fmt.Errorf("test"), // nolint:goerr113
 			},
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	}))
 	oap := node.Outputs()
@@ -342,6 +345,7 @@ func TestCompleteExternally(t *testing.T) {
 							Time: time.Now(),
 							Err:  fmt.Errorf("test"), // nolint:goerr113
 						},
+						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))
 				return node
@@ -499,9 +503,10 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// AttemptFailed
 	out, err := nexusoperations.TransitionCancelationAttemptFailed.Apply(cancelation, nexusoperations.EventCancelationAttemptFailed{
-		Time: currentTime,
-		Err:  fmt.Errorf("test"),
-		Node: node,
+		Time:        currentTime,
+		Err:         fmt.Errorf("test"),
+		Node:        node,
+		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 	})
 	require.NoError(t, err)
 

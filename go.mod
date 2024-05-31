@@ -32,7 +32,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/temporalio/ringpop-go v0.0.0-20231122191827-aece62eb7bc7
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
-	github.com/temporalio/tchannel-go v1.22.1-0.20231116015023-bd4fb7678499
+	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
 	github.com/temporalio/tctl-kit v0.0.0-20230328153839-577f95d16fa0
 	github.com/uber-go/tally/v4 v4.1.17-0.20240412215630-22fe011f5ff0
 	github.com/urfave/cli v1.22.14
@@ -45,7 +45,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.26.0
 	go.opentelemetry.io/otel/sdk v1.26.0
 	go.opentelemetry.io/otel/sdk/metric v1.26.0
-	go.temporal.io/api v1.34.0
+	go.temporal.io/api v1.34.1-0.20240530164610-8ef3250b3c6c
 	go.temporal.io/sdk v1.26.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0
@@ -137,8 +137,8 @@ require (
 	golang.org/x/text v0.15.0 // indirect
 	golang.org/x/tools v0.20.0 // indirect
 	google.golang.org/genproto v0.0.0-20240415180920-8c6c420018be // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240521202816-d264139d666e
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240521202816-d264139d666e // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
 	google.golang.org/protobuf v1.34.1
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect

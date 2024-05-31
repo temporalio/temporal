@@ -34,10 +34,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -124,7 +126,7 @@ func (s *CommonSuite) TestListOrdering() {
 		PageSize:              int32(numEndpoints / 2),
 	})
 	s.NoError(err)
-	s.Len(matchingResp1.Endpoints, numEndpoints/2)
+	s.Len(matchingResp1.Entries, numEndpoints/2)
 	s.NotNil(matchingResp1.NextPageToken)
 	matchingResp2, err := matchingClient.ListNexusEndpoints(NewContext(), &matchingservice.ListNexusEndpointsRequest{
 		LastKnownTableVersion: tableVersion,
@@ -132,7 +134,7 @@ func (s *CommonSuite) TestListOrdering() {
 		NextPageToken:         matchingResp1.NextPageToken,
 	})
 	s.NoError(err)
-	s.Len(matchingResp2.Endpoints, numEndpoints/2)
+	s.Len(matchingResp2.Entries, numEndpoints/2)
 
 	// list from operator level
 	operatorResp1, err := s.operatorClient.ListNexusEndpoints(NewContext(), &operatorservice.ListNexusEndpointsRequest{
@@ -150,8 +152,8 @@ func (s *CommonSuite) TestListOrdering() {
 
 	// assert list orders match
 	for i := 0; i < numEndpoints/2; i++ {
-		s.Equal(persistenceResp1.Entries[i].Id, matchingResp1.Endpoints[i].Id)
-		s.Equal(persistenceResp2.Entries[i].Id, matchingResp2.Endpoints[i].Id)
+		s.Equal(persistenceResp1.Entries[i].Id, matchingResp1.Entries[i].Id)
+		s.Equal(persistenceResp2.Entries[i].Id, matchingResp2.Entries[i].Id)
 
 		s.Equal(persistenceResp1.Entries[i].Id, operatorResp1.Endpoints[i].Id)
 		s.Equal(persistenceResp2.Entries[i].Id, operatorResp2.Endpoints[i].Id)
@@ -163,24 +165,24 @@ type MatchingSuite struct {
 }
 
 func (s *MatchingSuite) TestCreate() {
-	endpoint := s.createNexusEndpoint(s.T().Name())
-	s.Equal(int64(1), endpoint.Version)
-	s.Nil(endpoint.LastModifiedTime)
-	s.NotNil(endpoint.CreatedTime)
-	s.NotEmpty(endpoint.Id)
-	s.Equal(endpoint.Spec.Name, s.T().Name())
-	s.Equal(endpoint.Spec.Target.GetWorker().Namespace, s.namespace)
-	s.Equal("/"+commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint.Id), endpoint.UrlPrefix)
+	entry := s.createNexusEndpoint(s.T().Name())
+	s.Equal(int64(1), entry.Version)
+	s.NotNil(entry.Endpoint.Clock)
+	s.NotNil(entry.Endpoint.CreatedTime)
+	s.NotEmpty(entry.Id)
+	s.Equal(entry.Endpoint.Spec.Name, s.T().Name())
+	s.Equal(entry.Endpoint.Spec.Target.GetWorker().NamespaceId, s.getNamespaceID(s.namespace))
 
 	_, err := s.testCluster.GetMatchingClient().CreateNexusEndpoint(NewContext(), &matchingservice.CreateNexusEndpointRequest{
-		Spec: &nexus.EndpointSpec{
+		Spec: &persistencespb.NexusEndpointSpec{
 			Name: s.T().Name(),
-			Target: &nexus.EndpointTarget{
-				Variant: &nexus.EndpointTarget_Worker_{
-					Worker: &nexus.EndpointTarget_Worker{
-						Namespace: s.namespace,
-						TaskQueue: "dont-care",
-					}},
+			Target: &persistencespb.NexusEndpointTarget{
+				Variant: &persistencespb.NexusEndpointTarget_Worker_{
+					Worker: &persistencespb.NexusEndpointTarget_Worker{
+						NamespaceId: s.getNamespaceID(s.namespace),
+						TaskQueue:   "dont-care",
+					},
+				},
 			},
 		},
 	})
@@ -201,13 +203,13 @@ func (s *MatchingSuite) TestUpdate() {
 			request: &matchingservice.UpdateNexusEndpointRequest{
 				Version: 1,
 				Id:      endpoint.Id,
-				Spec: &nexus.EndpointSpec{
+				Spec: &persistencespb.NexusEndpointSpec{
 					Name: "updated name",
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.namespace,
-								TaskQueue: s.defaultTaskQueue().Name,
+					Target: &persistencespb.NexusEndpointTarget{
+						Variant: &persistencespb.NexusEndpointTarget_Worker_{
+							Worker: &persistencespb.NexusEndpointTarget_Worker{
+								NamespaceId: s.getNamespaceID(s.namespace),
+								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
 					},
@@ -215,11 +217,10 @@ func (s *MatchingSuite) TestUpdate() {
 			},
 			assertion: func(resp *matchingservice.UpdateNexusEndpointResponse, err error) {
 				s.NoError(err)
-				s.NotNil(resp.Endpoint)
-				s.Equal("/"+commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint.Id), endpoint.UrlPrefix)
-				s.Equal(int64(2), resp.Endpoint.Version)
-				s.Equal("updated name", resp.Endpoint.Spec.Name)
-				s.NotNil(resp.Endpoint.LastModifiedTime)
+				s.NotNil(resp.Entry)
+				s.Equal(int64(2), resp.Entry.Version)
+				s.Equal("updated name", resp.Entry.Endpoint.Spec.Name)
+				s.NotNil(resp.Entry.Endpoint.Clock)
 			},
 		},
 		{
@@ -227,13 +228,13 @@ func (s *MatchingSuite) TestUpdate() {
 			request: &matchingservice.UpdateNexusEndpointRequest{
 				Version: 1,
 				Id:      "not-found",
-				Spec: &nexus.EndpointSpec{
+				Spec: &persistencespb.NexusEndpointSpec{
 					Name: "updated name",
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.namespace,
-								TaskQueue: s.defaultTaskQueue().Name,
+					Target: &persistencespb.NexusEndpointTarget{
+						Variant: &persistencespb.NexusEndpointTarget_Worker_{
+							Worker: &persistencespb.NexusEndpointTarget_Worker{
+								NamespaceId: s.getNamespaceID(s.namespace),
+								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
 					},
@@ -249,13 +250,13 @@ func (s *MatchingSuite) TestUpdate() {
 			request: &matchingservice.UpdateNexusEndpointRequest{
 				Version: 1,
 				Id:      endpoint.Id,
-				Spec: &nexus.EndpointSpec{
+				Spec: &persistencespb.NexusEndpointSpec{
 					Name: "updated name",
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.namespace,
-								TaskQueue: s.defaultTaskQueue().Name,
+					Target: &persistencespb.NexusEndpointTarget{
+						Variant: &persistencespb.NexusEndpointTarget_Worker_{
+							Worker: &persistencespb.NexusEndpointTarget_Worker{
+								NamespaceId: s.getNamespaceID(s.namespace),
+								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
 					},
@@ -333,7 +334,7 @@ func (s *MatchingSuite) TestList() {
 	s.NoError(err)
 	s.NotNil(resp)
 	tableVersion := resp.TableVersion
-	endpointsOrdered := resp.Endpoints
+	endpointsOrdered := resp.Entries
 	nextPageToken := []byte(endpointsOrdered[2].Id)
 
 	type testcase struct {
@@ -354,7 +355,7 @@ func (s *MatchingSuite) TestList() {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
 				s.Equal([]byte(endpointsOrdered[2].Id), resp.NextPageToken)
-				s.ProtoElementsMatch(resp.Endpoints, endpointsOrdered[0:2])
+				s.ProtoElementsMatch(resp.Entries, endpointsOrdered[0:2])
 			},
 		},
 		{
@@ -368,7 +369,7 @@ func (s *MatchingSuite) TestList() {
 			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
-				s.ProtoElementsMatch(resp.Endpoints, endpointsOrdered[0:3])
+				s.ProtoElementsMatch(resp.Entries, endpointsOrdered[0:3])
 			},
 		},
 		{
@@ -408,7 +409,7 @@ func (s *MatchingSuite) TestList() {
 			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
-				s.ProtoEqual(resp.Endpoints[0], endpointsOrdered[2])
+				s.ProtoEqual(resp.Entries[0], endpointsOrdered[2])
 			},
 		},
 		{
@@ -436,7 +437,7 @@ func (s *MatchingSuite) TestList() {
 				s.NoError(err)
 				s.Equal(tableVersion+1, resp.TableVersion)
 				s.NotNil(resp.NextPageToken)
-				s.Len(resp.Endpoints, 3)
+				s.Len(resp.Entries, 3)
 			},
 		},
 	}
@@ -726,7 +727,7 @@ func (s *OperatorSuite) TestCreate() {
 			},
 		},
 		{
-			name: "invalid: description too large",
+			name: "invalid: summary too large",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
 					Name: s.randomizeStr(s.T().Name()),
@@ -738,14 +739,41 @@ func (s *OperatorSuite) TestCreate() {
 							},
 						},
 					},
-					Description: &common.Payload{
-						Data: make([]byte, 4100),
+					Metadata: &sdk.UserMetadata{
+						Summary: &common.Payload{
+							Data: make([]byte, 401),
+						},
 					},
 				},
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "description length exceeds limit of 4096")
+				s.ErrorContains(err, "summary size exceeds limit of 400")
+			},
+		},
+		{
+			name: "invalid: details too large",
+			request: &operatorservice.CreateNexusEndpointRequest{
+				Spec: &nexus.EndpointSpec{
+					Name: s.randomizeStr(s.T().Name()),
+					Target: &nexus.EndpointTarget{
+						Variant: &nexus.EndpointTarget_Worker_{
+							Worker: &nexus.EndpointTarget_Worker{
+								Namespace: s.namespace,
+								TaskQueue: s.defaultTaskQueue().Name,
+							},
+						},
+					},
+					Metadata: &sdk.UserMetadata{
+						Details: &common.Payload{
+							Data: make([]byte, 20001),
+						},
+					},
+				},
+			},
+			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+				s.ErrorContains(err, "details size exceeds limit of 20000")
 			},
 		},
 	}
@@ -786,7 +814,6 @@ func (s *OperatorSuite) TestUpdate() {
 			assertion: func(resp *operatorservice.UpdateNexusEndpointResponse, err error) {
 				s.NoError(err)
 				s.NotNil(resp.Endpoint)
-				s.Equal("/"+commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint.Id), endpoint.UrlPrefix)
 				s.Equal(int64(2), resp.Endpoint.Version)
 				s.Equal("updated name", resp.Endpoint.Spec.Name)
 				s.NotNil(resp.Endpoint.LastModifiedTime)
@@ -888,7 +915,7 @@ func (s *OperatorSuite) TestList() {
 	// initialize some endpoints
 	s.createNexusEndpoint("operator-list-test-service0")
 	s.createNexusEndpoint("operator-list-test-service1")
-	serviceToFilter := s.createNexusEndpoint("operator-list-test-service2")
+	entryToFilter := s.createNexusEndpoint("operator-list-test-service2")
 
 	// get ordered endpoints for the course of the tests
 	resp, err := s.operatorClient.ListNexusEndpoints(NewContext(), &operatorservice.ListNexusEndpointsRequest{})
@@ -943,13 +970,13 @@ func (s *OperatorSuite) TestList() {
 			request: &operatorservice.ListNexusEndpointsRequest{
 				NextPageToken: nil,
 				PageSize:      2,
-				Name:          serviceToFilter.Spec.Name,
+				Name:          entryToFilter.Endpoint.Spec.Name,
 			},
 			assertion: func(resp *operatorservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Nil(resp.NextPageToken)
 				s.Len(resp.Endpoints, 1)
-				s.ProtoEqual(resp.Endpoints[0], serviceToFilter)
+				s.Equal(resp.Endpoints[0].Spec.Name, entryToFilter.Endpoint.Spec.Name)
 			},
 		},
 		{
@@ -1002,7 +1029,12 @@ func (s *OperatorSuite) TestGet() {
 			},
 			assertion: func(response *operatorservice.GetNexusEndpointResponse, err error) {
 				s.NoError(err)
-				s.ProtoEqual(endpoint, response.Endpoint)
+				s.Equal(endpoint.Id, response.Endpoint.Id)
+				s.Equal(endpoint.Version, response.Endpoint.Version)
+				s.Equal(endpoint.Endpoint.CreatedTime, response.Endpoint.CreatedTime)
+				s.Equal(endpoint.Endpoint.Spec.Name, response.Endpoint.Spec.Name)
+				s.Equal(endpoint.Endpoint.Spec.Target.GetWorker().NamespaceId, s.getNamespaceID(response.Endpoint.Spec.Target.GetWorker().Namespace))
+				s.Equal(endpoint.Endpoint.Spec.Target.GetWorker().TaskQueue, response.Endpoint.Spec.Target.GetWorker().TaskQueue)
 			},
 		},
 		{
@@ -1037,17 +1069,17 @@ func (s *NexusEndpointFunctionalSuite) defaultTaskQueue() *taskqueuepb.TaskQueue
 	return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 }
 
-func (s *NexusEndpointFunctionalSuite) createNexusEndpoint(name string) *nexus.Endpoint {
+func (s *NexusEndpointFunctionalSuite) createNexusEndpoint(name string) *persistencespb.NexusEndpointEntry {
 	resp, err := s.testCluster.GetMatchingClient().CreateNexusEndpoint(
 		NewContext(),
 		&matchingservice.CreateNexusEndpointRequest{
-			Spec: &nexus.EndpointSpec{
+			Spec: &persistencespb.NexusEndpointSpec{
 				Name: name,
-				Target: &nexus.EndpointTarget{
-					Variant: &nexus.EndpointTarget_Worker_{
-						Worker: &nexus.EndpointTarget_Worker{
-							Namespace: s.namespace,
-							TaskQueue: s.defaultTaskQueue().Name,
+				Target: &persistencespb.NexusEndpointTarget{
+					Variant: &persistencespb.NexusEndpointTarget_Worker_{
+						Worker: &persistencespb.NexusEndpointTarget_Worker{
+							NamespaceId: s.getNamespaceID(s.namespace),
+							TaskQueue:   s.defaultTaskQueue().Name,
 						},
 					},
 				},
@@ -1055,6 +1087,6 @@ func (s *NexusEndpointFunctionalSuite) createNexusEndpoint(name string) *nexus.E
 		})
 
 	s.NoError(err)
-	s.NotNil(resp.Endpoint)
-	return resp.Endpoint
+	s.NotNil(resp.Entry)
+	return resp.Entry
 }

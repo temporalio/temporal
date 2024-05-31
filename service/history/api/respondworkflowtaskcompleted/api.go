@@ -429,26 +429,26 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			wtFailedShouldCreateNewTask ||
 			bufferedEventShouldCreateNewTask ||
 			activityNotStartedCancelled {
+
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 
+		} else if updateRegistry.HasOutgoingMessages(true) {
 			// There shouldn't be any sent updates in the registry because
 			// all sent but not processed updates were rejected by server.
 			// Therefore, it doesn't matter if to includeAlreadySent or not.
-		} else if updateRegistry.HasOutgoingMessages(true) {
-			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
-				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
-			} else {
-				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-			}
+
+			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 		}
 	}
 
 	bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
-	// TODO (alex-update): Need to support case when ReturnNewWorkflowTask=false and WT.Type=Speculative.
-	// In this case WT needs to be added directly to matching.
-	// Current implementation will create normal WT.
+	// TODO (alex-update): All current SDKs always set ReturnNewWorkflowTask to true
+	//  which means that server always bypass task generation if WFT didn't fail.
+	//  ReturnNewWorkflowTask flag needs to be removed.
+
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && !bypassTaskGeneration {
-		// If task generation can't be bypassed workflow task must be of Normal type because Speculative workflow task always skip task generation.
+		// If task generation can't be bypassed (i.e. WFT has failed),
+		// WFT must be created as Normal because speculative WFT by nature skips task generation.
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 	}
 
@@ -656,7 +656,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// SDK needs to know where to roll back its history event pointer, i.e. after what event all other events needs to be dropped.
 	// SDK uses WorkflowTaskStartedEventID to do that.
 	if completedEvent == nil {
-		resp.ResetHistoryEventId = ms.GetExecutionInfo().LastWorkflowTaskStartedEventId
+		resp.ResetHistoryEventId = ms.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId
 	}
 
 	for _, mutation := range responseMutations {

@@ -798,22 +798,22 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 	startTime := timestamppb.New(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	info := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId:                    namespaceID.String(),
-		WorkflowId:                     we.GetWorkflowId(),
-		TaskQueue:                      tl,
-		WorkflowTypeName:               "wType",
-		WorkflowRunTimeout:             timestamp.DurationFromSeconds(200),
-		DefaultWorkflowTaskTimeout:     timestamp.DurationFromSeconds(100),
-		LastWorkflowTaskStartedEventId: int64(99),
-		LastUpdateTime:                 timestamp.TimeNowPtrUtc(),
-		StartTime:                      startTime,
-		ExecutionTime:                  startTime,
-		WorkflowTaskVersion:            failoverVersion,
-		WorkflowTaskScheduledEventId:   101,
-		WorkflowTaskStartedEventId:     102,
-		WorkflowTaskTimeout:            timestamp.DurationFromSeconds(100),
-		WorkflowTaskAttempt:            1,
-		WorkflowTaskType:               enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		NamespaceId:                             namespaceID.String(),
+		WorkflowId:                              we.GetWorkflowId(),
+		TaskQueue:                               tl,
+		WorkflowTypeName:                        "wType",
+		WorkflowRunTimeout:                      timestamp.DurationFromSeconds(200),
+		DefaultWorkflowTaskTimeout:              timestamp.DurationFromSeconds(100),
+		LastCompletedWorkflowTaskStartedEventId: int64(99),
+		LastUpdateTime:                          timestamp.TimeNowPtrUtc(),
+		StartTime:                               startTime,
+		ExecutionTime:                           startTime,
+		WorkflowTaskVersion:                     failoverVersion,
+		WorkflowTaskScheduledEventId:            101,
+		WorkflowTaskStartedEventId:              102,
+		WorkflowTaskTimeout:                     timestamp.DurationFromSeconds(100),
+		WorkflowTaskAttempt:                     1,
+		WorkflowTaskType:                        enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		VersionHistories: &historyspb.VersionHistories{
 			Histories: []*historyspb.VersionHistory{
 				{
@@ -1199,6 +1199,23 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 	}
 }
 
+func (s *mutableStateSuite) TestRetryWorkflowTask_WithNextRetryDelay() {
+	expectedDelayDuration := time.Minute
+	s.mutableState.executionInfo.HasRetryPolicy = true
+	applicationFailure := &failurepb.Failure{
+		Message: "application failure with customized next retry delay",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:           "application-failure-type",
+			NonRetryable:   false,
+			NextRetryDelay: durationpb.New(expectedDelayDuration),
+		}},
+	}
+
+	duration, retryState := s.mutableState.GetRetryBackoffDuration(applicationFailure)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+	s.Equal(duration, expectedDelayDuration)
+}
 func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 

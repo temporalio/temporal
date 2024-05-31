@@ -167,6 +167,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -324,6 +325,38 @@ func (s *executableHistoryTaskSuite) TestMarkPoisonPill() {
 	}).Return(nil)
 
 	err := s.task.MarkPoisonPill()
+	s.NoError(err)
+}
+
+func (s *executableHistoryTaskSuite) TestMarkPoisonPill_MaxAttempt_Reached() {
+	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
+	events := s.events
+
+	shardID := rand.Int31()
+	shardContext := shard.NewMockContext(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.task.NamespaceID),
+		s.task.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.sourceClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId:  s.task.NamespaceID,
+			WorkflowId:   s.task.WorkflowID,
+			RunId:        s.task.RunID,
+			TaskId:       s.task.ExecutableTask.TaskID(),
+			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+			FirstEventId: events[0].GetEventId(),
+			NextEventId:  events[len(events)-1].GetEventId() + 1,
+			Version:      events[0].GetVersion(),
+		},
+	}).Return(serviceerror.NewInternal("failed"))
+
+	err := s.task.MarkPoisonPill()
+	s.Error(err)
+	err = s.task.MarkPoisonPill()
 	s.NoError(err)
 }
 
@@ -549,6 +582,7 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 		time.Unix(0, rand.Int63()),
 		replicationTaskAttribute,
 		sourceCluster,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	executableHistoryTask.ExecutableTask = executableTask
 	return executableHistoryTask

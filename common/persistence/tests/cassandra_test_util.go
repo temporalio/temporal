@@ -52,7 +52,7 @@ import (
 const (
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testCassandraExecutionSchema  = "../../../schema/cassandra/temporal/schema.cql"
+	testCassandraExecutionSchema = "../../../schema/cassandra/temporal/schema.cql"
 )
 
 // TODO merge the initialization with existing persistence setup
@@ -77,8 +77,8 @@ func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
 	var testData CassandraTestData
 	testData.Cfg = NewCassandraConfig()
 	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
-	SetUpCassandraDatabase(testData.Cfg, testData.Logger)
-	SetUpCassandraSchema(testData.Cfg, testData.Logger)
+	SetUpCassandraDatabase(t, testData.Cfg, testData.Logger)
+	SetUpCassandraSchema(t, testData.Cfg, testData.Logger)
 
 	testData.Factory = cassandra.NewFactory(
 		*testData.Cfg,
@@ -90,13 +90,13 @@ func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
 
 	tearDown := func() {
 		testData.Factory.Close()
-		TearDownCassandraKeyspace(testData.Cfg)
+		TearDownCassandraKeyspace(t, testData.Cfg)
 	}
 
 	return testData, tearDown
 }
 
-func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
+func SetUpCassandraDatabase(t *testing.T, cfg *config.Cassandra, logger log.Logger) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.Keyspace = "system"
@@ -109,7 +109,7 @@ func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
 		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
+		t.Fatalf("unable to create Cassandra session: %v", err)
 	}
 	defer session.Close()
 
@@ -120,15 +120,15 @@ func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
 		true,
 		log.NewNoopLogger(),
 	); err != nil {
-		panic(fmt.Sprintf("unable to create Cassandra keyspace: %v", err))
+		t.Fatalf("unable to create Cassandra keyspace: %v", err)
 	}
 }
 
-func SetUpCassandraSchema(cfg *config.Cassandra, logger log.Logger) {
-	ApplySchemaUpdate(cfg, testCassandraExecutionSchema, logger)
+func SetUpCassandraSchema(t *testing.T, cfg *config.Cassandra, logger log.Logger) {
+	ApplySchemaUpdate(t, cfg, testCassandraExecutionSchema, logger)
 }
 
-func ApplySchemaUpdate(cfg *config.Cassandra, schemaFile string, logger log.Logger) {
+func ApplySchemaUpdate(t *testing.T, cfg *config.Cassandra, schemaFile string, logger log.Logger) {
 	session, err := commongocql.NewSession(
 		func() (*gocql.ClusterConfig, error) {
 			return commongocql.NewCassandraCluster(*cfg, resolver.NewNoopResolver())
@@ -137,29 +137,29 @@ func ApplySchemaUpdate(cfg *config.Cassandra, schemaFile string, logger log.Logg
 		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	defer session.Close()
 
 	schemaPath, err := filepath.Abs(schemaFile)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	statements, err := p.LoadAndSplitQuery([]string{schemaPath})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	for _, stmt := range statements {
 		if err = session.Query(stmt).Exec(); err != nil {
 			logger.Error(fmt.Sprintf("Unable to execute statement from file: %s\n  %s", schemaFile, stmt))
-			panic(err)
+			t.Fatal(err)
 		}
 	}
 }
 
-func TearDownCassandraKeyspace(cfg *config.Cassandra) {
+func TearDownCassandraKeyspace(t *testing.T, cfg *config.Cassandra) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.Keyspace = "system"
@@ -172,7 +172,7 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
+		t.Fatalf("unable to create Cassandra session: %v", err)
 	}
 	defer session.Close()
 
@@ -181,7 +181,7 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 		cfg.Keyspace,
 		log.NewNoopLogger(),
 	); err != nil {
-		panic(fmt.Sprintf("unable to drop Cassandra keyspace: %v", err))
+		t.Fatalf("unable to drop Cassandra keyspace: %v", err)
 	}
 }
 
@@ -189,13 +189,13 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 // the .cql files within. E.g.: //schema/cassandra/temporal/versioned
 // Subdirectories are ordered by semantic version, but files within the same subdirectory are in arbitrary order.
 // All .cql files are returned regardless of whether they are named in manifest.json.
-func GetSchemaFiles(schemaDir string, logger log.Logger) []string {
+func GetSchemaFiles(t *testing.T, schemaDir string, logger log.Logger) []string {
 	var retVal []string
 
 	versionDirPath := path.Join(schemaDir, "versioned")
 	subDirs, err := os.ReadDir(versionDirPath)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	versionDirNames := make([]string, 0, len(subDirs))
@@ -213,11 +213,11 @@ func GetSchemaFiles(schemaDir string, logger log.Logger) []string {
 	sort.Slice(versionDirNames, func(i, j int) bool {
 		vLeft, err := semver.ParseTolerant(versionDirNames[i])
 		if err != nil {
-			panic(err) // Logic error
+			t.Fatal(err) // Logic error
 		}
 		vRight, err := semver.ParseTolerant(versionDirNames[j])
 		if err != nil {
-			panic(err) // Logic error
+			t.Fatal(err) // Logic error
 		}
 		return vLeft.Compare(vRight) < 0
 	})
@@ -226,7 +226,7 @@ func GetSchemaFiles(schemaDir string, logger log.Logger) []string {
 		vDirPath := path.Join(versionDirPath, dir)
 		files, err := os.ReadDir(vDirPath)
 		if err != nil {
-			panic(err)
+			t.Fatal(err)
 		}
 		for _, file := range files {
 			if file.IsDir() {

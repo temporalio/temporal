@@ -86,6 +86,8 @@ func (s *collectionSuite) TestGetIntProperty() {
 	s.Equal(10, value())
 	s.client[testGetIntPropertyKey] = 50
 	s.Equal(50, value())
+	s.client[testGetIntPropertyKey] = uint32(50000)
+	s.Equal(50000, value())
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
@@ -128,9 +130,11 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByTaskQueueInfo() {
 func (s *collectionSuite) TestGetFloat64Property() {
 	setting := dynamicconfig.NewGlobalFloatSetting(testGetFloat64PropertyKey, 0.1, "")
 	value := setting.Get(s.cln)
-	s.Equal(0.1, value())
+	s.InEpsilon(0.1, value(), 1e-10)
 	s.client[testGetFloat64PropertyKey] = 0.01
-	s.Equal(0.01, value())
+	s.InEpsilon(0.01, value(), 1e-10)
+	s.client[testGetFloat64PropertyKey] = int64(123456789)
+	s.InEpsilon(float64(123456789), value(), 1e-10)
 }
 
 func (s *collectionSuite) TestGetBoolProperty() {
@@ -168,8 +172,14 @@ func (s *collectionSuite) TestGetDurationProperty() {
 	s.Equal(time.Minute, value())
 	s.client[testGetDurationPropertyKey] = 33
 	s.Equal(33*time.Second, value())
+	s.client[testGetDurationPropertyKey] = int16(33)
+	s.Equal(33*time.Second, value())
 	s.client[testGetDurationPropertyKey] = "33"
 	s.Equal(33*time.Second, value())
+	s.client[testGetDurationPropertyKey] = "33h"
+	s.Equal(33*time.Hour, value())
+	s.client[testGetDurationPropertyKey] = float32(33.5)
+	s.Equal(33*time.Second+500*time.Millisecond, value())
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {

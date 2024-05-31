@@ -286,7 +286,7 @@ func NewMutableState(
 		WorkflowTaskTimeout:          timestamp.DurationFromSeconds(0),
 		WorkflowTaskAttempt:          1,
 
-		LastWorkflowTaskStartedEventId: common.EmptyEventID,
+		LastCompletedWorkflowTaskStartedEventId: common.EmptyEventID,
 
 		StartTime:              timestamppb.New(startTime),
 		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
@@ -1798,8 +1798,8 @@ func (ms *MutableStateImpl) GetNextEventID() int64 {
 }
 
 // GetStartedEventIdForLastCompletedWorkflowTask returns last started workflow task event ID
-func (ms *MutableStateImpl) GetStartedEventIdOfLastCompletedWorkflowTask() int64 {
-	return ms.executionInfo.LastWorkflowTaskStartedEventId
+func (ms *MutableStateImpl) GetLastCompletedWorkflowTaskStartedEventId() int64 {
+	return ms.executionInfo.LastCompletedWorkflowTaskStartedEventId
 }
 
 func (ms *MutableStateImpl) IsWorkflowExecutionRunning() bool {
@@ -2136,7 +2136,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.LastWorkflowTaskStartedEventId = common.EmptyEventID
+	ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = common.EmptyEventID
 	ms.executionInfo.LastFirstEventId = startEvent.GetEventId()
 
 	ms.executionInfo.WorkflowTaskVersion = common.EmptyVersion
@@ -5934,5 +5934,5 @@ func (ms *MutableStateImpl) logDataInconsistency() {
 }
 
 func (ms *MutableStateImpl) HasCompletedAnyWorkflowTask() bool {
-	return ms.GetStartedEventIdOfLastCompletedWorkflowTask() != common.EmptyEventID
+	return ms.GetLastCompletedWorkflowTaskStartedEventId() != common.EmptyEventID
 }

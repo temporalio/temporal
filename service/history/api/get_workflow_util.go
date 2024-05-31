@@ -255,7 +255,7 @@ func MutableStateToGetResponse(
 		LastFirstEventId:       lastFirstEventID,
 		LastFirstEventTxnId:    lastFirstEventTxnID,
 		NextEventId:            mutableState.GetNextEventID(),
-		PreviousStartedEventId: mutableState.GetStartedEventIdOfLastCompletedWorkflowTask(),
+		PreviousStartedEventId: mutableState.GetLastCompletedWorkflowTaskStartedEventId(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: executionInfo.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,

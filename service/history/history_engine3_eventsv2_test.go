@@ -270,8 +270,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
-	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
+	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
 	}
 	expectedResponse.ScheduledEventId = wt.ScheduledEventID
 	expectedResponse.ScheduledTime = timestamppb.New(wt.ScheduledTime)

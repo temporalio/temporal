@@ -28,10 +28,12 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -49,31 +51,42 @@ type CanGetNexusCompletion interface {
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
 
-type ActiveExecutorOptions struct {
-	NamespaceRegistry namespace.Registry
-	CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
-}
-
 func RegisterExecutor(
 	registry *hsm.Registry,
-	options ActiveExecutorOptions,
+	activeExecutorOptions ActiveExecutorOptions,
+	standbyExecutorOptions StandbyExecutorOptions,
 	config *Config,
 ) error {
-	exec := activeExecutor{options: options, config: config}
-	if err := hsm.RegisterExecutor(
+	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
+	standbyExec := standbyExecutor{options: standbyExecutorOptions}
+	if err := hsm.RegisterExecutors(
 		registry,
 		TaskTypeInvocation.ID,
-		exec.executeInvocationTask,
+		activeExec.executeInvocationTask,
+		standbyExec.executeInvocationTask,
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutor(registry, TaskTypeBackoff.ID, exec.executeBackoffTask)
+	return hsm.RegisterExecutors(
+		registry,
+		TaskTypeBackoff.ID,
+		activeExec.executeBackoffTask,
+		standbyExec.executeBackoffTask,
+	)
 }
 
-type activeExecutor struct {
-	options ActiveExecutorOptions
-	config  *Config
-}
+type (
+	ActiveExecutorOptions struct {
+		NamespaceRegistry namespace.Registry
+		MetricsHandler    metrics.Handler
+		CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
+	}
+
+	activeExecutor struct {
+		options ActiveExecutorOptions
+		config  *Config
+	}
+)
 
 func (e activeExecutor) executeInvocationTask(
 	ctx context.Context,
@@ -114,7 +127,16 @@ func (e activeExecutor) executeInvocationTask(
 		NamespaceID: ref.WorkflowKey.GetNamespaceID(),
 		Destination: task.Destination,
 	})
+	// Make the call and record metrics.
+	startTime := time.Now()
 	response, callErr := caller(request)
+
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(task.Destination)
+	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(callCtx, response, callErr))
+	e.options.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
+	e.options.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+
 	if callErr == nil {
 		// Body is not read but should be discarded to keep the underlying TCP connection alive.
 		// Just in case something unexpected happens while discarding or closing the body,
@@ -197,8 +219,9 @@ func (e activeExecutor) saveResult(
 				}
 			}
 			return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
-				Time: env.Now(),
-				Err:  callErr,
+				Time:        env.Now(),
+				Err:         callErr,
+				RetryPolicy: e.config.RetryPolicy(),
 			})
 		})
 	})
@@ -217,6 +240,42 @@ func (e activeExecutor) executeBackoffTask(
 	})
 }
 
+type (
+	StandbyExecutorOptions struct{}
+
+	standbyExecutor struct {
+		options StandbyExecutorOptions
+	}
+)
+
+func (e standbyExecutor) executeInvocationTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task InvocationTask,
+) error {
+	panic("unimplemented")
+}
+
+func (e standbyExecutor) executeBackoffTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task BackoffTask,
+) error {
+	panic("unimplemented")
+}
+
 func isRetryableHTTPResponse(response *http.Response) bool {
 	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
+}
+
+func outcomeTag(callCtx context.Context, response *http.Response, callErr error) string {
+	if callErr != nil {
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		return "unknown-error"
+	}
+	return fmt.Sprintf("status:%d", response.StatusCode)
 }

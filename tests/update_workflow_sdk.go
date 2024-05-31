@@ -35,6 +35,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 )
@@ -42,7 +43,7 @@ import (
 func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAdmitted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
 
 	activityDone := make(chan struct{})
 	activityFn := func(ctx context.Context) error {
@@ -88,7 +89,7 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateA
 func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
 
 	activityDone := make(chan struct{})
 	activityFn := func(ctx context.Context) error {

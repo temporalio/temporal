@@ -32,6 +32,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/service/history/shard"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/backoff"
@@ -107,6 +109,7 @@ type (
 		taskCreationTime  time.Time
 		taskReceivedTime  time.Time
 		sourceClusterName string
+		taskPriority      enumsspb.TaskPriority
 
 		// mutable data
 		taskState int32
@@ -122,6 +125,7 @@ func NewExecutableTask(
 	taskCreationTime time.Time,
 	taskReceivedTime time.Time,
 	sourceClusterName string,
+	priority enumsspb.TaskPriority,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
 		ProcessToolBox:    processToolBox,
@@ -130,6 +134,7 @@ func NewExecutableTask(
 		taskCreationTime:  taskCreationTime,
 		taskReceivedTime:  taskReceivedTime,
 		sourceClusterName: sourceClusterName,
+		taskPriority:      priority,
 
 		taskState: taskStatePending,
 		attempt:   1,
@@ -231,6 +236,9 @@ func (e *ExecutableTaskImpl) Reschedule() {
 }
 
 func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
+	if shard.IsShardOwnershipLostError(err) {
+		return false
+	}
 	switch err.(type) {
 	case *serviceerror.InvalidArgument, *serviceerror.DataLoss:
 		return false
@@ -269,16 +277,19 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
-		now.Sub(e.taskCreationTime),
-		metrics.OperationTag(e.metricsTag),
-		nsTag,
-	)
-	metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
-		e.taskReceivedTime.Sub(e.taskCreationTime),
-		metrics.OperationTag(e.metricsTag),
-		nsTag,
-	)
+	// replication lag is only meaningful for non-low priority tasks as for low priority task, we may delay processing
+	if e.taskPriority != enumsspb.TASK_PRIORITY_LOW {
+		metrics.ReplicationLatency.With(e.MetricsHandler).Record(
+			now.Sub(e.taskCreationTime),
+			metrics.OperationTag(e.metricsTag),
+			nsTag,
+		)
+		metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
+			e.taskReceivedTime.Sub(e.taskCreationTime),
+			metrics.OperationTag(e.metricsTag),
+			nsTag,
+		)
+	}
 	// TODO consider emit attempt metrics
 }
 

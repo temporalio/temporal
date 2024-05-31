@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -69,6 +70,11 @@ var (
 		"system.enableReadFromSecondaryVisibility",
 		false,
 		`EnableReadFromSecondaryVisibility is the config to enable read from secondary visibility`,
+	)
+	VisibilityEnableShadowReadMode = NewGlobalBoolSetting(
+		"system.visibilityEnableShadowReadMode",
+		false,
+		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
 	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
 		"system.secondaryVisibilityWritingMode",
@@ -502,11 +508,6 @@ is currently processing a task.
 		200,
 		`NexusEndpointNameMaxLength is the maximum length of a Nexus endpoint name.`,
 	)
-	NexusEndpointDescriptionMaxSize = NewGlobalIntSetting(
-		"limit.endpointDescriptionMaxSize",
-		4*1024,
-		`NexusEndpointDescriptionMaxSize is the maximum size of a Nexus endpoint description in bytes.`,
-	)
 	NexusEndpointExternalURLMaxLength = NewGlobalIntSetting(
 		"limit.endpointExternalURLMaxLength",
 		4*1024,
@@ -855,20 +856,6 @@ server hosts for it to take effect.`,
 		"frontend.enableBatcher",
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
-	)
-	FrontendAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.accessHistoryFraction",
-		1.0,
-		`FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
-service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
-	)
-	FrontendAdminDeleteAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.adminDeleteAccessHistoryFraction",
-		1.0,
-		`FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
-that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
 	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
@@ -1338,6 +1325,11 @@ to this require a restart to take effect.`,
 		"history.shardIOConcurrency",
 		1,
 		`ShardIOConcurrency controls the concurrency of persistence operations in shard context`,
+	)
+	ShardIOTimeout = NewGlobalDurationSetting(
+		"history.shardIOTimeout",
+		5*time.Second*debug.TimeoutMultiplier,
+		`ShardIOTimeout sets the timeout for persistence operations in the shard context`,
 	)
 	StandbyClusterDelay = NewGlobalDurationSetting(
 		"history.standbyClusterDelay",
@@ -2101,6 +2093,21 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderHighPriorityQPS",
+		100,
+		`Maximum number of high priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamSenderLowPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLowPriorityQPS",
+		100,
+		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxOutstandingTaskCount",
+		50,
+		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
 
 	// keys for worker
 
@@ -2329,5 +2336,16 @@ close to or more than the workflow task timeout)`,
 		map[string]any{},
 		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
 settings for controlling remote activity concurrency for delete namespace workflows.`,
+	)
+
+	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
+		"limit.userMetadataSummarySize",
+		400,
+		`MaxUserMetadataSummarySize is the maximum size of user metadata summary payloads in bytes.`,
+	)
+	MaxUserMetadataDetailsSize = NewNamespaceIntSetting(
+		"limit.userMetadataDetailsSize",
+		20000,
+		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
 )

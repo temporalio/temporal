@@ -39,6 +39,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -368,7 +369,11 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	_, err = coll.Add("backoff", callbackToBackoff)
 	require.NoError(t, err)
 	err = coll.Transition("backoff", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
-		return callbacks.TransitionAttemptFailed.Apply(cb, callbacks.EventAttemptFailed{Time: time.Now(), Err: fmt.Errorf("test")}) // nolint:goerr113
+		return callbacks.TransitionAttemptFailed.Apply(cb, callbacks.EventAttemptFailed{
+			Time:        time.Now(),
+			Err:         fmt.Errorf("test"), // nolint:goerr113
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+		})
 	})
 	require.NoError(t, err)
 

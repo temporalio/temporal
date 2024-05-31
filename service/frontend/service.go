@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -62,6 +61,7 @@ type Config struct {
 	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableReadFromSecondaryVisibility     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableShadowReadMode        dynamicconfig.BoolPropertyFn
 	VisibilityDisableOrderByClause        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityAllowList                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -186,10 +186,6 @@ type Config struct {
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// AccessHistoryFraction are interim flags across 2 minor releases and will be removed once fully enabled.
-	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
-	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
-
 	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
 
@@ -216,10 +212,11 @@ func NewConfig(
 		PersistenceDynamicRateLimitingParams: dynamicconfig.FrontendPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
 
-		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
-		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
+		VisibilityPersistenceMaxReadQPS:       dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:      dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
 		VisibilityMaxPageSize:                 dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		EnableReadFromSecondaryVisibility:     visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
+		EnableReadFromSecondaryVisibility:     dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:        dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		VisibilityDisableOrderByClause:        dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:      dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 		VisibilityAllowList:                   dynamicconfig.VisibilityAllowList.Get(dc),
@@ -299,9 +296,6 @@ func NewConfig(
 		EnableWorkerVersioningData:     dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Get(dc),
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
-
-		AccessHistoryFraction:            dynamicconfig.FrontendAccessHistoryFraction.Get(dc),
-		AdminDeleteAccessHistoryFraction: dynamicconfig.FrontendAdminDeleteAccessHistoryFraction.Get(dc),
 
 		EnableNexusAPIs:             dynamicconfig.EnableNexus.Get(dc),
 		CallbackURLMaxLength:        dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),

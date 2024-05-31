@@ -168,7 +168,17 @@ func (s {{.P.Name}}TypedSetting[T]) WithDefault(v T) {{.P.Name}}TypedSetting[T] 
 	return newS
 }
 
-func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) func({{.P.GoArgs}}) T {
+{{if eq .P.Name "Global" -}}
+type TypedPropertyFn[T any] func({{.P.GoArgs}}) T
+{{- else -}}
+type TypedPropertyFnWith{{.P.Name}}Filter[T any] func({{.P.GoArgs}}) T
+{{- end}}
+
+{{if eq .P.Name "Global" -}}
+func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFn[T] {
+{{- else -}}
+func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFnWith{{.P.Name}}Filter[T] {
+{{- end}}
 	return func({{.P.GoArgs}}) T {
 		return matchAndConvert(
 			c,
@@ -178,6 +188,16 @@ func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) func({{.P.GoArgs}}) T {
 			s.convert,
 			precedence{{.P.Name}}({{.P.GoArgNames}}),
 		)
+	}
+}
+
+{{if eq .P.Name "Global" -}}
+func GetTypedPropertyFn[T any](value T) TypedPropertyFn[T] {
+{{- else -}}
+func GetTypedPropertyFnFilteredBy{{.P.Name}}[T any](value T) TypedPropertyFnWith{{.P.Name}}Filter[T] {
+{{- end}}
+	return func({{.P.GoArgs}}) T {
+		return value
 	}
 }
 {{- else -}}

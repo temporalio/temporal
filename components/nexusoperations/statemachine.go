@@ -249,7 +249,8 @@ var TransitionRescheduled = hsm.NewTransition(
 // EventAttemptFailed is triggered when an invocation attempt is failed with a retryable error.
 type EventAttemptFailed struct {
 	AttemptFailure
-	Node *hsm.Node
+	Node        *hsm.Node
+	RetryPolicy backoff.RetryPolicy
 }
 
 var TransitionAttemptFailed = hsm.NewTransition(
@@ -258,8 +259,7 @@ var TransitionAttemptFailed = hsm.NewTransition(
 	func(op Operation, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		// TODO: Make the retry policy initial interval configurable.
-		nextDelay := backoff.NewExponentialRetryPolicy(time.Second).ComputeNextDelay(0, int(op.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(op.Attempt))
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		op.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
 		op.LastAttemptFailure = &failurepb.Failure{
@@ -516,9 +516,10 @@ var TransitionCancelationRescheduled = hsm.NewTransition(
 
 // EventCancelationAttemptFailed is triggered when a cancelation attempt is failed with a retryable error.
 type EventCancelationAttemptFailed struct {
-	Time time.Time
-	Err  error
-	Node *hsm.Node
+	Time        time.Time
+	Err         error
+	Node        *hsm.Node
+	RetryPolicy backoff.RetryPolicy
 }
 
 var TransitionCancelationAttemptFailed = hsm.NewTransition(
@@ -527,8 +528,7 @@ var TransitionCancelationAttemptFailed = hsm.NewTransition(
 	func(c Cancelation, event EventCancelationAttemptFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		// TODO: Make the retry policy initial interval configurable.
-		nextDelay := backoff.NewExponentialRetryPolicy(time.Second).ComputeNextDelay(0, int(c.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt))
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		c.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
 		c.LastAttemptFailure = &failurepb.Failure{

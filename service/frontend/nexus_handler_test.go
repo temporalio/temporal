@@ -32,13 +32,20 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/cluster/clustertest"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
 )
@@ -84,9 +91,11 @@ func (n mockNamespaceChecker) Exists(name namespace.Name) error {
 
 type contextOptions struct {
 	namespaceState          enumspb.NamespaceState
+	namespacePassive        bool
 	quota                   int
 	namespaceRateLimitAllow bool
 	rateLimitAllow          bool
+	redirectAllow           bool
 }
 
 func newOperationContext(options contextOptions) *operationContext {
@@ -96,18 +105,31 @@ func newOperationContext(options contextOptions) *operationContext {
 	oc.metricsHandlerForInterceptors = mh
 	oc.metricsHandler = mh
 	oc.apiName = "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"
-	oc.namespace = namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:    uuid.NewString(),
-				Name:  "test",
-				State: options.namespaceState,
-			},
-			Config: &persistencespb.NamespaceConfig{
-				CustomSearchAttributeAliases: make(map[string]string),
+
+	oc.namespaceName = "test-namespace"
+	activeClusterName := cluster.TestCurrentClusterName
+	if options.namespacePassive {
+		activeClusterName = cluster.TestAlternativeClusterName
+	}
+	oc.namespace = namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id:    uuid.NewString(),
+			Name:  oc.namespaceName,
+			State: options.namespaceState,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:                    timestamp.DurationFromDays(1),
+			CustomSearchAttributeAliases: make(map[string]string),
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: activeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
-	})
+		1,
+	)
 
 	checker := mockNamespaceChecker(oc.namespace.Name())
 	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, checker, nil, "", "")
@@ -123,10 +145,15 @@ func newOperationContext(options contextOptions) *operationContext {
 	)
 	oc.namespaceRateLimitInterceptor = interceptor.NewNamespaceRateLimitInterceptor(nil, mockRateLimiter{options.namespaceRateLimitAllow}, make(map[string]int))
 	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(mockRateLimiter{options.rateLimitAllow}, make(map[string]int))
+
+	oc.clusterMetadata = clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, !options.namespacePassive))
+	oc.forwardingEnabledForNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.redirectAllow)
+	oc.redirectionInterceptor = interceptor.NewRedirection(nil, nil, config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding}, oc.logger, nil, oc.metricsHandlerForInterceptors, clock.NewRealTimeSource(), oc.clusterMetadata)
+
 	return oc
 }
 
-func TestNexusInterceptRequeset_InvalidNamespaceState_ResultsInBadRequest(t *testing.T) {
+func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	var err error
@@ -150,7 +177,7 @@ func TestNexusInterceptRequeset_InvalidNamespaceState_ResultsInBadRequest(t *tes
 	require.Equal(t, map[string]string{"outcome": "invalid_namespace_state"}, snap["test"][0].Tags)
 }
 
-func TestNexusInterceptRequeset_NamespaceConcurrencyLimited_ResultsInResourceExhausted(t *testing.T) {
+func TestNexusInterceptRequest_NamespaceConcurrencyLimited_ResultsInResourceExhausted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	var err error
@@ -174,7 +201,7 @@ func TestNexusInterceptRequeset_NamespaceConcurrencyLimited_ResultsInResourceExh
 	require.Equal(t, map[string]string{"outcome": "namespace_concurrency_limited"}, snap["test"][0].Tags)
 }
 
-func TestNexusInterceptRequeset_NamespaceRateLimited_ResultsInResourceExhausted(t *testing.T) {
+func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	var err error
@@ -198,7 +225,7 @@ func TestNexusInterceptRequeset_NamespaceRateLimited_ResultsInResourceExhausted(
 	require.Equal(t, map[string]string{"outcome": "namespace_rate_limited"}, snap["test"][0].Tags)
 }
 
-func TestNexusInterceptRequeset_GlobalRateLimited_ResultsInResourceExhausted(t *testing.T) {
+func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	var err error
@@ -220,4 +247,53 @@ func TestNexusInterceptRequeset_GlobalRateLimited_ResultsInResourceExhausted(t *
 	snap := capture.Snapshot()
 	require.Equal(t, 1, len(snap["test"]))
 	require.Equal(t, map[string]string{"outcome": "global_rate_limited"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_ForwardingDisabled_ResultsInUnavailable(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		namespacePassive:        true,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          true,
+		redirectAllow:           false,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerError.Type)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Equal(t, 1, len(snap["test"]))
+	require.Equal(t, map[string]string{"outcome": "namespace_inactive_forwarding_disabled"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_ForwardingEnabled_ResultsInNotActiveError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		namespacePassive:        true,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          true,
+		redirectAllow:           true,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var notActiveErr *serviceerror.NamespaceNotActive
+	require.ErrorAs(t, err, &notActiveErr)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Equal(t, 1, len(snap["test"]))
+	require.Equal(t, map[string]string{"outcome": "request_forwarded"}, snap["test"][0].Tags)
 }

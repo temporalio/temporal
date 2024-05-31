@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/auth"
@@ -243,9 +244,6 @@ type (
 		VisibilityStore string `yaml:"visibilityStore"`
 		// SecondaryVisibilityStore is the name of the secondary datastore to be used for visibility records
 		SecondaryVisibilityStore string `yaml:"secondaryVisibilityStore"`
-		// DEPRECATED: use VisibilityStore key instead of AdvancedVisibilityStore
-		// AdvancedVisibilityStore is the name of the datastore to be used for visibility records
-		AdvancedVisibilityStore string `yaml:"advancedVisibilityStore"`
 		// NumHistoryShards is the desired number of history shards. This config doesn't
 		// belong here, needs refactoring
 		NumHistoryShards int32 `yaml:"numHistoryShards" validate:"nonzero"`
@@ -385,6 +383,8 @@ type (
 
 	// SQL is the configuration for connecting to a SQL backed datastore
 	SQL struct {
+		// Connect is a function that returns a sql db connection. String based configuration is ignored if this is provided.
+		Connect func(sqlConfig *SQL) (*sqlx.DB, error) `yaml:"-" json:"-"`
 		// User is the username to be used for the conn
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name

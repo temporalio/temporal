@@ -38,8 +38,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	replicationpb "go.temporal.io/api/replication/v1"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"gopkg.in/yaml.v3"
+
+	"go.temporal.io/server/common/testing/historyrequire"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -121,9 +122,10 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 			Enabled:                true,
 			InitialFailoverVersion: int64(i + 1),
 			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
-			HTTPAddress:            fmt.Sprintf("http://127.0.0.1:%d144", 7+i),
+			HTTPAddress:            fmt.Sprintf("127.0.0.1:%d144", 7+i),
 		}
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
+		clusterConfigs[i].EnableMetricsCapture = true
 	}
 
 	c, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))

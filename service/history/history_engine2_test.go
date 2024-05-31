@@ -321,8 +321,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
-	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
+	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
 	}
 	expectedResponse.Version = tests.GlobalNamespaceEntry.FailoverVersion()
 	expectedResponse.ScheduledEventId = wt.ScheduledEventID
@@ -1001,7 +1001,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	s.Nil(err)
 	ms2 := s.getMutableState(namespaceID, we)
 	s.Equal(int64(6), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 }

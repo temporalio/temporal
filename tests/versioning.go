@@ -4106,7 +4106,88 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 
 		return foundN == workerN
 	}, 3*time.Second, 50*time.Millisecond)
+}
 
+func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
+	tq := s.randomizeStr(s.T().Name())
+	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	wId := s.randomizeStr("id")
+	w := worker.New(s.sdkClient, tq, worker.Options{
+		UseBuildIDForVersioning: false,
+		Identity:                wId,
+	})
+	w.RegisterWorkflow(wf)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	// wait for pollers to show up, verify both ReportPollers and ReportTaskReachability
+	s.Eventually(func() bool {
+		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:              s.namespace,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			Versions:               nil, // default version, in this case unversioned queue
+			TaskQueueTypes:         nil, // both types
+			ReportPollers:          true,
+			ReportTaskReachability: true,
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		versionInfo := resp.GetVersionsInfo()[""]
+		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+		var pollersInfo []*taskqueuepb.PollerInfo
+		for _, t := range versionInfo.GetTypesInfo() {
+			pollersInfo = append(pollersInfo, t.GetPollers()...)
+		}
+		for _, pi := range pollersInfo {
+			s.False(pi.GetWorkerVersionCapabilities().GetUseVersioning())
+			if pi.GetIdentity() == wId {
+				return true
+			}
+		}
+
+		return false
+	}, 3*time.Second, 50*time.Millisecond)
+
+	// ask for reachability only
+	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:              s.namespace,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+		Versions:               nil, // default version, in this case unversioned queue
+		TaskQueueTypes:         nil, // both types
+		ReportTaskReachability: true,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+	versionInfo := resp.GetVersionsInfo()[""]
+	s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+	for _, t := range versionInfo.GetTypesInfo() {
+		s.Zero(len(t.GetPollers()), "poller info should not be reported")
+	}
+
+	// ask for pollers only
+	resp, err = s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:      s.namespace,
+		TaskQueue:      &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+		Versions:       nil, // default version, in this case unversioned queue
+		TaskQueueTypes: nil, // both types
+		ReportPollers:  true,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+	versionInfo = resp.GetVersionsInfo()[""]
+	s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
+	for _, t := range versionInfo.GetTypesInfo() {
+		s.Equal(1, len(t.GetPollers()), "only one poller info should be reported")
+	}
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {

@@ -25,7 +25,6 @@
 package tests
 
 import (
-	"fmt"
 	"net"
 	"path/filepath"
 	"strconv"
@@ -77,8 +76,8 @@ func setUpMySQLTest(t *testing.T) (MySQLTestData, func()) {
 	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
 	mh := metricstest.NewCaptureHandler()
 	testData.Metrics = mh.StartCapture()
-	SetupMySQLDatabase(testData.Cfg)
-	SetupMySQLSchema(testData.Cfg)
+	SetupMySQLDatabase(t, testData.Cfg)
+	SetupMySQLSchema(t, testData.Cfg)
 
 	testData.Factory = sql.NewFactory(
 		*testData.Cfg,
@@ -91,7 +90,7 @@ func setUpMySQLTest(t *testing.T) (MySQLTestData, func()) {
 	tearDown := func() {
 		testData.Factory.Close()
 		mh.StopCapture(testData.Metrics)
-		TearDownMySQLDatabase(testData.Cfg)
+		TearDownMySQLDatabase(t, testData.Cfg)
 	}
 
 	return testData, tearDown
@@ -112,76 +111,76 @@ func NewMySQLConfig() *config.SQL {
 	}
 }
 
-func SetupMySQLDatabase(cfg *config.SQL) {
+func SetupMySQLDatabase(t *testing.T, cfg *config.SQL) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
+		t.Fatalf("unable to create MySQL admin DB: %v", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	err = db.CreateDatabase(cfg.DatabaseName)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL database: %v", err))
+		t.Fatalf("unable to create MySQL database: %v", err)
 	}
 }
 
-func SetupMySQLSchema(cfg *config.SQL) {
+func SetupMySQLSchema(t *testing.T, cfg *config.SQL) {
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
+		t.Fatalf("unable to create MySQL admin DB: %v", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	schemaPath, err := filepath.Abs(testMySQLExecutionSchema)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	statements, err := p.LoadAndSplitQuery([]string{schemaPath})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	for _, stmt := range statements {
 		if err = db.Exec(stmt); err != nil {
-			panic(err)
+			t.Fatal(err)
 		}
 	}
 
 	schemaPath, err = filepath.Abs(testMySQLVisibilitySchema)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	statements, err = p.LoadAndSplitQuery([]string{schemaPath})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	for _, stmt := range statements {
 		if err = db.Exec(stmt); err != nil {
-			panic(err)
+			t.Fatal(err)
 		}
 	}
 }
 
-func TearDownMySQLDatabase(cfg *config.SQL) {
+func TearDownMySQLDatabase(t *testing.T, cfg *config.SQL) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
+		t.Fatalf("unable to create MySQL admin DB: %v", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	err = db.DropDatabase(cfg.DatabaseName)
 	if err != nil {
-		panic(fmt.Sprintf("unable to drop MySQL database: %v", err))
+		t.Fatalf("unable to drop MySQL database: %v", err)
 	}
 }

@@ -22,6 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate stringer -type loadCause -trimprefix loadCause -output loadcause_string_gen.go
+//go:generate stringer -type unloadCause -trimprefix unloadCause -output unloadcause_string_gen.go
+
 package matching
 
 import (
@@ -30,7 +33,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -98,15 +100,13 @@ type (
 		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
 		EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableShadowReadMode    dynamicconfig.BoolPropertyFn
 		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
-
-		// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
-		FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 	}
 
 	forwarderConfig struct {
@@ -148,7 +148,35 @@ type (
 
 		// Retry policy for fetching user data from root partition. Should retry forever.
 		GetUserDataRetryPolicy backoff.RetryPolicy
+
+		loadCause loadCause
 	}
+
+	loadCause   int
+	unloadCause int
+)
+
+const (
+	loadCauseUnspecified loadCause = iota
+	loadCauseTask
+	loadCauseQuery
+	loadCauseDescribe
+	loadCauseUserData
+	loadCauseNexusTask
+	loadCausePoll
+	loadCauseOtherRead  // any other read-only rpc
+	loadCauseOtherWrite // any other mutating rpc
+)
+
+const (
+	unloadCauseUnspecified unloadCause = iota
+	unloadCauseInitError
+	unloadCauseIdle
+	unloadCauseMembership // proactive unload due to ownership change
+	unloadCauseConflict   // reactive unload due to other node stealing ownership
+	unloadCauseShuttingDown
+	unloadCauseForce
+	unloadCauseOtherError
 )
 
 // NewConfig returns new service config with default values
@@ -207,15 +235,14 @@ func NewConfig(
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Get(dc),
 
-		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc),
-		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
-		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
+		VisibilityPersistenceMaxReadQPS:   dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:  dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
+		EnableReadFromSecondaryVisibility: dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:    dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		VisibilityDisableOrderByClause:    dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:  dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
-
-		FrontendAccessHistoryFraction: dynamicconfig.FrontendAccessHistoryFraction.Get(dc),
 	}
 }
 

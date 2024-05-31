@@ -50,19 +50,31 @@ type (
 			retentionDuration time.Duration,
 		) ([]byte, error)
 		// ParseHistoryBranchInfo parses the history branch for branch information
-		ParseHistoryBranchInfo(branchToken []byte) (*persistencespb.HistoryBranch, error)
+		ParseHistoryBranchInfo(
+			branchToken []byte,
+		) (*persistencespb.HistoryBranch, error)
 		// UpdateHistoryBranchInfo updates the history branch with branch information
-		UpdateHistoryBranchInfo(branchToken []byte, branchInfo *persistencespb.HistoryBranch) ([]byte, error)
+		UpdateHistoryBranchInfo(
+			branchToken []byte,
+			branchInfo *persistencespb.HistoryBranch,
+			runID string,
+		) ([]byte, error)
 	}
 
 	HistoryBranchUtilImpl struct {
 	}
 )
 
-func NewHistoryBranch(
+func (u *HistoryBranchUtilImpl) NewHistoryBranch(
+	_ string, // namespaceID
+	_ string, // workflowID
+	_ string, // runID
 	treeID string,
 	branchID *string,
 	ancestors []*persistencespb.HistoryBranchRange,
+	_ time.Duration, // runTimeout
+	_ time.Duration, // executionTimeout
+	_ time.Duration, // retentionDuration
 ) ([]byte, error) {
 	var id string
 	if branchID == nil {
@@ -82,25 +94,17 @@ func NewHistoryBranch(
 	return data.Data, nil
 }
 
-func (u *HistoryBranchUtilImpl) NewHistoryBranch(
-	namespaceID string,
-	workflowID string,
-	runID string,
-	treeID string,
-	branchID *string,
-	ancestors []*persistencespb.HistoryBranchRange,
-	runTimeout time.Duration,
-	executionTimeout time.Duration,
-	retentionDuration time.Duration,
-) ([]byte, error) {
-	return NewHistoryBranch(treeID, branchID, ancestors)
-}
-
-func (u *HistoryBranchUtilImpl) ParseHistoryBranchInfo(branchToken []byte) (*persistencespb.HistoryBranch, error) {
+func (u *HistoryBranchUtilImpl) ParseHistoryBranchInfo(
+	branchToken []byte,
+) (*persistencespb.HistoryBranch, error) {
 	return serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 }
 
-func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(branchToken []byte, branchInfo *persistencespb.HistoryBranch) ([]byte, error) {
+func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
+	branchToken []byte,
+	branchInfo *persistencespb.HistoryBranch,
+	runID string,
+) ([]byte, error) {
 	bi, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
 		return nil, err
