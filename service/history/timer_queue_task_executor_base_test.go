@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
@@ -257,34 +256,6 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeoutTask() {
 	}
 }
 
-func (s *timerQueueTaskExecutorBaseSuite) TestExecuteStateMachineTimerTask_PerformsStalenessCheck() {
-	we := &commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowID,
-		RunId:      tests.RunID,
-	}
-
-	ms := workflow.NewMockMutableState(s.controller)
-	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 2, MaxTransitionCount: 1},
-		},
-	}).AnyTimes()
-
-	mockWeCtx := workflow.NewMockContext(s.controller)
-	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, workflow.LockPriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(ms, nil)
-
-	task := &tasks.StateMachineTimerTask{
-		WorkflowKey:                 tests.WorkflowKey,
-		Version:                     1,
-		MutableStateTransitionCount: 1,
-	}
-	err := s.timerQueueTaskExecutorBase.executeStateMachineTimerTask(context.Background(), task, func(node *hsm.Node, task hsm.Task) error {
-		return nil
-	})
-	s.ErrorIs(err, consts.ErrStaleReference)
-}
-
 func (s *timerQueueTaskExecutorBaseSuite) TestExecuteStateMachineTimerTask_ExecutesAllAvailableTimers() {
 	reg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(reg))
@@ -305,6 +276,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestExecuteStateMachineTimerTask_Execu
 	}
 	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, ms, make(map[int32]*persistencespb.StateMachineMap), ms)
 	s.NoError(err)
+	ms.EXPECT().GetNextEventID().Return(int64(2))
 	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}).AnyTimes()

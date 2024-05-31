@@ -248,19 +248,19 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimerTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	wfCtx, release, ms, err := t.getValidatedMutableState(
-		ctx, task.WorkflowKey, func(ms workflow.MutableState) error {
-			return workflow.TransitionHistoryStalenessCheck(
-				ms.GetExecutionInfo().GetTransitionHistory(),
-				task.Version,
-				task.MutableStateTransitionCount,
-			)
-		},
-	)
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return nil
+	}
 
 	timers := ms.GetExecutionInfo().StateMachineTimers
 
@@ -295,6 +295,8 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimerTask(
 
 	// Update processed timers and ensure the next timer task is scheduled.
 	ms.GetExecutionInfo().StateMachineTimers = timers
+	// TODO(bergundy): Right now there's an early return in task_generator.go GenerateDirtySubStateMachineTasks because
+	// transition history may be disabled. Remove this line from here once that early return is gone.
 	workflow.AddNextStateMachineTimerTask(ms)
 
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
