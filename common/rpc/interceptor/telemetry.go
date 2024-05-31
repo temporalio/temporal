@@ -146,6 +146,11 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 			if request.GetWaitNewEvent() {
 				return metrics.FrontendPollWorkflowExecutionHistoryScope
 			}
+		} else if operation == metrics.HistoryGetWorkflowExecutionHistoryScope {
+			request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
+			if request.GetWaitNewEvent() {
+				return metrics.HistoryPollWorkflowExecutionHistoryScope
+			}
 		}
 		return operation
 	}
