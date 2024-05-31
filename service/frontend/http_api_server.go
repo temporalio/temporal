@@ -154,8 +154,8 @@ func NewHTTPAPIServer(
 		h.matchAdditionalHeaders[v] = true
 	}
 	for _, v := range rpcConfig.HTTPAdditionalForwardedHeaders {
-		if len(v) > 0 && v[len(v)-1] == '*' {
-			h.matchAdditionalHeaderPrefixes = append(h.matchAdditionalHeaderPrefixes, http.CanonicalHeaderKey(v[:len(v)-1]))
+		if strings.HasSuffix(v, "*") {
+			h.matchAdditionalHeaderPrefixes = append(h.matchAdditionalHeaderPrefixes, http.CanonicalHeaderKey(strings.TrimSuffix(v, "*")))
 		} else {
 			h.matchAdditionalHeaders[http.CanonicalHeaderKey(v)] = true
 		}
