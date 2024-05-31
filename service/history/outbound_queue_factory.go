@@ -43,6 +43,9 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
+// outboundQueuePersistenceMaxRPSRatio is meant to ensure queue loading doesn't consume more than 30% of the host's
+// persistence tokens. This is especially important upon host restart when we need to perform a load for all shards.
+// This value was copied from the transfer queue factory.
 const outboundQueuePersistenceMaxRPSRatio = 0.3
 
 var (

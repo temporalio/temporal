@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
@@ -126,6 +127,7 @@ func (s *executableTaskSuite) SetupTest() {
 		creationTime,
 		receivedTime,
 		s.sourceCluster,
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 	)
 }
 

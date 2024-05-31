@@ -343,6 +343,10 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
+	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
+	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
+	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
+	HistoryPollWorkflowExecutionHistoryScope = "PollWorkflowExecutionHistory"
 	// HistoryGetWorkflowExecutionRawHistoryScope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
 	HistoryGetWorkflowExecutionRawHistoryScope = "GetWorkflowExecutionRawHistory"
 	// HistoryGetWorkflowExecutionRawHistoryV2Scope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
@@ -1186,18 +1190,4 @@ var (
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
 	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
-)
-
-// DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration
-const (
-	AccessHistoryOld = "AccessHistoryOld"
-	AccessHistoryNew = "AccessHistoryNew"
-
-	AdminGetWorkflowExecutionRawHistoryV2Tag      = "GetWorkflowExecutionRawHistoryV2"
-	AdminDeleteWorkflowExecutionTag               = "DeleteWorkflowExecution"
-	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
-	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
-	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
-	MatchingPollWorkflowTaskQueueTag              = "PollWorkflowTaskQueue"
-	HistoryHandleWorkflowTaskStartedTag           = "HandleWorkflowTaskStarted"
 )

@@ -25,10 +25,8 @@
 package dynamicconfig
 
 import (
-	"math/rand"
 	"time"
 
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -109,17 +107,6 @@ var DefaultDynamicRateLimitingParams = DynamicRateLimitingParams{
 	RateIncreaseStepSize: 0.1,
 	RateMultiMin:         0.8,
 	RateMultiMax:         1.0,
-}
-
-// AccessHistory is an interim config helper for dialing fraction of FE->History calls
-// DEPRECATED: Remove once migration is complete
-func AccessHistory(accessHistoryFraction FloatPropertyFn, metricsHandler metrics.Handler) bool {
-	if rand.Float64() < accessHistoryFraction() {
-		metricsHandler.Counter(metrics.AccessHistoryNew).Record(1)
-		return true
-	}
-	metricsHandler.Counter(metrics.AccessHistoryOld).Record(1)
-	return false
 }
 
 type CircuitBreakerSettings struct {

@@ -31,6 +31,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -508,11 +509,6 @@ is currently processing a task.
 		200,
 		`NexusEndpointNameMaxLength is the maximum length of a Nexus endpoint name.`,
 	)
-	NexusEndpointDescriptionMaxSize = NewGlobalIntSetting(
-		"limit.endpointDescriptionMaxSize",
-		4*1024,
-		`NexusEndpointDescriptionMaxSize is the maximum size of a Nexus endpoint description in bytes.`,
-	)
 	NexusEndpointExternalURLMaxLength = NewGlobalIntSetting(
 		"limit.endpointExternalURLMaxLength",
 		4*1024,
@@ -861,20 +857,6 @@ server hosts for it to take effect.`,
 		"frontend.enableBatcher",
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
-	)
-	FrontendAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.accessHistoryFraction",
-		1.0,
-		`FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
-service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
-	)
-	FrontendAdminDeleteAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.adminDeleteAccessHistoryFraction",
-		1.0,
-		`FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
-that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
 	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
@@ -1329,20 +1311,8 @@ checks while a shard is lingering.`,
 		0,
 		`ShardLingerTimeLimit configures if and for how long the shard controller
 will temporarily delay closing shards after a membership update, awaiting a
-shard ownership lost error from persistence. Not recommended with
-persistence layers that are missing AssertShardOwnership support.
-If set to zero, shards will not delay closing.`,
-	)
-	ShardOwnershipAssertionEnabled = NewGlobalBoolSetting(
-		"history.shardOwnershipAssertionEnabled",
-		false,
-		`ShardOwnershipAssertionEnabled configures if the shard ownership is asserted
-for API requests when a NotFound or NamespaceNotFound error is returned from
-persistence.
-NOTE: Shard ownership assertion is not implemented by any persistence implementation
-in this codebase, because assertion is not needed for persistence implementation
-that guarantees read after write consistency. As a result, even if this config is
-enabled, it's a no-op.`,
+shard ownership lost error from persistence. If set to zero, shards will not delay closing.
+Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
 	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",
@@ -1356,6 +1326,11 @@ to this require a restart to take effect.`,
 		"history.shardIOConcurrency",
 		1,
 		`ShardIOConcurrency controls the concurrency of persistence operations in shard context`,
+	)
+	ShardIOTimeout = NewGlobalDurationSetting(
+		"history.shardIOTimeout",
+		5*time.Second*debug.TimeoutMultiplier,
+		`ShardIOTimeout sets the timeout for persistence operations in the shard context`,
 	)
 	StandbyClusterDelay = NewGlobalDurationSetting(
 		"history.standbyClusterDelay",
@@ -2119,6 +2094,21 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderHighPriorityQPS",
+		100,
+		`Maximum number of high priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamSenderLowPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLowPriorityQPS",
+		100,
+		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxOutstandingTaskCount",
+		50,
+		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
 
 	// keys for worker
 
@@ -2350,5 +2340,16 @@ settings for controlling remote activity concurrency for delete namespace workfl
 Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
 WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 `,
+	)
+
+	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
+		"limit.userMetadataSummarySize",
+		400,
+		`MaxUserMetadataSummarySize is the maximum size of user metadata summary payloads in bytes.`,
+	)
+	MaxUserMetadataDetailsSize = NewNamespaceIntSetting(
+		"limit.userMetadataDetailsSize",
+		20000,
+		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
 )

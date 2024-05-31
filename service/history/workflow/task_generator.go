@@ -322,6 +322,9 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 			}
 		}
 	}
+
+	AddNextStateMachineTimerTask(r.mutableState)
+
 	return nil
 }
 
@@ -821,30 +824,28 @@ func generateSubStateMachineTask(
 	if !task.Concurrent() {
 		transitionCount = node.TransitionCount()
 	}
-	smt := tasks.StateMachineTask{
-		WorkflowKey: mutableState.GetWorkflowKey(),
-		Info: &persistencespb.StateMachineTaskInfo{
-			Ref: &persistencespb.StateMachineRef{
-				Path:                                 ppath,
-				MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
-				MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
-				MachineTransitionCount:               transitionCount,
-			},
-			Type: task.Type().ID,
-			Data: data,
+
+	taskInfo := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path:                                 ppath,
+			MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
+			MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
+			MachineTransitionCount:               transitionCount,
 		},
+		Type: task.Type().ID,
+		Data: data,
 	}
 	switch kind := task.Kind().(type) {
 	case hsm.TaskKindOutbound:
 		mutableState.AddTasks(&tasks.StateMachineOutboundTask{
-			StateMachineTask: smt,
-			Destination:      kind.Destination,
+			StateMachineTask: tasks.StateMachineTask{
+				WorkflowKey: mutableState.GetWorkflowKey(),
+				Info:        taskInfo,
+			},
+			Destination: kind.Destination,
 		})
 	case hsm.TaskKindTimer:
-		smt.VisibilityTimestamp = kind.Deadline
-		mutableState.AddTasks(&tasks.StateMachineTimerTask{
-			StateMachineTask: smt,
-		})
+		TrackStateMachineTimer(mutableState, kind.Deadline, taskInfo)
 	}
 
 	return nil

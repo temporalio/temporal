@@ -102,7 +102,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 
 	// Start
 	workflowID := s.randomizeStr("wf")
-	_, respBody := s.httpPost(http.StatusOK, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, contentType, startWFRequestBody())
+	_, respBody := s.httpPost(http.StatusOK, "/namespaces/"+s.namespace+"/workflows/"+workflowID, contentType, startWFRequestBody())
 	var startResp struct {
 		RunID string `json:"runId"`
 	}
@@ -124,7 +124,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	s.Require().True(found)
 
 	// Confirm already exists error with details and proper code
-	_, respBody = s.httpPost(http.StatusConflict, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, contentType, startWFRequestBody())
+	_, respBody = s.httpPost(http.StatusConflict, "/namespaces/"+s.namespace+"/workflows/"+workflowID, contentType, startWFRequestBody())
 	var errResp struct {
 		Message string `json:"message"`
 		Details []struct {
@@ -138,7 +138,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	// Query
 	_, respBody = s.httpPost(
 		http.StatusOK,
-		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/query/some-query",
+		"/namespaces/"+s.namespace+"/workflows/"+workflowID+"/query/some-query",
 		contentType,
 		queryBody(),
 	)
@@ -147,7 +147,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	// Signal which also completes the workflow
 	s.httpPost(
 		http.StatusOK,
-		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/signal/some-signal",
+		"/namespaces/"+s.namespace+"/workflows/"+workflowID+"/signal/some-signal",
 		contentType,
 		signalBody(),
 	)
@@ -156,7 +156,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	_, respBody = s.httpGet(
 		http.StatusOK,
 		// Our version of gRPC gateway only supports integer enums in queries :-(
-		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/history?historyEventFilterType=2",
+		"/namespaces/"+s.namespace+"/workflows/"+workflowID+"/history?historyEventFilterType=2",
 		contentType,
 	)
 	verifyHistory(s, respBody)
@@ -327,12 +327,14 @@ func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
 	})
 
 	// Make a simple list call that we don't care about the result
-	req, err := http.NewRequest("GET", "/api/v1/namespaces/"+s.namespace+"/workflows", nil)
+	req, err := http.NewRequest("GET", "/namespaces/"+s.namespace+"/workflows", nil)
 	s.Require().NoError(err)
 	req.Header.Set("Authorization", "my-auth-token")
 	req.Header.Set("X-Forwarded-For", "1.2.3.4:5678")
-	// The header is set to forward deep in the onebox config
+	// These headers are set to forward deep in the onebox config
 	req.Header.Set("This-Header-Forwarded", "some-value")
+	req.Header.Set("This-Header-Prefix-Forwarded-Foo", "foo")
+	req.Header.Set("This-Header-Prefix-Forwarded-Bar", "bar")
 	req.Header.Set("This-Header-Not-Forwarded", "some-value")
 	s.httpRequest(http.StatusOK, req)
 
@@ -345,6 +347,8 @@ func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
 	s.Require().Equal("my-auth-token", listWorkflowMetadata["authorization"][0])
 	s.Require().Contains(listWorkflowMetadata["x-forwarded-for"][0], "1.2.3.4:5678")
 	s.Require().Equal("some-value", listWorkflowMetadata["this-header-forwarded"][0])
+	s.Require().Equal("foo", listWorkflowMetadata["this-header-prefix-forwarded-foo"][0])
+	s.Require().Equal("bar", listWorkflowMetadata["this-header-prefix-forwarded-bar"][0])
 	s.Require().NotContains(listWorkflowMetadata, "this-header-not-forwarded")
 	s.Require().Equal(headers.ClientNameServerHTTP, listWorkflowMetadata[headers.ClientNameHeaderName][0])
 	s.Require().Equal(headers.ServerVersion, listWorkflowMetadata[headers.ClientVersionHeaderName][0])
@@ -356,9 +360,9 @@ func (s *ClientFunctionalSuite) TestHTTPAPIPretty() {
 	}
 	// Make a call to system info normal, confirm no newline, then ask for pretty
 	// and confirm newlines
-	_, b := s.httpGet(http.StatusOK, "/api/v1/system-info", "application/json")
+	_, b := s.httpGet(http.StatusOK, "/system-info", "application/json")
 	s.Require().NotContains(b, byte('\n'))
-	_, b = s.httpGet(http.StatusOK, "/api/v1/system-info?pretty", "application/json")
+	_, b = s.httpGet(http.StatusOK, "/system-info?pretty", "application/json")
 	s.Require().Contains(b, byte('\n'))
 }
 
@@ -401,7 +405,7 @@ func (s *ClientFunctionalSuite) httpRequest(expectedStatus int, req *http.Reques
 func (s *ClientFunctionalSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
 	_, respBody := s.httpGet(
 		http.StatusOK,
-		"/api/v1/namespaces/"+s.namespace+"/search-attributes",
+		"/namespaces/"+s.namespace+"/search-attributes",
 		"application/json",
 	)
 	s.T().Log(string(respBody))
@@ -421,7 +425,7 @@ func (s *ClientFunctionalSuite) TestHTTPAPI_OperatorService_ListSearchAttributes
 func (s *ClientFunctionalSuite) TestHTTPAPI_Serves_OpenAPIv2_Docs() {
 	_, respBody := s.httpGet(
 		http.StatusOK,
-		"/api/v1/swagger.json",
+		"/swagger.json",
 		"",
 	)
 	var spec map[string]interface{}
@@ -432,7 +436,7 @@ func (s *ClientFunctionalSuite) TestHTTPAPI_Serves_OpenAPIv2_Docs() {
 func (s *ClientFunctionalSuite) TestHTTPAPI_Serves_OpenAPIv3_Docs() {
 	_, respBody := s.httpGet(
 		http.StatusOK,
-		"/api/v1/openapi.yaml",
+		"/openapi.yaml",
 		"",
 	)
 	var spec map[string]interface{}

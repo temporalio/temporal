@@ -72,3 +72,22 @@ func NamespaceOperationFromString(s string) (NamespaceOperation, error) {
 	}
 	return NamespaceOperation(0), fmt.Errorf("%s is not a valid NamespaceOperation", s)
 }
+
+var (
+	ReplicationFlowControlCommand_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Resume":      1,
+		"Pause":       2,
+	}
+)
+
+// ReplicationFlowControlCommandFromString parses a ReplicationFlowControlCommand value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to ReplicationFlowControlCommand
+func ReplicationFlowControlCommandFromString(s string) (ReplicationFlowControlCommand, error) {
+	if v, ok := ReplicationFlowControlCommand_value[s]; ok {
+		return ReplicationFlowControlCommand(v), nil
+	} else if v, ok := ReplicationFlowControlCommand_shorthandValue[s]; ok {
+		return ReplicationFlowControlCommand(v), nil
+	}
+	return ReplicationFlowControlCommand(0), fmt.Errorf("%s is not a valid ReplicationFlowControlCommand", s)
+}

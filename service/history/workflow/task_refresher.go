@@ -489,9 +489,12 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		// transition history not enabled.
 		return nil
 	}
+	// Reset all the state machine timers, we'll recreate them all.
+	mutableState.GetExecutionInfo().StateMachineTimers = nil
+
 	versionedTransition := transitionHistory[len(transitionHistory)-1]
 
-	return mutableState.HSM().Walk(func(node *hsm.Node) error {
+	err := mutableState.HSM().Walk(func(node *hsm.Node) error {
 		taskRegenerator, err := hsm.MachineData[hsm.TaskRegenerator](node)
 		if err != nil {
 			if node.Parent == nil && errors.Is(err, hsm.ErrIncompatibleType) {
@@ -520,4 +523,11 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	AddNextStateMachineTimerTask(mutableState)
+
+	return nil
 }
