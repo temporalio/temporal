@@ -259,15 +259,15 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Start() *gomock.Call {
 }
 
 // Stop mocks base method.
-func (m *MockphysicalTaskQueueManager) Stop() {
+func (m *MockphysicalTaskQueueManager) Stop(arg0 unloadCause) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
+	m.ctrl.Call(m, "Stop", arg0)
 }
 
 // Stop indicates an expected call of Stop.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop() *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Stop))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Stop), arg0)
 }
 
 // String mocks base method.
@@ -300,15 +300,15 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) TrySyncMatch(ctx, task inter
 }
 
 // UnloadFromPartitionManager mocks base method.
-func (m *MockphysicalTaskQueueManager) UnloadFromPartitionManager() {
+func (m *MockphysicalTaskQueueManager) UnloadFromPartitionManager(arg0 unloadCause) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UnloadFromPartitionManager")
+	m.ctrl.Call(m, "UnloadFromPartitionManager", arg0)
 }
 
 // UnloadFromPartitionManager indicates an expected call of UnloadFromPartitionManager.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) UnloadFromPartitionManager() *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) UnloadFromPartitionManager(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnloadFromPartitionManager", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UnloadFromPartitionManager))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnloadFromPartitionManager", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UnloadFromPartitionManager), arg0)
 }
 
 // UpdatePollerInfo mocks base method.

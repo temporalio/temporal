@@ -2950,7 +2950,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	minTaskID, done := s.taskManager.minTaskID(ptq)
 	s.True(done)
 
-	partitionManager, err := s.matchingEngine.getTaskQueuePartitionManagerNoWait(ptq.Partition(), false)
+	partitionManager, err := s.matchingEngine.getTaskQueuePartitionManagerNoWait(ptq.Partition(), false, loadCauseTask)
 	s.NoError(err)
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 
@@ -2965,7 +2965,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.EqualValues(taskCount*numWorkers, pgMgr.backlogMgr.db.getApproximateBacklogCount())
 
 	// Unload the PQM
-	s.matchingEngine.unloadTaskQueuePartition(partitionManager)
+	s.matchingEngine.unloadTaskQueuePartition(partitionManager, unloadCauseForce)
 
 	// Simulate a TTL'ed task in Cassandra by removing it from the DB
 	// Remove the task from testTaskManager but not from db/AckManager
