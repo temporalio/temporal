@@ -41,6 +41,11 @@ const (
 	StoreTypeNoSQL = "nosql"
 )
 
+var (
+	ErrInvalidVisibilityStoreCombination = errors.New("persistence config: Cannot set visibilityStore and secondaryVisibilityStore with different datastore types")
+	ErrConfigMismatch                    = errors.New("persistence config: Config mismatch for visibilityStore and secondaryVisibilityStore")
+)
+
 // DefaultStoreType returns the storeType for the default persistence store
 func (c *Persistence) DefaultStoreType() string {
 	if c.DataStores[c.DefaultStore].SQL != nil {
@@ -78,17 +83,9 @@ func (c *Persistence) Validate() error {
 		return errors.New("persistence config: visibilityStore must be specified")
 	}
 	if c.SecondaryVisibilityStore != "" {
-		if c.DataStores[c.VisibilityStore].Elasticsearch == nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil {
-			return errors.New(
-				"persistence config: cannot set secondaryVisibilityStore elasticsearch datastore" +
-					"when visibilityStore is setting advanced sql datastore",
-			)
-		}
-		if c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch == nil {
-			return errors.New(
-				"persistence config: cannot set secondaryVisibilityStore advanced sql datastore" +
-					"when visibilityStore is setting elasticsearch datastore",
-			)
+		if (c.DataStores[c.VisibilityStore].Elasticsearch == nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil) ||
+			(c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch == nil) {
+			return ErrInvalidVisibilityStoreCombination
 		}
 	}
 	if c.DataStores[c.VisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" && c.SecondaryVisibilityStore != "" {
@@ -123,10 +120,7 @@ func (c *Persistence) Validate() error {
 				continue
 			}
 			if !reflect.DeepEqual(visibilityStoreEsConfig.Field(i).Interface(), secondaryVisibilityStoreEsConfig.Field(i).Interface()) {
-				return fmt.Errorf(
-					"persistence config: Config mismatch for visibilityStore and secondaryVisibilityStore: %q",
-					visibilityStoreEsConfig.Type().Field(i).Name,
-				)
+				return fmt.Errorf("%w: %q", ErrConfigMismatch, visibilityStoreEsConfig.Type().Field(i).Name)
 			}
 		}
 	}
