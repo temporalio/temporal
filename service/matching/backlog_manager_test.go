@@ -301,7 +301,8 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 	backlogMgr := newBacklogMgr(controller, true)
 
 	// mock error signals
-	logger := backlogMgr.logger.(*log.MockLogger)
+	logger, ok := backlogMgr.logger.(*log.MockLogger)
+	require.True(t, ok)
 	logger.EXPECT().Error("Persistent store operation failure", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// only start the taskWriter for now!
