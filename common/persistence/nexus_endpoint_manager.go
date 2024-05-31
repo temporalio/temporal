@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -35,15 +36,8 @@ import (
 )
 
 var (
-	ErrNexusTableVersionConflict = &ConditionFailedError{
-		Msg: "nexus endpoints table version mismatch",
-	}
-	ErrNexusEndpointVersionConflict = &ConditionFailedError{
-		Msg: "nexus endpoint version mismatch",
-	}
-	ErrNexusEndpointNotFound = &ConditionFailedError{
-		Msg: "nexus endpoint not found",
-	}
+	ErrNexusTableVersionConflict          = serviceerror.NewFailedPrecondition("nexus endpoints table version mismatch")
+	ErrNexusEndpointVersionConflict       = serviceerror.NewFailedPrecondition("nexus endpoint version mismatch")
 	ErrNegativeListNexusEndpointsPageSize = &InvalidPersistenceRequestError{
 		Msg: "received negative page size for listing Nexus endpoints",
 	}

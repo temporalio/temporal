@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/worker_versioning"
@@ -45,10 +46,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
-	"go.temporal.io/server/common/cluster/clustertest"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"go.temporal.io/server/common/cluster/clustertest"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -353,23 +355,23 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 		uuid.New(),
 		"makeToast",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	tqm2 := s.newPartitionManager(prtn, s.matchingEngine.config)
 
 	// try to unload a different tqm instance with the same taskqueue ID
-	s.matchingEngine.unloadTaskQueuePartition(tqm2)
+	s.matchingEngine.unloadTaskQueuePartition(tqm2, unloadCauseUnspecified)
 
-	got, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true)
+	got, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 	s.Require().Same(tqm, got,
 		"Unload call with non-matching taskQueuePartitionManager should not cause unload")
 
 	// this time unload the right tqm
-	s.matchingEngine.unloadTaskQueuePartition(tqm)
+	s.matchingEngine.unloadTaskQueuePartition(tqm, unloadCauseUnspecified)
 
-	got, err = s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true)
+	got, err = s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 	s.Require().NotSame(tqm, got,
 		"Unload call with matching incarnation should have caused unload")
@@ -1773,7 +1775,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// unload the queue and stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
-	tlMgr.UnloadFromPartitionManager()
+	tlMgr.UnloadFromPartitionManager(unloadCauseUnspecified)
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
@@ -1875,7 +1877,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		mgr.Start()
 		// tlMgr.taskWriter startup is async so give it time to complete
 		time.Sleep(100 * time.Millisecond)
-		mgr.(*taskQueuePartitionManagerImpl).unloadFromEngine()
+		mgr.(*taskQueuePartitionManagerImpl).unloadFromEngine(unloadCauseUnspecified)
 
 		getTasksCount := s.taskManager.getGetTasksCount(dbq) - prevGetTasksCount
 		s.LessOrEqual(getTasksCount, 1)
@@ -2436,10 +2438,10 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	// unload base and versioned tqm. note: unload the partition manager unloads both
 	prtn := newRootPartition(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	baseTqm, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, prtn, false)
+	baseTqm, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, prtn, false, loadCauseUnspecified)
 	s.NoError(err)
 	s.NotNil(baseTqm)
-	s.matchingEngine.unloadTaskQueuePartition(baseTqm)
+	s.matchingEngine.unloadTaskQueuePartition(baseTqm, unloadCauseUnspecified)
 	// wait for taskReader goroutines to exit
 	baseTqm.(*taskQueuePartitionManagerImpl).userDataManager.(*userDataManagerImpl).goroGroup.Wait()
 
@@ -2504,9 +2506,9 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	p2, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.New(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.NoError(err)
 
-	_, err = e.getTaskQueuePartitionManager(context.Background(), p1, true)
+	_, err = e.getTaskQueuePartitionManager(context.Background(), p1, true, loadCauseUnspecified)
 	s.NoError(err)
-	_, err = e.getTaskQueuePartitionManager(context.Background(), p2, true)
+	_, err = e.getTaskQueuePartitionManager(context.Background(), p2, true, loadCauseUnspecified)
 	s.NoError(err)
 
 	s.Equal(2, len(e.getTaskQueuePartitions(1000)))
@@ -2527,7 +2529,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	}, 100*time.Millisecond, 10*time.Millisecond, "p2 should have been unloaded")
 
 	isLoaded := func(p tqid.Partition) bool {
-		tqm, err := e.getTaskQueuePartitionManager(context.Background(), p, false)
+		tqm, err := e.getTaskQueuePartitionManager(context.Background(), p, false, loadCauseUnspecified)
 		s.NoError(err)
 		return tqm != nil
 	}
@@ -2570,7 +2572,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWor
 		uuid.New(),
 		"MetricTester",
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	s.TaskQueueMetricValidator(capture, 1, 1, 1, 1, 1, 1)
@@ -2595,7 +2597,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 		uuid.New(),
 		"MetricTester",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creation of a new root partition, having an activity task queue, should not have
@@ -2621,7 +2623,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 		uuid.New(),
 		"MetricTester",
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(31)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), NonRootPrtn, true)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), NonRootPrtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creation of a non-root partition should only increase the Queue Partition counter
@@ -2646,7 +2648,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 		uuid.New(),
 		"MetricTester",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
@@ -2681,7 +2683,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	versionSet := uuid.New()
 	tl := "MetricTester"
 	dbq := VersionSetQueueKey(newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), versionSet)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
@@ -2718,7 +2720,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	buildID := uuid.New()
 	tl := "MetricTester"
 	dbq := BuildIdQueueKey(newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), buildID)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
@@ -3225,7 +3227,6 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
-	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	return config
 }
 

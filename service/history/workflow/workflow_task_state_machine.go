@@ -619,6 +619,18 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		return false
 	}
 
+	// Speculative WFT can be dropped only if there are no events after previous WFTCompleted event,
+	// i.e. last event in the history is WFTCompleted event.
+	// It is guaranteed that WFTStarted event is followed by WFTCompleted event and history tail might look like:
+	//   previous WFTStarted
+	//   previous WFTCompleted
+	//   --> NextEventID points here because it doesn't move for speculative WFT.
+	// In this case difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
+	// If there are other events after WFTCompleted event, then difference is > 2 and speculative WFT can't be dropped.
+	if m.ms.GetNextEventID() != m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
+		return false
+	}
+
 	for _, message := range request.Messages {
 		if !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
 			return false
@@ -1038,7 +1050,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	limits WorkflowTaskCompletionLimits,
 ) error {
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
-	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
+	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
@@ -1131,11 +1143,6 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	// If execution info in mutable state has speculative workflow task, then
 	// convert it to normal workflow task before persisting.
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
-
-	if !m.ms.IsWorkflowExecutionRunning() {
-		// Workflow execution can be terminated. New events can't be added after workflow is finished.
-		return nil
-	}
 
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 

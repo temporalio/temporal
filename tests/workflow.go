@@ -43,9 +43,10 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testvars"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
@@ -1086,7 +1087,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		}
 
 		s.Run("workflow is not running", func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			_, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
 			s.NoError(err)
@@ -1095,7 +1096,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		s.Run("workflow is running", func() {
 
 			s.Run("workflow id reuse policy use-existing: only send update", func() {
-				tv := testvars.New(s.T().Name())
+				tv := testvars.New(s.T())
 
 				_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
 				s.NoError(err)
@@ -1108,7 +1109,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			})
 
 			s.Run("workflow id reuse policy terminate-existing: terminate workflow first, then start and update", func() {
-				tv := testvars.New(s.T().Name())
+				tv := testvars.New(s.T())
 
 				initReq := startWorkflowReq(tv)
 				initReq.TaskQueue.Name = initReq.TaskQueue.Name + "-init" // avoid race condition with poller
@@ -1132,7 +1133,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			})
 
 			s.Run("workflow id reuse policy fail: abort multi operation", func() {
-				tv := testvars.New(s.T().Name())
+				tv := testvars.New(s.T())
 
 				_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
 				s.NoError(err)

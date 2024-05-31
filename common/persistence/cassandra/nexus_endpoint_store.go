@@ -284,9 +284,7 @@ func (s *NexusEndpointStore) DeleteNexusEndpoint(
 				currentTableVersion)
 		}
 
-		return fmt.Errorf("%w. provided ID: %v",
-			p.ErrNexusEndpointNotFound,
-			request.ID)
+		return serviceerror.NewNotFound(fmt.Sprintf("nexus endpoint not found for ID: %v", request.ID))
 	}
 
 	return nil

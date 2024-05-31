@@ -794,6 +794,9 @@ func SourceShardID(shardID int32) ZapTag {
 func TargetShardID(shardID int32) ZapTag {
 	return NewInt32("xdc-target-shard-id", shardID)
 }
+func ReplicationTask(replicationTask interface{}) ZapTag {
+	return NewAnyTag("xdc-replication-task", replicationTask)
+}
 
 // PrevActiveCluster returns tag for PrevActiveCluster
 func PrevActiveCluster(prevActiveCluster string) ZapTag {

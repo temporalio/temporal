@@ -284,7 +284,7 @@ func TestProcessInvocationTask(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:             dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					CallbackURLTemplate: dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
 				},
@@ -300,7 +300,15 @@ func TestProcessInvocationTask(t *testing.T) {
 				},
 			}))
 
-			err := hsm.Execute(context.Background(), reg, env, hsm.Ref{WorkflowKey: definition.NewWorkflowKey("ns-id", "wf-id", "run-id"), StateMachineRef: &persistence.StateMachineRef{}}, nexusoperations.InvocationTask{Destination: "endpoint-name"})
+			err := reg.ExecuteActiveTask(
+				context.Background(),
+				env,
+				hsm.Ref{
+					WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
+					StateMachineRef: &persistence.StateMachineRef{},
+				},
+				nexusoperations.InvocationTask{Destination: "endpoint-name"},
+			)
 			require.NoError(t, err)
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
@@ -327,7 +335,12 @@ func TestProcessBackoffTask(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = hsm.Execute(context.Background(), reg, env, hsm.Ref{}, nexusoperations.BackoffTask{})
+	err = reg.ExecuteActiveTask(
+		context.Background(),
+		env,
+		hsm.Ref{},
+		nexusoperations.BackoffTask{},
+	)
 	require.NoError(t, err)
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
@@ -343,7 +356,12 @@ func TestProcessTimeoutTask(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
 
-	err := hsm.Execute(context.Background(), reg, env, hsm.Ref{}, nexusoperations.TimeoutTask{})
+	err := reg.ExecuteActiveTask(
+		context.Background(),
+		env,
+		hsm.Ref{},
+		nexusoperations.TimeoutTask{},
+	)
 	require.NoError(t, err)
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
@@ -483,7 +501,7 @@ func TestProcessCancelationTask(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+					Enabled:        dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 				},
 				NamespaceRegistry: namespaceRegistry,
@@ -497,7 +515,15 @@ func TestProcessCancelationTask(t *testing.T) {
 				},
 			}))
 
-			err = hsm.Execute(context.Background(), reg, env, hsm.Ref{WorkflowKey: definition.NewWorkflowKey("ns-id", "wf-id", "run-id"), StateMachineRef: &persistence.StateMachineRef{}}, nexusoperations.CancelationTask{Destination: "endpoint-name"})
+			err = reg.ExecuteActiveTask(
+				context.Background(),
+				env,
+				hsm.Ref{
+					WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
+					StateMachineRef: &persistence.StateMachineRef{},
+				},
+				nexusoperations.CancelationTask{Destination: "endpoint-name"},
+			)
 			require.NoError(t, err)
 			cancelation, err := hsm.MachineData[nexusoperations.Cancelation](node)
 			require.NoError(t, err)
@@ -539,7 +565,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
 		Config: &nexusoperations.Config{
-			Enabled:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+			Enabled:        dynamicconfig.GetBoolPropertyFn(true),
 			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 		},
 		NamespaceRegistry: namespaceRegistry,
@@ -551,7 +577,15 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		},
 	}))
 
-	err = hsm.Execute(context.Background(), reg, env, hsm.Ref{WorkflowKey: definition.NewWorkflowKey("ns-id", "wf-id", "run-id"), StateMachineRef: &persistence.StateMachineRef{}}, nexusoperations.CancelationTask{Destination: "endpoint-name"})
+	err = reg.ExecuteActiveTask(
+		context.Background(),
+		env,
+		hsm.Ref{
+			WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
+			StateMachineRef: &persistence.StateMachineRef{},
+		},
+		nexusoperations.CancelationTask{Destination: "endpoint-name"},
+	)
 	require.ErrorIs(t, err, consts.ErrStaleReference)
 }
 
@@ -588,7 +622,12 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
 
-	err = hsm.Execute(context.Background(), reg, env, hsm.Ref{}, nexusoperations.CancelationBackoffTask{})
+	err = reg.ExecuteActiveTask(
+		context.Background(),
+		env,
+		hsm.Ref{},
+		nexusoperations.CancelationBackoffTask{},
+	)
 	require.NoError(t, err)
 	c, err := hsm.MachineData[nexusoperations.Cancelation](node)
 	require.NoError(t, err)

@@ -429,6 +429,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 	)
 
 	currentMutation, currentEvents := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -465,6 +466,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 	)
 
 	currentMutation, currentEvents := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -504,6 +506,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 	)
 
 	currentMutation, currentEvents := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -539,6 +542,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 	)
 
 	updateMutation, updateEvents := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -614,6 +618,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 	s.NoError(err)
 
 	zombieMutation, zombieEvents2 := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -650,6 +655,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
 	)
 
 	currentMutation, currentEvents := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -709,6 +715,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 	s.NoError(err)
 
 	zombieMutation, zombieEvents := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -769,6 +776,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 	s.NoError(err)
 
 	zombieMutation, zombieEvents2 := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -857,6 +865,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		baseBranchToken,
 	)
 	currentMutation, currentEvents2 := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -937,6 +946,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 	currentRunID := uuid.New().String()
 	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.historyBranchUtil)
 	currentMutation, currentEvents := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		currentRunID,
@@ -1013,6 +1023,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		baseBranchToken,
 	)
 	currentMutation, currentEvents2 := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1089,6 +1100,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		baseBranchToken,
 	)
 	currentMutation, currentEvents2 := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1178,6 +1190,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		newBranchToken,
 	)
 	currentMutation, currentEvents2 := RandomMutation(
+		s.T(),
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,

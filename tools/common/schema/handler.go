@@ -41,7 +41,7 @@ func Setup(cli *cli.Context, db DB, logger log.Logger) error {
 	if err != nil {
 		return err
 	}
-	return newSetupSchemaTask(db, cfg, logger).Run()
+	return NewSetupSchemaTask(db, cfg, logger).Run()
 }
 
 // Update updates the schema for the specified database
@@ -50,7 +50,7 @@ func Update(cli *cli.Context, db DB, logger log.Logger) error {
 	if err != nil {
 		return err
 	}
-	return newUpdateSchemaTask(db, cfg, logger).Run()
+	return NewUpdateSchemaTask(db, cfg, logger).Run()
 }
 
 func newUpdateConfig(cli *cli.Context, db DB) (*UpdateConfig, error) {

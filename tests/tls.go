@@ -94,7 +94,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	calls := s.trackAuthInfoByCall()
 
 	// Confirm non-HTTPS call is rejected with 400
-	resp, err := http.Get("http://" + s.httpAPIAddress + "/api/v1/namespaces/" + s.namespace + "/workflows")
+	resp, err := http.Get("http://" + s.httpAPIAddress + "/namespaces/" + s.namespace + "/workflows")
 	s.Require().NoError(err)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 
@@ -106,7 +106,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	}
 
 	// Make a list call
-	req, err := http.NewRequest("GET", "https://"+s.httpAPIAddress+"/api/v1/namespaces/"+s.namespace+"/workflows", nil)
+	req, err := http.NewRequest("GET", "https://"+s.httpAPIAddress+"/namespaces/"+s.namespace+"/workflows", nil)
 	s.Require().NoError(err)
 	resp, err = httpClient.Do(req)
 	s.Require().NoError(err)

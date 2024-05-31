@@ -77,6 +77,8 @@ const (
 	// ResourceExhaustedScopeHeader will be added to rpc response if request returns ResourceExhausted error.
 	// Value of this header will be the scope of exhausted resource.
 	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
+
+	shardUnavailableErrorMessage = "shard unavailable, please backoff and retry"
 )
 
 // Dial creates a client connection to the given target with default options.
@@ -152,6 +154,47 @@ func headersInterceptor(
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
+func ServiceErrorInterceptor(
+	ctx context.Context,
+	req interface{},
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+
+	resp, err := handler(ctx, req)
+	return resp, serviceerror.ToStatus(err).Err()
+}
+
+func NewFrontendServiceErrorInterceptor(
+	logger log.Logger,
+) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		_ *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+
+		resp, err := handler(ctx, req)
+
+		if err == nil {
+			return resp, err
+		}
+
+		// mask some internal service errors at frontend
+		switch err.(type) {
+		case *serviceerrors.ShardOwnershipLost:
+			err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+		case *serviceerror.DataLoss:
+			err = serviceerror.NewUnavailable("internal history service error")
+		}
+
+		addHeadersForResourceExhausted(ctx, logger, err)
+
+		return resp, err
+	}
+}
+
 func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
 	var reErr *serviceerror.ResourceExhausted
 	if errors.As(err, &reErr) {
@@ -163,38 +206,4 @@ func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err 
 			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))
 		}
 	}
-}
-
-func NewServiceErrorInterceptor(
-	logger log.Logger,
-) grpc.UnaryServerInterceptor {
-	return func(
-		ctx context.Context,
-		req interface{},
-		_ *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (interface{}, error) {
-
-		resp, err := handler(ctx, req)
-		if err != nil {
-			addHeadersForResourceExhausted(ctx, logger, err)
-		}
-		return resp, serviceerror.ToStatus(err).Err()
-	}
-
-}
-
-func FrontendErrorInterceptor(
-	ctx context.Context,
-	req interface{},
-	_ *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	resp, err := handler(ctx, req)
-
-	// mask some internal errors at frontend
-	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
-		err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
-	}
-	return resp, serviceerror.ToStatus(err).Err()
 }

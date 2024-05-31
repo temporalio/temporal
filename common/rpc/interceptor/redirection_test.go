@@ -333,31 +333,31 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NamespaceNot
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Empty() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{}))
-	allowed := s.redirector.redirectionAllowed(ctx)
+	allowed := s.redirector.RedirectionAllowed(ctx)
 	s.True(allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Error() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		dcRedirectionContextHeaderName: "?",
+		DCRedirectionContextHeaderName: "?",
 	}))
-	allowed := s.redirector.redirectionAllowed(ctx)
+	allowed := s.redirector.RedirectionAllowed(ctx)
 	s.True(allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_True() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		dcRedirectionContextHeaderName: "t",
+		DCRedirectionContextHeaderName: "t",
 	}))
-	allowed := s.redirector.redirectionAllowed(ctx)
+	allowed := s.redirector.RedirectionAllowed(ctx)
 	s.True(allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_False() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		dcRedirectionContextHeaderName: "f",
+		DCRedirectionContextHeaderName: "f",
 	}))
-	allowed := s.redirector.redirectionAllowed(ctx)
+	allowed := s.redirector.RedirectionAllowed(ctx)
 	s.False(allowed)
 }
 

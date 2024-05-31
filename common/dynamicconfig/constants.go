@@ -70,6 +70,11 @@ var (
 		false,
 		`EnableReadFromSecondaryVisibility is the config to enable read from secondary visibility`,
 	)
+	VisibilityEnableShadowReadMode = NewGlobalBoolSetting(
+		"system.visibilityEnableShadowReadMode",
+		false,
+		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
+	)
 	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
 		"system.secondaryVisibilityWritingMode",
 		"off",
@@ -502,11 +507,6 @@ is currently processing a task.
 		200,
 		`NexusEndpointNameMaxLength is the maximum length of a Nexus endpoint name.`,
 	)
-	NexusEndpointDescriptionMaxSize = NewGlobalIntSetting(
-		"limit.endpointDescriptionMaxSize",
-		4*1024,
-		`NexusEndpointDescriptionMaxSize is the maximum size of a Nexus endpoint description in bytes.`,
-	)
 	NexusEndpointExternalURLMaxLength = NewGlobalIntSetting(
 		"limit.endpointExternalURLMaxLength",
 		4*1024,
@@ -713,6 +713,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10,
 		`FrontendMaxBadBinaries is the max number of bad binaries in namespace config`,
 	)
+	FrontendMaskInternalErrorDetails = NewNamespaceBoolSetting(
+		"frontend.maskInternalErrorDetails",
+		true,
+		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
+	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
@@ -805,16 +810,11 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
-	FrontendEnableNexusAPIs = NewGlobalBoolSetting(
-		"frontend.enableNexusAPIs",
+	EnableNexus = NewGlobalBoolSetting(
+		"system.enableNexus",
 		false,
-		`FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.`,
-	)
-	EnableNexusEndpointRegistryBackgroundRefresh = NewGlobalBoolSetting(
-		"system.enableNexusEndpointRegistryBackgroundRefresh",
-		false,
-		`EnableNexusEndpointRegistryBackgroundRefresh toggles the background refresh job of the Nexus endpoint registry on
-frontend and history hosts.`,
+		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
+server hosts for it to take effect.`,
 	)
 	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"system.refreshNexusEndpointsLongPollTimeout",
@@ -826,20 +826,20 @@ frontend and history hosts.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
-	FrontendEnableCallbackAttachment = NewNamespaceBoolSetting(
-		"frontend.enableCallbackAttachment",
-		false,
-		`FrontendEnableCallbackAttachment enables attaching callbacks to workflows.`,
-	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
 		`FrontendCallbackURLMaxLength is the maximum length of callback URL`,
 	)
-	FrontendMaxCallbacksPerWorkflow = NewNamespaceIntSetting(
-		"frontend.maxCallbacksPerWorkflow",
+	FrontendCallbackHeaderMaxSize = NewNamespaceIntSetting(
+		"frontend.callbackHeaderMaxLength",
+		8*1024,
+		`FrontendCallbackHeaderMaxSize is the maximum accumulated size of callback header keys and values`,
+	)
+	MaxCallbacksPerWorkflow = NewNamespaceIntSetting(
+		"system.maxCallbacksPerWorkflow",
 		32,
-		`FrontendMaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
@@ -855,20 +855,6 @@ frontend and history hosts.`,
 		"frontend.enableBatcher",
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
-	)
-	FrontendAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.accessHistoryFraction",
-		1.0,
-		`FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
-service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
-	)
-	FrontendAdminDeleteAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.adminDeleteAccessHistoryFraction",
-		1.0,
-		`FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
-that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
 	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
@@ -1244,12 +1230,12 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 	)
 	EnableHostHistoryCache = NewGlobalBoolSetting(
 		"history.enableHostHistoryCache",
-		false,
+		true,
 		`EnableHostHistoryCache controls if the history cache is host level`,
 	)
 	HistoryCacheHostLevelMaxSize = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSize",
-		256000,
+		128000,
 		`HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache`,
 	)
 	HistoryCacheHostLevelMaxSizeBytes = NewGlobalIntSetting(
@@ -1257,13 +1243,6 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 		256000*4*1024,
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 HistoryCacheSizeBasedLimit is set to true.`,
-	)
-	EnableMutableStateTransitionHistory = NewGlobalBoolSetting(
-		"history.enableMutableStateTransitionHistory",
-		false,
-		`EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
-The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
-change with the pending replication design.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
@@ -1594,11 +1573,6 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		`TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue`,
 	)
 
-	OutboundProcessorEnabled = NewGlobalBoolSetting(
-		"history.outboundProcessorEnabled",
-		false,
-		`OutboundProcessorEnabled enables starting the outbound queue processor.`,
-	)
 	OutboundTaskBatchSize = NewGlobalIntSetting(
 		"history.outboundTaskBatchSize",
 		100,
@@ -2125,6 +2099,21 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderHighPriorityQPS",
+		100,
+		`Maximum number of high priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamSenderLowPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLowPriorityQPS",
+		100,
+		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxOutstandingTaskCount",
+		50,
+		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
 
 	// keys for worker
 
@@ -2353,5 +2342,16 @@ close to or more than the workflow task timeout)`,
 		map[string]any{},
 		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
 settings for controlling remote activity concurrency for delete namespace workflows.`,
+	)
+
+	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
+		"limit.userMetadataSummarySize",
+		400,
+		`MaxUserMetadataSummarySize is the maximum size of user metadata summary payloads in bytes.`,
+	)
+	MaxUserMetadataDetailsSize = NewNamespaceIntSetting(
+		"limit.userMetadataDetailsSize",
+		20000,
+		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
 )

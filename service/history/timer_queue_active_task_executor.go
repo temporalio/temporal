@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
-	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -124,7 +123,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		// TODO: exclude task types here if we believe it's safe & necessary to execute
 		//  them during namespace handover.
 		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
-		//  be returned from task executor
+		//  be returned from task executor. Also check the standby queue logic.
 		return queues.ExecuteResponse{
 			ExecutionMetricTags: metricsTags,
 			ExecutedAsActive:    true,
@@ -133,7 +132,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	}
 
 	if isAStateMachineTask {
-		err = hsm.Execute(ctx, t.shardContext.StateMachineRegistry(), t, smRef, smt)
+		smRegistry := t.shardContext.StateMachineRegistry()
+		err = smRegistry.ExecuteActiveTask(ctx, t, smRef, smt)
 		return queues.ExecuteResponse{
 			ExecutionMetricTags: metricsTags,
 			ExecutedAsActive:    true,

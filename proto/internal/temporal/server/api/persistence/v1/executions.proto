@@ -89,8 +89,7 @@ message WorkflowExecutionInfo {
     reserved 16;
     int64 last_event_task_id = 17;
     int64 last_first_event_id = 18;
-    // Started event id for the last *completed* workflow task
-    int64 last_workflow_task_started_event_id = 19;
+    int64 last_completed_workflow_task_started_event_id = 19;
     google.protobuf.Timestamp start_time = 20;
     google.protobuf.Timestamp last_update_time = 21;
 
