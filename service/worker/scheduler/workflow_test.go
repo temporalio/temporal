@@ -1785,6 +1785,65 @@ func (s *workflowSuite) TestSignalBetweenNominalAndJittered() {
 	)
 }
 
+func (s *workflowSuite) TestPauseUnpauseBetweenNominalAndJittered() {
+	s.T().Skip("this illustrates an existing bug")
+
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 49, 22, 594000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 53, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T02:00:00Z",
+				start:  time.Date(2022, 6, 1, 2, 2, 39, 204000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 2, 11, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T03:00:00Z",
+				start:  time.Date(2022, 6, 1, 3, 37, 29, 538000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 3, 41, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T04:00:00Z",
+				start:  time.Date(2022, 6, 1, 4, 23, 34, 755000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 4, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 3, 20, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{Pause: "paused"})
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 3, 30, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{Unpause: "go ahead"})
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 5, 0, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+				Jitter: durationpb.New(1 * time.Hour),
+			},
+		},
+	)
+}
+
 func (s *workflowSuite) TestLimitedActions() {
 	// written using low-level mocks so we can sleep forever
 
