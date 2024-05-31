@@ -4466,6 +4466,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 		The second speculative WT responds back, server accepted it.
 	*/
 
+	// reset reuse minimal interval to allow workflow termination
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+
 	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
