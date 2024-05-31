@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -279,8 +278,7 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 
 func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
 	logger := log.NewMockLogger(controller)
-	generator := rand.New(rand.NewSource(time.Now().UnixNano()))
-	tm := newTestTaskManager(logger, generator)
+	tm := newTestTaskManager(logger)
 
 	pqMgr := NewMockphysicalTaskQueueManager(controller)
 

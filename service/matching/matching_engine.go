@@ -954,12 +954,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 						// only report Task Queue Statistics if requested.
 						if req.GetReportStats() {
-							rootStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats // BacklogInfo of the previous partition
+							totalStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats
 							partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 
 							// Aggregate counts; for now, we only aggregate approximateBacklogCount
 							mergedStats = &taskqueuepb.TaskQueueStats{
-								ApproximateBacklogCount: rootStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
+								ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
 								ApproximateBacklogAge:   nil,
 								TasksAddRate:            float32(0),
 								TasksDispatchRate:       float32(0),

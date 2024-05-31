@@ -106,7 +106,6 @@ type (
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
 		logger         log.Logger
-		generator      *rand.Rand
 		sync.Mutex
 	}
 )
@@ -121,8 +120,7 @@ func createTestMatchingEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	namespaceRegistry namespace.Registry) *matchingEngineImpl {
 	logger := log.NewTestLogger()
-	generator := rand.New(rand.NewSource(time.Now().UnixNano()))
-	tm := newTestTaskManager(logger, generator)
+	tm := newTestTaskManager(logger)
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
@@ -171,8 +169,7 @@ func (s *matchingEngineSuite) SetupTest() {
 		Return(&matchingservice.UpdateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
-	s.generator = rand.New(rand.NewSource(time.Now().UnixNano()))
-	s.taskManager = newTestTaskManager(s.logger, s.generator)
+	s.taskManager = newTestTaskManager(s.logger)
 	s.taskManager.dbError = false // set to true when you want db to throw errors randomly
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
@@ -3154,10 +3151,9 @@ var _ persistence.TaskManager = (*testTaskManager)(nil) // Asserts that interfac
 
 type testTaskManager struct {
 	sync.Mutex
-	queues    map[dbTaskQueueKey]*testPhysicalTaskQueueManager
-	logger    log.Logger
-	dbError   bool
-	generator *rand.Rand
+	queues  map[dbTaskQueueKey]*testPhysicalTaskQueueManager
+	logger  log.Logger
+	dbError bool
 }
 
 type dbTaskQueueKey struct {
@@ -3170,8 +3166,8 @@ func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
 	return dbTaskQueueKey{dbq.partition.Key(), dbq.versionSet, dbq.buildId}
 }
 
-func newTestTaskManager(logger log.Logger, generator *rand.Rand) *testTaskManager {
-	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger, generator: generator}
+func newTestTaskManager(logger log.Logger) *testTaskManager {
+	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger}
 }
 
 func (m *testTaskManager) GetName() string {
@@ -3379,7 +3375,7 @@ func (m *testTaskManager) generateErrorRandomly() bool {
 		threshold := 10
 
 		// Generate a random number between 0 and 99
-		randomNumber := m.generator.Intn(100)
+		randomNumber := rand.Intn(100)
 		if randomNumber < threshold {
 			return true
 		}
@@ -3397,7 +3393,7 @@ func (m *testTaskManager) CreateTasks(
 	taskType := request.TaskQueueInfo.Data.TaskType
 	rangeID := request.TaskQueueInfo.RangeID
 
-	// Randomly returns an error
+	// Randomly returns a ConditionFailedError
 	if m.generateErrorRandomly() {
 		return nil, &persistence.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",

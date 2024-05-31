@@ -34,11 +34,11 @@ import (
 )
 
 func TestAckManager_AddingTasksIncreasesBacklogCounter(t *testing.T) {
+	t.Parallel()
+
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	backlogMgr := newBacklogMgr(controller)
 
-	t.Parallel()
 	backlogMgr.taskAckManager.addTask(1)
 	require.Equal(t, backlogMgr.taskAckManager.getBacklogCountHint(), int64(1))
 	backlogMgr.taskAckManager.addTask(12)
@@ -48,7 +48,6 @@ func TestAckManager_AddingTasksIncreasesBacklogCounter(t *testing.T) {
 func TestAckManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
 	t.Parallel()
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	backlogMgr := newBacklogMgr(controller)
 
 	backlogMgr.taskAckManager.addTask(1)
@@ -69,7 +68,6 @@ func TestAckManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
 
 func BenchmarkAckManager_AddTask(b *testing.B) {
 	controller := gomock.NewController(b)
-	defer controller.Finish()
 
 	tasks := make([]int, 1000)
 	for i := 0; i < len(tasks); i++ {
@@ -94,7 +92,6 @@ func BenchmarkAckManager_AddTask(b *testing.B) {
 
 func BenchmarkAckManager_CompleteTask(b *testing.B) {
 	controller := gomock.NewController(b)
-	defer controller.Finish()
 
 	tasks := make([]int, 1000)
 	b.ResetTimer()
@@ -106,6 +103,7 @@ func BenchmarkAckManager_CompleteTask(b *testing.B) {
 		for i := 0; i < len(tasks); i++ {
 			tasks[i] = i
 			backlogMgr.taskAckManager.addTask(int64(i))
+			backlogMgr.db.updateApproximateBacklogCount(int64(1)) // Increment the backlog so that we don't under-count
 		}
 		rand.Shuffle(len(tasks), func(i, j int) {
 			tasks[i], tasks[j] = tasks[j], tasks[i]
