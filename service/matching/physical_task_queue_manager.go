@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -104,6 +103,7 @@ type (
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		// Describe returns information about the physical task queue
 		Describe() *taskqueuespb.PhysicalTaskQueueInfo
+		GetStats() *taskqueuepb.TaskQueueStats
 		UnloadFromPartitionManager(unloadCause)
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
@@ -389,7 +389,17 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 
 func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
 	return &taskqueuespb.PhysicalTaskQueueInfo{
-		Pollers: c.GetAllPollerInfo(),
+		Pollers:        c.GetAllPollerInfo(),
+		TaskQueueStats: c.GetStats(),
+	}
+}
+
+func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
+	return &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
+		ApproximateBacklogAge:   nil,        // TODO: Shivam - add this feature
+		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
+		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature
 	}
 }
 
