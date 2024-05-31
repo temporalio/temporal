@@ -59,8 +59,8 @@ type (
 		Start()
 		Stop()
 		WaitUntilInitialized(context.Context) error
-		BacklogCountHint() int64
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
+		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		String() string
 	}
