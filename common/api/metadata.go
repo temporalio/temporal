@@ -67,6 +67,7 @@ const (
 const (
 	WorkflowServicePrefix = "/temporal.api.workflowservice.v1.WorkflowService/"
 	OperatorServicePrefix = "/temporal.api.operatorservice.v1.OperatorService/"
+	HistoryServicePrefix  = "/temporal.server.api.historyservice.v1.HistoryService/"
 	AdminServicePrefix    = "/temporal.server.api.adminservice.v1.AdminService/"
 	// Technically not a gRPC service, but still using this format for metadata.
 	NexusServicePrefix = "/temporal.api.nexusservice.v1.NexusService/"
