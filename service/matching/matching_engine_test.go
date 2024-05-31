@@ -3076,7 +3076,6 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksD
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
-<<<<<<< HEAD
 func (s *matchingEngineSuite) TestLargerBacklogAge() {
 	firstAge := durationpb.New(100 * time.Second)
 	secondAge := durationpb.New(1 * time.Millisecond)
@@ -3087,8 +3086,6 @@ func (s *matchingEngineSuite) TestLargerBacklogAge() {
 	s.Same(thirdAge, s.matchingEngine.largerBacklogAge(secondAge, thirdAge))
 }
 
-=======
->>>>>>> main
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
