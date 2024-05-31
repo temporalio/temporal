@@ -643,7 +643,6 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 				}, nil
 			}).AnyTimes()
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	}
 
 	randomLoadedShard := func() (int32, Context) {
@@ -738,6 +737,10 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 	mockEngine := NewMockEngine(s.controller)
 	historyEngines[shardID] = mockEngine
 	s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: 6,
+	}).Return(nil).MinTimes(1)
 
 	s.shardController.acquireShards(context.Background())
 
@@ -821,8 +824,8 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 
 	mockEngine.EXPECT().Stop().Return().MinTimes(1)
 
-	// We mock 2 AssertShardOwnership calls because the first call happens
-	// before any waiting actually occcurs in shardLingerAndClose.
+	// We mock 2 AssertShardOwnership calls in shardLingerThenClose.
+	// The second one finds that the shard is no longer owned by the host, and unloads it.
 	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 		ShardID: shardID,
 		RangeID: 6,
@@ -837,8 +840,8 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 
 	s.shardController.acquireShards(context.Background())
 
-	// Wait for one check plus 100ms of test fudge factor.
-	expectedWait := time.Second / time.Duration(checkQPS)
+	// Wait for two checks plus 100ms of test fudge factor.
+	expectedWait := time.Second / time.Duration(checkQPS) * 2
 	time.Sleep(expectedWait + 100*time.Millisecond)
 
 	s.Len(s.shardController.ShardIDs(), 0)
@@ -925,10 +928,6 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 		},
 		PreviousRangeID: currentRangeID,
 	})).Return(nil).MinTimes(minTimes)
-	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
-		ShardID: shardID,
-		RangeID: newRangeID,
-	}).Return(nil).MinTimes(minTimes)
 }
 
 func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {

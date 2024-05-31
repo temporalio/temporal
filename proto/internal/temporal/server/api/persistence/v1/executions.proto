@@ -206,6 +206,13 @@ message WorkflowExecutionInfo {
     // 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
     string root_workflow_id = 83;
     string root_run_id = 84;
+
+    // Timer tasks emitted from state machines are stored in this array, grouped and sorted by their deadline. Only the
+    // next state machine timer task is generated at a time per mutable state. When that task is processed it iterates
+    // this array and triggers timers that are ready.
+    // NOTE: Task status is clsuter specific information, so when replicating mutable state, this field need to be
+    // sanitized.
+    repeated StateMachineTimerGroup state_machine_timers = 90;
 }
 
 message ExecutionStats {
@@ -302,8 +309,10 @@ message TimerTaskInfo {
     // If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
     bool already_archived = 13;
 
+    // Number of transitions on the corresponding mutable state object. Used to verify that a task is not referencing a
+    // stale state or, in some situations, that the task itself is not stale.
     // If task addresses a sub-statemachine (e.g. callback), this field will be set.
-    StateMachineTaskInfo state_machine_info = 14;
+    int64 mutable_state_transition_count = 14;
 
     // If specified, the task is a for a workflow chain instead of a specific workflow run.
     // A workflow chain is identified by the run_id of the first workflow in the chain.

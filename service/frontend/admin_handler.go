@@ -1665,15 +1665,24 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 	logger.Info("AdminStreamReplicationMessages started.")
 	defer logger.Info("AdminStreamReplicationMessages stopped.")
 
-	ctx := clientCluster.Context()
-	serverCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(ctx)
+	historyStreamCtx, cancel := context.WithCancel(clientCluster.Context())
+	defer cancel()
+
+	serverCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(historyStreamCtx)
 	if err != nil {
 		return err
 	}
 
 	shutdownChan := channel.NewShutdownOnce()
 	go func() {
-		defer shutdownChan.Shutdown()
+		defer func() {
+			shutdownChan.Shutdown()
+			err = serverCluster.CloseSend()
+			if err != nil {
+				logger.Error("Failed to close AdminStreamReplicationMessages server", tag.Error(err))
+			}
+
+		}()
 
 		for !shutdownChan.IsShutdown() {
 			req, err := clientCluster.Recv()

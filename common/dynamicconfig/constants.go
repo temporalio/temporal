@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -1309,20 +1310,8 @@ checks while a shard is lingering.`,
 		0,
 		`ShardLingerTimeLimit configures if and for how long the shard controller
 will temporarily delay closing shards after a membership update, awaiting a
-shard ownership lost error from persistence. Not recommended with
-persistence layers that are missing AssertShardOwnership support.
-If set to zero, shards will not delay closing.`,
-	)
-	ShardOwnershipAssertionEnabled = NewGlobalBoolSetting(
-		"history.shardOwnershipAssertionEnabled",
-		false,
-		`ShardOwnershipAssertionEnabled configures if the shard ownership is asserted
-for API requests when a NotFound or NamespaceNotFound error is returned from
-persistence.
-NOTE: Shard ownership assertion is not implemented by any persistence implementation
-in this codebase, because assertion is not needed for persistence implementation
-that guarantees read after write consistency. As a result, even if this config is
-enabled, it's a no-op.`,
+shard ownership lost error from persistence. If set to zero, shards will not delay closing.
+Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
 	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",
@@ -1336,6 +1325,11 @@ to this require a restart to take effect.`,
 		"history.shardIOConcurrency",
 		1,
 		`ShardIOConcurrency controls the concurrency of persistence operations in shard context`,
+	)
+	ShardIOTimeout = NewGlobalDurationSetting(
+		"history.shardIOTimeout",
+		5*time.Second*debug.TimeoutMultiplier,
+		`ShardIOTimeout sets the timeout for persistence operations in the shard context`,
 	)
 	StandbyClusterDelay = NewGlobalDurationSetting(
 		"history.standbyClusterDelay",

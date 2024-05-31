@@ -415,26 +415,11 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 
 func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	task := &tasks.StateMachineTimerTask{
-		StateMachineTask: tasks.StateMachineTask{
-			WorkflowKey:         s.workflowKey,
-			VisibilityTimestamp: time.Now().UTC(),
-			TaskID:              rand.Int63(),
-			Info: &persistence.StateMachineTaskInfo{
-				Ref: &persistence.StateMachineRef{
-					Path: []*persistence.StateMachineKey{
-						{
-							Type: rand.Int31(),
-							Id:   "some-id",
-						},
-					},
-					MutableStateNamespaceFailoverVersion: rand.Int63(),
-					MutableStateTransitionCount:          rand.Int63(),
-					MachineTransitionCount:               rand.Int63(),
-				},
-				Type: rand.Int31(),
-				Data: []byte{},
-			},
-		},
+		WorkflowKey:                 s.workflowKey,
+		VisibilityTimestamp:         time.Now().UTC(),
+		TaskID:                      rand.Int63(),
+		Version:                     rand.Int63(),
+		MutableStateTransitionCount: rand.Int63(),
 	}
 
 	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
@@ -446,9 +431,6 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	deserializedTask := deserializedTaskIface.(*tasks.StateMachineTimerTask)
 	s.NoError(err)
 
-	protorequire.ProtoEqual(s.T(), task.Info, deserializedTask.Info)
-	task.Info = nil
-	deserializedTask.Info = nil
 	s.Equal(task, deserializedTask)
 }
 

@@ -26,13 +26,17 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -200,25 +204,105 @@ func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
 	// return expired
 }
 
-func (t *timerQueueTaskExecutorBase) stateMachineTask(task tasks.Task) (hsm.Ref, hsm.Task, bool, error) {
-	cbt, ok := task.(*tasks.StateMachineTimerTask)
+func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
+	ms workflow.MutableState,
+	deadline time.Time,
+	timer *persistencespb.StateMachineTaskInfo,
+	execute func(node *hsm.Node, task hsm.Task) error,
+) error {
+	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(timer.Type)
 	if !ok {
-		return hsm.Ref{}, nil, false, nil
+		return queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", timer.Type))
 	}
-	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
-	if !ok {
-		return hsm.Ref{}, nil, true, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
-	}
-	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindTimer{Deadline: cbt.VisibilityTimestamp})
+	smt, err := def.Deserialize(timer.Data, hsm.TaskKindTimer{Deadline: deadline})
 	if err != nil {
-		return hsm.Ref{}, nil, true, fmt.Errorf(
+		return fmt.Errorf(
 			"%w: %w",
-			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
+			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", timer.Type)),
 			err,
 		)
 	}
-	return hsm.Ref{
-		WorkflowKey:     taskWorkflowKey(task),
-		StateMachineRef: cbt.Info.Ref,
-	}, smt, true, nil
+	ref := hsm.Ref{
+		WorkflowKey:     ms.GetWorkflowKey(),
+		StateMachineRef: timer.Ref,
+	}
+	if err := t.validateStateMachineRef(ms, ref); err != nil {
+		return err
+	}
+	node, err := ms.HSM().Child(ref.StateMachinePath())
+	if err != nil {
+		return err
+	}
+
+	if err := execute(node, smt); err != nil {
+		return fmt.Errorf("failed to execute task: %w", err)
+	}
+	return nil
+}
+
+func (t *timerQueueTaskExecutorBase) executeStateMachineTimerTask(
+	ctx context.Context,
+	task *tasks.StateMachineTimerTask,
+	execute func(node *hsm.Node, task hsm.Task) error,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return nil
+	}
+
+	timers := ms.GetExecutionInfo().StateMachineTimers
+
+	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
+	for len(timers) > 0 {
+		group := timers[0]
+		if !queues.IsTimeExpired(t.shardContext.GetTimeSource().Now(), group.Deadline.AsTime()) {
+			break
+		}
+
+		for _, timer := range group.Infos {
+			err := t.executeSingleStateMachineTimer(ms, group.Deadline.AsTime(), timer, execute)
+			if err != nil {
+				if !errors.As(err, new(*serviceerror.NotFound)) {
+					// Return on first error as we don't want to duplicate the Executable's error handling logic.
+					// This implies that a single bad task in the mutable state timer sequence will cause all other
+					// tasks to be stuck. We'll accept this limitation for now.
+					return err
+				}
+				// TODO(bergundy): Metric?
+				t.logger.Warn("Skipped state machine timer", tag.Error(err))
+			}
+		}
+		// Remove the processed timer group.
+		timers = timers[1:]
+	}
+
+	// We haven't done any work, return without committing.
+	if len(timers) == len(ms.GetExecutionInfo().StateMachineTimers) {
+		return nil
+	}
+
+	// Update processed timers and ensure the next timer task is scheduled.
+	ms.GetExecutionInfo().StateMachineTimers = timers
+	// TODO(bergundy): Right now there's an early return in task_generator.go GenerateDirtySubStateMachineTasks because
+	// transition history may be disabled. Remove this line from here once that early return is gone.
+	workflow.AddNextStateMachineTimerTask(ms)
+
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
+		// closed workflow.
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
+	}
+	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
