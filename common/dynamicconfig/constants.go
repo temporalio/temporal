@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -1336,6 +1337,11 @@ to this require a restart to take effect.`,
 		"history.shardIOConcurrency",
 		1,
 		`ShardIOConcurrency controls the concurrency of persistence operations in shard context`,
+	)
+	ShardIOTimeout = NewGlobalDurationSetting(
+		"history.shardIOTimeout",
+		5*time.Second*debug.TimeoutMultiplier,
+		`ShardIOTimeout sets the timeout for persistence operations in the shard context`,
 	)
 	StandbyClusterDelay = NewGlobalDurationSetting(
 		"history.standbyClusterDelay",

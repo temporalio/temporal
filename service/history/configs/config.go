@@ -92,6 +92,7 @@ type Config struct {
 	AcquireShardInterval           dynamicconfig.DurationPropertyFn
 	AcquireShardConcurrency        dynamicconfig.IntPropertyFn
 	ShardIOConcurrency             dynamicconfig.IntPropertyFn
+	ShardIOTimeout                 dynamicconfig.DurationPropertyFn
 	ShardLingerOwnershipCheckQPS   dynamicconfig.IntPropertyFn
 	ShardLingerTimeLimit           dynamicconfig.DurationPropertyFn
 	ShardOwnershipAssertionEnabled dynamicconfig.BoolPropertyFn
@@ -404,6 +405,7 @@ func NewConfig(
 		AcquireShardInterval:           dynamicconfig.AcquireShardInterval.Get(dc),
 		AcquireShardConcurrency:        dynamicconfig.AcquireShardConcurrency.Get(dc),
 		ShardIOConcurrency:             dynamicconfig.ShardIOConcurrency.Get(dc),
+		ShardIOTimeout:                 dynamicconfig.ShardIOTimeout.Get(dc),
 		ShardLingerOwnershipCheckQPS:   dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
 		ShardLingerTimeLimit:           dynamicconfig.ShardLingerTimeLimit.Get(dc),
 		ShardOwnershipAssertionEnabled: dynamicconfig.ShardOwnershipAssertionEnabled.Get(dc),

@@ -83,6 +83,7 @@ func NewExecutableHistoryTask(
 	taskCreationTime time.Time,
 	task *replicationspb.HistoryTaskAttributes,
 	sourceClusterName string,
+	priority enumsspb.TaskPriority,
 ) *ExecutableHistoryTask {
 	return &ExecutableHistoryTask{
 		ProcessToolBox: processToolBox,
@@ -95,6 +96,7 @@ func NewExecutableHistoryTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			priority,
 		),
 
 		baseExecutionInfo:      task.BaseExecutionInfo,
