@@ -217,3 +217,33 @@ func (s *prioritySemaphoreSuite) Test_AcquireLow_ReleaseHigh() {
 		semaphore.Release(PriorityHigh, 1)
 	})
 }
+
+func (s *prioritySemaphoreSuite) Test_AllThreadsAreWokenUp() {
+	s.T().Parallel()
+	semaphore := NewPrioritySemaphore(10)
+	ctx := context.Background()
+	s.NoError(semaphore.Acquire(ctx, PriorityHigh, 6))
+	s.NoError(semaphore.Acquire(ctx, PriorityHigh, 4))
+
+	wg := sync.WaitGroup{}
+	wg.Add(10)
+	for i := 0; i < 5; i++ {
+		go func() {
+			s.NoError(semaphore.Acquire(ctx, PriorityHigh, 1))
+			wg.Done()
+		}()
+	}
+	for i := 5; i < 10; i++ {
+		go func() {
+			s.NoError(semaphore.Acquire(ctx, PriorityLow, 1))
+			wg.Done()
+		}()
+	}
+
+	// Waiting for all above goroutines to block on semaphore.
+	time.Sleep(time.Second) // nolint
+	semaphore.Release(PriorityHigh, 6)
+	semaphore.Release(PriorityHigh, 4)
+
+	wg.Wait()
+}

@@ -70,7 +70,6 @@ func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, 
 			if priority == PriorityHigh {
 				s.highWaiting++
 				s.highCV.Wait()
-				s.highWaiting--
 			} else {
 				s.lowCV.Wait()
 			}
@@ -120,14 +119,13 @@ func (s *PrioritySemaphoreImpl) Release(priority Priority, n int) {
 		s.lowCount -= n
 	}
 
-	if s.highWaiting != 0 {
-		// If n > 1, more than one caller could potentially make progress.
-		for ; n > 0; n-- {
-			s.highCV.Signal()
-		}
-	} else {
-		for ; n > 0; n-- {
-			s.lowCV.Signal()
-		}
+	// Wake up threads in highCV. Here n is the number of resources getting release in this call. We might not need
+	// all n threads to consume these resources.
+	for ; s.highWaiting > 0 && n > 0; s.highWaiting, n = s.highWaiting-1, n-1 {
+		s.highCV.Signal()
+	}
+	// Wake up threads in lowCV if resource is available.
+	for ; n > 0; n-- {
+		s.lowCV.Signal()
 	}
 }
