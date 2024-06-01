@@ -119,7 +119,7 @@ func (s *PrioritySemaphoreImpl) Release(priority Priority, n int) {
 		s.lowCount -= n
 	}
 
-	// Wake up threads in highCV. Here n is the number of resources getting release in this call. We might not need
+	// Wake up threads in highCV. Here n is the number of resources getting released in this call. We might not need
 	// all n threads to consume these resources.
 	for ; s.highWaiting > 0 && n > 0; s.highWaiting, n = s.highWaiting-1, n-1 {
 		s.highCV.Signal()
