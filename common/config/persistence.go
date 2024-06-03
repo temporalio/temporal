@@ -99,9 +99,9 @@ func (c *Persistence) Validate() error {
 				ErrPersistenceConfig,
 				c.SecondaryVisibilityStore)
 		}
-		// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
-		// `indices.visibility` config key and private fields - this is a restriction due to global ES client
 		if isPrimaryEs && isSecondaryEs {
+			// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
+			// `indices.visibility` config key and private fields - this is a restriction due to global ES client
 			esConfig := *c.DataStores[c.VisibilityStore].Elasticsearch
 			secEsConfig := *c.DataStores[c.SecondaryVisibilityStore].Elasticsearch
 			esConfig.Indices = nil
