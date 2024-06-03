@@ -1154,6 +1154,9 @@ var (
 	NamespaceReplicationDLQAckLevelGauge  = NewGaugeDef("namespace_dlq_ack_level")
 	NamespaceReplicationDLQMaxLevelGauge  = NewGaugeDef("namespace_dlq_max_level")
 
+	// Namespace Handover
+	NamespaceHandoverUnavailableWindow = NewTimerDef("namespace_handover_unavailable_window")
+
 	// Persistence
 	PersistenceRequests = NewCounterDef(
 		"persistence_requests",
