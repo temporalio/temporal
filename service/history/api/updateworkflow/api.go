@@ -175,7 +175,7 @@ func (u *Updater) ApplyRequest(
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}
-	if err = u.upd.Admit(ctx, u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+	if err = u.upd.Admit(u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
 	}
 

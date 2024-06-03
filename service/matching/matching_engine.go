@@ -936,9 +936,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						TaskQueueType: taskQueueType,
 						PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
 					},
-					Versions:          req.GetVersions(),
-					ReportBacklogInfo: false,
-					ReportPollers:     req.GetReportPollers(),
+					Versions:      req.GetVersions(),
+					ReportStats:   req.GetReportStats(),
+					ReportPollers: req.GetReportPollers(),
 				})
 				if err != nil {
 					return nil, err
@@ -950,8 +950,24 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
 						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
+						var mergedStats *taskqueuepb.TaskQueueStats
+
+						// only report Task Queue Statistics if requested.
+						if req.GetReportStats() {
+							totalStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats
+							partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
+
+							// Aggregate counts; for now, we only aggregate approximateBacklogCount
+							mergedStats = &taskqueuepb.TaskQueueStats{
+								ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
+								ApproximateBacklogAge:   nil,
+								TasksAddRate:            float32(0),
+								TasksDispatchRate:       float32(0),
+							}
+						}
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
-							Pollers: dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
+							Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
+							TaskQueueStats: mergedStats,
 						}
 						physicalInfoByBuildId[buildId][taskQueueType] = merged
 					}
@@ -965,6 +981,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			for taskQueueType, physicalInfo := range typeMap {
 				typesInfo[int32(taskQueueType)] = &taskqueuepb.TaskQueueTypeInfo{
 					Pollers: physicalInfo.Pollers,
+					Stats:   physicalInfo.TaskQueueStats,
 				}
 			}
 			var reachability enumspb.BuildIdTaskReachability
@@ -1036,7 +1053,7 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	if err != nil {
 		return nil, err
 	}
-	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
+	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers())
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
