@@ -49,6 +49,8 @@ const (
 	NumPriorities
 )
 
+var _ PrioritySemaphore = (*PrioritySemaphoreImpl)(nil)
+
 // NewPrioritySemaphore creates a new semaphore with the given
 // maximum combined weight for concurrent access, capable of handling multiple priority levels.
 // Most of the logic is taken directly from golang's semaphore.Weighted.

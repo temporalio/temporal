@@ -266,7 +266,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			Timeout: 10 * time.Second,
 			Ping: func() []common.Pingable {
 				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
-				s.ioSemaphore.Release(locks.PriorityHigh, 1)
+				s.ioSemaphore.Release(1)
 				return nil
 			},
 			MetricsName: metrics.DDShardIOSemaphoreLatency.Name(),
@@ -1540,7 +1540,7 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 }
 
 func (s *ContextImpl) ioSemaphoreRelease(priority locks.Priority) {
-	s.ioSemaphore.Release(priority, 1)
+	s.ioSemaphore.Release(1)
 }
 
 func (s *ContextImpl) transition(request contextRequest) error {
