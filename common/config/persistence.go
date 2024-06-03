@@ -41,7 +41,7 @@ const (
 	StoreTypeNoSQL = "nosql"
 )
 
-var ErrPersistenceConfig = errors.New("persistence config")
+var ErrPersistenceConfig = errors.New("persistence config error")
 
 // DefaultStoreType returns the storeType for the default persistence store
 func (c *Persistence) DefaultStoreType() string {
@@ -101,15 +101,17 @@ func (c *Persistence) Validate() error {
 		}
 		// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
 		// `indices.visibility` config key and private fields - this is a restriction due to global ES client
-		esConfig := *c.DataStores[c.VisibilityStore].Elasticsearch
-		secEsConfig := *c.DataStores[c.SecondaryVisibilityStore].Elasticsearch
-		esConfig.Indices = nil
-		secEsConfig.Indices = nil
-		if !reflect.DeepEqual(esConfig, secEsConfig) {
-			return fmt.Errorf(
-				"%w: config mismatch for visibilityStore and secondaryVisibilityStore",
-				ErrPersistenceConfig,
-			)
+		if isPrimaryEs && isSecondaryEs {
+			esConfig := *c.DataStores[c.VisibilityStore].Elasticsearch
+			secEsConfig := *c.DataStores[c.SecondaryVisibilityStore].Elasticsearch
+			esConfig.Indices = nil
+			secEsConfig.Indices = nil
+			if !reflect.DeepEqual(esConfig, secEsConfig) {
+				return fmt.Errorf(
+					"%w: config mismatch for visibilityStore and secondaryVisibilityStore",
+					ErrPersistenceConfig,
+				)
+			}
 		}
 	}
 
