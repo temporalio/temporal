@@ -68,7 +68,7 @@ func NewPrioritySemaphore(n int) *PrioritySemaphoreImpl {
 // ctx.Err() and leaves the semaphore unchanged.
 func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, n int) error {
 	if priority >= NumPriorities {
-		panic(fmt.Sprintf("invalid priority %v, priority must be less than %v", priority, NumPriorities))
+		panic(fmt.Sprintf("semaphore: invalid priority %v, priority must be less than %v", priority, NumPriorities))
 	}
 
 	done := ctx.Done()
@@ -173,7 +173,10 @@ func (s *PrioritySemaphoreImpl) notifyWaiters() {
 				break // No more waiters blocked.
 			}
 
-			w := next.Value.(waiter)
+			w, ok := next.Value.(waiter)
+			if !ok {
+				panic("semaphore: failed to cast waiter")
+			}
 			if s.size-s.cur < w.n {
 				// Not enough tokens for the next waiter.  We could keep going (to try to
 				// find a waiter with a smaller request), but under load that could cause
