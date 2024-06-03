@@ -419,9 +419,6 @@ func (c *physicalTaskQueueManagerImpl) DispatchSpooledTask(
 	task *internalTask,
 	userDataChanged <-chan struct{},
 ) error {
-	if !task.isForwarded() {
-		c.tasksAddedInIntervals.incrementTaskCount()
-	}
 	return c.matcher.MustOffer(ctx, task, userDataChanged)
 }
 
@@ -435,9 +432,6 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
-	if !task.isForwarded() {
-		c.tasksAddedInIntervals.incrementTaskCount()
-	}
 	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue.BuildId())
 }
 
@@ -449,6 +443,9 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
+	if !task.isForwarded() {
+		c.tasksAddedInIntervals.incrementTaskCount()
+	}
 	return c.matcher.OfferQuery(ctx, task)
 }
 
@@ -459,6 +456,9 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
 	task := newInternalNexusTask(taskId, deadline, request)
+	if !task.isForwarded() {
+		c.tasksAddedInIntervals.incrementTaskCount()
+	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
 

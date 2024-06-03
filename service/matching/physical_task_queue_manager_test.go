@@ -401,7 +401,6 @@ func TestAddTaskStandby(t *testing.T) {
 	tlm := mustCreateTestTaskQueueManagerWithConfig(
 		t,
 		controller,
-
 		defaultTqmTestOpts(controller),
 		func(tqm *physicalTaskQueueManagerImpl) {
 			ns := namespace.NewGlobalNamespaceForTest(
