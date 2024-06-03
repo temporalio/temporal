@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testvars"
 
@@ -120,6 +121,10 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 }
 
 func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
+
+	// setting this to 0 to be sure we are terminating old workflow
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+
 	testCases := []struct {
 		name                     string
 		WorkflowIdReusePolicy    enumspb.WorkflowIdReusePolicy
@@ -976,6 +981,9 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 }
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
+	// reset reuse minimal interval to allow workflow termination
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+
 	runMultiOp := func(
 		tv *testvars.TestVars,
 		request *workflowservice.ExecuteMultiOperationRequest,

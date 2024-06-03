@@ -32,13 +32,19 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tqid"
 )
 
 func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	tests := []func(tlm *physicalTaskQueueManagerImpl){
 		func(tlm *physicalTaskQueueManagerImpl) { close(tlm.backlogMgr.taskReader.taskBuffer) },
@@ -66,7 +72,6 @@ func TestDeliverBufferTasks(t *testing.T) {
 
 func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	// TODO: do not create pq manager, directly create backlog manager
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
@@ -81,7 +86,6 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 
 func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	// TODO: do not create pq manager, directly create backlog manager
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
@@ -137,7 +141,6 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 
 func TestTaskWriterShutdown(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 	tlm.Start()
@@ -153,4 +156,164 @@ func TestTaskWriterShutdown(t *testing.T) {
 	// now attempt to add a task
 	err = tlm.backlogMgr.SpoolTask(&persistencespb.TaskInfo{})
 	require.Error(t, err)
+}
+
+func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
+	controller := gomock.NewController(t)
+	backlogMgr := newBacklogMgr(controller, false)
+
+	// Add tasks on the taskWriters channel
+	backlogMgr.taskWriter.appendCh <- &writeTaskRequest{
+		taskInfo: &persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		},
+		responseCh: make(chan<- *writeTaskResponse),
+	}
+
+	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount())
+
+	backlogMgr.taskWriter.Start()
+	defer backlogMgr.taskWriter.Stop()
+	// Adding tasks to the buffer will increase the in-memory counter by 1
+	// and this will be written to persistence
+	require.Eventually(t, func() bool { return backlogMgr.db.getApproximateBacklogCount() == int64(1) },
+		time.Second*30, time.Millisecond)
+}
+
+func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
+	controller := gomock.NewController(t)
+	backlogMgr := newBacklogMgr(controller, false)
+
+	backlogMgr.taskAckManager.addTask(int64(1))
+	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
+	backlogMgr.db.updateApproximateBacklogCount(int64(1))
+	require.Equal(t, int64(1), backlogMgr.db.getApproximateBacklogCount(), "1 task in the backlog")
+	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
+	require.Equal(t, int64(1), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
+	require.Equal(t, int64(1), backlogMgr.taskAckManager.completeTask(1), "should move ack level and decrease backlog counter on completion")
+
+	require.Equal(t, int64(1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
+	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount(), "0 tasks in the backlog")
+
+}
+
+func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
+	controller := gomock.NewController(t)
+	backlogMgr := newBacklogMgr(controller, false)
+
+	backlogMgr.taskAckManager.addTask(int64(1))
+	backlogMgr.taskAckManager.addTask(int64(2))
+	backlogMgr.taskAckManager.addTask(int64(3))
+
+	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
+	backlogMgr.db.updateApproximateBacklogCount(int64(3))
+
+	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "1 task in the backlog")
+	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
+	require.Equal(t, int64(3), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
+
+	// Complete tasks
+	require.Equal(t, int64(-1), backlogMgr.taskAckManager.completeTask(2), "should not move the ack level")
+	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "should not decrease the backlog counter as ack level has not gone up")
+
+	require.Equal(t, int64(-1), backlogMgr.taskAckManager.completeTask(3), "should not move the ack level")
+	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "should not decrease the backlog counter as ack level has not gone up")
+
+	require.Equal(t, int64(3), backlogMgr.taskAckManager.completeTask(1), "should move the ack level")
+	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount(), "should decrease the backlog counter to 0 as no more tasks in the backlog")
+
+}
+
+// TestAddTasksValidateBacklogCounter uses the "backlogManager methods" to add a task to the backlog.
+func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
+	controller := gomock.NewController(t)
+	backlogMgr := newBacklogMgr(controller, false)
+
+	// only start the taskWriter for now!
+	backlogMgr.taskWriter.Start()
+	defer backlogMgr.taskWriter.Stop()
+	task := &persistencespb.TaskInfo{
+		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+		CreateTime: timestamp.TimeNowPtrUtc(),
+	}
+	err := backlogMgr.SpoolTask(task)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), backlogMgr.db.getApproximateBacklogCount())
+}
+
+func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
+	controller := gomock.NewController(t)
+	backlogMgr := newBacklogMgr(controller, true)
+
+	// mock error signals
+	logger := backlogMgr.logger.(*log.MockLogger) // nolint:revive
+	logger.EXPECT().Error("Persistent store operation failure", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// only start the taskWriter for now!
+	backlogMgr.taskWriter.Start()
+	defer backlogMgr.taskWriter.Stop()
+	taskCount := 10
+	for i := 0; i < taskCount; i++ {
+		// Create new tasks and spool them
+		task := &persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}
+		err := backlogMgr.SpoolTask(task)
+		require.Error(t, err)
+	}
+	require.Equal(t, int64(10), backlogMgr.db.getApproximateBacklogCount())
+}
+
+func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
+	controller := gomock.NewController(t)
+	backlogMgr := newBacklogMgr(controller, false)
+
+	// Only start the taskWriter for now!
+	backlogMgr.taskWriter.Start()
+	defer backlogMgr.taskWriter.Stop()
+	taskCount := 10
+	for i := 0; i < taskCount; i++ {
+		// Create new tasks and spool them
+		task := &persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}
+		err := backlogMgr.SpoolTask(task)
+		require.NoError(t, err)
+	}
+	require.Equal(t, int64(10), backlogMgr.db.getApproximateBacklogCount())
+}
+
+func newBacklogMgr(controller *gomock.Controller, serviceError bool) *backlogManagerImpl {
+	logger := log.NewMockLogger(controller)
+	tm := newTestTaskManager(logger)
+	if serviceError {
+		tm.dbServiceError = true
+	}
+
+	pqMgr := NewMockphysicalTaskQueueManager(controller)
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	handler := metrics.NewMockHandler(controller)
+
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
+	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
+	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+	queue := UnversionedQueueKey(prtn)
+	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
+
+	// Set expected calls
+	pqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
+	pqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	handler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
+	handler.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
+	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+
+	return newBacklogManager(pqMgr, tlCfg, tm, logger, logger, matchingClient, handler, defaultContextInfoProvider)
+}
+
+func defaultContextInfoProvider(ctx context.Context) context.Context {
+	return ctx
 }

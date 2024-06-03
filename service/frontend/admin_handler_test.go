@@ -1251,7 +1251,7 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks() {
 		},
 		{
 			name: "WorkflowExecutionFailed",
-			err:  serviceerror.NewNotFound("example sdk worfklow start failure"),
+			err:  serviceerror.NewNotFound("example sdk workflow start failure"),
 		},
 	} {
 		s.Run(tc.name, func() {

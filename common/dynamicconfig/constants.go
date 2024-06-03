@@ -2345,7 +2345,6 @@ Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
 WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 `,
 	)
-
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",
 		400,
@@ -2355,5 +2354,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
+		"system.workflowIdReuseMinimalInterval",
+		1*time.Second,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
 )
