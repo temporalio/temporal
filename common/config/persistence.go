@@ -41,10 +41,7 @@ const (
 	StoreTypeNoSQL = "nosql"
 )
 
-var (
-	ErrInvalidVisibilityStoreCombination = errors.New("persistence config: Cannot set visibilityStore and secondaryVisibilityStore with different datastore types")
-	ErrConfigMismatch                    = errors.New("persistence config: Config mismatch for visibilityStore and secondaryVisibilityStore")
-)
+var ErrPersistenceConfig = errors.New("persistence config")
 
 // DefaultStoreType returns the storeType for the default persistence store
 func (c *Persistence) DefaultStoreType() string {
@@ -80,48 +77,49 @@ func (c *Persistence) Validate() error {
 	// - visibilityStore (es),            secondaryVisibilityStore (advanced sql)
 
 	if c.VisibilityStore == "" {
-		return errors.New("persistence config: visibilityStore must be specified")
+		return fmt.Errorf("%w: visibilityStore must be specified", ErrPersistenceConfig)
 	}
 	if c.SecondaryVisibilityStore != "" {
-		if (c.DataStores[c.VisibilityStore].Elasticsearch == nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil) ||
-			(c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch == nil) {
-			return ErrInvalidVisibilityStoreCombination
+		isPrimaryEs := c.DataStores[c.VisibilityStore].Elasticsearch != nil
+		isSecondaryEs := c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil
+		if isPrimaryEs != isSecondaryEs {
+			return fmt.Errorf(
+				"%w: cannot set visibilityStore and secondaryVisibilityStore with different datastore types",
+				ErrPersistenceConfig)
+		}
+		if c.DataStores[c.VisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" {
+			return fmt.Errorf(
+				"%w: cannot set secondaryVisibilityStore "+
+					"when visibilityStore is setting Elasticsearch secondary visibility index",
+				ErrPersistenceConfig)
+		}
+		if c.DataStores[c.SecondaryVisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" {
+			return fmt.Errorf(
+				"%w: secondary visibility datastore %q cannot set secondary_visibility",
+				ErrPersistenceConfig,
+				c.SecondaryVisibilityStore)
+		}
+		// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
+		// `indices.visibility` config key and private fields - this is a restriction due to global ES client
+		esConfig := *c.DataStores[c.VisibilityStore].Elasticsearch
+		secEsConfig := *c.DataStores[c.SecondaryVisibilityStore].Elasticsearch
+		esConfig.Indices = nil
+		secEsConfig.Indices = nil
+		if !reflect.DeepEqual(esConfig, secEsConfig) {
+			return fmt.Errorf(
+				"%w: config mismatch for visibilityStore and secondaryVisibilityStore",
+				ErrPersistenceConfig,
+			)
 		}
 	}
-	if c.DataStores[c.VisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" && c.SecondaryVisibilityStore != "" {
-		return errors.New(
-			"persistence config: cannot set secondaryVisibilityStore " +
-				"when visibilityStore is setting secondary visibility index",
-		)
-	}
-	if c.DataStores[c.SecondaryVisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" {
-		return fmt.Errorf(
-			"persistence config: secondary visibility datastore %q: elasticsearch config: "+
-				"cannot set secondary_visibility",
-			c.SecondaryVisibilityStore,
-		)
-	}
+
 	for _, st := range stores {
 		ds, ok := c.DataStores[st]
 		if !ok {
-			return fmt.Errorf("persistence config: missing config for datastore %q", st)
+			return fmt.Errorf("%w: missing config for datastore %q", ErrPersistenceConfig, st)
 		}
 		if err := ds.Validate(); err != nil {
-			return fmt.Errorf("persistence config: datastore %q: %s", st, err.Error())
-		}
-	}
-	// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
-	// `indices.visibility` config key and private fields - this is a restriction due to global ES client
-	if c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil {
-		visibilityStoreEsConfig := reflect.ValueOf(c.DataStores[c.VisibilityStore].Elasticsearch).Elem()
-		secondaryVisibilityStoreEsConfig := reflect.ValueOf(c.DataStores[c.SecondaryVisibilityStore].Elasticsearch).Elem()
-		for i := 0; i < max(visibilityStoreEsConfig.NumField(), secondaryVisibilityStoreEsConfig.NumField()); i++ {
-			if visibilityStoreEsConfig.Type().Field(i).Name == "Indices" || visibilityStoreEsConfig.Type().Field(i).PkgPath != "" {
-				continue
-			}
-			if !reflect.DeepEqual(visibilityStoreEsConfig.Field(i).Interface(), secondaryVisibilityStoreEsConfig.Field(i).Interface()) {
-				return fmt.Errorf("%w: %q", ErrConfigMismatch, visibilityStoreEsConfig.Type().Field(i).Name)
-			}
+			return fmt.Errorf("%w: datastore %q: %s", ErrPersistenceConfig, st, err.Error())
 		}
 	}
 	return nil
