@@ -567,8 +567,9 @@ is currently processing a task.
 	FrontendPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"frontend.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`FrontendPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for fields and defaults`,
+		`FrontendPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	FrontendVisibilityMaxPageSize = NewNamespaceIntSetting(
 		"frontend.visibilityMaxPageSize",
@@ -962,8 +963,9 @@ Default is 0, means, namespace will be deleted immediately.`,
 	MatchingPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"matching.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`MatchingPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for fields and defaults`,
+		`MatchingPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	MatchingMinTaskThrottlingBurstSize = NewTaskQueueIntSetting(
 		"matching.minTaskThrottlingBurstSize",
@@ -1188,8 +1190,9 @@ If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS`,
 	HistoryPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"history.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`HistoryPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for fields defaults`,
+		`HistoryPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
@@ -1633,10 +1636,10 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		CircuitBreakerSettings{},
 		`OutboundQueueCircuitBreakerSettings are circuit breaker settings.
 Fields (see gobreaker reference for more details):
-- MaxRequests: maximum number of requests allowed to pass through when it is half-open (default 1).
-- Interval (duration): cyclic period in closed state to clear the internal counts;
+- MaxRequests: Maximum number of requests allowed to pass through when it is half-open (default 1).
+- Interval (duration): Cyclic period in closed state to clear the internal counts;
   if interval is 0, then it never clears the internal counts (default 0).
-- Timeout (duration): period of open state before changing to half-open state (default 60).`,
+- Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
@@ -2135,8 +2138,9 @@ that task will be sent to DLQ.`,
 	WorkerPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"worker.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`WorkerPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for fields and defaults`,
+		`WorkerPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	WorkerIndexerConcurrency = NewGlobalIntSetting(
 		"worker.indexerConcurrency",
