@@ -46,7 +46,7 @@ func BenchmarkPrioritySemaphore_High(b *testing.B) {
 	ctx := context.Background()
 	for n := 0; n < b.N; n++ {
 		_ = semaphore.Acquire(ctx, PriorityHigh, 1)
-		semaphore.Release(PriorityHigh, 1)
+		semaphore.Release(1)
 	}
 }
 
@@ -57,7 +57,7 @@ func BenchmarkPrioritySemaphore_Low(b *testing.B) {
 	ctx := context.Background()
 	for n := 0; n < b.N; n++ {
 		_ = semaphore.Acquire(ctx, PriorityLow, 1)
-		semaphore.Release(PriorityLow, 1)
+		semaphore.Release(1)
 	}
 }
 
@@ -70,15 +70,37 @@ func (s *prioritySemaphoreSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *prioritySemaphoreSuite) TestTryAcquire_High() {
+func (s *prioritySemaphoreSuite) TestTryAcquire() {
 	s.T().Parallel()
 	semaphore := NewPrioritySemaphore(2)
-	s.True(semaphore.TryAcquire(PriorityHigh, 1))
-	s.True(semaphore.TryAcquire(PriorityHigh, 1))
-	s.False(semaphore.TryAcquire(PriorityHigh, 1))
-	s.False(semaphore.TryAcquire(PriorityLow, 1))
-	semaphore.Release(PriorityHigh, 2)
-	s.True(semaphore.TryAcquire(PriorityLow, 1))
+	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(1))
+	s.False(semaphore.TryAcquire(1))
+	s.False(semaphore.TryAcquire(1))
+	semaphore.Release(2)
+	s.True(semaphore.TryAcquire(1))
+}
+
+func (s *prioritySemaphoreSuite) TestAcquire_High_Success() {
+	s.T().Parallel()
+	semaphore := NewPrioritySemaphore(1)
+	ctx := context.Background()
+	err := semaphore.Acquire(ctx, PriorityHigh, 1)
+	s.NoError(err)
+	s.False(semaphore.TryAcquire(1))
+	semaphore.Release(1)
+	s.True(semaphore.TryAcquire(1))
+}
+
+func (s *prioritySemaphoreSuite) TestAcquire_Low_Success() {
+	s.T().Parallel()
+	semaphore := NewPrioritySemaphore(1)
+	ctx := context.Background()
+	err := semaphore.Acquire(ctx, PriorityLow, 1)
+	s.NoError(err)
+	s.False(semaphore.TryAcquire(1))
+	semaphore.Release(1)
+	s.True(semaphore.TryAcquire(1))
 }
 
 func (s *prioritySemaphoreSuite) TestTryAcquire_HighAfterWaiting() {
@@ -87,13 +109,13 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAfterWaiting() {
 	cLock := make(chan struct{})
 	go func() {
 		// Acquire the function to make the next call blocking.
-		s.True(semaphore.TryAcquire(PriorityHigh, 1))
+		s.True(semaphore.TryAcquire(1))
 		// Let the other thread start which will block on this semaphore.
 		cLock <- struct{}{}
 		// Wait for other thread to block on this semaphore.
 		time.Sleep(time.Second) // nolint
 		// Release the semaphore so that blocking thread can resume.
-		semaphore.Release(PriorityHigh, 1)
+		semaphore.Release(1)
 	}()
 	<-cLock
 	s.NoError(semaphore.Acquire(context.Background(), PriorityHigh, 1))
@@ -105,13 +127,13 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_LowAfterWaiting() {
 	cLock := make(chan struct{})
 	go func() {
 		// Acquire the function to make the next call blocking.
-		s.True(semaphore.TryAcquire(PriorityLow, 1))
+		s.True(semaphore.TryAcquire(1))
 		// Let the other thread start which will block on this semaphore.
 		cLock <- struct{}{}
 		// Wait for other thread to block on this semaphore.
 		time.Sleep(time.Second) // nolint
 		// Release the semaphore so that blocking thread can resume.
-		semaphore.Release(PriorityLow, 1)
+		semaphore.Release(1)
 	}()
 	<-cLock
 	s.NoError(semaphore.Acquire(context.Background(), PriorityLow, 1))
@@ -123,9 +145,9 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAllowedBeforeLow() {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		s.True(semaphore.TryAcquire(PriorityHigh, 1))
+		s.True(semaphore.TryAcquire(1))
 		time.Sleep(3 * time.Second) // nolint
-		semaphore.Release(PriorityHigh, 1)
+		semaphore.Release(1)
 		wg.Done()
 	}()
 	wg.Add(1)
@@ -138,84 +160,8 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAllowedBeforeLow() {
 	}()
 	time.Sleep(2 * time.Second) // nolint
 	s.NoError(semaphore.Acquire(context.Background(), PriorityHigh, 1))
-	semaphore.Release(PriorityHigh, 1)
+	semaphore.Release(1)
 	wg.Wait()
-}
-
-func (s *prioritySemaphoreSuite) TestTryAcquire_HighAndLow() {
-	s.T().Parallel()
-	semaphore := NewPrioritySemaphore(2)
-	s.True(semaphore.TryAcquire(PriorityHigh, 1))
-	s.True(semaphore.TryAcquire(PriorityLow, 1))
-	s.False(semaphore.TryAcquire(PriorityHigh, 1))
-	s.False(semaphore.TryAcquire(PriorityLow, 1))
-	semaphore.Release(PriorityHigh, 1)
-	s.True(semaphore.TryAcquire(PriorityLow, 1))
-}
-
-func (s *prioritySemaphoreSuite) TestAcquire_High_Success() {
-	s.T().Parallel()
-	semaphore := NewPrioritySemaphore(1)
-	ctx := context.Background()
-	err := semaphore.Acquire(ctx, PriorityHigh, 1)
-	s.NoError(err)
-	s.False(semaphore.TryAcquire(PriorityHigh, 1))
-	semaphore.Release(PriorityHigh, 1)
-	s.True(semaphore.TryAcquire(PriorityHigh, 1))
-}
-
-func (s *prioritySemaphoreSuite) TestAcquire_High_Failed() {
-	s.T().Parallel()
-	semaphore := NewPrioritySemaphore(1)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err := semaphore.Acquire(ctx, PriorityHigh, 1)
-	s.Error(err)
-	s.True(semaphore.TryAcquire(PriorityHigh, 1))
-}
-
-func (s *prioritySemaphoreSuite) TestTryAcquire_Low() {
-	s.T().Parallel()
-	semaphore := NewPrioritySemaphore(2)
-	s.True(semaphore.TryAcquire(PriorityLow, 1))
-	s.True(semaphore.TryAcquire(PriorityLow, 1))
-	s.False(semaphore.TryAcquire(PriorityHigh, 1))
-	s.False(semaphore.TryAcquire(PriorityLow, 1))
-	semaphore.Release(PriorityLow, 2)
-	s.True(semaphore.TryAcquire(PriorityLow, 1))
-}
-
-func (s *prioritySemaphoreSuite) TestAcquire_Low_Success() {
-	s.T().Parallel()
-	semaphore := NewPrioritySemaphore(1)
-	ctx := context.Background()
-	err := semaphore.Acquire(ctx, PriorityLow, 1)
-	s.NoError(err)
-	s.False(semaphore.TryAcquire(PriorityHigh, 1))
-	semaphore.Release(PriorityLow, 1)
-	s.True(semaphore.TryAcquire(PriorityHigh, 1))
-}
-
-func (s *prioritySemaphoreSuite) Test_AcquireHigh_ReleaseLow() {
-	s.T().Parallel()
-	semaphore := NewPrioritySemaphore(1)
-	ctx := context.Background()
-	err := semaphore.Acquire(ctx, PriorityHigh, 1)
-	s.NoError(err)
-	s.Panics(func() {
-		semaphore.Release(PriorityLow, 1)
-	})
-}
-
-func (s *prioritySemaphoreSuite) Test_AcquireLow_ReleaseHigh() {
-	s.T().Parallel()
-	semaphore := NewPrioritySemaphore(1)
-	ctx := context.Background()
-	err := semaphore.Acquire(ctx, PriorityLow, 1)
-	s.NoError(err)
-	s.Panics(func() {
-		semaphore.Release(PriorityHigh, 1)
-	})
 }
 
 func (s *prioritySemaphoreSuite) Test_AllThreadsAreWokenUp() {
@@ -242,8 +188,42 @@ func (s *prioritySemaphoreSuite) Test_AllThreadsAreWokenUp() {
 
 	// Waiting for all above goroutines to block on semaphore.
 	time.Sleep(time.Second) // nolint
-	semaphore.Release(PriorityHigh, 6)
-	semaphore.Release(PriorityHigh, 4)
+
+	semaphore.Release(6)
+	semaphore.Release(4)
 
 	wg.Wait()
+}
+
+func (s *prioritySemaphoreSuite) Test_ContextCanceledBeforeAcquire() {
+	s.T().Parallel()
+	semaphore := NewPrioritySemaphore(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s.ErrorIs(semaphore.Acquire(ctx, PriorityHigh, 1), ctx.Err())
+}
+
+func (s *prioritySemaphoreSuite) Test_InvalidPriority() {
+	s.T().Parallel()
+	semaphore := NewPrioritySemaphore(1)
+	s.Panics(func() {
+		_ = semaphore.Acquire(context.Background(), Priority(10), 1)
+	})
+}
+
+func (s *prioritySemaphoreSuite) Test_TimedOutWaitingForLock() {
+	s.T().Parallel()
+	semaphore := NewPrioritySemaphore(1)
+	s.NoError(semaphore.Acquire(context.Background(), PriorityHigh, 1))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.ErrorIs(semaphore.Acquire(ctx, PriorityHigh, 1), ctx.Err())
+}
+
+func (s *prioritySemaphoreSuite) Test_AcquireMoreThanAvailable() {
+	s.T().Parallel()
+	semaphore := NewPrioritySemaphore(1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.ErrorIs(semaphore.Acquire(ctx, PriorityHigh, 2), ctx.Err())
 }

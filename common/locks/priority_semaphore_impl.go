@@ -23,109 +23,185 @@
 package locks
 
 import (
+	"container/list"
 	"context"
+	"fmt"
 	"sync"
 )
 
-type Priority int
+type (
+	Priority uint32
+	waiter   struct {
+		n     int
+		ready chan<- struct{} // Closed when semaphore acquired.
+	}
+	PrioritySemaphoreImpl struct {
+		size      int
+		cur       int
+		mu        sync.Mutex
+		waitLists []*list.List // Array of lists for managing different priority levels
+	}
+)
 
 const (
 	PriorityHigh Priority = iota
 	PriorityLow
+	NumPriorities
 )
 
-type PrioritySemaphoreImpl struct {
-	capacity    int
-	highWaiting int        // Current number of high priority requests waiting.
-	highCount   int        // Current count of high-priority holds
-	lowCount    int        // Current count of low-priority holds
-	lock        sync.Mutex // Mutex to protect conditional variable and changes to the counts
-	highCV      sync.Cond  // Condition variable for high-priority tasks
-	lowCV       sync.Cond  // Condition variable for low-priority tasks
-}
-
-var _ PrioritySemaphore = (*PrioritySemaphoreImpl)(nil)
-
-// NewPrioritySemaphore creates a new PrioritySemaphoreImpl with specified capacity
-func NewPrioritySemaphore(capacity int) PrioritySemaphore {
-	sem := &PrioritySemaphoreImpl{
-		capacity:  capacity,
-		highCount: 0,
-		lowCount:  0,
+// NewPrioritySemaphore creates a new semaphore with the given
+// maximum combined weight for concurrent access, capable of handling multiple priority levels.
+// Most of the logic is taken directly from golang's semaphore.Weighted.
+func NewPrioritySemaphore(n int) *PrioritySemaphoreImpl {
+	waitLists := make([]*list.List, NumPriorities)
+	for i := range waitLists {
+		waitLists[i] = list.New()
 	}
-	sem.highCV.L = &sem.lock
-	sem.lowCV.L = &sem.lock
-	return sem
+	return &PrioritySemaphoreImpl{
+		size:      n,
+		waitLists: waitLists,
+	}
 }
 
+// Acquire acquires the semaphore with a weight of n and a priority, blocking until resources
+// are available or ctx is done. On success, returns nil. On failure, returns
+// ctx.Err() and leaves the semaphore unchanged.
 func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, n int) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	for s.lowCount+s.highCount+n > s.capacity {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			if priority == PriorityHigh {
-				s.highWaiting++
-				s.highCV.Wait()
-			} else {
-				s.lowCV.Wait()
-			}
-		}
+	if priority >= NumPriorities {
+		panic(fmt.Sprintf("invalid priority %v, priority must be less than %v", priority, NumPriorities))
 	}
-	if ctx.Err() != nil {
+
+	done := ctx.Done()
+
+	s.mu.Lock()
+	select {
+	case <-done:
+		// ctx becoming done has "happened before" acquiring the semaphore,
+		// whether it became done before the call began or while we were
+		// waiting for the mutex. We prefer to fail even if we could acquire
+		// the mutex without blocking.
+		s.mu.Unlock()
+		return ctx.Err()
+	default:
+	}
+	// Check if acquisition can proceed without waiting
+	if s.size-s.cur >= n && s.noWaiters() {
+		// Since we hold s.mu and haven't synchronized since checking done, if
+		// ctx becomes done before we return here, it becoming done must have
+		// "happened concurrently" with this call - it cannot "happen before"
+		// we return in this branch. So, we're ok to always acquire here.
+		s.cur += n
+		s.mu.Unlock()
+		return nil
+	}
+
+	if n > s.size {
+		// Don't make other Acquire calls block on one that's doomed to fail.
+		s.mu.Unlock()
+		<-ctx.Done()
 		return ctx.Err()
 	}
-	if priority == PriorityHigh {
-		s.highCount += n
-	} else {
-		s.lowCount += n
+
+	ready := make(chan struct{})
+	w := waiter{n: n, ready: ready}
+	elem := s.waitLists[priority].PushBack(w)
+	s.mu.Unlock()
+
+	select {
+	case <-done:
+		s.mu.Lock()
+		select {
+		case <-ready:
+			// Acquired the semaphore after we were canceled.
+			// Pretend we didn't and put the tokens back.
+			s.cur -= n
+			s.notifyWaiters()
+		default:
+			isFront := s.waitLists[priority].Front() == elem
+			s.waitLists[priority].Remove(elem)
+			// If we're at the front and there are extra tokens left, notify other waiters.
+			if isFront && s.size > s.cur {
+				s.notifyWaiters()
+			}
+		}
+		s.mu.Unlock()
+		return ctx.Err()
+
+	case <-ready:
+		// Acquired the semaphore. Check that ctx isn't already done.
+		// We check the done channel instead of calling ctx.Err because we
+		// already have the channel, and ctx.Err is O(n) with the nesting
+		// depth of ctx.
+		select {
+		case <-done:
+			s.Release(n)
+			return ctx.Err()
+		default:
+		}
+		return nil
 	}
-	return nil
 }
 
-func (s *PrioritySemaphoreImpl) TryAcquire(priority Priority, n int) bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if s.lowCount+s.highCount+n > s.capacity {
-		return false
+// TryAcquire acquires the semaphore with a weight of n without blocking.
+// On success, returns true. On failure, returns false and leaves the semaphore unchanged.
+func (s *PrioritySemaphoreImpl) TryAcquire(n int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.size-s.cur >= n && s.noWaiters() {
+		s.cur += n
+		return true
 	}
+	return false
+}
 
-	if priority == PriorityHigh {
-		s.highCount += n
-	} else {
-		s.lowCount += n
+func (s *PrioritySemaphoreImpl) Release(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cur -= n
+	if s.cur < 0 {
+		s.mu.Unlock()
+		panic("semaphore: released more than held")
+	}
+	s.notifyWaiters()
+}
+
+func (s *PrioritySemaphoreImpl) notifyWaiters() {
+	for _, l := range s.waitLists {
+		for {
+			next := l.Front()
+			if next == nil {
+				break // No more waiters blocked.
+			}
+
+			w := next.Value.(waiter)
+			if s.size-s.cur < w.n {
+				// Not enough tokens for the next waiter.  We could keep going (to try to
+				// find a waiter with a smaller request), but under load that could cause
+				// starvation for large requests; instead, we leave all remaining waiters
+				// blocked. For the same reason, we should not wake lower priority waiters.
+				//
+				// Consider a semaphore used as a read-write lock, with N tokens, N
+				// readers, and one writer.  Each reader can Acquire(1) to obtain a read
+				// lock.  The writer can Acquire(N) to obtain a write lock, excluding all
+				// of the readers.  If we allow the readers to jump ahead in the queue,
+				// the writer will starve — there is always one token available for every
+				// reader.
+				return
+			}
+
+			s.cur += w.n
+			l.Remove(next)
+			close(w.ready)
+		}
+	}
+}
+
+// noWaiters return true if all waitLists are empty, and false otherwise.
+func (s *PrioritySemaphoreImpl) noWaiters() bool {
+	for _, l := range s.waitLists {
+		if l.Len() > 0 {
+			return false
+		}
 	}
 	return true
-}
-
-func (s *PrioritySemaphoreImpl) Release(priority Priority, n int) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if priority == PriorityHigh {
-		if n > s.highCount {
-			panic("trying to release more resources than acquired")
-		}
-		s.highCount -= n
-
-	} else {
-		if n > s.lowCount {
-			panic("trying to release more resources than acquired")
-		}
-		s.lowCount -= n
-	}
-
-	// Wake up threads in highCV. Here n is the number of resources getting released in this call. We might not need
-	// all n threads to consume these resources.
-	for ; s.highWaiting > 0 && n > 0; s.highWaiting, n = s.highWaiting-1, n-1 {
-		s.highCV.Signal()
-	}
-	// Wake up threads in lowCV if resource is available.
-	for ; n > 0; n-- {
-		s.lowCV.Signal()
-	}
 }
