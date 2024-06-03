@@ -1007,7 +1007,8 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServer
 	clientCluster := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesServer(s.controller)
 	clientCluster.EXPECT().Context().Return(ctx).AnyTimes()
 	serverCluster := historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesClient(s.controller)
-	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(ctx).Return(serverCluster, nil)
+	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(serverCluster, nil)
+	serverCluster.EXPECT().CloseSend().AnyTimes()
 
 	waitGroupStart := sync.WaitGroup{}
 	waitGroupStart.Add(2)
@@ -1052,7 +1053,8 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 	clientCluster := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesServer(s.controller)
 	clientCluster.EXPECT().Context().Return(ctx).AnyTimes()
 	serverCluster := historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesClient(s.controller)
-	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(ctx).Return(serverCluster, nil)
+	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(serverCluster, nil)
+	serverCluster.EXPECT().CloseSend().AnyTimes()
 
 	waitGroupStart := sync.WaitGroup{}
 	waitGroupStart.Add(2)
@@ -1249,7 +1251,7 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks() {
 		},
 		{
 			name: "WorkflowExecutionFailed",
-			err:  serviceerror.NewNotFound("example sdk worfklow start failure"),
+			err:  serviceerror.NewNotFound("example sdk workflow start failure"),
 		},
 	} {
 		s.Run(tc.name, func() {

@@ -426,11 +426,6 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		engineCtx, engineCancel := context.WithTimeout(ctx, 1*time.Second)
 		defer engineCancel()
 		_, _ = shard.GetEngine(engineCtx)
-
-		assertCtx, assertCancel := context.WithTimeout(ctx, c.config.ShardIOTimeout())
-		defer assertCancel()
-		// trust the AssertOwnership will handle shard ownership lost
-		_ = shard.AssertOwnership(assertCtx)
 	}
 
 	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))

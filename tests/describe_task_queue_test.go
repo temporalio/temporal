@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,23 +20,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+package tests
 
-var (
-	// while we *could* write the unit test code to walk an Update through a
-	// series of message deliveries to get to the right state, it's much faster
-	// just to instantiate directly into the desired state.
-	NewAccepted  = newAccepted
-	NewCompleted = newCompleted
+import (
+	"flag"
+	"testing"
+
+	"github.com/stretchr/testify/suite"
 )
 
-// ObserveCompletion exports withOnComplete to unit tests
-func ObserveCompletion(b *bool) updateOpt {
-	return withCompletionCallback(func() { *b = true })
+func TestDescribeTaskQueueSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(DescribeTaskQueueSuite))
 }
-
-func (u *Update) IsSent() bool { return u.isSent() }
-
-func (u *Update) ID() string { return u.id }
-
-func CompletedCount(r Registry) int { return r.(*registry).completedCount }

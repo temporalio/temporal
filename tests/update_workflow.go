@@ -444,6 +444,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
 			go func() {
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
+			// To make sure that update gets to the server before WFT is polled.
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 			// Process update in workflow.
 			res, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
@@ -4463,6 +4465,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 		The first speculative WT responds back, server rejected it (different start time).
 		The second speculative WT responds back, server accepted it.
 	*/
+
+	// reset reuse minimal interval to allow workflow termination
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)

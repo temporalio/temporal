@@ -1310,20 +1310,8 @@ checks while a shard is lingering.`,
 		0,
 		`ShardLingerTimeLimit configures if and for how long the shard controller
 will temporarily delay closing shards after a membership update, awaiting a
-shard ownership lost error from persistence. Not recommended with
-persistence layers that are missing AssertShardOwnership support.
-If set to zero, shards will not delay closing.`,
-	)
-	ShardOwnershipAssertionEnabled = NewGlobalBoolSetting(
-		"history.shardOwnershipAssertionEnabled",
-		false,
-		`ShardOwnershipAssertionEnabled configures if the shard ownership is asserted
-for API requests when a NotFound or NamespaceNotFound error is returned from
-persistence.
-NOTE: Shard ownership assertion is not implemented by any persistence implementation
-in this codebase, because assertion is not needed for persistence implementation
-that guarantees read after write consistency. As a result, even if this config is
-enabled, it's a no-op.`,
+shard ownership lost error from persistence. If set to zero, shards will not delay closing.
+Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
 	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",
@@ -2349,7 +2337,6 @@ close to or more than the workflow task timeout)`,
 		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
 settings for controlling remote activity concurrency for delete namespace workflows.`,
 	)
-
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",
 		400,
@@ -2359,5 +2346,10 @@ settings for controlling remote activity concurrency for delete namespace workfl
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
+		"system.workflowIdReuseMinimalInterval",
+		1*time.Second,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
 )

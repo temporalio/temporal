@@ -834,11 +834,6 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
 	}).Return(nil, serviceerror.NewNotFound("current worflow not found")).Times(1)
-	mockShardManager := s.mockShard.Resource.ShardMgr
-	mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
-		ShardID: s.mockShard.GetShardID(),
-		RangeID: s.mockShard.GetRangeID(),
-	}).Return(nil).Times(1)
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),

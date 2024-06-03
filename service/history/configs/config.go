@@ -88,14 +88,13 @@ type Config struct {
 	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
 
 	// ShardController settings
-	RangeSizeBits                  uint
-	AcquireShardInterval           dynamicconfig.DurationPropertyFn
-	AcquireShardConcurrency        dynamicconfig.IntPropertyFn
-	ShardIOConcurrency             dynamicconfig.IntPropertyFn
-	ShardIOTimeout                 dynamicconfig.DurationPropertyFn
-	ShardLingerOwnershipCheckQPS   dynamicconfig.IntPropertyFn
-	ShardLingerTimeLimit           dynamicconfig.DurationPropertyFn
-	ShardOwnershipAssertionEnabled dynamicconfig.BoolPropertyFn
+	RangeSizeBits                uint
+	AcquireShardInterval         dynamicconfig.DurationPropertyFn
+	AcquireShardConcurrency      dynamicconfig.IntPropertyFn
+	ShardIOConcurrency           dynamicconfig.IntPropertyFn
+	ShardIOTimeout               dynamicconfig.DurationPropertyFn
+	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
+	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -342,6 +341,8 @@ type Config struct {
 	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -402,13 +403,12 @@ func NewConfig(
 
 		RangeSizeBits: 20, // 20 bits for sequencer, 2^20 sequence number for any range
 
-		AcquireShardInterval:           dynamicconfig.AcquireShardInterval.Get(dc),
-		AcquireShardConcurrency:        dynamicconfig.AcquireShardConcurrency.Get(dc),
-		ShardIOConcurrency:             dynamicconfig.ShardIOConcurrency.Get(dc),
-		ShardIOTimeout:                 dynamicconfig.ShardIOTimeout.Get(dc),
-		ShardLingerOwnershipCheckQPS:   dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
-		ShardLingerTimeLimit:           dynamicconfig.ShardLingerTimeLimit.Get(dc),
-		ShardOwnershipAssertionEnabled: dynamicconfig.ShardOwnershipAssertionEnabled.Get(dc),
+		AcquireShardInterval:         dynamicconfig.AcquireShardInterval.Get(dc),
+		AcquireShardConcurrency:      dynamicconfig.AcquireShardConcurrency.Get(dc),
+		ShardIOConcurrency:           dynamicconfig.ShardIOConcurrency.Get(dc),
+		ShardIOTimeout:               dynamicconfig.ShardIOTimeout.Get(dc),
+		ShardLingerOwnershipCheckQPS: dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
+		ShardLingerTimeLimit:         dynamicconfig.ShardLingerTimeLimit.Get(dc),
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
@@ -623,7 +623,8 @@ func NewConfig(
 		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
 		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
-		SendRawWorkflowHistory: dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		SendRawWorkflowHistory:         dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 	}
 
 	return cfg
