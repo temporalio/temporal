@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
@@ -68,13 +69,14 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller          *gomock.Controller
-		mockShard           *shard.ContextTest
-		mockEventsCache     *events.MockCache
-		mockNamespaceCache  *namespace.MockRegistry
-		mockTaskGenerator   *MockTaskGenerator
-		mockMutableState    *MockMutableState
-		mockClusterMetadata *cluster.MockMetadata
+		controller           *gomock.Controller
+		mockShard            *shard.ContextTest
+		mockEventsCache      *events.MockCache
+		mockNamespaceCache   *namespace.MockRegistry
+		mockTaskGenerator    *MockTaskGenerator
+		mockMutableState     *MockMutableState
+		mockClusterMetadata  *cluster.MockMetadata
+		stateMachineRegistry *hsm.Registry
 
 		logger log.Logger
 
@@ -117,9 +119,12 @@ func (s *stateBuilderSuite) SetupTest() {
 	)
 
 	reg := hsm.NewRegistry()
-	err := RegisterStateMachine(reg)
-	s.NoError(err)
+	s.NoError(RegisterStateMachine(reg))
+	s.NoError(nexusoperations.RegisterStateMachines(reg))
+	s.NoError(nexusoperations.RegisterEventDefinitions(reg))
+	s.NoError(nexusoperations.RegisterTaskSerializers(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
+	s.stateMachineRegistry = reg
 
 	root, err := hsm.NewRoot(reg, StateMachineType.ID, s.mockMutableState, make(map[int32]*persistencespb.StateMachineMap), s.mockMutableState)
 	s.NoError(err)
@@ -2123,6 +2128,48 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionUpdateComp
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
 	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
+	version := int64(1)
+	requestID := uuid.New()
+
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      tests.RunID,
+	}
+
+	now := time.Now().UTC()
+	event := &historypb.HistoryEvent{
+		TaskId:    rand.Int63(),
+		Version:   version,
+		EventId:   5,
+		EventTime: timestamppb.New(now),
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:                     "endpoint",
+				Service:                      "service",
+				Operation:                    "operation",
+				WorkflowTaskCompletedEventId: 4,
+				RequestId:                    "request-id",
+			},
+		},
+	}
+	root, err := hsm.NewRoot(s.stateMachineRegistry, StateMachineType.ID, nil, make(map[int32]*persistencespb.StateMachineMap), s.mockMutableState)
+	s.NoError(err)
+	s.mockMutableState.EXPECT().HSM().Return(root).AnyTimes()
+	s.mockMutableState.HSM()
+	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
+	s.mockUpdateVersion(event)
+	s.mockTaskGenerator.EXPECT().GenerateDirtySubStateMachineTasks(s.stateMachineRegistry).Return(nil).AnyTimes()
+
+	_, err = s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
+	s.NoError(err)
+	// Verify the event was applied.
+	sm, err := nexusoperations.MachineCollection(root).Data("5")
+	s.NoError(err)
+	s.Equal(enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, sm.State())
 }
 
 func (p *testTaskGeneratorProvider) NewTaskGenerator(

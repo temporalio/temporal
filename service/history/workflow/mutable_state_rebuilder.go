@@ -114,6 +114,9 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	}
 	// must generate the activity timer / user timer at the very end
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
+	if err := taskGenerator.GenerateDirtySubStateMachineTasks(b.shard.StateMachineRegistry()); err != nil {
+		return nil, err
+	}
 	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
 		return nil, err
 	}
@@ -676,7 +679,13 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			return nil, serviceerror.NewUnimplemented("Workflow/activity property modification not implemented")
 
 		default:
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
+			def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())
+			if !ok {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
+			}
+			if err := def.Apply(b.mutableState.HSM(), event); err != nil {
+				return nil, err
+			}
 		}
 	}
 

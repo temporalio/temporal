@@ -362,11 +362,9 @@ func TestProcessBackoffTask(t *testing.T) {
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
 	err := hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
-			Node: node,
-			AttemptFailure: nexusoperations.AttemptFailure{
-				Time: time.Now(),
-				Err:  errors.New("test"),
-			},
+			Node:        node,
+			Time:        time.Now(),
+			Err:         errors.New("test"),
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})

@@ -140,12 +140,8 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 		he.UserMetadata = command.UserMetadata
 	})
-	token, err := hsm.GenerateEventLoadToken(event)
-	if err != nil {
-		return err
-	}
-	_, err = nexusoperations.AddChild(root, strconv.FormatInt(event.EventId, 10), event, endpoint.Id, token, true)
-	return err
+	// TODO: make this prettier
+	return nexusoperations.ScheduledEventDefinition.Apply(nexusoperations.ScheduledEventDefinition{}, root, event)
 }
 
 func (ch *commandHandler) HandleCancelCommand(
@@ -205,17 +201,17 @@ func (ch *commandHandler) HandleCancelCommand(
 		}
 		he.UserMetadata = command.UserMetadata
 	})
-	return coll.Transition(nodeID, func(o nexusoperations.Operation) (hsm.TransitionOutput, error) {
-		output, err := o.Cancel(node, event.EventTime.AsTime())
-		// Cancel spawns a child Cancelation machine, if that machine already exists we got a duplicate cancelation request.
-		if errors.Is(err, hsm.ErrStateMachineAlreadyExists) {
-			return output, workflow.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID of %d", attrs.ScheduledEventId),
-			}
+
+	err = nexusoperations.CancelRequestedEventDefinition.Apply(nexusoperations.CancelRequestedEventDefinition{}, ms.HSM(), event)
+
+	// Cancel spawns a child Cancelation machine, if that machine already exists we got a duplicate cancelation request.
+	if errors.Is(err, hsm.ErrStateMachineAlreadyExists) {
+		return workflow.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID of %d", attrs.ScheduledEventId),
 		}
-		return output, err
-	})
+	}
+	return err
 }
 
 func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointRegistry commonnexus.EndpointRegistry, config *nexusoperations.Config) error {

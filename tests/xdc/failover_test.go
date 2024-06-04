@@ -3025,31 +3025,6 @@ func (s *FunctionalClustersTestSuite) getHistory(client tests.FrontendClient, na
 	return events
 }
 
-func (s *FunctionalClustersTestSuite) failover(
-	namespace string,
-	targetCluster string,
-	targetFailoverVersion int64,
-	client tests.FrontendClient,
-) {
-	// wait for replication task propagation
-	time.Sleep(4 * time.Second)
-
-	// update namespace to fail over
-	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			ActiveClusterName: targetCluster,
-		},
-	}
-	updateResp, err := client.UpdateNamespace(tests.NewContext(), updateReq)
-	s.NoError(err)
-	s.Equal(targetCluster, updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(targetFailoverVersion, updateResp.GetFailoverVersion())
-
-	// wait till failover completed
-	time.Sleep(cacheRefreshInterval)
-}
-
 func (s *FunctionalClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {
 	clusters := s.clusterReplicationConfig()
 	if !isGlobalNamespace {
