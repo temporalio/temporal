@@ -852,6 +852,9 @@ var (
 	WorkflowExecutionUpdateNormalWorkflowTask            = NewCounterDef("workflow_update_normal_workflow_task")
 	WorkflowExecutionUpdateClientTimeout                 = NewCounterDef("workflow_update_client_timeout")
 	WorkflowExecutionUpdateServerTimeout                 = NewCounterDef("workflow_update_server_timeout")
+	ConvertSpeculativeWorkflowTask                       = NewCounterDef(
+		"workflow_task_convert_speculative_to_normal",
+		WithDescription("The number of speculative workflow tasks converted to normal workflow tasks."))
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
