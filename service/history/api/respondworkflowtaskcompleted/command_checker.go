@@ -58,8 +58,8 @@ type (
 		config                          *configs.Config
 		maxIDLengthLimit                int
 		searchAttributesValidator       *searchattribute.Validator
-		getDefaultActivityRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
-		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+		getDefaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 		enableCrossNamespaceCommands    dynamicconfig.BoolPropertyFn
 	}
 
@@ -850,7 +850,8 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	defaultActivityRetrySettings := retrypolicy.FromConfigToDefault(v.getDefaultActivityRetrySettings(namespaceID.String()))
+	// TODO: this is a namespace setting, not a namespace id setting
+	defaultActivityRetrySettings := v.getDefaultActivityRetrySettings(namespaceID.String())
 	retrypolicy.EnsureDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
 	return retrypolicy.Validate(attributes.RetryPolicy)
 }
@@ -865,7 +866,7 @@ func (v *commandAttrValidator) validateWorkflowRetryPolicy(
 	}
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
-	defaultWorkflowRetrySettings := retrypolicy.FromConfigToDefault(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	defaultWorkflowRetrySettings := v.getDefaultWorkflowRetrySettings(namespaceName.String())
 	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }
