@@ -27,7 +27,6 @@ package worker
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -39,12 +38,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
-	"go.temporal.io/server/common/clock"
 	"go.uber.org/fx"
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -52,7 +51,6 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -114,19 +112,6 @@ type (
 		componentSet string
 		client       sdkclient.Client
 		worker       sdkworker.Worker
-	}
-
-	sdkWorkerOptions struct {
-		// Copy of relevant fields from sdkworker.Options
-		MaxConcurrentActivityExecutionSize      int
-		WorkerActivitiesPerSecond               float64
-		MaxConcurrentLocalActivityExecutionSize int
-		WorkerLocalActivitiesPerSecond          float64
-		MaxConcurrentActivityTaskPollers        int
-		MaxConcurrentWorkflowTaskExecutionSize  int
-		MaxConcurrentWorkflowTaskPollers        int
-		StickyScheduleToStartTimeout            string // parse into time.Duration
-		StickyScheduleToStartTimeoutDuration    time.Duration
 	}
 
 	workerAllocation struct {
@@ -314,22 +299,6 @@ func (wm *perNamespaceWorkerManager) getLocallyDesiredWorkersCount(ns *namespace
 	return result, nil
 }
 
-func (wm *perNamespaceWorkerManager) getWorkerOptions(ns *namespace.Namespace) sdkWorkerOptions {
-	optionsMap := wm.config.PerNamespaceWorkerOptions(ns.Name().String())
-	var options sdkWorkerOptions
-	b, err := json.Marshal(optionsMap)
-	if err != nil {
-		return options
-	}
-	_ = json.Unmarshal(b, &options) // ignore errors, just use the zero value anyway
-	if len(options.StickyScheduleToStartTimeout) > 0 {
-		if options.StickyScheduleToStartTimeoutDuration, err = timestamp.ParseDuration(options.StickyScheduleToStartTimeout); err != nil {
-			wm.logger.Warn("invalid StickyScheduleToStartTimeout", tag.Error(err))
-		}
-	}
-	return options
-}
-
 // called on namespace state change callback
 func (w *perNamespaceWorker) refreshWithNewNamespace(ns *namespace.Namespace, deleted bool) {
 	w.lock.Lock()
@@ -450,7 +419,7 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 	componentSet += fmt.Sprintf(",%d", workerAllocation.Local)
 
 	// get sdk worker options
-	dcOptions := w.wm.getWorkerOptions(ns)
+	dcOptions := w.wm.config.PerNamespaceWorkerOptions(ns.Name().String())
 	componentSet += fmt.Sprintf(",%+v", dcOptions)
 
 	// we do need a worker, but maybe we have one already
@@ -492,7 +461,7 @@ func (w *perNamespaceWorker) startWorker(
 	ns *namespace.Namespace,
 	components []workercommon.PerNSWorkerComponent,
 	allocation *workerAllocation,
-	dcOptions sdkWorkerOptions,
+	dcOptions sdkworker.Options,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
 	// this should not block because it uses an existing grpc connection
@@ -512,7 +481,7 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.MaxConcurrentActivityTaskPollers = max(cmp.Or(dcOptions.MaxConcurrentActivityTaskPollers, 2), 2)
 	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = cmp.Or(dcOptions.MaxConcurrentWorkflowTaskExecutionSize, 1000)
 	sdkoptions.MaxConcurrentWorkflowTaskPollers = max(cmp.Or(dcOptions.MaxConcurrentWorkflowTaskPollers, 2), 2)
-	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeoutDuration
+	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeout
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
 	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)

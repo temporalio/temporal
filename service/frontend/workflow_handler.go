@@ -118,7 +118,7 @@ type (
 		config                          *Config
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                *namespaceHandler
-		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		getDefaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 		visibilityMgr                   manager.VisibilityManager
 		logger                          log.Logger
 		throttledLogger                 log.Logger
@@ -3996,6 +3996,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		identity = op.ResetOperation.GetIdentity()
 		operationType = batcher.BatchTypeReset
 		if op.ResetOperation.Options != nil {
+			if op.ResetOperation.Options.Target == nil {
+				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
+			}
 			encoded, err := op.ResetOperation.Options.Marshal()
 			if err != nil {
 				return nil, err
@@ -4003,7 +4006,11 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			resetParams.ResetOptions = encoded
 		} else {
 			// TODO: remove support for old fields later
-			resetParams.ResetType = op.ResetOperation.GetResetType()
+			resetType := op.ResetOperation.GetResetType()
+			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown batch reset type %v", resetType))
+			}
+			resetParams.ResetType = resetType
 			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
 		}
 
@@ -4734,7 +4741,7 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 		return nil
 	}
 
-	defaultWorkflowRetrySettings := retrypolicy.FromConfigToDefault(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	defaultWorkflowRetrySettings := wh.getDefaultWorkflowRetrySettings(namespaceName.String())
 	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }
