@@ -281,22 +281,15 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	baseBranchToken := []byte("some random base branch token")
 	baseRebuildLastEventID := int64(1233)
 	baseRebuildLastEventVersion := int64(12)
-	baseNodeID := baseRebuildLastEventID + 1
 
 	resetBranchToken := []byte("some random reset branch token")
 	resetRequestID := uuid.New()
 	resetHistorySize := int64(4411)
 	resetMutableState := workflow.NewMockMutableState(s.controller)
 
-	shardID := s.mockShard.GetShardID()
-	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
-		ForkBranchToken: baseBranchToken,
-		ForkNodeID:      baseNodeID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
-		ShardID:         shardID,
-		NamespaceID:     s.namespaceID.String(),
-		NewRunID:        s.resetRunID,
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
+	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil,
+	)
 
 	s.mockStateRebuilder.EXPECT().Rebuild(
 		ctx,
@@ -979,7 +972,6 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 	baseRebuildLastEventID := int64(1234)
 	baseRebuildLastEventVersion := int64(12)
 	resetWorkflowVersion := int64(0)
-	baseNodeID := baseRebuildLastEventID + 1
 	resetReason := "some random reset reason"
 
 	resetBranchToken := []byte("some random reset branch token")
@@ -988,14 +980,19 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 	resetMutableState := workflow.NewMockMutableState(s.controller)
 	executionInfos := make(map[int64]*persistencespb.ChildExecutionInfo)
 
-	shardID := s.mockShard.GetShardID()
-	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
-		ForkBranchToken: baseBranchToken,
-		ForkNodeID:      baseNodeID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
-		ShardID:         shardID,
-		NamespaceID:     s.namespaceID.String(),
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
+	workflowTaskSchedule := &workflow.WorkflowTaskInfo{
+		ScheduledEventID: baseRebuildLastEventID - 12,
+		StartedEventID:   common.EmptyEventID,
+		RequestID:        uuid.New(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "random task queue name",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil,
+	)
 
 	s.mockStateRebuilder.EXPECT().Rebuild(
 		ctx,
@@ -1021,16 +1018,6 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 	resetMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 	resetMutableState.EXPECT().RefreshExpirationTimeoutTask(ctx).Return(nil).AnyTimes()
 	resetMutableState.EXPECT().GetPendingChildExecutionInfos().Return(executionInfos)
-
-	workflowTaskSchedule := &workflow.WorkflowTaskInfo{
-		ScheduledEventID: baseRebuildLastEventID - 12,
-		StartedEventID:   common.EmptyEventID,
-		RequestID:        uuid.New(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "random task queue name",
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-	}
 	resetMutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule).AnyTimes()
 
 	workflowTaskStart := &workflow.WorkflowTaskInfo{
@@ -1047,6 +1034,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		nil,
 		nil,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
+
 	resetMutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,

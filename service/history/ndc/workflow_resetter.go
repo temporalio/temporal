@@ -280,17 +280,6 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	// if workflow was reset after it was expired - at this point expiration task will
-	// already be fired since it is (re)created from the event, and event has old expiration time
-	// generate workflow execution task. again. this time with proper expiration time
-	taskRefresher := workflow.NewTaskRefresher(
-		r.shardContext,
-		r.logger,
-	)
-	if err := taskRefresher.RefreshTasks(ctx, resetMutableState); err != nil {
-		return nil, err
-	}
-
 	if resetMutableState.GetCurrentVersion() > resetWorkflowVersion {
 		return nil, serviceerror.NewInternal("WorkflowResetter encountered version mismatch.")
 	}

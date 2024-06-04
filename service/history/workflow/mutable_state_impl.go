@@ -5945,7 +5945,5 @@ func (ms *MutableStateImpl) RefreshExpirationTimeoutTask(ctx context.Context) er
 		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
 
-	err := RefreshTasksForWorkflowStart(ctx, ms, ms.taskGenerator)
-	return err
-
+	return RefreshTasksForWorkflowStart(ctx, ms, ms.taskGenerator)
 }
