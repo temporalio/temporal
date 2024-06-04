@@ -507,7 +507,8 @@ func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
 	return &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
 		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.taskReader.getBacklogHeadAge()), // using this and not matcher's
-		// because it reports the age of the current partition's backlog which is consistent with the other metrics and also does not include re-directions
+		// because it reports only the age of the current physical queue backlog (not including the redirected backlogs) which is consistent
+		// with the ApproximateBacklogCount metric.
 		TasksAddRate:      c.tasksAddedInIntervals.rate(),
 		TasksDispatchRate: c.tasksDispatchedInIntervals.rate(),
 	}

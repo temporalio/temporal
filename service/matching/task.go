@@ -165,7 +165,7 @@ func (info *startedTaskInfo) hasEmptyResponse() bool {
 		return false
 	} else if info.activityTaskInfo != nil && len(info.activityTaskInfo.TaskToken) != 0 {
 		return false
-	} else if info.nexusTaskInfo != nil && len(info.nexusTaskInfo.Response.TaskToken) != 0 {
+	} else if info.nexusTaskInfo != nil && info.nexusTaskInfo.Response != nil {
 		return false
 	}
 	return true
