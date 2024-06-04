@@ -391,8 +391,8 @@ func (s *VisibilityStore) generateVisibilityRow(
 		SearchAttributes: searchAttributes,
 		ParentWorkflowID: request.ParentWorkflowID,
 		ParentRunID:      request.ParentRunID,
-		RootWorkflowID:   request.RootWorkflowID,
-		RootRunID:        request.RootRunID,
+		RootWorkflowID:   &request.RootWorkflowID,
+		RootRunID:        &request.RootRunID,
 	}, nil
 }
 
@@ -459,8 +459,6 @@ func (s *VisibilityStore) rowToInfo(
 		ExecutionTime:  row.ExecutionTime,
 		Status:         enumspb.WorkflowExecutionStatus(row.Status),
 		TaskQueue:      row.TaskQueue,
-		RootWorkflowID: row.RootWorkflowID,
-		RootRunID:      row.RootRunID,
 		Memo:           persistence.NewDataBlob(row.Memo, row.Encoding),
 	}
 	if row.SearchAttributes != nil && len(*row.SearchAttributes) > 0 {
@@ -490,6 +488,12 @@ func (s *VisibilityStore) rowToInfo(
 	}
 	if row.ParentRunID != nil {
 		info.ParentRunID = *row.ParentRunID
+	}
+	if row.RootWorkflowID != nil {
+		info.RootWorkflowID = *row.RootWorkflowID
+	}
+	if row.RootRunID != nil {
+		info.RootRunID = *row.RootRunID
 	}
 	return info, nil
 }

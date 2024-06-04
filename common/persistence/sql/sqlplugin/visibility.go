@@ -71,8 +71,8 @@ type (
 		SearchAttributes     *VisibilitySearchAttributes
 		ParentWorkflowID     *string
 		ParentRunID          *string
-		RootWorkflowID       string
-		RootRunID            string
+		RootWorkflowID       *string
+		RootRunID            *string
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that
