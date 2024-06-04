@@ -1145,7 +1145,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-	metrics.WorkflowTaskAttempt.With(m.ms.metricsHandler).
+	metrics.ConvertSpeculativeWorkflowTask.With(m.ms.metricsHandler).
 		Record(1, metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()))
 
 	wt := m.getWorkflowTaskInfo()
