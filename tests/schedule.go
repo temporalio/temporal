@@ -682,7 +682,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 	_, err = s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 	// TODO(Tianyu): For now, simply test that no workflow tasks are generated and the scheduler does not run
-	<-time.After(1 * time.Second)
+	<-time.After(5 * time.Second)
 	s.True(atomic.LoadInt32(&runs) == 0)
 	s.NoError(err)
 
@@ -693,6 +693,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 		Identity:   "test",
 	})
 	s.NoError(err)
+	s.testCluster.host.dcClient.RemoveOverride(schedulerhsm.UseExperimentalHsmScheduler)
 }
 
 func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
