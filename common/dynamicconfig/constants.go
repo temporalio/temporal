@@ -2023,6 +2023,11 @@ the number of children greater than or equal to this threshold`,
 		`ReplicationEnableUpdateWithNewTaskMerge is the flag controlling whether replication task merging logic
 should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 	)
+	ReplicationMultipleBatches = NewGlobalBoolSetting(
+		"history.ReplicationMultipleBatches",
+		false,
+		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
+	)
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",
 		true,

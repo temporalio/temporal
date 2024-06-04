@@ -34,6 +34,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -83,6 +84,7 @@ type (
 		taskID         int64
 		task           *ExecutableHistoryTask
 		events         []*historypb.HistoryEvent
+		eventsBatches  [][]*historypb.HistoryEvent
 		newRunEvents   []*historypb.HistoryEvent
 		newRunID       string
 		processToolBox ProcessToolBox
@@ -116,37 +118,6 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.eventSerializer = serialization.NewSerializer()
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 
-	firstEventID := rand.Int63()
-	nextEventID := firstEventID + 1
-	version := rand.Int63()
-	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
-		EventId: firstEventID,
-		Version: version,
-	}}, enumspb.ENCODING_TYPE_PROTO3)
-	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
-
-	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
-		EventId: 1,
-		Version: version,
-	}}, enumspb.ENCODING_TYPE_PROTO3)
-	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
-	s.newRunID = uuid.NewString()
-
-	s.replicationTask = &replicationspb.HistoryTaskAttributes{
-		NamespaceId:       uuid.NewString(),
-		WorkflowId:        uuid.NewString(),
-		RunId:             uuid.NewString(),
-		BaseExecutionInfo: &workflowspb.BaseExecutionInfo{},
-		VersionHistoryItems: []*history.VersionHistoryItem{{
-			EventId: nextEventID - 1,
-			Version: version,
-		}},
-		Events:       eventsBlob,
-		NewRunEvents: newEventsBlob,
-		NewRunId:     s.newRunID,
-	}
-	s.sourceClusterName = cluster.TestCurrentClusterName
-
 	s.taskID = rand.Int63()
 	s.processToolBox = ProcessToolBox{
 		ClusterMetadata:         s.clusterMetadata,
@@ -161,6 +132,47 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  tests.NewDynamicConfig(),
 	}
+
+	firstEventID := rand.Int63()
+	nextEventID := firstEventID + 1
+	version := rand.Int63()
+	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
+		EventId: firstEventID,
+		Version: version,
+	}}, enumspb.ENCODING_TYPE_PROTO3)
+	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
+	s.eventsBatches = [][]*historypb.HistoryEvent{s.events}
+	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
+		EventId: 1,
+		Version: version,
+	}}, enumspb.ENCODING_TYPE_PROTO3)
+	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
+	s.newRunID = uuid.NewString()
+
+	var events *commonpb.DataBlob
+	var eventsBatches []*commonpb.DataBlob
+	if s.processToolBox.Config.ReplicationMultipleBatches() {
+		eventsBatches = []*commonpb.DataBlob{eventsBlob}
+	} else {
+		events = eventsBlob
+	}
+
+	s.replicationTask = &replicationspb.HistoryTaskAttributes{
+		NamespaceId:       uuid.NewString(),
+		WorkflowId:        uuid.NewString(),
+		RunId:             uuid.NewString(),
+		BaseExecutionInfo: &workflowspb.BaseExecutionInfo{},
+		VersionHistoryItems: []*history.VersionHistoryItem{{
+			EventId: nextEventID - 1,
+			Version: version,
+		}},
+		Events:        events,
+		NewRunEvents:  newEventsBlob,
+		NewRunId:      s.newRunID,
+		EventsBatches: eventsBatches,
+	}
+	s.sourceClusterName = cluster.TestCurrentClusterName
+
 	s.task = NewExecutableHistoryTask(
 		s.processToolBox,
 		s.taskID,
@@ -196,7 +208,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
-		[][]*historypb.HistoryEvent{s.events},
+		s.eventsBatches,
 		s.newRunEvents,
 		s.newRunID,
 	).Return(nil).Times(1)
@@ -249,7 +261,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
-		[][]*historypb.HistoryEvent{s.events},
+		s.eventsBatches,
 		s.newRunEvents,
 		s.newRunID,
 	).Return(nil)

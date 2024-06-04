@@ -95,7 +95,7 @@ type (
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
-			events []*historypb.HistoryEvent,
+			eventBatches [][]*historypb.HistoryEvent,
 		) error
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 
@@ -694,14 +694,16 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 }
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
-	events []*historypb.HistoryEvent,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
-	if len(events) == 0 {
+	if len(eventBatches) == 0 {
 		return nil
 	}
 
-	firstEvent := events[0]
-	lastEvent := events[len(events)-1]
+	firstBatch := eventBatches[0]
+	firstEvent := firstBatch[0]
+	lastBatch := eventBatches[len(eventBatches)-1]
+	lastEvent := lastBatch[len(lastBatch)-1]
 	if firstEvent.GetVersion() != lastEvent.GetVersion() {
 		return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
 	}

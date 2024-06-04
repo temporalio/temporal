@@ -5126,7 +5126,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -5140,7 +5140,7 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
-		workflowEventsSeq,
+		eventBatches,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -5268,7 +5268,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 
 func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy TransactionPolicy,
-	workflowEventsSeq []*persistence.WorkflowEvents,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -5291,17 +5291,23 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 
-	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, workflowEventsSeq)
+	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches)
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	transactionPolicy TransactionPolicy,
-	workflowEventsSeq []*persistence.WorkflowEvents,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
 
-	for _, workflowEvents := range workflowEventsSeq {
-		if err := ms.eventsToReplicationTask(transactionPolicy, workflowEvents.Events); err != nil {
+	if ms.config.ReplicationMultipleBatches() {
+		if err := ms.eventsToReplicationTask(transactionPolicy, eventBatches); err != nil {
 			return err
+		}
+	} else {
+		for _, events := range eventBatches {
+			if err := ms.eventsToReplicationTask(transactionPolicy, [][]*historypb.HistoryEvent{events}); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -5365,16 +5371,16 @@ func (ms *MutableStateImpl) cleanupTransaction(
 
 func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	transactionPolicy TransactionPolicy,
-) ([]*persistence.WorkflowEvents, []*historypb.HistoryEvent, bool, error) {
+) ([]*persistence.WorkflowEvents, [][]*historypb.HistoryEvent, []*historypb.HistoryEvent, bool, error) {
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
 	historyMutation, err := ms.hBuilder.Finish(!ms.HasStartedWorkflowTask())
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
 	// TODO @wxing1292 need more refactoring to make the logic clean
@@ -5387,7 +5393,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
 	historyNodeTxnIDs, err := ms.shard.GenerateTaskIDs(len(newEventsBatches))
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 	for index, eventBatch := range newEventsBatches {
 		workflowEventsSeq[index] = &persistence.WorkflowEvents{
@@ -5407,20 +5413,20 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		transactionPolicy,
 		workflowEventsSeq,
 	); err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
-	return workflowEventsSeq, newBufferBatch, clearBuffer, nil
+	return workflowEventsSeq, newEventsBatches, newBufferBatch, clearBuffer, nil
 }
 
 func (ms *MutableStateImpl) eventsToReplicationTask(
 	transactionPolicy TransactionPolicy,
-	events []*historypb.HistoryEvent,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
 	switch transactionPolicy {
 	case TransactionPolicyActive:
 		if ms.generateReplicationTask() {
-			return ms.taskGenerator.GenerateHistoryReplicationTasks(events)
+			return ms.taskGenerator.GenerateHistoryReplicationTasks(eventBatches)
 		}
 		return nil
 	case TransactionPolicyPassive:

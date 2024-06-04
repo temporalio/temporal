@@ -432,6 +432,7 @@ func (p *ackMgrImpl) ConvertTask(
 			p.eventBlobCache,
 			p.executionMgr,
 			p.logger,
+			p.config,
 		)
 	default:
 		return nil, errUnknownReplicationTask
