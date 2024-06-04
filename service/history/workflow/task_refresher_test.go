@@ -124,7 +124,8 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 
 	refreshedTasks := s.mutableState.PopTasks()
 	s.Len(refreshedTasks[tasks.CategoryOutbound], 3)
-	s.Len(refreshedTasks[tasks.CategoryTimer], 3)
+	s.Len(s.mutableState.GetExecutionInfo().StateMachineTimers, 3)
+	s.Len(refreshedTasks[tasks.CategoryTimer], 1)
 
 	s.False(hsmRoot.Dirty())
 }

@@ -98,7 +98,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 
 	if err == nil {
 		smRegistry := e.shardContext.StateMachineRegistry()
-		err = smRegistry.ExecuteActiveTask(ctx, e, ref, smt)
+		err = smRegistry.ExecuteActiveImmediateTask(ctx, e, ref, smt)
 	}
 
 	return queues.ExecuteResponse{

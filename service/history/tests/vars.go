@@ -190,7 +190,6 @@ func NewDynamicConfig() *configs.Config {
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
 	config.EnableNexus = dynamicconfig.GetBoolPropertyFn(true)
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
-	config.ShardOwnershipAssertionEnabled = dynamicconfig.GetBoolPropertyFn(true)
 	config.EnableWorkflowExecutionTimeoutTimer = dynamicconfig.GetBoolPropertyFn(true)
 	return config
 }

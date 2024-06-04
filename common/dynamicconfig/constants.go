@@ -29,6 +29,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkworker "go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
@@ -563,11 +564,12 @@ is currently processing a task.
 		0,
 		`FrontendPersistenceGlobalNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB`,
 	)
-	FrontendPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	FrontendPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"frontend.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`FrontendPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`FrontendPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	FrontendVisibilityMaxPageSize = NewNamespaceIntSetting(
 		"frontend.visibilityMaxPageSize",
@@ -958,11 +960,12 @@ Default is 0, means, namespace will be deleted immediately.`,
 		0,
 		`MatchingPersistenceNamespaceMaxQPS is the max qps each namespace in matching cluster can query DB`,
 	)
-	MatchingPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	MatchingPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"matching.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`MatchingPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`MatchingPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	MatchingMinTaskThrottlingBurstSize = NewTaskQueueIntSetting(
 		"matching.minTaskThrottlingBurstSize",
@@ -1184,11 +1187,12 @@ If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS`,
 		0,
 		`HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB`,
 	)
-	HistoryPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	HistoryPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"history.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`HistoryPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`HistoryPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
@@ -1310,20 +1314,8 @@ checks while a shard is lingering.`,
 		0,
 		`ShardLingerTimeLimit configures if and for how long the shard controller
 will temporarily delay closing shards after a membership update, awaiting a
-shard ownership lost error from persistence. Not recommended with
-persistence layers that are missing AssertShardOwnership support.
-If set to zero, shards will not delay closing.`,
-	)
-	ShardOwnershipAssertionEnabled = NewGlobalBoolSetting(
-		"history.shardOwnershipAssertionEnabled",
-		false,
-		`ShardOwnershipAssertionEnabled configures if the shard ownership is asserted
-for API requests when a NotFound or NamespaceNotFound error is returned from
-persistence.
-NOTE: Shard ownership assertion is not implemented by any persistence implementation
-in this codebase, because assertion is not needed for persistence implementation
-that guarantees read after write consistency. As a result, even if this config is
-enabled, it's a no-op.`,
+shard ownership lost error from persistence. If set to zero, shards will not delay closing.
+Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
 	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",
@@ -1639,15 +1631,15 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		100.0,
 		`OutboundQueueHostSchedulerMaxTaskRPS is the host scheduler max task RPS`,
 	)
-	OutboundQueueCircuitBreakerSettings = NewDestinationMapSetting(
+	OutboundQueueCircuitBreakerSettings = NewDestinationTypedSetting(
 		"history.outboundQueue.circuitBreakerSettings",
-		map[string]any{},
+		CircuitBreakerSettings{},
 		`OutboundQueueCircuitBreakerSettings are circuit breaker settings.
-Accepted config keys (see gobreaker reference for more details):
-- maxRequests: maximum number of requests allowed to pass through when it is half-open (default 1).
-- interval (seconds): cyclic period in closed state to clear the internal counts;
+Fields (see gobreaker reference for more details):
+- MaxRequests: Maximum number of requests allowed to pass through when it is half-open (default 1).
+- Interval (duration): Cyclic period in closed state to clear the internal counts;
   if interval is 0, then it never clears the internal counts (default 0).
-- timeout (seconds): period of open state before changing to half-open state (default 60).`,
+- Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
@@ -1860,15 +1852,15 @@ When the this config is zero or lower we will only update shard info at most onc
 		enumspb.ENCODING_TYPE_PROTO3.String(),
 		`DefaultEventEncoding is the encoding type for history events`,
 	)
-	DefaultActivityRetryPolicy = NewNamespaceMapSetting(
+	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
-		retrypolicy.GetDefault(),
+		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 the user has not specified an explicit RetryPolicy`,
 	)
-	DefaultWorkflowRetryPolicy = NewNamespaceMapSetting(
+	DefaultWorkflowRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultWorkflowRetryPolicy",
-		retrypolicy.GetDefault(),
+		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
 	)
@@ -2143,11 +2135,12 @@ that task will be sent to DLQ.`,
 		0,
 		`WorkerPersistenceNamespaceMaxQPS is the max qps each namespace in worker cluster can query DB`,
 	)
-	WorkerPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	WorkerPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"worker.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`WorkerPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`WorkerPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	WorkerIndexerConcurrency = NewGlobalIntSetting(
 		"worker.indexerConcurrency",
@@ -2311,10 +2304,10 @@ If the service configures with archival feature enabled, update worker.historySc
 		1,
 		`WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace`,
 	)
-	WorkerPerNamespaceWorkerOptions = NewNamespaceMapSetting(
+	WorkerPerNamespaceWorkerOptions = NewNamespaceTypedSetting(
 		"worker.perNamespaceWorkerOptions",
-		map[string]any{},
-		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker`,
+		sdkworker.Options{},
+		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace workers`,
 	)
 	WorkerPerNamespaceWorkerStartRate = NewGlobalFloatSetting(
 		"worker.perNamespaceWorkerStartRate",
@@ -2343,13 +2336,15 @@ If the service configures with archival feature enabled, update worker.historySc
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
-	WorkerDeleteNamespaceActivityLimitsConfig = NewGlobalMapSetting(
+	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
-		map[string]any{},
-		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
-settings for controlling remote activity concurrency for delete namespace workflows.`,
+		sdkworker.Options{},
+		`WorkerDeleteNamespaceActivityLimitsConfig is a struct with relevant sdkworker.Options
+settings for controlling remote activity concurrency for delete namespace workflows.
+Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
+WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
+`,
 	)
-
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",
 		400,
@@ -2359,5 +2354,10 @@ settings for controlling remote activity concurrency for delete namespace workfl
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
+		"system.workflowIdReuseMinimalInterval",
+		1*time.Second,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
 )

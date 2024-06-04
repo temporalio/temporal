@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
@@ -429,26 +430,38 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	}, invocationTask.Info)
 
 	require.Equal(t, tests.WorkflowKey, backoffTask.WorkflowKey)
-	require.Equal(t, &persistencespb.StateMachineTaskInfo{
-		Ref: &persistencespb.StateMachineRef{
-			Path: []*persistencespb.StateMachineKey{
-				{
-					Type: callbacks.StateMachineType.ID,
-					Id:   "backoff",
+	require.Equal(t, int64(3), backoffTask.Version)
+	require.Equal(t, int64(2), backoffTask.MutableStateTransitionCount)
+
+	timers := mutableState.GetExecutionInfo().StateMachineTimers
+	require.Equal(t, 1, len(timers))
+	protorequire.ProtoEqual(t, &persistencespb.StateMachineTimerGroup{
+		Deadline:  callbackToBackoff.PublicInfo.NextAttemptScheduleTime,
+		Scheduled: true,
+		Infos: []*persistencespb.StateMachineTaskInfo{
+			{
+				Ref: &persistencespb.StateMachineRef{
+					Path: []*persistencespb.StateMachineKey{
+						{
+							Type: callbacks.StateMachineType.ID,
+							Id:   "backoff",
+						},
+					},
+					MutableStateNamespaceFailoverVersion: 3,
+					MutableStateTransitionCount:          2,
+					MachineTransitionCount:               1,
 				},
+				Type: callbacks.TaskTypeBackoff.ID,
+				Data: nil,
 			},
-			MutableStateNamespaceFailoverVersion: 3,
-			MutableStateTransitionCount:          2,
-			MachineTransitionCount:               1,
 		},
-		Type: callbacks.TaskTypeBackoff.ID,
-		Data: nil,
-	}, backoffTask.Info)
+	}, timers[0])
 
 	// Reset and test a concurrent task (nexusoperations.TimeoutTask)
 	node.ClearTransactionState()
 	genTasks = nil
 	opNode, err := nexusoperations.AddChild(node, "ID", &historypb.HistoryEvent{
+		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
 				Service:                "some-service",
@@ -461,14 +474,16 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(genTasks))
-	timeoutTask, ok := genTasks[0].(*tasks.StateMachineTimerTask) // nolint:revive
-	if !ok {
-		timeoutTask = genTasks[1].(*tasks.StateMachineTimerTask) // nolint:revive
-	}
+	// No new timer tasks are generated they are collapsed.
+	// Only an outbound task is expected here.
+	require.Equal(t, 1, len(genTasks))
+	_, ok = genTasks[0].(*tasks.StateMachineOutboundTask)
+	require.True(t, ok)
 
-	require.Equal(t, tests.WorkflowKey, timeoutTask.WorkflowKey)
-	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+	timers = mutableState.GetExecutionInfo().StateMachineTimers
+	require.Equal(t, 2, len(timers))
+
+	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
 				{
@@ -482,7 +497,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		},
 		Type: nexusoperations.TaskTypeTimeout.ID,
 		Data: nil,
-	}, timeoutTask.Info)
+	}, timers[1].Infos[0])
 }
 
 func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {

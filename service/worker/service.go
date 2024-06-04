@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	sdkworker "go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
@@ -95,7 +96,7 @@ type (
 		PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+		PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		EnableBatcher                        dynamicconfig.BoolPropertyFn
@@ -103,7 +104,7 @@ type (
 		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount              dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PerNamespaceWorkerOptions            dynamicconfig.MapPropertyFnWithNamespaceFilter
+		PerNamespaceWorkerOptions            dynamicconfig.TypedPropertyFnWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
 
 		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn

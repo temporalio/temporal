@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,26 +20,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package tests
 
 import (
-	"encoding/json"
+	"flag"
+	"testing"
 
-	"go.temporal.io/server/common/dynamicconfig"
+	"github.com/stretchr/testify/suite"
 )
 
-// NewActivityWorkerConcurrencyConfig constructs an ActivityWorkerLimitsConfig from the map of values identified
-// by key in the dynamic collection. Any errors are ignored and 0 values will be returned instead.
-func NewActivityWorkerConcurrencyConfig(
-	dc *dynamicconfig.Collection,
-	setting dynamicconfig.GlobalMapSetting,
-) ActivityWorkerLimitsConfig {
-	dcOptions := setting.Get(dc)()
-	var config ActivityWorkerLimitsConfig
-	b, err := json.Marshal(dcOptions)
-	if err != nil {
-		return config
-	}
-	_ = json.Unmarshal(b, &config) // ignore errors, just use the zero value anyway
-	return config
+func TestDescribeTaskQueueSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(DescribeTaskQueueSuite))
 }

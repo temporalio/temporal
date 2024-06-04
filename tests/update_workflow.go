@@ -444,6 +444,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
 			go func() {
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
+			// To make sure that update gets to the server before WFT is polled.
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 			// Process update in workflow.
 			res, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
@@ -566,7 +568,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 			}()
 			// Signal creates WFT, and it is important to wait for update to get blocked,
 			// to make sure that poll bellow won't poll just for WFT from signal.
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 			// Process update in workflow. It will be attached to existing WT.
 			res, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
@@ -616,7 +618,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_RunningWorkflowTask_NewEmptySpecula
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 			// To make sure that 1st update gets to the sever while WT1 is running.
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 			// Completes WT with empty command list to create next WFT w/o events.
 			return nil, nil
 		case 2:
@@ -733,7 +735,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_RunningWorkflowTask_NewNotEmptySpec
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 			// To make sure that 1st update gets to the sever while WT1 is running.
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 			// Completes WT with update unrelated commands to create events that will be in the next speculative WFT.
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -2304,7 +2306,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() {
 	s.Contains(err.Error(), "wasn't found")
 	// New normal (but transient) WT will be created but not returned.
 
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
 	_, err = poller.PollAndProcessWorkflowTask()
@@ -2527,7 +2529,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Co
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 	// This is to make sure that update gets to the server before the next Signal call.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	// Send signal which will NOT be buffered because speculative WT is not started yet (only scheduled).
 	// This will persist MS and speculative WT must be converted to normal.
@@ -2768,7 +2770,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_ScheduleToS
 	}()
 
 	// To make sure that update got to the server before test start to wait for StickyScheduleToStartTimeout.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	s.Logger.Info("Wait for sticky timeout to fire. Sleep poller.StickyScheduleToStartTimeout+ seconds.", tag.NewDurationTag("StickyScheduleToStartTimeout", poller.StickyScheduleToStartTimeout))
 	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
@@ -2871,7 +2873,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_ScheduleToS
 	}()
 
 	// To make sure that update got to the server before test start to wait for SpeculativeWorkflowTaskScheduleToStartTimeout.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	// TODO: it would be nice to shutdown matching before sending an update to emulate case which is actually being tested here.
 	//  But test infrastructure doesn't support it. 5 seconds sleep will cause same observable effect.
@@ -3095,7 +3097,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	}
 	go updateWorkflowFn()
 	// This is to make sure that update gets to the server before the next Terminate call.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	// Terminate workflow after speculative WT is scheduled but not started.
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -3456,35 +3458,29 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Lo
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	updateResultCh := make(chan struct{})
-	updateWorkflowFn := func() {
-		halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
-		defer cancel()
+	halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
+	defer cancel()
 
-		updateResponse, err1 := s.engine.UpdateWorkflowExecution(halfSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace:         s.namespace,
-			WorkflowExecution: tv.WorkflowExecution(),
-			Request: &updatepb.Request{
-				Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-				Input: &updatepb.Input{
-					Name: tv.Any().String(),
-					Args: tv.Any().Payloads(),
-				},
+	updateResponse, err1 := s.engine.UpdateWorkflowExecution(halfSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         s.namespace,
+		WorkflowExecution: tv.WorkflowExecution(),
+		Request: &updatepb.Request{
+			Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+			Input: &updatepb.Input{
+				Name: tv.Any().String(),
+				Args: tv.Any().Payloads(),
 			},
-		})
-		assert.Error(s.T(), err1)
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
-		assert.Nil(s.T(), updateResponse)
+		},
+	})
+	s.Error(err1)
+	s.True(common.IsContextDeadlineExceededErr(err1), err1)
+	s.Nil(updateResponse)
 
-		updateResultCh <- struct{}{}
-	}
-	go updateWorkflowFn()
-
-	// Close shard, Speculative WT with update will be lost.
+	// Close shard, Speculative WFT with update will be lost.
 	s.closeShard(tv.WorkflowID())
 
-	// Ensure, there is no new WT.
-	pollCtx, cancel := context.WithTimeout(NewContext(), common.MinLongPollTimeout+100*time.Millisecond)
+	// Ensure, there is no WFT.
+	pollCtx, cancel := context.WithTimeout(NewContext(), common.MinLongPollTimeout*2)
 	defer cancel()
 	pollResponse, err := s.engine.PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
@@ -3492,16 +3488,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Lo
 		Identity:  tv.WorkerIdentity(),
 	})
 	s.NoError(err)
-	s.Nil(pollResponse.Messages)
-
-	// Wait for update API call to timeout.
-	<-updateResultCh
+	s.Nil(pollResponse.Messages, "there should not be new WFT with messages")
 
 	// Send signal to schedule new WT.
 	err = s.sendSignal(s.namespace, tv.WorkflowExecution(), tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
 	s.NoError(err)
 
-	// Complete workflow.
+	// Complete workflow and check that there is update messages.
 	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
@@ -3758,7 +3751,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResur
 	go updateWorkflowFn()
 
 	// To make sure that first WFT has update message.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	// Process update in workflow. Update won't be found on server but will be resurrected from acceptance message and completed.
 	res, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
@@ -3864,7 +3857,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	// Send second update with the same ID.
 	updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -3919,7 +3912,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Dedu
 			go func() {
 				updateResultCh2 <- s.sendUpdateNoError(tv, "1")
 			}()
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
@@ -4098,14 +4091,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
 				s.closeShard(tv.WorkflowID())
 			}
 
-			// Send second update with the same ID.
-			updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
-			go func() {
-				updateResultCh2 <- s.sendUpdateNoError(tv, "1")
-			}()
+			// Send second update with the same ID. It must return immediately.
+			updateResult2 := s.sendUpdateNoError(tv, "1")
 
 			// Ensure, there is no new WT.
-			pollCtx, cancel := context.WithTimeout(NewContext(), common.MinLongPollTimeout+100*time.Millisecond)
+			pollCtx, cancel := context.WithTimeout(NewContext(), common.MinLongPollTimeout*2)
 			defer cancel()
 			pollResponse, err := s.engine.PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
 				Namespace: s.namespace,
@@ -4115,7 +4105,6 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
 			s.NoError(err)
 			s.Nil(pollResponse.Messages, "there must be no new WT")
 
-			updateResult2 := <-updateResultCh2
 			s.EqualValues(
 				"success-result-of-"+tv.UpdateID("1"),
 				decodeString(s, updateResult2.GetOutcome().GetSuccess()),
@@ -4477,6 +4466,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 		The second speculative WT responds back, server accepted it.
 	*/
 
+	// reset reuse minimal interval to allow workflow termination
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+
 	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 
@@ -4516,12 +4508,12 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 	s.NoError(err)
 	s.NotNil(res)
 
-	// Send 1st update. It will create 2nd WT as speculative.
+	// Send 1st update. It will create 2nd speculative WFT.
 	go func() {
 		_, _ = s.sendUpdate(tv, "1")
 	}()
 
-	// Poll 2nd speculative WT with 1st update.
+	// Poll 2nd speculative WFT with 1st update.
 	wt2, err := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: tv.TaskQueue(),
@@ -4541,25 +4533,25 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 	  6 WorkflowTaskScheduled
 	  7 WorkflowTaskStarted`, wt2.History)
 
-	// DescribeMutableState will clear MS, cause the speculative WT and update registry to disappear.
+	// DescribeMutableState will clear workflow context cause the speculative WT and update registry to disappear.
 	_, err = s.adminClient.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace,
 		Execution: tv.WorkflowExecution(),
 	})
 	s.NoError(err)
 
-	// Make sure UpdateWorkflowExecution call for the update "1" is retried and new (3rd) WFT is created as speculative.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	// Make sure UpdateWorkflowExecution call for the update "1" is retried and new (3rd) WFT is created as speculative with updateID=1.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
-	// Send 2nd update (with DIFFERENT updateId). It re-use already create 3rd WFT.
+	// Send 2nd update (with DIFFERENT updateId). It reuses already created 3rd WFT.
 	go func() {
 		_, _ = s.sendUpdate(tv, "2")
 	}()
-
 	// Make sure that updateID=2 reached server (and added to the 4th WFT) before WFT is polled.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	// updateID=1 is still blocked. There must be 2 blocked calls now.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, runtime.WithNumGoRoutines(2))
 
-	// Poll the 3rd speculative WT.
+	// Poll the 3rd speculative WFT.
 	wt3, err := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: tv.TaskQueue(),
@@ -4834,7 +4826,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_WorkerSkipp
 				update2ResultCh <- s.sendUpdateNoError(tv, "2")
 			}()
 			// To make sure that gets to the sever while this WT is running.
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
@@ -5058,7 +5050,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_QueryFailur
 	}()
 
 	// Wait for update go through and speculative WFT to be created.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	type QueryResult struct {
 		Resp *workflowservice.QueryWorkflowResponse
