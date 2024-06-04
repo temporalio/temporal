@@ -29,7 +29,9 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkworker "go.temporal.io/sdk/worker"
 
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -69,6 +71,11 @@ var (
 		"system.enableReadFromSecondaryVisibility",
 		false,
 		`EnableReadFromSecondaryVisibility is the config to enable read from secondary visibility`,
+	)
+	VisibilityEnableShadowReadMode = NewGlobalBoolSetting(
+		"system.visibilityEnableShadowReadMode",
+		false,
+		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
 	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
 		"system.secondaryVisibilityWritingMode",
@@ -502,11 +509,6 @@ is currently processing a task.
 		200,
 		`NexusEndpointNameMaxLength is the maximum length of a Nexus endpoint name.`,
 	)
-	NexusEndpointDescriptionMaxSize = NewGlobalIntSetting(
-		"limit.endpointDescriptionMaxSize",
-		4*1024,
-		`NexusEndpointDescriptionMaxSize is the maximum size of a Nexus endpoint description in bytes.`,
-	)
 	NexusEndpointExternalURLMaxLength = NewGlobalIntSetting(
 		"limit.endpointExternalURLMaxLength",
 		4*1024,
@@ -562,11 +564,12 @@ is currently processing a task.
 		0,
 		`FrontendPersistenceGlobalNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB`,
 	)
-	FrontendPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	FrontendPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"frontend.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`FrontendPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`FrontendPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	FrontendVisibilityMaxPageSize = NewNamespaceIntSetting(
 		"frontend.visibilityMaxPageSize",
@@ -713,6 +716,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10,
 		`FrontendMaxBadBinaries is the max number of bad binaries in namespace config`,
 	)
+	FrontendMaskInternalErrorDetails = NewNamespaceBoolSetting(
+		"frontend.maskInternalErrorDetails",
+		true,
+		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
+	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
@@ -805,16 +813,11 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
-	FrontendEnableNexusAPIs = NewGlobalBoolSetting(
-		"frontend.enableNexusAPIs",
+	EnableNexus = NewGlobalBoolSetting(
+		"system.enableNexus",
 		false,
-		`FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.`,
-	)
-	EnableNexusEndpointRegistryBackgroundRefresh = NewGlobalBoolSetting(
-		"system.enableNexusEndpointRegistryBackgroundRefresh",
-		false,
-		`EnableNexusEndpointRegistryBackgroundRefresh toggles the background refresh job of the Nexus endpoint registry on
-frontend and history hosts.`,
+		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
+server hosts for it to take effect.`,
 	)
 	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"system.refreshNexusEndpointsLongPollTimeout",
@@ -826,20 +829,20 @@ frontend and history hosts.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
-	FrontendEnableCallbackAttachment = NewNamespaceBoolSetting(
-		"frontend.enableCallbackAttachment",
-		false,
-		`FrontendEnableCallbackAttachment enables attaching callbacks to workflows.`,
-	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
 		`FrontendCallbackURLMaxLength is the maximum length of callback URL`,
 	)
-	FrontendMaxCallbacksPerWorkflow = NewNamespaceIntSetting(
-		"frontend.maxCallbacksPerWorkflow",
+	FrontendCallbackHeaderMaxSize = NewNamespaceIntSetting(
+		"frontend.callbackHeaderMaxLength",
+		8*1024,
+		`FrontendCallbackHeaderMaxSize is the maximum accumulated size of callback header keys and values`,
+	)
+	MaxCallbacksPerWorkflow = NewNamespaceIntSetting(
+		"system.maxCallbacksPerWorkflow",
 		32,
-		`FrontendMaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
@@ -855,20 +858,6 @@ frontend and history hosts.`,
 		"frontend.enableBatcher",
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
-	)
-	FrontendAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.accessHistoryFraction",
-		1.0,
-		`FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
-service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
-	)
-	FrontendAdminDeleteAccessHistoryFraction = NewGlobalFloatSetting(
-		"frontend.adminDeleteAccessHistoryFraction",
-		1.0,
-		`FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
-that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
-TODO: remove once migration completes.`,
 	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
@@ -971,11 +960,12 @@ Default is 0, means, namespace will be deleted immediately.`,
 		0,
 		`MatchingPersistenceNamespaceMaxQPS is the max qps each namespace in matching cluster can query DB`,
 	)
-	MatchingPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	MatchingPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"matching.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`MatchingPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`MatchingPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	MatchingMinTaskThrottlingBurstSize = NewTaskQueueIntSetting(
 		"matching.minTaskThrottlingBurstSize",
@@ -1197,11 +1187,12 @@ If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS`,
 		0,
 		`HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB`,
 	)
-	HistoryPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	HistoryPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"history.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`HistoryPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`HistoryPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
@@ -1244,12 +1235,12 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 	)
 	EnableHostHistoryCache = NewGlobalBoolSetting(
 		"history.enableHostHistoryCache",
-		false,
+		true,
 		`EnableHostHistoryCache controls if the history cache is host level`,
 	)
 	HistoryCacheHostLevelMaxSize = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSize",
-		256000,
+		128000,
 		`HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache`,
 	)
 	HistoryCacheHostLevelMaxSizeBytes = NewGlobalIntSetting(
@@ -1257,13 +1248,6 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 		256000*4*1024,
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 HistoryCacheSizeBasedLimit is set to true.`,
-	)
-	EnableMutableStateTransitionHistory = NewGlobalBoolSetting(
-		"history.enableMutableStateTransitionHistory",
-		false,
-		`EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
-The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
-change with the pending replication design.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
@@ -1330,20 +1314,8 @@ checks while a shard is lingering.`,
 		0,
 		`ShardLingerTimeLimit configures if and for how long the shard controller
 will temporarily delay closing shards after a membership update, awaiting a
-shard ownership lost error from persistence. Not recommended with
-persistence layers that are missing AssertShardOwnership support.
-If set to zero, shards will not delay closing.`,
-	)
-	ShardOwnershipAssertionEnabled = NewGlobalBoolSetting(
-		"history.shardOwnershipAssertionEnabled",
-		false,
-		`ShardOwnershipAssertionEnabled configures if the shard ownership is asserted
-for API requests when a NotFound or NamespaceNotFound error is returned from
-persistence.
-NOTE: Shard ownership assertion is not implemented by any persistence implementation
-in this codebase, because assertion is not needed for persistence implementation
-that guarantees read after write consistency. As a result, even if this config is
-enabled, it's a no-op.`,
+shard ownership lost error from persistence. If set to zero, shards will not delay closing.
+Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
 	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",
@@ -1357,6 +1329,11 @@ to this require a restart to take effect.`,
 		"history.shardIOConcurrency",
 		1,
 		`ShardIOConcurrency controls the concurrency of persistence operations in shard context`,
+	)
+	ShardIOTimeout = NewGlobalDurationSetting(
+		"history.shardIOTimeout",
+		5*time.Second*debug.TimeoutMultiplier,
+		`ShardIOTimeout sets the timeout for persistence operations in the shard context`,
 	)
 	StandbyClusterDelay = NewGlobalDurationSetting(
 		"history.standbyClusterDelay",
@@ -1594,11 +1571,6 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		`TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue`,
 	)
 
-	OutboundProcessorEnabled = NewGlobalBoolSetting(
-		"history.outboundProcessorEnabled",
-		false,
-		`OutboundProcessorEnabled enables starting the outbound queue processor.`,
-	)
 	OutboundTaskBatchSize = NewGlobalIntSetting(
 		"history.outboundTaskBatchSize",
 		100,
@@ -1658,6 +1630,16 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		"history.outboundQueue.hostScheduler.maxTaskRPS",
 		100.0,
 		`OutboundQueueHostSchedulerMaxTaskRPS is the host scheduler max task RPS`,
+	)
+	OutboundQueueCircuitBreakerSettings = NewDestinationTypedSetting(
+		"history.outboundQueue.circuitBreakerSettings",
+		CircuitBreakerSettings{},
+		`OutboundQueueCircuitBreakerSettings are circuit breaker settings.
+Fields (see gobreaker reference for more details):
+- MaxRequests: Maximum number of requests allowed to pass through when it is half-open (default 1).
+- Interval (duration): Cyclic period in closed state to clear the internal counts;
+  if interval is 0, then it never clears the internal counts (default 0).
+- Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
@@ -1870,15 +1852,15 @@ When the this config is zero or lower we will only update shard info at most onc
 		enumspb.ENCODING_TYPE_PROTO3.String(),
 		`DefaultEventEncoding is the encoding type for history events`,
 	)
-	DefaultActivityRetryPolicy = NewNamespaceMapSetting(
+	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
-		retrypolicy.GetDefault(),
+		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 the user has not specified an explicit RetryPolicy`,
 	)
-	DefaultWorkflowRetryPolicy = NewNamespaceMapSetting(
+	DefaultWorkflowRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultWorkflowRetryPolicy",
-		retrypolicy.GetDefault(),
+		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
 	)
@@ -1959,6 +1941,11 @@ the number of children greater than or equal to this threshold`,
 		`MutableStateChecksumInvalidateBefore is the epoch timestamp before which all checksums are to be discarded`,
 	)
 
+	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
+		"history.ReplicationTaskApplyTimeout",
+		20*time.Second,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply`,
+	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",
 		4,
@@ -2079,6 +2066,17 @@ that task will be sent to DLQ.`,
 		512,
 		`ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count`,
 	)
+	ReplicationLowPriorityProcessorSchedulerWorkerCount = NewGlobalIntSetting(
+		"history.ReplicationLowPriorityProcessorSchedulerWorkerCount",
+		128,
+		`ReplicationLowPriorityProcessorSchedulerWorkerCount is the low priority replication task executor worker count`,
+	)
+	ReplicationLowPriorityTaskParallelism = NewGlobalIntSetting(
+		"history.ReplicationLowPriorityTaskParallelism",
+		4,
+		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
+	)
+
 	EnableEagerNamespaceRefresher = NewGlobalBoolSetting(
 		"history.EnableEagerNamespaceRefresher",
 		false,
@@ -2093,6 +2091,26 @@ that task will be sent to DLQ.`,
 		"history.EnableReplicateLocalGeneratedEvents",
 		false,
 		`EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events`,
+	)
+	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
+		"history.EnableReplicationTaskTieredProcessing",
+		false,
+		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
+	)
+	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderHighPriorityQPS",
+		100,
+		`Maximum number of high priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamSenderLowPriorityQPS = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLowPriorityQPS",
+		100,
+		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxOutstandingTaskCount",
+		50,
+		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
 
 	// keys for worker
@@ -2117,11 +2135,12 @@ that task will be sent to DLQ.`,
 		0,
 		`WorkerPersistenceNamespaceMaxQPS is the max qps each namespace in worker cluster can query DB`,
 	)
-	WorkerPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
+	WorkerPersistenceDynamicRateLimitingParams = NewGlobalTypedSetting(
 		"worker.persistenceDynamicRateLimitingParams",
 		DefaultDynamicRateLimitingParams,
-		`WorkerPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
-see DefaultDynamicRateLimitingParams for available options and defaults`,
+		`WorkerPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
+Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
+See DynamicRateLimitingParams comments for more details.`,
 	)
 	WorkerIndexerConcurrency = NewGlobalIntSetting(
 		"worker.indexerConcurrency",
@@ -2285,10 +2304,10 @@ If the service configures with archival feature enabled, update worker.historySc
 		1,
 		`WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace`,
 	)
-	WorkerPerNamespaceWorkerOptions = NewNamespaceMapSetting(
+	WorkerPerNamespaceWorkerOptions = NewNamespaceTypedSetting(
 		"worker.perNamespaceWorkerOptions",
-		map[string]any{},
-		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker`,
+		sdkworker.Options{},
+		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace workers`,
 	)
 	WorkerPerNamespaceWorkerStartRate = NewGlobalFloatSetting(
 		"worker.perNamespaceWorkerStartRate",
@@ -2317,10 +2336,28 @@ If the service configures with archival feature enabled, update worker.historySc
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
-	WorkerDeleteNamespaceActivityLimitsConfig = NewGlobalMapSetting(
+	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
-		map[string]any{},
-		`WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
-settings for controlling remote activity concurrency for delete namespace workflows.`,
+		sdkworker.Options{},
+		`WorkerDeleteNamespaceActivityLimitsConfig is a struct with relevant sdkworker.Options
+settings for controlling remote activity concurrency for delete namespace workflows.
+Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
+WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
+`,
+	)
+	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
+		"limit.userMetadataSummarySize",
+		400,
+		`MaxUserMetadataSummarySize is the maximum size of user metadata summary payloads in bytes.`,
+	)
+	MaxUserMetadataDetailsSize = NewNamespaceIntSetting(
+		"limit.userMetadataDetailsSize",
+		20000,
+		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
+		"system.workflowIdReuseMinimalInterval",
+		1*time.Second,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
 )

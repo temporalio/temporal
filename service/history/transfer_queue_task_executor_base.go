@@ -146,7 +146,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	}
 
 	if directive.GetUseAssignmentRules() == nil {
-		// activity is not getting a new build id, so no need to update MS
+		// activity is not getting a new build ID, so no need to update MS
 		return nil
 	}
 
@@ -201,7 +201,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		return nil
 	}
 
-	return updateWorkflowAssignedBuildId(
+	return initializeWorkflowAssignedBuildId(
 		ctx,
 		task,
 		resp.AssignedBuildId,
@@ -262,8 +262,9 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	// ensureNoPendingCloseTask flag is set iff we're running in the active cluster, and we aren't processing the
 	// CloseExecutionTask from within this same goroutine.
 	if ensureNoPendingCloseTask {
-		// Unfortunately, queue states/ack levels are updated with delay (default 30s), therefore this could fail if the
-		// workflow was closed before the queue state/ack levels were updated, so we return a retryable error.
+		// Unfortunately, queue states/ack levels are updated with delay ("history.transferProcessorUpdateAckInterval", default 30s),
+		// therefore this could fail if the workflow was closed before the queue state/ack levels were updated,
+		// so we return a retryable error.
 		if t.isCloseExecutionTaskPending(mutableState, weCtx) {
 			return consts.ErrDependencyTaskNotCompleted
 		}
@@ -278,11 +279,11 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	}
 
 	if taskVersion != common.EmptyVersion {
-		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		closeVersion, err := mutableState.GetCloseVersion()
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, taskVersion, task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, taskVersion, task)
 		if err != nil {
 			return err
 		}

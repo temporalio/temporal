@@ -74,7 +74,7 @@ type (
 			workflowTaskScheduledEventID int64,
 		) error
 		GenerateActivityTasks(
-			event *historypb.HistoryEvent,
+			activityScheduledEventID int64,
 		) error
 		GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error
 		GenerateChildWorkflowTasks(
@@ -201,12 +201,15 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closedTime time.Time,
 	deleteAfterClose bool,
 ) error {
-	currentVersion := r.mutableState.GetCurrentVersion()
+	closeVersion, err := r.mutableState.GetCloseVersion()
+	if err != nil {
+		return err
+	}
 
 	closeExecutionTask := &tasks.CloseExecutionTask{
 		// TaskID, Visiblitytimestamp is set by shard
 		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		Version:          currentVersion,
+		Version:          closeVersion,
 		DeleteAfterClose: deleteAfterClose,
 	}
 	closeTasks := []tasks.Task{
@@ -233,7 +236,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			&tasks.CloseExecutionVisibilityTask{
 				// TaskID, VisibilityTimestamp is set by shard
 				WorkflowKey: r.mutableState.GetWorkflowKey(),
-				Version:     currentVersion,
+				Version:     closeVersion,
 			},
 		)
 		if r.archivalEnabled() {
@@ -255,7 +258,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				// TaskID is set by the shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
 				VisibilityTimestamp: archiveTime,
-				Version:             currentVersion,
+				Version:             closeVersion,
 			}
 			closeTasks = append(closeTasks, task)
 		} else if err := r.GenerateDeleteHistoryEventTask(closedTime); err != nil {
@@ -306,54 +309,22 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 		}
 		for _, output := range pao.Outputs {
 			for _, task := range output.Tasks {
-				ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
-				if !ok {
-					return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
-				}
-				data, err := ser.Serialize(task)
-				if err != nil {
-					return err
-				}
-				ppath := make([]*persistencespb.StateMachineKey, len(pao.Path))
-				for i, k := range pao.Path {
-					ppath[i] = &persistencespb.StateMachineKey{
-						Type: k.Type,
-						Id:   k.ID,
-					}
-				}
-				// Only set transition count if a task is non-concurrent.
-				transitionCount := int64(0)
-				if !task.Concurrent() {
-					transitionCount = node.TransitionCount()
-				}
-				smt := tasks.StateMachineTask{
-					WorkflowKey: r.mutableState.GetWorkflowKey(),
-					Info: &persistencespb.StateMachineTaskInfo{
-						Ref: &persistencespb.StateMachineRef{
-							Path:                                 ppath,
-							MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
-							MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
-							MachineTransitionCount:               transitionCount,
-						},
-						Type: task.Type().ID,
-						Data: data,
-					},
-				}
-				switch kind := task.Kind().(type) {
-				case hsm.TaskKindOutbound:
-					r.mutableState.AddTasks(&tasks.StateMachineOutboundTask{
-						StateMachineTask: smt,
-						Destination:      kind.Destination,
-					})
-				case hsm.TaskKindTimer:
-					smt.VisibilityTimestamp = kind.Deadline
-					r.mutableState.AddTasks(&tasks.StateMachineTimerTask{
-						StateMachineTask: smt,
-					})
+				if err := generateSubStateMachineTask(
+					r.mutableState,
+					stateMachineRegistry,
+					node,
+					pao.Path,
+					task,
+					versionedTransition,
+				); err != nil {
+					return nil
 				}
 			}
 		}
 	}
+
+	AddNextStateMachineTimerTask(r.mutableState)
+
 	return nil
 }
 
@@ -365,7 +336,11 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time) 
 	if err != nil {
 		return err
 	}
-	currentVersion := r.mutableState.GetCurrentVersion()
+	closeVersion, err := r.mutableState.GetCloseVersion()
+	if err != nil {
+		return err
+	}
+
 	branchToken, err := r.mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return err
@@ -377,7 +352,7 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time) 
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: deleteTime,
-		Version:             currentVersion,
+		Version:             closeVersion,
 		BranchToken:         branchToken,
 	})
 	return nil
@@ -558,10 +533,8 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateActivityTasks(
-	event *historypb.HistoryEvent,
+	activityScheduledEventID int64,
 ) error {
-
-	activityScheduledEventID := event.GetEventId()
 	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduledEventID)
 	if !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID))
@@ -821,4 +794,59 @@ func (r *TaskGeneratorImpl) archivalEnabled() bool {
 		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED ||
 		r.archivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival() &&
 			namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
+}
+
+func generateSubStateMachineTask(
+	mutableState MutableState,
+	stateMachineRegistry *hsm.Registry,
+	node *hsm.Node,
+	subStateMachinePath []hsm.Key,
+	task hsm.Task,
+	versionedTransition *persistencespb.VersionedTransition,
+) error {
+	ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
+	if !ok {
+		return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
+	}
+	data, err := ser.Serialize(task)
+	if err != nil {
+		return err
+	}
+	ppath := make([]*persistencespb.StateMachineKey, len(subStateMachinePath))
+	for i, k := range subStateMachinePath {
+		ppath[i] = &persistencespb.StateMachineKey{
+			Type: k.Type,
+			Id:   k.ID,
+		}
+	}
+	// Only set transition count if a task is non-concurrent.
+	transitionCount := int64(0)
+	if !task.Concurrent() {
+		transitionCount = node.TransitionCount()
+	}
+
+	taskInfo := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path:                                 ppath,
+			MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
+			MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
+			MachineTransitionCount:               transitionCount,
+		},
+		Type: task.Type().ID,
+		Data: data,
+	}
+	switch kind := task.Kind().(type) {
+	case hsm.TaskKindOutbound:
+		mutableState.AddTasks(&tasks.StateMachineOutboundTask{
+			StateMachineTask: tasks.StateMachineTask{
+				WorkflowKey: mutableState.GetWorkflowKey(),
+				Info:        taskInfo,
+			},
+			Destination: kind.Destination,
+		})
+	case hsm.TaskKindTimer:
+		TrackStateMachineTimer(mutableState, kind.Deadline, taskInfo)
+	}
+
+	return nil
 }

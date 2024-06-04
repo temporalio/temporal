@@ -36,8 +36,8 @@ import "temporal/api/query/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
-import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 import "temporal/server/api/taskqueue/v1/message.proto";
 
@@ -115,12 +115,11 @@ message AddWorkflowTaskRequest {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 5;
-    string forwarded_source = 6;
-    temporal.server.api.enums.v1.TaskSource source = 7;
     temporal.server.api.clock.v1.VectorClock clock = 9;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
 }
 
 message AddWorkflowTaskResponse {
@@ -137,12 +136,11 @@ message AddActivityTaskRequest {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 6;
-    string forwarded_source = 7;
-    temporal.server.api.enums.v1.TaskSource source = 8;
     temporal.server.api.clock.v1.VectorClock clock = 9;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
 }
 
 message AddActivityTaskResponse {
@@ -154,10 +152,10 @@ message QueryWorkflowRequest {
     string namespace_id = 1;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.workflowservice.v1.QueryWorkflowRequest query_request = 3;
-    string forwarded_source = 4;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
 }
 
 message QueryWorkflowResponse {
@@ -201,8 +199,8 @@ message DescribeTaskQueuePartitionRequest {
 
     temporal.api.taskqueue.v1.TaskQueueVersionSelection versions = 3;
 
-    // Report backlog info for the requested task queue types and versions
-    bool report_backlog_info = 4;
+    // Report task queue stats for the requested task queue types and versions
+    bool report_stats = 4;
     // Report list of pollers for requested task queue types and versions
     bool report_pollers = 5;
 }
@@ -374,8 +372,7 @@ message DispatchNexusTaskRequest {
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     // Nexus request extracted by the frontend and translated into Temporal API format.
     temporal.api.nexus.v1.Request request = 3;
-    // Non-empty if this task was forwarded from a child partition.
-    string forwarded_source = 4;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 4;
 }
 
 message DispatchNexusTaskResponse {
@@ -433,11 +430,11 @@ message RespondNexusTaskFailedResponse {
 // (-- api-linter: core::0133::request-parent-required=disabled
 //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 message CreateNexusEndpointRequest {
-    temporal.api.nexus.v1.EndpointSpec spec = 1;
+    temporal.server.api.persistence.v1.NexusEndpointSpec spec = 1;
 }
 
 message CreateNexusEndpointResponse {
-    temporal.api.nexus.v1.Endpoint endpoint = 1;
+    temporal.server.api.persistence.v1.NexusEndpointEntry entry = 1;
 }
 
 // (-- api-linter: core::0134::request-resource-required=disabled
@@ -450,11 +447,11 @@ message UpdateNexusEndpointRequest {
     // Version of the endpoint, used for optimistic concurrency. Must match current version in persistence or the
     // request will fail a FAILED_PRECONDITION error.
     int64 version = 2; 
-    temporal.api.nexus.v1.EndpointSpec spec = 3;
+    temporal.server.api.persistence.v1.NexusEndpointSpec spec = 3;
 }
 
 message UpdateNexusEndpointResponse {
-    temporal.api.nexus.v1.Endpoint endpoint = 1;
+    temporal.server.api.persistence.v1.NexusEndpointEntry entry = 1;
 }
 
 // (-- api-linter: core::0135::request-name-behavior=disabled
@@ -491,5 +488,5 @@ message ListNexusEndpointsResponse {
     // Token for getting the next page.
     bytes next_page_token = 1;
     int64 table_version = 2;
-    repeated temporal.api.nexus.v1.Endpoint endpoints = 3;
+    repeated temporal.server.api.persistence.v1.NexusEndpointEntry entries = 3;
 }

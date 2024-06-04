@@ -38,9 +38,9 @@ import (
 
 type (
 	settingType struct {
-		Name   string
-		GoType string
-		Index  int
+		Name      string
+		GoType    string
+		IsGeneric bool
 	}
 	settingPrecedence struct {
 		Name       string
@@ -75,6 +75,11 @@ var (
 		{
 			Name:   "Map",
 			GoType: "map[string]any",
+		},
+		{
+			Name:      "Typed",
+			GoType:    "<generic>",
+			IsGeneric: true, // this one is treated differently
 		},
 	}
 	precedences = []*settingPrecedence{
@@ -119,12 +124,6 @@ func writeTemplatedCode(w io.Writer, text string, data any) {
 	fatalIfErr(template.Must(template.New("code").Parse(text)).Execute(w, data))
 }
 
-func generateTypeEnum(w io.Writer, tp *settingType) {
-	writeTemplatedCode(w, `
-const Type{{.Name}} Type = {{.Index}} // go type: {{.GoType}}
-`, tp)
-}
-
 func generatePrecEnum(w io.Writer, prec *settingPrecedence) {
 	writeTemplatedCode(w, `
 const Precedence{{.Name}} Precedence = {{.Index}}
@@ -133,66 +132,112 @@ const Precedence{{.Name}} Precedence = {{.Index}}
 
 func generateType(w io.Writer, tp *settingType, prec *settingPrecedence) {
 	writeTemplatedCode(w, `
-type {{.P.Name}}{{.T.Name}}Setting setting[{{.T.GoType}}, func({{.P.GoArgs}})]
+{{ if .T.IsGeneric -}}
+type {{.P.Name}}TypedSetting[T any] setting[T, func({{.P.GoArgs}})]
 
-func New{{.P.Name}}{{.T.Name}}Setting(key Key, def {{.T.GoType}}, description string) {{.P.Name}}{{.T.Name}}Setting {
-	s := {{.P.Name}}{{.T.Name}}Setting{
+// New{{.P.Name}}TypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
+// 'def' must not contain any non-nil slices, maps, or pointers.
+func New{{.P.Name}}TypedSetting[T any](key Key, def T, description string) {{.P.Name}}TypedSetting[T] {
+	s := {{.P.Name}}TypedSetting[T]{
 		key:         key,
 		def:         def,
+		convert:     ConvertStructure[T](def),
 		description: description,
 	}
 	return s
 }
 
-func New{{.P.Name}}{{.T.Name}}SettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[{{.T.GoType}}], description string) {{.P.Name}}{{.T.Name}}Setting {
-	s := {{.P.Name}}{{.T.Name}}Setting{
+// New{{.P.Name}}TypedSettingWithConverter creates a setting with a custom converter function.
+func New{{.P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) {{.P.Name}}TypedSetting[T] {
+	s := {{.P.Name}}TypedSetting[T]{
+		key:         key,
+		def:         def,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
+// New{{.P.Name}}TypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func New{{.P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{.P.Name}}TypedSetting[T] {
+	s := {{.P.Name}}TypedSetting[T]{
 		key:         key,
 		cdef:        cdef,
+		convert:     convert,
 		description: description,
 	}
 	return s
 }
 
-func (s {{.P.Name}}{{.T.Name}}Setting) Key() Key               { return s.key }
-func (s {{.P.Name}}{{.T.Name}}Setting) Type() Type             { return Type{{.T.Name}} }
-func (s {{.P.Name}}{{.T.Name}}Setting) Precedence() Precedence { return Precedence{{.P.Name}} }
+func (s {{.P.Name}}TypedSetting[T]) Key() Key               { return s.key }
+func (s {{.P.Name}}TypedSetting[T]) Precedence() Precedence { return Precedence{{.P.Name}} }
 
-func (s {{.P.Name}}{{.T.Name}}Setting) WithDefault(v {{.T.GoType}}) {{.P.Name}}{{.T.Name}}Setting {
+func (s {{.P.Name}}TypedSetting[T]) WithDefault(v T) {{.P.Name}}TypedSetting[T] {
 	newS := s
 	newS.def = v
 	return newS
 }
 
 {{if eq .P.Name "Global" -}}
-type {{.T.Name}}PropertyFn func({{.P.GoArgs}}) {{.T.GoType}}
+type TypedPropertyFn[T any] func({{.P.GoArgs}}) T
 {{- else -}}
-type {{.T.Name}}PropertyFnWith{{.P.Name}}Filter func({{.P.GoArgs}}) {{.T.GoType}}
+type TypedPropertyFnWith{{.P.Name}}Filter[T any] func({{.P.GoArgs}}) T
 {{- end}}
 
 {{if eq .P.Name "Global" -}}
-func (s {{.P.Name}}{{.T.Name}}Setting) Get(c *Collection) {{.T.Name}}PropertyFn {
+func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFn[T] {
 {{- else -}}
-func (s {{.P.Name}}{{.T.Name}}Setting) Get(c *Collection) {{.T.Name}}PropertyFnWith{{.P.Name}}Filter {
+func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFnWith{{.P.Name}}Filter[T] {
 {{- end}}
-	return func({{.P.GoArgs}}) {{.T.GoType}} {
+	return func({{.P.GoArgs}}) T {
 		return matchAndConvert(
 			c,
-			(setting[{{.T.GoType}}, func({{.P.GoArgs}})])(s),
+			s.key,
+			s.def,
+			s.cdef,
+			s.convert,
 			precedence{{.P.Name}}({{.P.GoArgNames}}),
-			convert{{.T.Name}},
 		)
 	}
 }
 
 {{if eq .P.Name "Global" -}}
-func Get{{.T.Name}}PropertyFn(value {{.T.GoType}}) {{.T.Name}}PropertyFn {
+func GetTypedPropertyFn[T any](value T) TypedPropertyFn[T] {
 {{- else -}}
-func Get{{.T.Name}}PropertyFnFilteredBy{{.P.Name}}(value {{.T.GoType}}) {{.T.Name}}PropertyFnWith{{.P.Name}}Filter {
+func GetTypedPropertyFnFilteredBy{{.P.Name}}[T any](value T) TypedPropertyFnWith{{.P.Name}}Filter[T] {
 {{- end}}
-	return func({{.P.GoArgs}}) {{.T.GoType}} {
+	return func({{.P.GoArgs}}) T {
 		return value
 	}
 }
+{{- else -}}
+type {{.P.Name}}{{.T.Name}}Setting = {{.P.Name}}TypedSetting[{{.T.GoType}}]
+
+func New{{.P.Name}}{{.T.Name}}Setting(key Key, def {{.T.GoType}}, description string) {{.P.Name}}{{.T.Name}}Setting {
+	return New{{.P.Name}}TypedSettingWithConverter[{{.T.GoType}}](key, convert{{.T.Name}}, def, description)
+}
+
+func New{{.P.Name}}{{.T.Name}}SettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[{{.T.GoType}}], description string) {{.P.Name}}{{.T.Name}}Setting {
+	return New{{.P.Name}}TypedSettingWithConstrainedDefault[{{.T.GoType}}](key, convert{{.T.Name}}, cdef, description)
+}
+
+{{if eq .P.Name "Global" -}}
+type {{.T.Name}}PropertyFn = TypedPropertyFn[{{.T.GoType}}]
+{{- else -}}
+type {{.T.Name}}PropertyFnWith{{.P.Name}}Filter = TypedPropertyFnWith{{.P.Name}}Filter[{{.T.GoType}}]
+{{- end}}
+
+{{if eq .P.Name "Global" -}}
+func Get{{.T.Name}}PropertyFn(value {{.T.GoType}}) {{.T.Name}}PropertyFn {
+	return GetTypedPropertyFn(value)
+}
+{{- else -}}
+func Get{{.T.Name}}PropertyFnFilteredBy{{.P.Name}}(value {{.T.GoType}}) {{.T.Name}}PropertyFnWith{{.P.Name}}Filter {
+	return GetTypedPropertyFnFilteredBy{{.P.Name}}(value)
+}
+{{- end}}
+{{- end }}
 `, map[string]any{"T": tp, "P": prec})
 }
 
@@ -207,11 +252,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 `, nil)
-	for idx, tp := range types {
-		// fill in Index
-		tp.Index = idx
-		generateTypeEnum(w, tp)
-	}
 	for idx, prec := range precedences {
 		// fill in Index and GoArgNames
 		prec.Index = idx

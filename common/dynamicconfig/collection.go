@@ -27,8 +27,11 @@ package dynamicconfig
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"sync/atomic"
 	"time"
+
+	"github.com/mitchellh/mapstructure"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -119,40 +122,42 @@ func findMatch[T any](cvs []ConstrainedValue, defaultCVs []TypedConstrainedValue
 
 // matchAndConvert can't be a method of Collection because methods can't be generic, but we can
 // take a *Collection as an argument.
-func matchAndConvert[T any, P any](
+func matchAndConvert[T any](
 	c *Collection,
-	s setting[T, P],
+	key Key,
+	def T,
+	cdef []TypedConstrainedValue[T],
+	convert func(value any) (T, error),
 	precedence []Constraints,
-	converter func(value any) (T, error),
 ) T {
-	cvs := c.client.GetValue(s.key)
+	cvs := c.client.GetValue(key)
 
-	defaultCVs := s.cdef
+	defaultCVs := cdef
 	if defaultCVs == nil {
-		defaultCVs = []TypedConstrainedValue[T]{{Value: s.def}}
+		defaultCVs = []TypedConstrainedValue[T]{{Value: def}}
 	}
 
 	val, matchErr := findMatch(cvs, defaultCVs, precedence)
 	if matchErr != nil {
 		if c.throttleLog() {
-			c.logger.Debug("No such key in dynamic config, using default", tag.Key(s.key.String()), tag.Error(matchErr))
+			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(matchErr))
 		}
 		// couldn't find a constrained match, use default
-		val = s.def
+		val = def
 	}
 
-	typedVal, convertErr := converter(val)
+	typedVal, convertErr := convert(val)
 	if convertErr != nil && matchErr == nil {
 		// We failed to convert the value to the desired type. Try converting the default. note
 		// that if matchErr != nil then val _is_ defaultValue and we don't have to try this again.
 		if c.throttleLog() {
-			c.logger.Warn("Failed to convert value, using default", tag.Key(s.key.String()), tag.IgnoredValue(val), tag.Error(convertErr))
+			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(val), tag.Error(convertErr))
 		}
-		typedVal, convertErr = converter(s.def)
+		typedVal, convertErr = convert(def)
 	}
 	if convertErr != nil {
 		// If we can't convert the default, that's a bug in our code, use Warn level.
-		c.logger.Warn("Can't convert default value (this is a bug; fix server code)", tag.Key(s.key.String()), tag.IgnoredValue(s.def), tag.Error(convertErr))
+		c.logger.Warn("Can't convert default value (this is a bug; fix server code)", tag.Key(key.String()), tag.IgnoredValue(def), tag.Error(convertErr))
 		// Return typedVal anyway since we have to return something.
 	}
 	return typedVal
@@ -215,17 +220,43 @@ func precedenceTaskType(taskType enumsspb.TaskType) []Constraints {
 }
 
 func convertInt(val any) (int, error) {
-	if intVal, ok := val.(int); ok {
-		return intVal, nil
+	switch val := val.(type) {
+	case int:
+		return int(val), nil
+	case int8:
+		return int(val), nil
+	case int16:
+		return int(val), nil
+	case int32:
+		return int(val), nil
+	case int64:
+		return int(val), nil
+	case uint:
+		return int(val), nil
+	case uint8:
+		return int(val), nil
+	case uint16:
+		return int(val), nil
+	case uint32:
+		return int(val), nil
+	case uint64:
+		return int(val), nil
+	case uintptr:
+		return int(val), nil
+	default:
+		return 0, errors.New("value type is not int")
 	}
-	return 0, errors.New("value type is not int")
 }
 
 func convertFloat(val any) (float64, error) {
-	if floatVal, ok := val.(float64); ok {
-		return floatVal, nil
-	} else if intVal, ok := val.(int); ok {
-		return float64(intVal), nil
+	switch val := val.(type) {
+	case float32:
+		return float64(val), nil
+	case float64:
+		return float64(val), nil
+	}
+	if ival, err := convertInt(val); err == nil {
+		return float64(ival), nil
 	}
 	return 0, errors.New("value type is not float64")
 }
@@ -234,15 +265,18 @@ func convertDuration(val any) (time.Duration, error) {
 	switch v := val.(type) {
 	case time.Duration:
 		return v, nil
-	case int:
-		// treat plain int as seconds
-		return time.Duration(v) * time.Second, nil
 	case string:
 		d, err := timestamp.ParseDurationDefaultSeconds(v)
 		if err != nil {
 			return 0, fmt.Errorf("failed to parse duration: %v", err)
 		}
 		return d, nil
+	}
+	// treat numeric values as seconds
+	if ival, err := convertInt(val); err == nil {
+		return time.Duration(ival) * time.Second, nil
+	} else if fval, err := convertFloat(val); err == nil {
+		return time.Duration(fval * float64(time.Second)), nil
 	}
 	return 0, errors.New("value not convertible to Duration")
 }
@@ -266,4 +300,48 @@ func convertMap(val any) (map[string]any, error) {
 		return mapVal, nil
 	}
 	return nil, errors.New("value type is not map")
+}
+
+// ConvertStructure can be used as a conversion function for New*TypedSettingWithConverter.
+// The value from dynamic config will be converted to T, on top of the given default.
+//
+// Note that any failure in conversion of _any_ field will result in the overall default being used,
+// ignoring the fields that successfully converted.
+//
+// Note that the default value will be shallow-copied, so it should not have any deep structure.
+// Scalar types and values are fine, and slice and map types are fine too as long as they're set to
+// nil in the default.
+//
+// To avoid confusion, the default passed to ConvertStructure should be either the same as the
+// overall default for the setting (if you want any value set to be merged over the default, i.e.
+// treat the fields independently), or the zero value of its type (if you want to treat the fields
+// as a group and default unset fields to zero).
+func ConvertStructure[T any](def T) func(v any) (T, error) {
+	return func(v any) (T, error) {
+		// if we already have the right type, no conversion is necessary
+		if typedV, ok := v.(T); ok {
+			return typedV, nil
+		}
+
+		out := def
+		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result: &out,
+			// If we want more than one hook in the future, combine them with mapstructure.OrComposeDecodeHookFunc
+			DecodeHook: mapstructureHookDuration,
+		})
+		if err != nil {
+			return out, err
+		}
+		err = dec.Decode(v)
+		return out, err
+	}
+}
+
+// Parses string into time.Duration. mapstructure has an implementation of this already but it
+// calls time.ParseDuration and we want to use our own method.
+func mapstructureHookDuration(f, t reflect.Type, data any) (any, error) {
+	if t != reflect.TypeOf(time.Duration(0)) {
+		return data, nil
+	}
+	return convertDuration(data)
 }

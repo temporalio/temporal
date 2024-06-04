@@ -168,7 +168,7 @@ func (pdb *db) ReplaceIntoActivityInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.ActivityInfoMapsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		setKeyInActivityInfoMapQry,
 		rows,
 	)
@@ -180,7 +180,7 @@ func (pdb *db) SelectAllFromActivityInfoMaps(
 	filter sqlplugin.ActivityInfoMapsAllFilter,
 ) ([]sqlplugin.ActivityInfoMapsRow, error) {
 	var rows []sqlplugin.ActivityInfoMapsRow
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows, getActivityInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -214,8 +214,8 @@ func (pdb *db) DeleteFromActivityInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return pdb.conn.ExecContext(ctx,
-		pdb.conn.Rebind(query),
+	return pdb.ExecContext(ctx,
+		pdb.Rebind(query),
 		args...,
 	)
 }
@@ -225,7 +225,7 @@ func (pdb *db) DeleteAllFromActivityInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.ActivityInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteActivityInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -253,7 +253,7 @@ func (pdb *db) ReplaceIntoTimerInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.TimerInfoMapsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		setKeyInTimerInfoMapSQLQuery,
 		rows,
 	)
@@ -265,7 +265,7 @@ func (pdb *db) SelectAllFromTimerInfoMaps(
 	filter sqlplugin.TimerInfoMapsAllFilter,
 ) ([]sqlplugin.TimerInfoMapsRow, error) {
 	var rows []sqlplugin.TimerInfoMapsRow
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows,
 		getTimerInfoMapSQLQuery,
 		filter.ShardID,
@@ -300,8 +300,8 @@ func (pdb *db) DeleteFromTimerInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return pdb.conn.ExecContext(ctx,
-		pdb.conn.Rebind(query),
+	return pdb.ExecContext(ctx,
+		pdb.Rebind(query),
 		args...,
 	)
 }
@@ -311,7 +311,7 @@ func (pdb *db) DeleteAllFromTimerInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.TimerInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteTimerInfoMapSQLQuery,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -339,7 +339,7 @@ func (pdb *db) ReplaceIntoChildExecutionInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.ChildExecutionInfoMapsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		setKeyInChildExecutionInfoMapQry,
 		rows,
 	)
@@ -351,7 +351,7 @@ func (pdb *db) SelectAllFromChildExecutionInfoMaps(
 	filter sqlplugin.ChildExecutionInfoMapsAllFilter,
 ) ([]sqlplugin.ChildExecutionInfoMapsRow, error) {
 	var rows []sqlplugin.ChildExecutionInfoMapsRow
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows,
 		getChildExecutionInfoMapQry,
 		filter.ShardID,
@@ -386,8 +386,8 @@ func (pdb *db) DeleteFromChildExecutionInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return pdb.conn.ExecContext(ctx,
-		pdb.conn.Rebind(query),
+	return pdb.ExecContext(ctx,
+		pdb.Rebind(query),
 		args...,
 	)
 }
@@ -397,7 +397,7 @@ func (pdb *db) DeleteAllFromChildExecutionInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.ChildExecutionInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteChildExecutionInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -425,7 +425,7 @@ func (pdb *db) ReplaceIntoRequestCancelInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.RequestCancelInfoMapsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		setKeyInRequestCancelInfoMapQry,
 		rows,
 	)
@@ -437,7 +437,7 @@ func (pdb *db) SelectAllFromRequestCancelInfoMaps(
 	filter sqlplugin.RequestCancelInfoMapsAllFilter,
 ) ([]sqlplugin.RequestCancelInfoMapsRow, error) {
 	var rows []sqlplugin.RequestCancelInfoMapsRow
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows,
 		getRequestCancelInfoMapQry,
 		filter.ShardID,
@@ -472,8 +472,8 @@ func (pdb *db) DeleteFromRequestCancelInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return pdb.conn.ExecContext(ctx,
-		pdb.conn.Rebind(query),
+	return pdb.ExecContext(ctx,
+		pdb.Rebind(query),
 		args...,
 	)
 }
@@ -483,7 +483,7 @@ func (pdb *db) DeleteAllFromRequestCancelInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.RequestCancelInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteRequestCancelInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -511,7 +511,7 @@ func (pdb *db) ReplaceIntoSignalInfoMaps(
 	ctx context.Context,
 	rows []sqlplugin.SignalInfoMapsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		setKeyInSignalInfoMapQry,
 		rows,
 	)
@@ -523,7 +523,7 @@ func (pdb *db) SelectAllFromSignalInfoMaps(
 	filter sqlplugin.SignalInfoMapsAllFilter,
 ) ([]sqlplugin.SignalInfoMapsRow, error) {
 	var rows []sqlplugin.SignalInfoMapsRow
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows,
 		getSignalInfoMapQry,
 		filter.ShardID,
@@ -558,8 +558,8 @@ func (pdb *db) DeleteFromSignalInfoMaps(
 	if err != nil {
 		return nil, err
 	}
-	return pdb.conn.ExecContext(ctx,
-		pdb.conn.Rebind(query),
+	return pdb.ExecContext(ctx,
+		pdb.Rebind(query),
 		args...,
 	)
 }
@@ -569,7 +569,7 @@ func (pdb *db) DeleteAllFromSignalInfoMaps(
 	ctx context.Context,
 	filter sqlplugin.SignalInfoMapsAllFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteSignalInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
@@ -583,7 +583,7 @@ func (pdb *db) ReplaceIntoSignalsRequestedSets(
 	ctx context.Context,
 	rows []sqlplugin.SignalsRequestedSetsRow,
 ) (sql.Result, error) {
-	return pdb.conn.NamedExecContext(ctx,
+	return pdb.NamedExecContext(ctx,
 		createSignalsRequestedSetQuery,
 		rows,
 	)
@@ -595,7 +595,7 @@ func (pdb *db) SelectAllFromSignalsRequestedSets(
 	filter sqlplugin.SignalsRequestedSetsAllFilter,
 ) ([]sqlplugin.SignalsRequestedSetsRow, error) {
 	var rows []sqlplugin.SignalsRequestedSetsRow
-	if err := pdb.conn.SelectContext(ctx,
+	if err := pdb.SelectContext(ctx,
 		&rows,
 		getSignalsRequestedSetQuery,
 		filter.ShardID,
@@ -630,8 +630,8 @@ func (pdb *db) DeleteFromSignalsRequestedSets(
 	if err != nil {
 		return nil, err
 	}
-	return pdb.conn.ExecContext(ctx,
-		pdb.conn.Rebind(query),
+	return pdb.ExecContext(ctx,
+		pdb.Rebind(query),
 		args...,
 	)
 }
@@ -641,7 +641,7 @@ func (pdb *db) DeleteAllFromSignalsRequestedSets(
 	ctx context.Context,
 	filter sqlplugin.SignalsRequestedSetsAllFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteAllSignalsRequestedSetQuery,
 		filter.ShardID,
 		filter.NamespaceID,

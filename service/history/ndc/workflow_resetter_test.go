@@ -220,7 +220,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 }
 
 func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
-	currentLastWriteVersion := int64(1234)
+	currentCloseVersion := int64(1234)
 
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentReleaseCalled := false
@@ -234,7 +234,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		RunId: s.currentRunID,
 	}).AnyTimes()
 
-	currentMutableState.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
+	currentMutableState.EXPECT().GetCloseVersion().Return(currentCloseVersion, nil).AnyTimes()
 
 	resetWorkflow := NewMockWorkflow(s.controller)
 	resetReleaseCalled := false
@@ -265,7 +265,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		s.mockShard,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		s.currentRunID,
-		currentLastWriteVersion,
+		currentCloseVersion,
 		resetMutableState,
 		resetSnapshot,
 		resetEventsSeq,
@@ -297,6 +297,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		ShardID:         shardID,
 		NamespaceID:     s.namespaceID.String(),
+		NewRunID:        s.resetRunID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	s.mockStateRebuilder.EXPECT().Rebuild(
@@ -390,6 +391,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		workflowTaskSchedule.RequestID,
 		workflowTaskSchedule.TaskQueue,
 		consts.IdentityHistoryService,
+		nil,
 		nil,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
@@ -514,6 +516,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		ShardID:         shardID,
 		NamespaceID:     s.namespaceID.String(),
+		NewRunID:        s.resetRunID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(

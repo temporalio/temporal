@@ -153,7 +153,7 @@ func newCache(
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:                     cache.New(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
+		Cache:                     cache.NewWithMetrics(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }
@@ -384,12 +384,10 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
-		shardOwnershipAsserted := false
 		runID, err := GetCurrentRunID(
 			ctx,
 			shardContext,
 			c,
-			&shardOwnershipAsserted,
 			namespaceID.String(),
 			execution.GetWorkflowId(),
 			lockPriority,
@@ -424,7 +422,6 @@ func GetCurrentRunID(
 	ctx context.Context,
 	shardContext shard.Context,
 	workflowCache Cache,
-	shardOwnershipAsserted *bool,
 	namespaceID string,
 	workflowID string,
 	lockPriority workflow.LockPriority,
@@ -439,7 +436,7 @@ func GetCurrentRunID(
 	if err != nil {
 		return "", err
 	}
-	defer currentRelease(retErr)
+	defer func() { currentRelease(retErr) }()
 
 	resp, err := shardContext.GetCurrentExecution(
 		ctx,
@@ -449,21 +446,10 @@ func GetCurrentRunID(
 			WorkflowID:  workflowID,
 		},
 	)
-	switch err.(type) {
-	case nil:
-		return resp.RunID, nil
-	case *serviceerror.NotFound:
-		if err := shard.AssertShardOwnership(
-			ctx,
-			shardContext,
-			shardOwnershipAsserted,
-		); err != nil {
-			return "", err
-		}
-		return "", err
-	default:
+	if err != nil {
 		return "", err
 	}
+	return resp.RunID, nil
 }
 
 func makeCacheKey(

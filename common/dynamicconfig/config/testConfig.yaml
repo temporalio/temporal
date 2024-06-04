@@ -71,6 +71,13 @@ testGetMapPropertyKey:
 - value: "1"
   constraints:
     namespace: random-namespace
+testGetTypedPropertyKey:
+- value:
+    number: 23.2  # note field is int
+    days: "6d"
+    inner:
+      key1: 12345  # note field is float
+      key2: true
 testGetStringPropertyKey:
 - value: some random string
   constraints: {}

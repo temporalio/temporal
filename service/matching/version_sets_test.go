@@ -882,7 +882,7 @@ func TestPersistUnknownBuildIdAlreadyThere(t *testing.T) {
 	actual := PersistUnknownBuildId(clock, initial, "1")
 	protoassert.ProtoEqual(t, initial, actual)
 
-	// build id is already there but adds set id
+	// build ID is already there but adds set id
 	actual = PersistUnknownBuildId(clock, initial, "2")
 	expected := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{

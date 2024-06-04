@@ -29,10 +29,10 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -52,18 +52,25 @@ type (
 		refreshRetryPolicy     backoff.RetryPolicy
 	}
 
-	// EndpointRegistry manages a cached view of Nexus endpoints.
+	EndpointRegistry interface {
+		GetByName(ctx context.Context, endpointName string) (*persistencespb.NexusEndpointEntry, error)
+		GetByID(ctx context.Context, id string) (*persistencespb.NexusEndpointEntry, error)
+		StartLifecycle()
+		StopLifecycle()
+	}
+
+	// EndpointRegistryImpl manages a cached view of Nexus endpoints.
 	// Endpoints are lazily-loaded into memory on the first read. Thereafter, endpoint data is kept up to date by
 	// background long polling on matching service ListNexusEndpoints.
-	EndpointRegistry struct {
+	EndpointRegistryImpl struct {
 		config *EndpointRegistryConfig
 
 		dataReady chan struct{}
 
 		dataLock        sync.RWMutex // Protects tableVersion and endpoints.
 		tableVersion    int64
-		endpointsByID   map[string]*nexus.Endpoint // Mapping of endpoint ID -> endpoint.
-		endpointsByName map[string]*nexus.Endpoint // Mapping of endpoint name -> endpoint.
+		endpointsByID   map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint ID -> endpoint.
+		endpointsByName map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint name -> endpoint.
 
 		refreshPoller *goro.Handle
 
@@ -75,7 +82,7 @@ type (
 
 func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryConfig {
 	config := &EndpointRegistryConfig{
-		refreshEnabled:         dynamicconfig.EnableNexusEndpointRegistryBackgroundRefresh.Get(dc),
+		refreshEnabled:         dynamicconfig.EnableNexus.Get(dc),
 		refreshLongPollTimeout: dynamicconfig.RefreshNexusEndpointsLongPollTimeout.Get(dc),
 		refreshPageSize:        dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc),
 		refreshMinWait:         dynamicconfig.RefreshNexusEndpointsMinWait.Get(dc),
@@ -89,12 +96,12 @@ func NewEndpointRegistry(
 	matchingClient matchingservice.MatchingServiceClient,
 	persistence p.NexusEndpointManager,
 	logger log.Logger,
-) *EndpointRegistry {
-	return &EndpointRegistry{
+) *EndpointRegistryImpl {
+	return &EndpointRegistryImpl{
 		config:          config,
 		dataReady:       make(chan struct{}),
-		endpointsByID:   make(map[string]*nexus.Endpoint),
-		endpointsByName: make(map[string]*nexus.Endpoint),
+		endpointsByID:   make(map[string]*persistencespb.NexusEndpointEntry),
+		endpointsByName: make(map[string]*persistencespb.NexusEndpointEntry),
 		matchingClient:  matchingClient,
 		persistence:     persistence,
 		logger:          logger,
@@ -103,7 +110,7 @@ func NewEndpointRegistry(
 
 // StartLifecycle starts this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StopLifecycle()
-func (r *EndpointRegistry) StartLifecycle() {
+func (r *EndpointRegistryImpl) StartLifecycle() {
 	backgroundCtx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemBackgroundCallerInfo,
@@ -113,14 +120,14 @@ func (r *EndpointRegistry) StartLifecycle() {
 
 // StopLifecycle stops this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StartLifecycle()
-func (r *EndpointRegistry) StopLifecycle() {
+func (r *EndpointRegistryImpl) StopLifecycle() {
 	if r.refreshPoller != nil {
 		r.refreshPoller.Cancel()
 		<-r.refreshPoller.Done()
 	}
 }
 
-func (r *EndpointRegistry) GetByName(ctx context.Context, endpointName string) (*nexus.Endpoint, error) {
+func (r *EndpointRegistryImpl) GetByName(ctx context.Context, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}
@@ -134,7 +141,7 @@ func (r *EndpointRegistry) GetByName(ctx context.Context, endpointName string) (
 	return endpoint, nil
 }
 
-func (r *EndpointRegistry) GetByID(ctx context.Context, id string) (*nexus.Endpoint, error) {
+func (r *EndpointRegistryImpl) GetByID(ctx context.Context, id string) (*persistencespb.NexusEndpointEntry, error) {
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}
@@ -150,7 +157,7 @@ func (r *EndpointRegistry) GetByID(ctx context.Context, id string) (*nexus.Endpo
 	return endpoint, nil
 }
 
-func (r *EndpointRegistry) waitUntilInitialized(ctx context.Context) error {
+func (r *EndpointRegistryImpl) waitUntilInitialized(ctx context.Context) error {
 	select {
 	case <-r.dataReady:
 		return nil
@@ -159,7 +166,7 @@ func (r *EndpointRegistry) waitUntilInitialized(ctx context.Context) error {
 	}
 }
 
-func (r *EndpointRegistry) refreshEndpointsLoop(ctx context.Context) error {
+func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context) error {
 	hasLoadedEndpointData := false
 	minWaitTime := r.config.refreshMinWait()
 
@@ -211,7 +218,7 @@ func (r *EndpointRegistry) refreshEndpointsLoop(ctx context.Context) error {
 
 // loadEndpoints initializes the in-memory view of endpoints data.
 // It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
-func (r *EndpointRegistry) loadEndpoints(ctx context.Context) error {
+func (r *EndpointRegistryImpl) loadEndpoints(ctx context.Context) error {
 	tableVersion, endpoints, err := r.getAllEndpointsMatching(ctx)
 	if err != nil {
 		// Fallback to persistence on matching error during initial load.
@@ -221,11 +228,11 @@ func (r *EndpointRegistry) loadEndpoints(ctx context.Context) error {
 			return err
 		}
 	}
-	endpointsByID := make(map[string]*nexus.Endpoint, len(endpoints))
-	endpointsByName := make(map[string]*nexus.Endpoint, len(endpoints))
+	endpointsByID := make(map[string]*persistencespb.NexusEndpointEntry, len(endpoints))
+	endpointsByName := make(map[string]*persistencespb.NexusEndpointEntry, len(endpoints))
 	for _, endpoint := range endpoints {
 		endpointsByID[endpoint.Id] = endpoint
-		endpointsByName[endpoint.Spec.Name] = endpoint
+		endpointsByName[endpoint.Endpoint.Spec.Name] = endpoint
 	}
 
 	r.tableVersion = tableVersion
@@ -235,7 +242,7 @@ func (r *EndpointRegistry) loadEndpoints(ctx context.Context) error {
 }
 
 // refreshEndpoints sends long-poll requests to matching to check for any updates to endpoint data.
-func (r *EndpointRegistry) refreshEndpoints(ctx context.Context) error {
+func (r *EndpointRegistryImpl) refreshEndpoints(ctx context.Context) error {
 	r.dataLock.RLock()
 	currentTableVersion := r.tableVersion
 	r.dataLock.RUnlock()
@@ -259,7 +266,7 @@ func (r *EndpointRegistry) refreshEndpoints(ctx context.Context) error {
 	}
 
 	currentTableVersion = resp.TableVersion
-	endpoints := resp.Endpoints
+	entries := resp.Entries
 
 	currentPageToken := resp.NextPageToken
 	for currentPageToken != nil {
@@ -271,9 +278,10 @@ func (r *EndpointRegistry) refreshEndpoints(ctx context.Context) error {
 		})
 
 		if err != nil {
-			if errors.Is(err, p.ErrNexusTableVersionConflict) {
+			var fpe *serviceerror.FailedPrecondition
+			if errors.As(err, &fpe) && fpe.Message == p.ErrNexusTableVersionConflict.Error() {
 				// Indicates table was updated during paging, so reset and start from the beginning.
-				currentTableVersion, endpoints, err = r.getAllEndpointsMatching(ctx)
+				currentTableVersion, entries, err = r.getAllEndpointsMatching(ctx)
 				if err != nil {
 					r.logger.Error("error during background refresh of Nexus endpoints", tag.Error(err))
 					return err
@@ -288,14 +296,14 @@ func (r *EndpointRegistry) refreshEndpoints(ctx context.Context) error {
 		}
 
 		currentPageToken = resp.NextPageToken
-		endpoints = append(endpoints, resp.Endpoints...)
+		entries = append(entries, resp.Entries...)
 	}
 
-	endpointsByID := make(map[string]*nexus.Endpoint, len(endpoints))
-	endpointsByName := make(map[string]*nexus.Endpoint, len(endpoints))
-	for _, endpoint := range endpoints {
-		endpointsByID[endpoint.Id] = endpoint
-		endpointsByName[endpoint.Spec.Name] = endpoint
+	endpointsByID := make(map[string]*persistencespb.NexusEndpointEntry, len(entries))
+	endpointsByName := make(map[string]*persistencespb.NexusEndpointEntry, len(entries))
+	for _, entry := range entries {
+		endpointsByID[entry.Id] = entry
+		endpointsByName[entry.Endpoint.Spec.Name] = entry
 	}
 
 	r.dataLock.Lock()
@@ -309,10 +317,10 @@ func (r *EndpointRegistry) refreshEndpoints(ctx context.Context) error {
 }
 
 // getAllEndpointsMatching paginates over all endpoints returned by matching. It always does a simple get.
-func (r *EndpointRegistry) getAllEndpointsMatching(ctx context.Context) (int64, []*nexus.Endpoint, error) {
+func (r *EndpointRegistryImpl) getAllEndpointsMatching(ctx context.Context) (int64, []*persistencespb.NexusEndpointEntry, error) {
 	var currentPageToken []byte
 	currentTableVersion := int64(0)
-	endpoints := make([]*nexus.Endpoint, 0)
+	entries := make([]*persistencespb.NexusEndpointEntry, 0)
 
 	for ctx.Err() == nil {
 		resp, err := r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
@@ -322,21 +330,22 @@ func (r *EndpointRegistry) getAllEndpointsMatching(ctx context.Context) (int64, 
 			Wait:                  false,
 		})
 		if err != nil {
-			if errors.Is(err, p.ErrNexusTableVersionConflict) {
+			var fpe *serviceerror.FailedPrecondition
+			if errors.As(err, &fpe) && fpe.Message == p.ErrNexusTableVersionConflict.Error() {
 				// indicates table was updated during paging, so reset and start from the beginning.
 				currentPageToken = nil
 				currentTableVersion = 0
-				endpoints = make([]*nexus.Endpoint, 0, len(endpoints))
+				entries = make([]*persistencespb.NexusEndpointEntry, 0, len(entries))
 				continue
 			}
 			return 0, nil, err
 		}
 
 		currentTableVersion = resp.TableVersion
-		endpoints = append(endpoints, resp.Endpoints...)
+		entries = append(entries, resp.GetEntries()...)
 
-		if resp.NextPageToken == nil {
-			return currentTableVersion, endpoints, nil
+		if len(resp.NextPageToken) == 0 {
+			return currentTableVersion, entries, nil
 		}
 
 		currentPageToken = resp.NextPageToken
@@ -347,11 +356,11 @@ func (r *EndpointRegistry) getAllEndpointsMatching(ctx context.Context) (int64, 
 
 // getAllEndpointsPersistence paginates over all endpoints returned by persistence.
 // Should only be used as a fall-back if matching service is unavailable during initial load.
-func (r *EndpointRegistry) getAllEndpointsPersistence(ctx context.Context) (int64, []*nexus.Endpoint, error) {
+func (r *EndpointRegistryImpl) getAllEndpointsPersistence(ctx context.Context) (int64, []*persistencespb.NexusEndpointEntry, error) {
 	var currentPageToken []byte
 
 	currentTableVersion := int64(0)
-	endpoints := make([]*nexus.Endpoint, 0)
+	entries := make([]*persistencespb.NexusEndpointEntry, 0)
 
 	for ctx.Err() == nil {
 		resp, err := r.persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
@@ -360,23 +369,22 @@ func (r *EndpointRegistry) getAllEndpointsPersistence(ctx context.Context) (int6
 			PageSize:              r.config.refreshPageSize(),
 		})
 		if err != nil {
-			if errors.Is(err, p.ErrNexusTableVersionConflict) {
+			var fpe *serviceerror.FailedPrecondition
+			if errors.As(err, &fpe) && fpe.Message == p.ErrNexusTableVersionConflict.Error() {
 				// indicates table was updated during paging, so reset and start from the beginning.
 				currentPageToken = nil
 				currentTableVersion = 0
-				endpoints = make([]*nexus.Endpoint, 0, len(endpoints))
+				entries = make([]*persistencespb.NexusEndpointEntry, 0, len(entries))
 				continue
 			}
 			return 0, nil, err
 		}
 
 		currentTableVersion = resp.TableVersion
-		for _, entry := range resp.Entries {
-			endpoints = append(endpoints, EndpointPersistedEntryToExternalAPI(entry))
-		}
+		entries = append(entries, resp.Entries...)
 
-		if resp.NextPageToken == nil {
-			return currentTableVersion, endpoints, nil
+		if len(resp.NextPageToken) == 0 {
+			return currentTableVersion, entries, nil
 		}
 
 		currentPageToken = resp.NextPageToken

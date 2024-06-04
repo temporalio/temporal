@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -131,20 +132,40 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	esClient client.Client,
-	index string,
+	cfg *client.Config,
+	processorConfig *ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
-	processor Processor,
-	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
-) *visibilityStore {
-
+	logger log.Logger,
+) (*visibilityStore, error) {
+	esHttpClient := cfg.GetHttpClient()
+	if esHttpClient == nil {
+		var err error
+		esHttpClient, err = client.NewAwsHttpClient(cfg.AWSRequestSigning)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
+		}
+	}
+	esClient, err := client.NewClient(cfg, esHttpClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
+			cfg.URL.Redacted(), cfg.Username, err)
+	}
+	var (
+		processor           Processor
+		processorAckTimeout dynamicconfig.DurationPropertyFn
+	)
+	if processorConfig != nil {
+		processor = NewProcessor(processorConfig, esClient, logger, metricsHandler)
+		processor.Start()
+		processorAckTimeout = processorConfig.ESProcessorAckTimeout
+	}
 	return &visibilityStore{
 		esClient:                       esClient,
-		index:                          index,
+		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		processor:                      processor,
@@ -152,11 +173,10 @@ func NewVisibilityStore(
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
-	}
+	}, nil
 }
 
 func (s *visibilityStore) Close() {
-	// TODO (alex): visibilityStore shouldn't Stop processor. Processor should be stopped where it is created.
 	if s.processor != nil {
 		s.processor.Stop()
 	}
@@ -354,159 +374,6 @@ func (s *visibilityStore) checkProcessor() {
 		// must be bug, check history setup
 		panic("config.ESProcessorAckTimeout is nil")
 	}
-}
-
-func (s *visibilityStore) ListOpenWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request, boolQuery, true)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutions failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListClosedWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request, boolQuery, false)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutions failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(
-			elastic.NewTermQuery(searchattribute.WorkflowType, request.WorkflowTypeName),
-			elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, true)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutionsByType failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.WorkflowType, request.WorkflowTypeName)).
-		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByType failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(
-			elastic.NewTermQuery(searchattribute.WorkflowID, request.WorkflowID),
-			elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, true)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutionsByWorkflowID failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.WorkflowID, request.WorkflowID)).
-		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByWorkflowID failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
-	ctx context.Context,
-	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, request.Status.String()))
-
-	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
-	if err != nil {
-		return nil, err
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByStatus failed", err)
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
 }
 
 func (s *visibilityStore) ListWorkflowExecutions(
@@ -889,6 +756,7 @@ func (s *visibilityStore) convertQuery(
 	queryConverter := NewQueryConverter(
 		nameInterceptor,
 		NewValuesInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider),
+		saTypeMap,
 	)
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {

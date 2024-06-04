@@ -51,10 +51,10 @@ func (ch *commandHandler) HandleScheduleCommand(
 	command *commandpb.Command,
 ) error {
 	nsName := ms.GetNamespaceEntry().Name().String()
-	if !ch.config.Enabled(nsName) {
+	if !ch.config.Enabled() {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
-			Message: "Nexus operations disabled for this workflow's namespace",
+			Message: "Nexus operations disabled",
 		}
 	}
 
@@ -134,6 +134,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			},
 		}
+		he.UserMetadata = command.UserMetadata
 	})
 	token, err := hsm.GenerateEventLoadToken(event)
 	if err != nil {
@@ -150,11 +151,10 @@ func (ch *commandHandler) HandleCancelCommand(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
 ) error {
-	nsName := ms.GetNamespaceEntry().Name().String()
-	if !ch.config.Enabled(nsName) {
+	if !ch.config.Enabled() {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
-			Message: "Nexus operations disabled for this workflow's namespace",
+			Message: "Nexus operations disabled",
 		}
 	}
 
@@ -199,6 +199,7 @@ func (ch *commandHandler) HandleCancelCommand(
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			},
 		}
+		he.UserMetadata = command.UserMetadata
 	})
 	return coll.Transition(nodeID, func(o nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		output, err := o.Cancel(node, event.EventTime.AsTime())

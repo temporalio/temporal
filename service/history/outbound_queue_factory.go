@@ -25,9 +25,9 @@ package history
 import (
 	"fmt"
 
-	"github.com/sony/gobreaker"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -36,12 +36,16 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
+// outboundQueuePersistenceMaxRPSRatio is meant to ensure queue loading doesn't consume more than 30% of the host's
+// persistence tokens. This is especially important upon host restart when we need to perform a load for all shards.
+// This value was copied from the transfer queue factory.
 const outboundQueuePersistenceMaxRPSRatio = 0.3
 
 var (
@@ -119,21 +123,34 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 			})
 		},
 	)
+
+	circuitBreakerSettings := params.Config.OutboundQueueCircuitBreakerSettings
 	circuitBreakerPool := collection.NewOnceMap(
-		func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) *gobreaker.TwoStepCircuitBreaker {
-			// TODO: get circuit breaker settings from dynamic config.
-			return gobreaker.NewTwoStepCircuitBreaker(
-				gobreaker.Settings{
-					Name: fmt.Sprintf(
-						"circuit_breaker:%d.%s.%s",
-						key.StateMachineTaskType,
-						key.NamespaceID,
-						key.Destination,
-					),
+		func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
+			return circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
+				Name: fmt.Sprintf(
+					"circuit_breaker:%d:%s:%s",
+					key.StateMachineTaskType,
+					key.NamespaceID,
+					key.Destination,
+				),
+				SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
+					nsName, err := params.NamespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
+					if err != nil {
+						// This is intentionally not failing the function in case of error. The circuit
+						// breaker is agnostic to Task implementation, and thus the settings function is
+						// not expected to return an error. Also, in this case, if the namespace registry
+						// fails to get the name, then the task itself will fail when it is processed and
+						// tries to get the namespace name.
+						readNamespaceErrors.With(metricsHandler).
+							Record(1, metrics.ReasonTag(metrics.ReasonString(err.Error())))
+					}
+					return circuitBreakerSettings(nsName.String(), key.Destination)
 				},
-			)
+			})
 		},
 	)
+
 	grouper := queues.GrouperStateMachineNamespaceIDAndDestination{}
 	f := &outboundQueueFactory{
 		outboundQueueFactoryParams: params,
@@ -221,7 +238,12 @@ func (f *outboundQueueFactory) CreateQueue(
 	)
 
 	// not implemented yet
-	standbyExecutor := &outboundQueueStandbyTaskExecutor{}
+	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
+		shardContext,
+		workflowCache,
+		logger,
+		metricsHandler,
+	)
 
 	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
@@ -284,4 +306,33 @@ func (f *outboundQueueFactory) CreateQueue(
 
 func getOutbountQueueProcessorMetricsHandler(handler metrics.Handler) metrics.Handler {
 	return handler.WithTags(metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope))
+}
+
+func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm.Task, error) {
+	cbt, ok := task.(*tasks.StateMachineOutboundTask)
+	if !ok {
+		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError("unknown task type")
+	}
+	def, ok := shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
+	if !ok {
+		return hsm.Ref{},
+			nil,
+			queues.NewUnprocessableTaskError(
+				fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type),
+			)
+	}
+	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindOutbound{Destination: cbt.Destination})
+	if err != nil {
+		return hsm.Ref{},
+			nil,
+			fmt.Errorf(
+				"%w: %w",
+				queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
+				err,
+			)
+	}
+	return hsm.Ref{
+		WorkflowKey:     taskWorkflowKey(task),
+		StateMachineRef: cbt.Info.Ref,
+	}, smt, nil
 }

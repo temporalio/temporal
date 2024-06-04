@@ -86,6 +86,7 @@ func (s *workflowSuite) TearDownTest() {
 func (s *workflowSuite) TestGetMethods() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -193,6 +194,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 	// cannot suppress by older workflow
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -206,6 +208,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 	incomingRunID := uuid.New()
 	incomingLastEventTaskID := int64(144)
 	incomingLastEventVersion := lastEventVersion - 1
+	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -226,7 +229,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetNextEventID().Return(randomEventID).AnyTimes() // This doesn't matter, GetNextEventID is not used if there is started WT.
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
@@ -253,6 +255,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		incomingMockMutableState,
 		wcache.NoopReleaseFn,
 	)
+	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -290,12 +293,14 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	// if workflow is in zombie or finished state, keep as is
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(2)
+	s.mockMutableState.EXPECT().GetCloseVersion().Return(lastEventVersion, nil)
 	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(workflow.TransactionPolicyPassive, policy)
 
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil)
 	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(workflow.TransactionPolicyActive, policy)
@@ -304,7 +309,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
@@ -338,6 +342,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		incomingMockMutableState,
 		wcache.NoopReleaseFn,
 	)
+	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -352,12 +357,14 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	// if workflow is in zombie or finished state, keep as is
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(2)
+	s.mockMutableState.EXPECT().GetCloseVersion().Return(lastEventVersion, nil).AnyTimes()
 	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(workflow.TransactionPolicyPassive, policy)
 
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(workflow.TransactionPolicyPassive, policy)

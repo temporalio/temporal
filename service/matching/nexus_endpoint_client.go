@@ -32,15 +32,13 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
-	commonnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
 )
 
@@ -53,13 +51,13 @@ type (
 	internalUpdateNexusEndpointRequest struct {
 		endpointID string
 		version    int64
-		spec       *nexuspb.EndpointSpec
+		spec       *persistencespb.NexusEndpointSpec
 		clusterID  int64
 		timeSource clock.TimeSource
 	}
 
 	internalCreateNexusEndpointRequest struct {
-		spec       *nexuspb.EndpointSpec
+		spec       *persistencespb.NexusEndpointSpec
 		clusterID  int64
 		timeSource clock.TimeSource
 	}
@@ -77,9 +75,9 @@ type (
 
 		sync.RWMutex        // protects tableVersion, endpoints, endpointsByID, endpointsByName, and tableVersionChanged
 		tableVersion        int64
-		endpoints           []*persistencepb.NexusEndpointEntry // sorted by ID to support pagination during ListNexusEndpoints
-		endpointsByID       map[string]*persistencepb.NexusEndpointEntry
-		endpointsByName     map[string]*persistencepb.NexusEndpointEntry
+		endpointEntries     []*persistencespb.NexusEndpointEntry // sorted by ID to support pagination during ListNexusEndpoints
+		endpointsByID       map[string]*persistencespb.NexusEndpointEntry
+		endpointsByName     map[string]*persistencespb.NexusEndpointEntry
 		tableVersionChanged chan struct{}
 
 		persistence p.NexusEndpointManager
@@ -114,10 +112,10 @@ func (m *nexusEndpointClient) CreateNexusEndpoint(
 		return nil, serviceerror.NewAlreadyExist(fmt.Sprintf("error creating Nexus endpoint. Endpoint with name %v already registered", request.spec.GetName()))
 	}
 
-	entry := &persistencepb.NexusEndpointEntry{
+	entry := &persistencespb.NexusEndpointEntry{
 		Version: 0,
 		Id:      uuid.NewString(),
-		Endpoint: &persistencepb.NexusEndpoint{
+		Endpoint: &persistencespb.NexusEndpoint{
 			Clock:       hlc.Zero(request.clusterID),
 			Spec:        request.spec,
 			CreatedTime: timestamppb.New(request.timeSource.Now().UTC()),
@@ -142,7 +140,7 @@ func (m *nexusEndpointClient) CreateNexusEndpoint(
 	close(ch)
 
 	return &matchingservice.CreateNexusEndpointResponse{
-		Endpoint: commonnexus.EndpointPersistedEntryToExternalAPI(entry),
+		Entry: entry,
 	}, nil
 }
 
@@ -170,10 +168,10 @@ func (m *nexusEndpointClient) UpdateNexusEndpoint(
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("nexus endpoint version mismatch. received: %v expected %v", request.version, previous.Version))
 	}
 
-	entry := &persistencepb.NexusEndpointEntry{
+	entry := &persistencespb.NexusEndpointEntry{
 		Version: previous.Version,
 		Id:      previous.Id,
-		Endpoint: &persistencepb.NexusEndpoint{
+		Endpoint: &persistencespb.NexusEndpoint{
 			Clock: hlc.Next(previous.Endpoint.Clock, request.timeSource),
 			Spec:  request.spec,
 		},
@@ -197,19 +195,19 @@ func (m *nexusEndpointClient) UpdateNexusEndpoint(
 	close(ch)
 
 	return &matchingservice.UpdateNexusEndpointResponse{
-		Endpoint: commonnexus.EndpointPersistedEntryToExternalAPI(entry),
+		Entry: entry,
 	}, nil
 }
 
-func (m *nexusEndpointClient) insertEndpointLocked(entry *persistencepb.NexusEndpointEntry) {
-	idx, found := slices.BinarySearchFunc(m.endpoints, entry, func(a *persistencepb.NexusEndpointEntry, b *persistencepb.NexusEndpointEntry) int {
+func (m *nexusEndpointClient) insertEndpointLocked(entry *persistencespb.NexusEndpointEntry) {
+	idx, found := slices.BinarySearchFunc(m.endpointEntries, entry, func(a *persistencespb.NexusEndpointEntry, b *persistencespb.NexusEndpointEntry) int {
 		return bytes.Compare([]byte(a.Id), []byte(b.Id))
 	})
 
 	if found {
-		m.endpoints[idx] = entry
+		m.endpointEntries[idx] = entry
 	} else {
-		m.endpoints = slices.Insert(m.endpoints, idx, entry)
+		m.endpointEntries = slices.Insert(m.endpointEntries, idx, entry)
 	}
 }
 
@@ -243,7 +241,7 @@ func (m *nexusEndpointClient) DeleteNexusEndpoint(
 	m.tableVersion++
 	delete(m.endpointsByID, request.Id)
 	delete(m.endpointsByName, entry.Endpoint.Spec.Name)
-	m.endpoints = slices.DeleteFunc(m.endpoints, func(entry *persistencepb.NexusEndpointEntry) bool {
+	m.endpointEntries = slices.DeleteFunc(m.endpointEntries, func(entry *persistencespb.NexusEndpointEntry) bool {
 		return entry.Id == request.Id
 	})
 	ch := m.tableVersionChanged
@@ -283,9 +281,9 @@ func (m *nexusEndpointClient) ListNexusEndpoints(
 
 		startFound := false
 		startIdx, startFound = slices.BinarySearchFunc(
-			m.endpoints,
-			&persistencepb.NexusEndpointEntry{Id: nextEndpointID},
-			func(a *persistencepb.NexusEndpointEntry, b *persistencepb.NexusEndpointEntry) int {
+			m.endpointEntries,
+			&persistencespb.NexusEndpointEntry{Id: nextEndpointID},
+			func(a *persistencespb.NexusEndpointEntry, b *persistencespb.NexusEndpointEntry) int {
 				return bytes.Compare([]byte(a.Id), []byte(b.Id))
 			})
 
@@ -294,26 +292,17 @@ func (m *nexusEndpointClient) ListNexusEndpoints(
 		}
 	}
 
-	endIdx := startIdx + int(request.PageSize)
-	if endIdx > len(m.endpoints) {
-		endIdx = len(m.endpoints)
-	}
+	endIdx := min(startIdx+int(request.PageSize), len(m.endpointEntries))
 
 	var nextPageToken []byte
-	if endIdx < len(m.endpoints) {
-		nextPageToken = []byte(m.endpoints[endIdx].Id)
-	}
-
-	endpoints := make([]*nexuspb.Endpoint, endIdx-startIdx)
-	for i := 0; i < endIdx-startIdx; i++ {
-		entry := m.endpoints[i+startIdx]
-		endpoints[i] = commonnexus.EndpointPersistedEntryToExternalAPI(entry)
+	if endIdx < len(m.endpointEntries) {
+		nextPageToken = []byte(m.endpointEntries[endIdx].Id)
 	}
 
 	resp := &matchingservice.ListNexusEndpointsResponse{
 		TableVersion:  m.tableVersion,
 		NextPageToken: nextPageToken,
-		Endpoints:     endpoints,
+		Entries:       slices.Clone(m.endpointEntries[startIdx:endIdx]),
 	}
 
 	return resp, m.tableVersionChanged, nil
@@ -352,7 +341,7 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 		pageToken = resp.NextPageToken
 		m.tableVersion = resp.TableVersion
 		for _, entry := range resp.Entries {
-			m.endpoints = append(m.endpoints, entry)
+			m.endpointEntries = append(m.endpointEntries, entry)
 			m.endpointsByID[entry.Id] = entry
 			m.endpointsByName[entry.Endpoint.Spec.Name] = entry
 		}
@@ -368,7 +357,7 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 
 func (m *nexusEndpointClient) resetCacheStateLocked() {
 	m.tableVersion = 0
-	m.endpoints = []*persistencepb.NexusEndpointEntry{}
-	m.endpointsByID = make(map[string]*persistencepb.NexusEndpointEntry)
-	m.endpointsByName = make(map[string]*persistencepb.NexusEndpointEntry)
+	m.endpointEntries = []*persistencespb.NexusEndpointEntry{}
+	m.endpointsByID = make(map[string]*persistencespb.NexusEndpointEntry)
+	m.endpointsByName = make(map[string]*persistencespb.NexusEndpointEntry)
 }

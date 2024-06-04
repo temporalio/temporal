@@ -39,6 +39,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
@@ -142,12 +143,24 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 		// remove this "if" case when that is done.
 		if operation == metrics.FrontendGetWorkflowExecutionHistoryScope {
-			request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
-			if request.GetWaitNewEvent() {
-				return metrics.FrontendPollWorkflowExecutionHistoryScope
+			if request, ok := req.(*workflowservice.GetWorkflowExecutionHistoryRequest); ok {
+				if request.GetWaitNewEvent() {
+					return metrics.FrontendPollWorkflowExecutionHistoryScope
+				}
 			}
 		}
 		return operation
+	} else if strings.HasPrefix(fullName, api.HistoryServicePrefix) {
+		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
+		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
+		// remove this "if" case when that is done.
+		if operation == metrics.HistoryGetWorkflowExecutionHistoryScope {
+			if request, ok := req.(*historyservice.GetWorkflowExecutionHistoryRequest); ok {
+				if r := request.GetRequest(); r != nil && r.GetWaitNewEvent() {
+					return metrics.HistoryPollWorkflowExecutionHistoryScope
+				}
+			}
+		}
 	}
 	return ti.overrideOperationTag(fullName, operation)
 }
@@ -394,6 +407,7 @@ func (ti *TelemetryInterceptor) handleError(
 	default:
 		// Also skip emitting ServiceFailures for non serviceerrors returned from handlers for certain error
 		// codes.
+
 		if st, ok := status.FromError(err); ok {
 			switch st.Code() {
 			case codes.InvalidArgument,
@@ -404,8 +418,13 @@ func (ti *TelemetryInterceptor) handleError(
 				codes.Unauthenticated,
 				codes.NotFound:
 				return
+			case codes.Internal,
+				codes.Unknown:
+				errorHash := common.ErrorHash(err)
+				logTags = append(logTags, tag.NewStringTag("hash", errorHash))
 			}
 		}
+
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
 		logTags = append(logTags, ti.getWorkflowTags(req)...)
 		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)

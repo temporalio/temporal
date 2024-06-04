@@ -25,14 +25,64 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/shard"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type outboundQueueStandbyTaskExecutor struct {
-}
-
-func (*outboundQueueStandbyTaskExecutor) Execute(context.Context, queues.Executable) queues.ExecuteResponse {
-	panic("unimplemented")
+	stateMachineEnvironment
 }
 
 var _ queues.Executor = &outboundQueueStandbyTaskExecutor{}
+
+func newOutboundQueueStandbyTaskExecutor(
+	shardCtx shard.Context,
+	workflowCache wcache.Cache,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) *outboundQueueStandbyTaskExecutor {
+	return &outboundQueueStandbyTaskExecutor{
+		stateMachineEnvironment: stateMachineEnvironment{
+			shardContext: shardCtx,
+			cache:        workflowCache,
+			logger:       logger,
+			metricsHandler: metricsHandler.WithTags(
+				metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
+			),
+		},
+	}
+}
+
+func (e *outboundQueueStandbyTaskExecutor) Execute(
+	ctx context.Context,
+	executable queues.Executable,
+) queues.ExecuteResponse {
+	task := executable.GetTask()
+	var taskType string
+	ref, smt, err := stateMachineTask(e.shardContext, task)
+	if err != nil {
+		taskType = "StandbyUnknownOutbound"
+	} else {
+		taskType = "Standby." + smt.Type().Name
+	}
+
+	metricsTags := []metrics.Tag{
+		getNamespaceTagByID(e.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType),
+	}
+
+	if err == nil {
+		smRegistry := e.shardContext.StateMachineRegistry()
+		err = smRegistry.ExecuteStandbyImmediateTask(ctx, e, ref, smt)
+	}
+
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: metricsTags,
+		ExecutedAsActive:    false,
+		ExecutionErr:        err,
+	}
+}

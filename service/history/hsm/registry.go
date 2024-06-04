@@ -56,19 +56,26 @@ func (notRegisteredError) IsTerminalTaskError() bool {
 type Registry struct {
 	machines map[int32]StateMachineDefinition
 	tasks    map[int32]TaskSerializer
-	// This is mapped to any because of Go's limited generics support.
-	// The actual value is Executor[T].
-	executors map[int32]any
-	events    map[enumspb.EventType]EventDefinition
+	// The executor maps are mapped to any because of Go's limited generics support.
+	// The actual value is ImmediateExecutor[T].
+	activeImmediateExecutors  map[int32]any
+	standbyImmediateExecutors map[int32]any
+	// The actual value is TimerExecutor[T].
+	activeTimerExecutors  map[int32]any
+	standbyTimerExecutors map[int32]any
+	events                map[enumspb.EventType]EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
 func NewRegistry() *Registry {
 	return &Registry{
-		machines:  make(map[int32]StateMachineDefinition),
-		tasks:     make(map[int32]TaskSerializer),
-		executors: make(map[int32]any),
-		events:    make(map[enumspb.EventType]EventDefinition),
+		machines:                  make(map[int32]StateMachineDefinition),
+		tasks:                     make(map[int32]TaskSerializer),
+		activeImmediateExecutors:  make(map[int32]any),
+		standbyImmediateExecutors: make(map[int32]any),
+		activeTimerExecutors:      make(map[int32]any),
+		standbyTimerExecutors:     make(map[int32]any),
+		events:                    make(map[enumspb.EventType]EventDefinition),
 	}
 }
 
@@ -105,25 +112,153 @@ func (r *Registry) TaskSerializer(t int32) (d TaskSerializer, ok bool) {
 	return
 }
 
-// RegisterExecutor registers an [Executor] for the given task type.
+// RegisterImmediateExecutors registers an active and a standby [ImmediateExecutor] for the given task type.
 // Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
-func RegisterExecutor[T Task](r *Registry, t int32, exec Executor[T]) error {
-	if existing, ok := r.executors[t]; ok {
-		return fmt.Errorf("%w: executor already registered for %v: %v", ErrDuplicateRegistration, t, existing)
+func RegisterImmediateExecutors[T Task](
+	r *Registry,
+	t int32,
+	activeExecutor ImmediateExecutor[T],
+	standbyExecutor ImmediateExecutor[T],
+) error {
+	// The executors are registered in pairs, so only need to check in one map.
+	if existing, ok := r.activeImmediateExecutors[t]; ok {
+		return fmt.Errorf(
+			"%w: executor already registered for %v: %v",
+			ErrDuplicateRegistration,
+			t,
+			existing,
+		)
 	}
-	r.executors[t] = exec
+	r.activeImmediateExecutors[t] = activeExecutor
+	r.standbyImmediateExecutors[t] = standbyExecutor
 	return nil
 }
 
-// Execute gets an [Executor] from the registry and invokes it.
+// RegisterExecutors registers an active and a standby [ImmediateExecutor] for the given task type.
+// Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
+func RegisterTimerExecutors[T Task](
+	r *Registry,
+	t int32,
+	activeExecutor TimerExecutor[T],
+	standbyExecutor TimerExecutor[T],
+) error {
+	// The executors are registered in pairs, so only need to check in one map.
+	if existing, ok := r.activeTimerExecutors[t]; ok {
+		return fmt.Errorf(
+			"%w: executor already registered for %v: %v",
+			ErrDuplicateRegistration,
+			t,
+			existing,
+		)
+	}
+	r.activeTimerExecutors[t] = activeExecutor
+	r.standbyTimerExecutors[t] = standbyExecutor
+	return nil
+}
+
+// ExecuteActiveImmediateTask gets an [ImmediateExecutor] from the registry and invokes it.
 // Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
-func Execute(ctx context.Context, r *Registry, env Environment, ref Ref, task Task) error {
-	executor, ok := r.executors[task.Type().ID]
+func (r *Registry) ExecuteActiveImmediateTask(
+	ctx context.Context,
+	env Environment,
+	ref Ref,
+	task Task,
+) error {
+	executor, ok := r.activeImmediateExecutors[task.Type().ID]
 	if !ok {
 		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
 	}
+	return r.execute(ctx, executor, env, ref, task)
+}
+
+// ExecuteStandbyImmediateTask gets an [ImmediateExecutor] from the registry and invokes it.
+// Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
+func (r *Registry) ExecuteStandbyImmediateTask(
+	ctx context.Context,
+	env Environment,
+	ref Ref,
+	task Task,
+) error {
+	executor, ok := r.standbyImmediateExecutors[task.Type().ID]
+	if !ok {
+		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
+	}
+	return r.execute(ctx, executor, env, ref, task)
+}
+
+// execute invokes an [ImmediateExecutor].
+func (r *Registry) execute(
+	ctx context.Context,
+	executor any,
+	env Environment,
+	ref Ref,
+	task Task,
+) error {
+	if executor == nil {
+		return nil
+	}
 	fn := reflect.ValueOf(executor)
-	values := fn.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(env), reflect.ValueOf(ref), reflect.ValueOf(task)})
+	values := fn.Call(
+		[]reflect.Value{
+			reflect.ValueOf(ctx),
+			reflect.ValueOf(env),
+			reflect.ValueOf(ref),
+			reflect.ValueOf(task),
+		},
+	)
+	if !values[0].IsNil() {
+		//nolint:revive // type cast result is unchecked
+		return values[0].Interface().(error)
+	}
+	return nil
+}
+
+// ExecuteActiveTimerTask gets a [TimerExecutor] from the registry and invokes it.
+// Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
+func (r *Registry) ExecuteActiveTimerTask(
+	env Environment,
+	node *Node,
+	task Task,
+) error {
+	executor, ok := r.activeTimerExecutors[task.Type().ID]
+	if !ok {
+		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
+	}
+	return r.executeTimer(executor, env, node, task)
+}
+
+// ExecuteStandbyTimerTask gets a [TimerExecutor] from the registry and invokes it.
+// Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
+func (r *Registry) ExecuteStandbyTimerTask(
+	env Environment,
+	node *Node,
+	task Task,
+) error {
+	executor, ok := r.standbyTimerExecutors[task.Type().ID]
+	if !ok {
+		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
+	}
+	return r.executeTimer(executor, env, node, task)
+}
+
+// executeTimer invokes a [TimerExecutor].
+func (r *Registry) executeTimer(
+	executor any,
+	env Environment,
+	node *Node,
+	task Task,
+) error {
+	if executor == nil {
+		return nil
+	}
+	fn := reflect.ValueOf(executor)
+	values := fn.Call(
+		[]reflect.Value{
+			reflect.ValueOf(env),
+			reflect.ValueOf(node),
+			reflect.ValueOf(task),
+		},
+	)
 	if !values[0].IsNil() {
 		//nolint:revive // type cast result is unchecked
 		return values[0].Interface().(error)

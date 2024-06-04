@@ -42,6 +42,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -131,8 +132,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	}
 
 	// activity handler
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -207,7 +207,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 	}
@@ -217,7 +217,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	}
@@ -227,7 +227,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_NONE,
 	}
@@ -237,7 +237,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 	}
@@ -247,7 +247,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	}
@@ -257,7 +257,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyNone() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_NONE,
 	}

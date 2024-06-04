@@ -31,6 +31,8 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -53,8 +55,8 @@ type VersionedBlob struct {
 type (
 	// Plugin defines the interface for any SQL database that needs to implement
 	Plugin interface {
-		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver) (DB, error)
-		CreateAdminDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver) (AdminDB, error)
+		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (DB, error)
+		CreateAdminDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (AdminDB, error)
 	}
 
 	// TableCRUD defines the API for interacting with the database tables

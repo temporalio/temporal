@@ -48,6 +48,7 @@ const (
 	trimHistoryBranchPageSize = 1000
 	errNonContiguousEventID   = "corrupted history event batch, eventID is not contiguous"
 	errWrongVersion           = "corrupted history event batch, wrong version and IDs"
+	errEmptyEvents            = "corrupted history event batch, empty events"
 )
 
 var _ ExecutionManager = (*executionManagerImpl)(nil)
@@ -104,7 +105,11 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	// The above newBranchInfo is a lossy construction of the forked branch token from the original opaque branch token.
 	// It only initializes with the fields it understands, which may inadvertently discard other misc fields. The
 	// following is the replacement logic to correctly apply the updated fields into the original opaque branch token.
-	newBranchToken, err := m.GetHistoryBranchUtil().UpdateHistoryBranchInfo(request.ForkBranchToken, newBranchInfo)
+	newBranchToken, err := m.GetHistoryBranchUtil().UpdateHistoryBranchInfo(
+		request.ForkBranchToken,
+		newBranchInfo,
+		request.NewRunID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +127,13 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 
 	req := &InternalForkHistoryBranchRequest{
-		ForkBranchToken: request.ForkBranchToken,
-		ForkBranchInfo:  forkBranch,
-		TreeInfo:        treeInfoBlob,
-		ForkNodeID:      request.ForkNodeID,
-		NewBranchID:     newBranchInfo.BranchId,
-		Info:            request.Info,
-		ShardID:         request.ShardID,
+		NewBranchToken: newBranchToken,
+		ForkBranchInfo: forkBranch,
+		TreeInfo:       treeInfoBlob,
+		ForkNodeID:     request.ForkNodeID,
+		NewBranchID:    newBranchInfo.BranchId,
+		Info:           request.Info,
+		ShardID:        request.ShardID,
 	}
 
 	err = m.persistence.ForkHistoryBranch(ctx, req)
@@ -932,8 +937,8 @@ func (m *executionManagerImpl) readHistoryBranch(
 			return nil, nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			m.logger.Error("Empty events in a batch")
-			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, empty events")
+			m.logger.Error(errEmptyEvents)
+			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
 		}
 
 		firstEvent := events[0]           // first
@@ -992,8 +997,8 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 			return nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			m.logger.Error("Empty events in a batch")
-			return nil, nil, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, empty events")
+			m.logger.Error(errEmptyEvents)
+			return nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
 		}
 
 		firstEvent := events[0]           // first
@@ -1002,19 +1007,19 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			m.logger.Error("Corrupted event batch",
+			m.logger.Error(errWrongVersion,
 				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
-			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
+			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
 		}
 		if (token.LastEventID != common.EmptyEventID) && (lastEvent.GetEventId() != token.LastEventID-1) {
-			m.logger.Error("Corrupted non-contiguous event batch",
+			m.logger.Error(errNonContiguousEventID,
 				tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.TokenLastEventID(token.LastEventID),
 				tag.Counter(eventCount))
-			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
+			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
 		}
 
 		events = m.reverseSlice(events)

@@ -43,9 +43,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testvars"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
@@ -119,6 +121,10 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 }
 
 func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
+
+	// setting this to 0 to be sure we are terminating old workflow
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+
 	testCases := []struct {
 		name                     string
 		WorkflowIdReusePolicy    enumspb.WorkflowIdReusePolicy
@@ -301,8 +307,7 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -448,13 +453,12 @@ func (s *FunctionalSuite) TestSequentialWorkflow() {
 	}
 
 	expectedActivity := int32(1)
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.EqualValues(id, execution.WorkflowId)
-		s.Equal(activityName, activityType.Name)
-		id, _ := strconv.Atoi(activityID)
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.EqualValues(id, task.WorkflowExecution.WorkflowId)
+		s.Equal(activityName, task.ActivityType.Name)
+		id, _ := strconv.Atoi(task.ActivityId)
 		s.Equal(int(expectedActivity), id)
-		s.Equal(expectedActivity, s.decodePayloadsByteSliceInt32(input))
+		s.Equal(expectedActivity, s.decodePayloadsByteSliceInt32(task.Input))
 		expectedActivity++
 
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -619,11 +623,10 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		}}, nil
 	}
 
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		s.EqualValues(id, execution.WorkflowId)
-		s.Equal(activityName, activityType.Name)
-		s.Logger.Info("Activity ID", tag.WorkflowActivityID(activityID))
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
+		s.EqualValues(id, task.WorkflowExecution.WorkflowId)
+		s.Equal(activityName, task.ActivityType.Name)
+		s.Logger.Info("Activity ID", tag.WorkflowActivityID(task.ActivityId))
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
@@ -978,6 +981,9 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 }
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
+	// reset reuse minimal interval to allow workflow termination
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+
 	runMultiOp := func(
 		tv *testvars.TestVars,
 		request *workflowservice.ExecuteMultiOperationRequest,
@@ -1089,7 +1095,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		}
 
 		s.Run("workflow is not running", func() {
-			tv := testvars.New(s.T().Name())
+			tv := testvars.New(s.T())
 
 			_, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
 			s.NoError(err)
@@ -1098,7 +1104,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		s.Run("workflow is running", func() {
 
 			s.Run("workflow id reuse policy use-existing: only send update", func() {
-				tv := testvars.New(s.T().Name())
+				tv := testvars.New(s.T())
 
 				_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
 				s.NoError(err)
@@ -1111,7 +1117,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			})
 
 			s.Run("workflow id reuse policy terminate-existing: terminate workflow first, then start and update", func() {
-				tv := testvars.New(s.T().Name())
+				tv := testvars.New(s.T())
 
 				initReq := startWorkflowReq(tv)
 				initReq.TaskQueue.Name = initReq.TaskQueue.Name + "-init" // avoid race condition with poller
@@ -1135,7 +1141,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			})
 
 			s.Run("workflow id reuse policy fail: abort multi operation", func() {
-				tv := testvars.New(s.T().Name())
+				tv := testvars.New(s.T())
 
 				_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
 				s.NoError(err)

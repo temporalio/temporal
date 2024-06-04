@@ -28,10 +28,12 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -49,31 +51,42 @@ type CanGetNexusCompletion interface {
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
 
-type ActiveExecutorOptions struct {
-	NamespaceRegistry namespace.Registry
-	CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
-}
-
 func RegisterExecutor(
 	registry *hsm.Registry,
-	options ActiveExecutorOptions,
+	activeExecutorOptions ActiveExecutorOptions,
+	standbyExecutorOptions StandbyExecutorOptions,
 	config *Config,
 ) error {
-	exec := activeExecutor{options: options, config: config}
-	if err := hsm.RegisterExecutor(
+	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
+	standbyExec := standbyExecutor{options: standbyExecutorOptions}
+	if err := hsm.RegisterImmediateExecutors(
 		registry,
 		TaskTypeInvocation.ID,
-		exec.executeInvocationTask,
+		activeExec.executeInvocationTask,
+		standbyExec.executeInvocationTask,
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterExecutor(registry, TaskTypeBackoff.ID, exec.executeBackoffTask)
+	return hsm.RegisterTimerExecutors(
+		registry,
+		TaskTypeBackoff.ID,
+		activeExec.executeBackoffTask,
+		standbyExec.executeBackoffTask,
+	)
 }
 
-type activeExecutor struct {
-	options ActiveExecutorOptions
-	config  *Config
-}
+type (
+	ActiveExecutorOptions struct {
+		NamespaceRegistry namespace.Registry
+		MetricsHandler    metrics.Handler
+		CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
+	}
+
+	activeExecutor struct {
+		options ActiveExecutorOptions
+		config  *Config
+	}
+)
 
 func (e activeExecutor) executeInvocationTask(
 	ctx context.Context,
@@ -86,7 +99,7 @@ func (e activeExecutor) executeInvocationTask(
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	url, completion, err := e.loadUrlAndCallback(ctx, env, ref)
+	args, err := e.loadInvocationArgs(ctx, env, ref)
 	if err != nil {
 		return err
 	}
@@ -97,7 +110,13 @@ func (e activeExecutor) executeInvocationTask(
 	)
 	defer cancel()
 
-	request, err := nexus.NewCompletionHTTPRequest(callCtx, url, completion)
+	request, err := nexus.NewCompletionHTTPRequest(callCtx, args.url, args.completion)
+	if request.Header == nil {
+		request.Header = make(http.Header)
+	}
+	for k, v := range args.header {
+		request.Header.Set(k, v)
+	}
 	if err != nil {
 		return queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
@@ -108,7 +127,16 @@ func (e activeExecutor) executeInvocationTask(
 		NamespaceID: ref.WorkflowKey.GetNamespaceID(),
 		Destination: task.Destination,
 	})
+	// Make the call and record metrics.
+	startTime := time.Now()
 	response, callErr := caller(request)
+
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(task.Destination)
+	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(callCtx, response, callErr))
+	e.options.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
+	e.options.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+
 	if callErr == nil {
 		// Body is not read but should be discarded to keep the underlying TCP connection alive.
 		// Just in case something unexpected happens while discarding or closing the body,
@@ -131,14 +159,18 @@ func (e activeExecutor) executeInvocationTask(
 	return err
 }
 
-func (e activeExecutor) loadUrlAndCallback(
+type invocationArgs struct {
+	url        string
+	header     map[string]string
+	completion nexus.OperationCompletion
+}
+
+func (e activeExecutor) loadInvocationArgs(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-) (string, nexus.OperationCompletion, error) {
-	var url string
-	var completion nexus.OperationCompletion
-	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+) (args invocationArgs, err error) {
+	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		callback, err := hsm.MachineData[Callback](node)
 		if err != nil {
 			return err
@@ -149,8 +181,9 @@ func (e activeExecutor) loadUrlAndCallback(
 		}
 		switch variant := callback.PublicInfo.GetCallback().GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
-			url = variant.Nexus.GetUrl()
-			completion, err = target.GetNexusCompletion(ctx)
+			args.url = variant.Nexus.GetUrl()
+			args.header = variant.Nexus.GetHeader()
+			args.completion, err = target.GetNexusCompletion(ctx)
 			if err != nil {
 				return err
 			}
@@ -161,7 +194,7 @@ func (e activeExecutor) loadUrlAndCallback(
 		}
 		return nil
 	})
-	return url, completion, err
+	return
 }
 
 func (e activeExecutor) saveResult(
@@ -186,26 +219,59 @@ func (e activeExecutor) saveResult(
 				}
 			}
 			return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
-				Time: env.Now(),
-				Err:  callErr,
+				Time:        env.Now(),
+				Err:         callErr,
+				RetryPolicy: e.config.RetryPolicy(),
 			})
 		})
 	})
 }
 
 func (e activeExecutor) executeBackoffTask(
+	env hsm.Environment,
+	node *hsm.Node,
+	task BackoffTask,
+) error {
+	return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
+		return TransitionRescheduled.Apply(callback, EventRescheduled{})
+	})
+}
+
+type (
+	StandbyExecutorOptions struct{}
+
+	standbyExecutor struct {
+		options StandbyExecutorOptions
+	}
+)
+
+func (e standbyExecutor) executeInvocationTask(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
+	task InvocationTask,
+) error {
+	panic("unimplemented")
+}
+
+func (e standbyExecutor) executeBackoffTask(
+	env hsm.Environment,
+	node *hsm.Node,
 	task BackoffTask,
 ) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
-			return TransitionRescheduled.Apply(callback, EventRescheduled{})
-		})
-	})
+	panic("unimplemented")
 }
 
 func isRetryableHTTPResponse(response *http.Response) bool {
 	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
+}
+
+func outcomeTag(callCtx context.Context, response *http.Response, callErr error) string {
+	if callErr != nil {
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		return "unknown-error"
+	}
+	return fmt.Sprintf("status:%d", response.StatusCode)
 }

@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -44,70 +43,23 @@ const (
 	// the actual failure type will be prefix + enums.TimeoutType.String()
 	// e.g. "TemporalTimeout:StartToClose" or "TemporalTimeout:Heartbeat"
 	TimeoutFailureTypePrefix = "TemporalTimeout:"
-
-	defaultInitialInterval            = time.Second
-	defaultMaximumIntervalCoefficient = 100.0
-	defaultBackoffCoefficient         = 2.0
-	defaultMaximumAttempts            = 0
-
-	initialIntervalInSecondsConfigKey   = "InitialIntervalInSeconds"
-	maximumIntervalCoefficientConfigKey = "MaximumIntervalCoefficient"
-	backoffCoefficientConfigKey         = "BackoffCoefficient"
-	maximumAttemptsConfigKey            = "MaximumAttempts"
 )
-
-func GetDefault() map[string]any {
-	return map[string]any{
-		initialIntervalInSecondsConfigKey:   int(defaultInitialInterval.Seconds()),
-		maximumIntervalCoefficientConfigKey: defaultMaximumIntervalCoefficient,
-		backoffCoefficientConfigKey:         defaultBackoffCoefficient,
-		maximumAttemptsConfigKey:            defaultMaximumAttempts,
-	}
-}
 
 // DefaultRetrySettings indicates what the "default" retry settings
 // are if it is not specified on an Activity or for any unset fields
 // if a policy is explicitly set on a workflow
 type DefaultRetrySettings struct {
-	InitialInterval            time.Duration
+	InitialInterval            time.Duration `mapstructure:"InitialIntervalInSeconds"`
 	MaximumIntervalCoefficient float64
 	BackoffCoefficient         float64
 	MaximumAttempts            int32
 }
 
-func FromConfigToDefault(options map[string]interface{}) DefaultRetrySettings {
-	defaultSettings := DefaultRetrySettings{
-		InitialInterval: defaultInitialInterval,
-		MaximumAttempts: defaultMaximumAttempts,
-	}
-
-	if seconds, ok := options[initialIntervalInSecondsConfigKey]; ok {
-		defaultSettings.InitialInterval = time.Duration(
-			number.NewNumber(
-				seconds,
-			).GetIntOrDefault(int(defaultInitialInterval.Nanoseconds())),
-		) * time.Second
-	}
-
-	if coefficient, ok := options[maximumIntervalCoefficientConfigKey]; ok {
-		defaultSettings.MaximumIntervalCoefficient = number.NewNumber(
-			coefficient,
-		).GetFloatOrDefault(defaultMaximumIntervalCoefficient)
-	}
-
-	if coefficient, ok := options[backoffCoefficientConfigKey]; ok {
-		defaultSettings.BackoffCoefficient = number.NewNumber(
-			coefficient,
-		).GetFloatOrDefault(defaultBackoffCoefficient)
-	}
-
-	if attempts, ok := options[maximumAttemptsConfigKey]; ok {
-		defaultSettings.MaximumAttempts = int32(number.NewNumber(
-			attempts,
-		).GetIntOrDefault(defaultMaximumAttempts))
-	}
-
-	return defaultSettings
+var DefaultDefaultRetrySettings = DefaultRetrySettings{
+	InitialInterval:            time.Second,
+	MaximumIntervalCoefficient: 100.0,
+	BackoffCoefficient:         2.0,
+	MaximumAttempts:            0,
 }
 
 // EnsureDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults

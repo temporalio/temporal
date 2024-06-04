@@ -633,7 +633,7 @@ func TestAddRedirectRuleMaxRules(t *testing.T) {
 func TestAddRedirectRuleInVersionSet(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
-	// make version set with build id "0" in it
+	// make version set with build ID "0" in it
 	initialData := mkInitialData(1, clock)
 
 	// insert with source build id "0" --> failure
@@ -767,7 +767,7 @@ func TestReplaceRedirectRuleBasic(t *testing.T) {
 func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
-	// make a version set with build id 0
+	// make a version set with build ID 0
 	data := mkInitialData(1, clock)
 	data.RedirectRules = []*persistencepb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("1", "2"), clock, nil),
@@ -1183,6 +1183,55 @@ func TestIsCyclic(t *testing.T) {
 	if !isCyclic(rules) {
 		t.Fail()
 	}
+}
+
+func TestFindTerminalBuildId(t *testing.T) {
+	t.Parallel()
+	/*
+		e.g.
+		Redirect Rules:
+		10
+		^
+		|
+		1 <------ 2
+		^
+		|
+		5 <------ 3 <------ 4
+	*/
+	createTs := hlc.Zero(1)
+
+	redirectRules := []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+	}
+
+	assert.Equal(t, "10", findTerminalBuildId("1", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("2", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("3", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("4", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("5", redirectRules))
+	assert.Equal(t, "10", findTerminalBuildId("10", redirectRules))
+
+	// empty rule set
+	assert.Equal(t, "11", findTerminalBuildId("11", []*persistencepb.RedirectRule{}))
+
+	// single rule
+	redirectRules = []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
+	}
+	assert.Equal(t, "2", findTerminalBuildId("1", redirectRules))
+	assert.Equal(t, "2", findTerminalBuildId("2", redirectRules))
+
+	// cyclic rule set
+	redirectRules = []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
+	}
+	assert.Equal(t, "", findTerminalBuildId("1", redirectRules))
+	assert.Equal(t, "", findTerminalBuildId("2", redirectRules))
 }
 
 func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {

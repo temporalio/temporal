@@ -92,15 +92,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
-	taskTypeTagValue := "TimerActiveUnknown"
-	smRef, smt, isAStateMachineTask, err := t.stateMachineTask(executable.GetTask())
-	if err == nil {
-		if isAStateMachineTask {
-			taskTypeTagValue = "TimerActive." + smt.Type().Name
-		} else {
-			taskTypeTagValue = queues.GetActiveTimerTaskTypeTagValue(executable)
-		}
-	}
+	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable)
 
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
@@ -111,20 +103,11 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		metrics.TaskTypeTag(taskTypeTagValue),
 		metrics.OperationTag(taskTypeTagValue), // for backward compatibility
 	}
-
-	if err != nil {
-		return queues.ExecuteResponse{
-			ExecutionMetricTags: metricsTags,
-			ExecutedAsActive:    true,
-			ExecutionErr:        err,
-		}
-	}
-
 	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
 		// TODO: exclude task types here if we believe it's safe & necessary to execute
 		//  them during namespace handover.
 		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
-		//  be returned from task executor
+		//  be returned from task executor. Also check the standby queue logic.
 		return queues.ExecuteResponse{
 			ExecutionMetricTags: metricsTags,
 			ExecutedAsActive:    true,
@@ -132,14 +115,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		}
 	}
 
-	if isAStateMachineTask {
-		err = hsm.Execute(ctx, t.shardContext.StateMachineRegistry(), t, smRef, smt)
-		return queues.ExecuteResponse{
-			ExecutionMetricTags: metricsTags,
-			ExecutedAsActive:    true,
-			ExecutionErr:        err,
-		}
-	}
+	var err error
 
 	switch task := executable.GetTask().(type) {
 	case *tasks.UserTimerTask:
@@ -158,6 +134,10 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
+	case *tasks.StateMachineTimerTask:
+		err = t.executeStateMachineTimerTask(ctx, task, func(node *hsm.Node, task hsm.Task) error {
+			return t.shardContext.StateMachineRegistry().ExecuteActiveTimerTask(t, node, task)
+		})
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -300,12 +280,14 @@ Loop:
 			continue Loop
 		}
 
-		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
-		// If retryState is Timeout then it means that expirationTime is expired.
-		// ExpirationTime is expired when ScheduleToClose timeout is expired.
 		if retryState == enumspb.RETRY_STATE_TIMEOUT {
-			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			// If retryState is Timeout then it means that expirationTime is expired.
+			// ExpirationTime is expired when ScheduleToClose timeout is expired.
+			const timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			var failureMsg = fmt.Sprintf("activity %v timeout", timeoutType.String())
+			timeoutFailure = failure.NewTimeoutFailure(failureMsg, timeoutType)
 		}
+		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
@@ -430,6 +412,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 		return nil
 	}
 
+	// TODO: deprecated, remove below 3 metrics after v1.25
 	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
 		metrics.WorkflowRetryBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
@@ -446,6 +429,12 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	}
+
+	nsName := mutableState.GetNamespaceEntry().Name().String()
+	metrics.WorkflowBackoffCount.With(t.metricHandler).Record(
+		1,
+		metrics.NamespaceTag(nsName),
+		metrics.StringTag("backoff_type", task.WorkflowBackoffType.String()))
 
 	if mutableState.HadOrHasWorkflowTask() {
 		// already has workflow task

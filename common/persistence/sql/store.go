@@ -28,6 +28,8 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 )
@@ -50,6 +52,8 @@ func NewSQLDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	mh metrics.Handler,
 ) (sqlplugin.DB, error) {
 	plugin, ok := supportedPlugins[cfg.PluginName]
 
@@ -57,7 +61,7 @@ func NewSQLDB(
 		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
 	}
 
-	return plugin.CreateDB(dbKind, cfg, r)
+	return plugin.CreateDB(dbKind, cfg, r, logger, mh)
 }
 
 // NewSQLAdminDB returns a AdminDB
@@ -65,11 +69,13 @@ func NewSQLAdminDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	mh metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
 	plugin, ok := supportedPlugins[cfg.PluginName]
 	if !ok {
 		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
 	}
 
-	return plugin.CreateAdminDB(dbKind, cfg, r)
+	return plugin.CreateAdminDB(dbKind, cfg, r, logger, mh)
 }

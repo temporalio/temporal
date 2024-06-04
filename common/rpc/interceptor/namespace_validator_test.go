@@ -600,6 +600,44 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 	}
 }
 
+func (s *namespaceValidatorSuite) Test_Intercept_DescribeHistoryHostRequests() {
+	// it's just a list of requests
+	testCases := []struct {
+		req any
+	}{
+		{
+			req: &adminservice.DescribeHistoryHostRequest{},
+		},
+		{
+			req: &adminservice.DescribeHistoryHostRequest{Namespace: "test-namespace"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		nvi := NewNamespaceValidatorInterceptor(
+			s.mockRegistry,
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetIntPropertyFn(100),
+		)
+		serverInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/random",
+		}
+
+		handlerCalled := false
+		_, err := nvi.StateValidationIntercept(
+			context.Background(),
+			testCase.req,
+			serverInfo,
+			func(ctx context.Context, req any) (any, error) {
+				handlerCalled = true
+				return nil, nil
+			},
+		)
+		s.NoError(err)
+		s.True(handlerCalled)
+	}
+}
+
 func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 	// it's just a list of requests
 	testCases := []struct {

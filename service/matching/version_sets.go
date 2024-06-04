@@ -388,7 +388,7 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 // lookupVersionSetForPoll is that we never redirect, we just need to return an error or not.
 // Requires: caps is not nil
 // Returns:
-// - whether the build id was found
+// - whether the build ID was found
 // - error (can only be nil or serviceerror.NewerBuildExists)
 func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
@@ -409,7 +409,7 @@ func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *common
 	return true, nil
 }
 
-// Looks up a version set in versioning data based on a build id associated with a task to
+// Looks up a version set in versioning data based on a build ID associated with a task to
 // determine how to redirect a task. For this function, buildId == "" means "use default"
 // Returns:
 // - set id to redirect to (primary)
@@ -450,16 +450,16 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string)
 	return primarySetId, false, nil
 }
 
-// Looks up a version set in versioning data based on a build id associated with a task to
+// Looks up a version set in versioning data based on a build ID associated with a task to
 // determine if a task for a sticky queue should be bounced back to history. For this function,
 // buildId == "" means "use default"
 // Returns:
-// - whether the build id was not found
+// - whether the build ID was not found
 // - error (can only be nil or serviceerrors.StickyWorkerUnavailable. or internal error for a bug)
 func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId string) (bool, error) {
 	if buildId == "" {
 		// This shouldn't happen.
-		return false, serviceerror.NewInternal("should have a build id directive on versioned sticky queue")
+		return false, serviceerror.NewInternal("should have a build ID directive on versioned sticky queue")
 	}
 	// For add, any version in the compatible set maps to the set.
 	// Note data may be nil here, findVersion will return -1 then.
@@ -525,7 +525,7 @@ func PersistUnknownBuildId(clock *hlc.Clock, data *persistencespb.VersioningData
 		return newData
 	}
 
-	// insert unknown build id with zero time so that if merged with any other set, the other
+	// insert unknown build ID with zero time so that if merged with any other set, the other
 	// will become the default.
 	clock = hlc.Zero(clock.ClusterId)
 

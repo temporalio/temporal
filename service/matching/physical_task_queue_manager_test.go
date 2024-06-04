@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"math"
 	"sync/atomic"
 	"testing"
@@ -35,7 +34,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -96,26 +94,6 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	}
 }
 
-func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			// any error other than ConditionFailedError indicates an
-			// availability problem at a lower layer so the TQM should NOT
-			// unload itself because resilient sync match is enabled.
-			return taskQueueState{}, errors.New(t.Name())
-		}))
-	tqm.Start()
-	defer tqm.Stop()
-	poller, _ := runOneShotPoller(context.Background(), tqm)
-	defer poller.Cancel()
-
-	sync, err := tqm.TrySyncMatch(context.TODO(), addTaskParams{
-		taskInfo: &persistencespb.TaskInfo{},
-		source:   enumsspb.TASK_SOURCE_HISTORY})
-	require.NoError(t, err)
-	require.True(t, sync)
-}
-
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
@@ -125,15 +103,13 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 			return taskQueueState{rangeID: 1}, leaseErr
 		}))
 	tqm.Start()
-	defer tqm.Stop()
+	defer tqm.Stop(unloadCauseUnspecified)
 
 	// TQM started succesfully with an ID block of size 1. Perform one send
 	// without a poller to consume the one task ID from the reserved block.
-	err := tqm.SpoolTask(addTaskParams{
-		taskInfo: &persistencespb.TaskInfo{
-			CreateTime: timestamp.TimePtr(time.Now().UTC()),
-		},
-		source: enumsspb.TASK_SOURCE_HISTORY})
+	err := tqm.SpoolTask(&persistencespb.TaskInfo{
+		CreateTime: timestamp.TimePtr(time.Now().UTC()),
+	})
 	require.NoError(t, err)
 
 	// TQM's ID block should be empty so the next AddTask will trigger an
@@ -141,11 +117,8 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// another service instance has become the owner of the partition
 	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
 
-	err = tqm.SpoolTask(addTaskParams{
-		taskInfo: &persistencespb.TaskInfo{
-			CreateTime: timestamp.TimePtr(time.Now().UTC()),
-		},
-		source: enumsspb.TASK_SOURCE_HISTORY,
+	err = tqm.SpoolTask(&persistencespb.TaskInfo{
+		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	})
 	require.NoError(t, err)
 }
@@ -164,7 +137,7 @@ func TestReaderSignaling(t *testing.T) {
 	tqm.backlogMgr.taskReader.notifyC = readerNotifications
 
 	tqm.Start()
-	defer tqm.Stop()
+	defer tqm.Stop(unloadCauseUnspecified)
 
 	// shut down the taskReader so it doesn't steal notifications from us
 	tqm.backlogMgr.taskReader.gorogrp.Cancel()
@@ -172,11 +145,9 @@ func TestReaderSignaling(t *testing.T) {
 
 	clearNotifications()
 
-	err := tqm.SpoolTask(addTaskParams{
-		taskInfo: &persistencespb.TaskInfo{
-			CreateTime: timestamp.TimePtr(time.Now().UTC()),
-		},
-		source: enumsspb.TASK_SOURCE_HISTORY})
+	err := tqm.SpoolTask(&persistencespb.TaskInfo{
+		CreateTime: timestamp.TimePtr(time.Now().UTC()),
+	})
 	require.NoError(t, err)
 	require.Len(t, readerNotifications, 1,
 		"Spool task should signal taskReader")
@@ -185,11 +156,10 @@ func TestReaderSignaling(t *testing.T) {
 	poller, _ := runOneShotPoller(context.Background(), tqm)
 	defer poller.Cancel()
 
-	sync, err := tqm.TrySyncMatch(context.TODO(), addTaskParams{
-		taskInfo: &persistencespb.TaskInfo{
-			CreateTime: timestamp.TimePtr(time.Now().UTC()),
-		},
-		source: enumsspb.TASK_SOURCE_HISTORY})
+	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+		CreateTime: timestamp.TimePtr(time.Now().UTC()),
+	}, nil)
+	sync, err := tqm.TrySyncMatch(context.TODO(), task)
 	require.NoError(t, err)
 	require.True(t, sync)
 	require.Len(t, readerNotifications, 0,
@@ -356,7 +326,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
-	tlm.Stop()
+	tlm.Stop(unloadCauseUnspecified)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 
 	// Active adding task
@@ -366,7 +336,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.backlogMgr.taskReader.Signal()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
-	tlm.Stop()
+	tlm.Stop(unloadCauseUnspecified)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 }
 
@@ -401,14 +371,9 @@ func TestAddTaskStandby(t *testing.T) {
 	tlm.backlogMgr.taskWriter.Stop()
 	<-tlm.backlogMgr.taskWriter.writeLoop.Done()
 
-	addTaskParam := addTaskParams{
-		taskInfo: &persistencespb.TaskInfo{
-			CreateTime: timestamp.TimePtr(time.Now().UTC()),
-		},
-		source: enumsspb.TASK_SOURCE_HISTORY,
-	}
-
-	err := tlm.SpoolTask(addTaskParam)
+	err := tlm.SpoolTask(&persistencespb.TaskInfo{
+		CreateTime: timestamp.TimePtr(time.Now().UTC()),
+	})
 	require.Equal(t, errShutdown, err) // task writer was stopped above
 }
 
@@ -458,4 +423,22 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	time.Sleep(2 * time.Second) // will attempt to update and fail and not try again
 
 	require.Equal(t, 1, tm.getUpdateCount(tqCfg.dbq))
+}
+
+func TestTQMInterruptsPollOnClose(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tqm.Start()
+
+	pollStart := time.Now()
+	pollCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, pollCh := runOneShotPoller(pollCtx, tqm)
+
+	tqm.Stop(unloadCauseUnspecified) // should interrupt poller
+
+	<-pollCh
+	require.Less(t, time.Since(pollStart), 4*time.Second)
 }
