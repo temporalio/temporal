@@ -59,7 +59,7 @@ var (
 	// directories to be excluded
 	dirBlocklist = []string{".gen/", ".git/", ".vscode/", ".idea/"}
 	// default perms for the newly created files
-	defaultFilePerms = os.FileMode(0644)
+	defaultFilePerms = os.FileMode(0o644)
 )
 
 // command line utility that adds license header
@@ -124,7 +124,7 @@ func (task *addLicenseHeaderTask) handleFile(path string, fileInfo os.FileInfo, 
 		return nil
 	}
 
-	// Used as part of the cli to write licence headers on files, does not use user supplied input so marked as nosec
+	// Used as part of the cli to write license headers on files, does not use user supplied input so marked as nosec
 	// #nosec
 	f, err := os.Open(path)
 	if err != nil {
@@ -154,7 +154,7 @@ func (task *addLicenseHeaderTask) handleFile(path string, fileInfo os.FileInfo, 
 		return fmt.Errorf("%v missing license header", path)
 	}
 
-	// Used as part of the cli to write licence headers on files, does not use user supplied input so marked as nosec
+	// Used as part of the cli to write license headers on files, does not use user supplied input so marked as nosec
 	// #nosec
 	data, err := os.ReadFile(path)
 	if err != nil {

@@ -302,7 +302,7 @@ func readLicenseFile(path string) string {
 }
 
 func main() {
-	licenseFlag := flag.String("licence_file", "../../LICENSE", "path to license to copy into header")
+	licenseFlag := flag.String("license_file", "../../LICENSE", "path to license to copy into header")
 	flag.Parse()
 
 	licenseText := readLicenseFile(*licenseFlag)
