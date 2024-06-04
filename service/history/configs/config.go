@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/components/scheduler"
 )
 
 // Config represents configuration for history service
@@ -343,6 +344,8 @@ type Config struct {
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFn
+
+	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -625,6 +628,8 @@ func NewConfig(
 
 		SendRawWorkflowHistory:         dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+
+		UseExperimentalHsmScheduler: scheduler.UseExperimentalHsmScheduler.Get(dc),
 	}
 
 	return cfg

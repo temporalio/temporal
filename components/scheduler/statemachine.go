@@ -28,6 +28,16 @@ type Scheduler struct {
 	*schedspb.HsmSchedulerState
 }
 
+// NewCallback creates a new callback in the STANDBY state from given params.
+func NewScheduler(args *schedspb.StartScheduleArgs) Scheduler {
+	return Scheduler{
+		&schedspb.HsmSchedulerState{
+			Args:     args,
+			HsmState: enumsspb.SCHEDULER_STATE_WAITING,
+		},
+	}
+}
+
 func (s Scheduler) State() enumsspb.SchedulerState {
 	return s.HsmState
 }
