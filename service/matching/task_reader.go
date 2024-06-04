@@ -137,7 +137,7 @@ func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
 dispatchLoop:
 	for ctx.Err() == nil {
 		if len(tr.taskBuffer) == 0 {
-			// resetting the atomic since we have no tasks from the backlog
+			// reset the atomic since we have no tasks from the backlog
 			tr.backlogHeadCreateTime.Store(-1)
 		}
 		select {

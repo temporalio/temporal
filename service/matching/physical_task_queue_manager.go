@@ -67,7 +67,7 @@ const (
 
 	// The duration of each mini-bucket in the circularTaskBuffer
 	intervalSize = 5
-	// The total duration which shall be used to calculate the rate of tasks added/dispatched
+	// The total duration which is used to calculate the rate of tasks added/dispatched
 	totalIntervalSize = 30
 )
 
@@ -140,7 +140,7 @@ type (
 	}
 )
 
-// a circular array of a fixed size which shall have it's pointer for tracking tasks
+// a circular array of a fixed size for tracking tasks
 type circularTaskBuffer struct {
 	buffer     []int
 	currentPos int
@@ -148,7 +148,7 @@ type circularTaskBuffer struct {
 
 func newCircularTaskBuffer(size int) circularTaskBuffer {
 	return circularTaskBuffer{
-		buffer: make([]int, size), // Initialize the buffer with the given size
+		buffer: make([]int, size),
 	}
 }
 
@@ -193,7 +193,7 @@ func newTaskTracker(timeSource clock.TimeSource) *taskTracker {
 	}
 }
 
-// advanceAndResetTracker is a helper to advance the trackers position and clear out any expired intervals
+// advanceAndResetTracker advances the trackers position and clears out any expired intervals
 // This method must be called with taskTracker's lock held.
 func (s *taskTracker) advanceAndResetTracker(elapsed time.Duration) {
 	// Calculate the number of intervals elapsed since the start interval time
@@ -205,7 +205,7 @@ func (s *taskTracker) advanceAndResetTracker(elapsed time.Duration) {
 	s.bucketStartTime = s.bucketStartTime.Add(time.Duration(intervalsElapsed) * s.bucketSize)
 }
 
-// incrementTaskCount is responsible for adding/removing tasks from the current time that falls in the appropriate interval
+// incrementTaskCount adds/removes tasks from the current time that falls in the appropriate interval
 func (s *taskTracker) incrementTaskCount() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -217,7 +217,7 @@ func (s *taskTracker) incrementTaskCount() {
 	s.tasksInInterval.incrementTaskCount()
 }
 
-// rate is responsible for returning the rate of tasks added/dispatched in a given interval
+// rate returns the rate of tasks added/dispatched in a given interval
 func (s *taskTracker) rate() float32 {
 	s.lock.Lock()
 	defer s.lock.Unlock()
