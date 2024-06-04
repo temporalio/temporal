@@ -27,18 +27,22 @@ package matching
 import (
 	"context"
 	"math"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"go.temporal.io/server/common/clock"
-
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -295,6 +299,55 @@ func createTestTaskQueuePartitionManager(ns *namespace.Namespace, partition tqid
 
 	me.partitions[partition.Key()] = pm
 	return pm
+}
+
+func TestReaderBacklogAge(t *testing.T) {
+	controller := gomock.NewController(t)
+
+	// Create queue Manager and set queue state
+	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tlm.backlogMgr.db.rangeID = int64(1)
+	tlm.backlogMgr.db.ackLevel = int64(0)
+	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
+
+	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
+	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Second, 2)
+	tlm.backlogMgr.taskReader.gorogrp.Go(tlm.backlogMgr.taskReader.dispatchBufferedTasks)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.InDelta(t, time.Minute, tlm.backlogMgr.taskReader.getBacklogHeadCreateTime(), float64(5*time.Second))
+	}, time.Second, 10*time.Millisecond)
+
+	_, err := tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	require.NoError(t, err)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.InDelta(t, time.Second, tlm.backlogMgr.taskReader.getBacklogHeadCreateTime(), float64(500*time.Millisecond))
+	}, time.Second, 10*time.Millisecond)
+
+	_, err = tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	require.NoError(t, err)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Equalf(t, time.Duration(0), tlm.backlogMgr.taskReader.getBacklogHeadCreateTime(), "backlog age being reset because of no tasks in the buffer")
+	}, time.Second, 10*time.Millisecond)
+}
+
+func randomTaskInfoWithAgeTaskID(age time.Duration, TaskID int64) *persistencespb.AllocatedTaskInfo {
+	rt1 := time.Now().Add(-age)
+	rt2 := rt1.Add(time.Hour)
+
+	return &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
+			NamespaceId:      uuid.New(),
+			WorkflowId:       uuid.New(),
+			RunId:            uuid.New(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamppb.New(rt1),
+			ExpiryTime:       timestamppb.New(rt2),
+		},
+		TaskId: TaskID,
+	}
 }
 
 func TestLegacyDescribeTaskQueue(t *testing.T) {

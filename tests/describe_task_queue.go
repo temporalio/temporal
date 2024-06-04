@@ -133,7 +133,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 	s.validateDescribeTaskQueue(tl, expectedBacklogCount, isEnhancedMode, true, true, workflows)
 }
 
-func (s *DescribeTaskQueueSuite) validateBacklogHeadCreateTime(queueType enumspb.TaskQueueType,
+func (s *DescribeTaskQueueSuite) isBacklogHeadCreateTimeCorrect(queueType enumspb.TaskQueueType,
 	backlogHeadCreateTime time.Duration, nullBacklogHeadCreateTime bool) bool {
 	if queueType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		if backlogHeadCreateTime != time.Duration(0) {
@@ -151,7 +151,7 @@ func (s *DescribeTaskQueueSuite) validateBacklogHeadCreateTime(queueType enumspb
 	return true
 }
 
-func (s *DescribeTaskQueueSuite) validateAddDispatchTasksRate(queueType enumspb.TaskQueueType, workflows int,
+func (s *DescribeTaskQueueSuite) isAddDispatchTasksRateCorrect(queueType enumspb.TaskQueueType, workflows int,
 	backlogAddTasksRate float32, backlogDispatchTasksRate float32, polled bool) bool {
 	if workflows == 0 || queueType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		if backlogAddTasksRate != 0 && backlogDispatchTasksRate != 0 {
@@ -165,7 +165,7 @@ func (s *DescribeTaskQueueSuite) validateAddDispatchTasksRate(queueType enumspb.
 	return true
 }
 
-func (s *DescribeTaskQueueSuite) validateBacklogCount(backlogCounter int64,
+func (s *DescribeTaskQueueSuite) isBacklogCountCorrect(backlogCounter int64,
 	expectedBacklogCount map[enumspb.TaskQueueType]int64, queueType enumspb.TaskQueueType) bool {
 	if backlogCounter != expectedBacklogCount[queueType] {
 		return false
@@ -210,9 +210,9 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBa
 				backlogDispatchTasksRate := t.Stats.TasksDispatchRate
 
 				validator = validator &&
-					s.validateBacklogCount(backlogCounter, expectedBacklogCount, queueType) &&
-					s.validateBacklogHeadCreateTime(queueType, backlogHeadCreateTime, nullBacklogHeadCreateTime) &&
-					s.validateAddDispatchTasksRate(queueType, workflows, backlogAddTasksRate, backlogDispatchTasksRate, polled)
+					s.isBacklogCountCorrect(backlogCounter, expectedBacklogCount, queueType) &&
+					s.isBacklogHeadCreateTimeCorrect(queueType, backlogHeadCreateTime, nullBacklogHeadCreateTime) &&
+					s.isAddDispatchTasksRateCorrect(queueType, workflows, backlogAddTasksRate, backlogDispatchTasksRate, polled)
 			}
 			return validator == true
 		}, 3*time.Second, 50*time.Millisecond)

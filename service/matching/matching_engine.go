@@ -35,10 +35,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -961,7 +960,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 							mergedStats = &taskqueuepb.TaskQueueStats{
 								ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-								ApproximateBacklogAge:   e.largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
+								ApproximateBacklogAge:   largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
 								TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
 								TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
 							}
@@ -2207,7 +2206,7 @@ func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 }
 
 // largerBacklogAge returns the larger BacklogAge
-func (e *matchingEngineImpl) largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *durationpb.Duration) *durationpb.Duration {
+func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *durationpb.Duration) *durationpb.Duration {
 	if rootBacklogAge.AsDuration() > currentPartitionAge.AsDuration() {
 		return rootBacklogAge
 	}

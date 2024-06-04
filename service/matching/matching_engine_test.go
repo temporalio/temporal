@@ -3079,11 +3079,11 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksD
 func (s *matchingEngineSuite) TestLargerBacklogAge() {
 	firstAge := durationpb.New(100 * time.Second)
 	secondAge := durationpb.New(1 * time.Millisecond)
-	s.Same(firstAge, s.matchingEngine.largerBacklogAge(firstAge, secondAge))
+	s.Same(firstAge, largerBacklogAge(firstAge, secondAge))
 
 	thirdAge := durationpb.New(5 * time.Minute)
-	s.Same(thirdAge, s.matchingEngine.largerBacklogAge(firstAge, thirdAge))
-	s.Same(thirdAge, s.matchingEngine.largerBacklogAge(secondAge, thirdAge))
+	s.Same(thirdAge, largerBacklogAge(firstAge, thirdAge))
+	s.Same(thirdAge, largerBacklogAge(secondAge, thirdAge))
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {

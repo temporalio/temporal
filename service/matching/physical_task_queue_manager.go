@@ -33,12 +33,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -148,8 +148,7 @@ type circularTaskBuffer struct {
 
 func newCircularTaskBuffer(size int) circularTaskBuffer {
 	return circularTaskBuffer{
-		buffer:     make([]int, size), // Initialize the buffer with the given size
-		currentPos: 0,
+		buffer: make([]int, size), // Initialize the buffer with the given size
 	}
 }
 
@@ -177,6 +176,7 @@ type taskTracker struct {
 	startTime         time.Time     // time when taskTracker was initialized
 	bucketStartTime   time.Time     // the starting time of a bucket in the buffer
 	bucketSize        time.Duration // the duration of each bucket in the buffer
+	numberOfBuckets   int           // the total number of buckets in the buffer
 	totalIntervalSize time.Duration // the number of seconds over which rate of tasks are added/dispatched
 	tasksInInterval   circularTaskBuffer
 }
@@ -186,7 +186,8 @@ func newTaskTracker(timeSource clock.TimeSource) *taskTracker {
 		clock:             timeSource,
 		startTime:         timeSource.Now(),
 		bucketStartTime:   timeSource.Now(),
-		bucketSize:        time.Duration(intervalSize) * time.Second, // Todo: Shivam - replace with config value
+		bucketSize:        time.Duration(intervalSize) * time.Second,
+		numberOfBuckets:   (totalIntervalSize / intervalSize) + 1,
 		totalIntervalSize: time.Duration(totalIntervalSize) * time.Second,
 		tasksInInterval:   newCircularTaskBuffer((totalIntervalSize / intervalSize) + 1),
 	}
@@ -198,7 +199,7 @@ func (s *taskTracker) advanceAndResetTracker(elapsed time.Duration) {
 	// Calculate the number of intervals elapsed since the start interval time
 	intervalsElapsed := int(elapsed / s.bucketSize)
 
-	for i := 0; i < intervalsElapsed; i++ {
+	for i := 0; i < min(intervalsElapsed, s.numberOfBuckets); i++ {
 		s.tasksInInterval.advance() // advancing our circular buffer's position until we land on the right interval
 	}
 	s.bucketStartTime = s.bucketStartTime.Add(time.Duration(intervalsElapsed) * s.bucketSize)
