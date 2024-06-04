@@ -184,7 +184,6 @@ func (r *StateRebuilderImpl) Rebuild(
 		}
 	}
 
-	r.logger.Info("QQQQQQ before CloseTransactionAsSnapshot")
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
 	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive)
 	if err != nil {
@@ -197,7 +196,6 @@ func (r *StateRebuilderImpl) Rebuild(
 	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
 	// from the base run. However, RefreshTasks always resets that field and
 	// force regenerates the execution timeout timer task.
-	r.logger.Info("QQQQQQ RefreshTasks")
 	if err := r.taskRefresher.RefreshTasks(ctx, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
