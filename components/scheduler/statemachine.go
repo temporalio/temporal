@@ -51,9 +51,9 @@ func (s Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	case enumsspb.SCHEDULER_STATE_WAITING:
 		s.Args.State.LastProcessedTime = timestamppb.Now()
 		// TODO(Tianyu): Replace with actual scheduler work
-		fmt.Printf("Scheduler has been invoked")
+		fmt.Printf("Scheduler has been invoked\n")
 		// TODO(Tianyu): Replace with actual scheduling logic
-		nextInvokeTime := timestamppb.New(s.Args.State.LastProcessedTime.AsTime().Add(10 * time.Second))
+		nextInvokeTime := timestamppb.New(s.Args.State.LastProcessedTime.AsTime().Add(1 * time.Second))
 		return []hsm.Task{ScheduleTask{Deadline: nextInvokeTime.AsTime()}}, nil
 	}
 	return nil, nil

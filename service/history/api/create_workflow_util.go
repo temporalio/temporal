@@ -26,6 +26,11 @@ package api
 
 import (
 	"context"
+	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/api/schedule/v1"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
+	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/worker/scheduler"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -86,6 +91,23 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
+	if startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId) {
+		// TODO(Tianyu): Should actually ensure the data converter is correct
+		args := schedule.StartScheduleArgs{}
+		if err = converter.GetDefaultDataConverter().FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
+			return nil, err
+		}
+
+		var node *hsm.Node
+		node, err = newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType.ID}, schedulerhsm.NewScheduler(&args))
+		if err != nil {
+			return nil, err
+		}
+		err = hsm.MachineTransition(node, func(scheduler schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
+			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
+		})
+	}
+
 	if signalWithStartRequest != nil {
 		if signalWithStartRequest.GetRequestId() != "" {
 			newMutableState.AddSignalRequested(signalWithStartRequest.GetRequestId())
@@ -101,15 +123,19 @@ func NewWorkflowWithSignal(
 		}
 	}
 	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
-	// Generate first workflow task event if not child WF and no first workflow task backoff
-	scheduledEventID, err := GenerateFirstWorkflowTask(
-		newMutableState,
-		startRequest.ParentExecutionInfo,
-		startEvent,
-		requestEagerExecution,
-	)
-	if err != nil {
-		return nil, err
+
+	var scheduledEventID int64
+	if startRequest.StartRequest.WorkflowType.Name != scheduler.WorkflowType || !shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId) {
+		// Generate first workflow task event if not child WF and no first workflow task backoff
+		scheduledEventID, err = GenerateFirstWorkflowTask(
+			newMutableState,
+			startRequest.ParentExecutionInfo,
+			startEvent,
+			requestEagerExecution,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.

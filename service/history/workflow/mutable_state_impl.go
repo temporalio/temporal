@@ -28,10 +28,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"go.temporal.io/sdk/converter"
-	"go.temporal.io/server/api/schedule/v1"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
-	"go.temporal.io/server/service/worker/scheduler"
 	"math/rand"
 	"time"
 
@@ -2080,26 +2076,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 
 	// TODO merge active & passive task generation
 	var err error
-
-	if startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && ms.config.UseExperimentalHsmScheduler(startRequest.NamespaceId) {
-		// TODO(Tianyu): Should actually ensure the data converter is correct
-		args := schedule.StartScheduleArgs{}
-		if err = converter.GetDefaultDataConverter().FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
-			return nil, err
-		}
-		coll := schedulerhsm.MachineCollection(ms.HSM())
-
-		var node *hsm.Node
-		node, err = schedulerhsm.MachineCollection(ms.HSM()).Add(fmt.Sprintf("%s-hsm", execution.WorkflowId), schedulerhsm.NewScheduler(&args))
-		if err != nil {
-			return nil, err
-		}
-
-		err = coll.Transition(node.Key.ID, func(scheduler schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
-			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
-		})
-		return nil, err
-	}
 	ms.executionInfo.WorkflowExecutionTimerTaskStatus, err = ms.taskGenerator.GenerateWorkflowStartTasks(
 		event,
 	)
