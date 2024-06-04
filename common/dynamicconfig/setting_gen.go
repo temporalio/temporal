@@ -47,2188 +47,676 @@ const PrecedenceTaskType Precedence = 5
 
 const PrecedenceDestination Precedence = 6
 
-type GlobalBoolSetting setting[bool, func()]
+type GlobalBoolSetting = GlobalTypedSetting[bool]
 
 func NewGlobalBoolSetting(key Key, def bool, description string) GlobalBoolSetting {
-	s := GlobalBoolSetting{
-		key:         key,
-		def:         def,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConverter[bool](key, convertBool, def, description)
 }
 
 func NewGlobalBoolSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[bool], description string) GlobalBoolSetting {
-	s := GlobalBoolSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConstrainedDefault[bool](key, convertBool, cdef, description)
 }
 
-func (s GlobalBoolSetting) Key() Key               { return s.key }
-func (s GlobalBoolSetting) Precedence() Precedence { return PrecedenceGlobal }
-
-func (s GlobalBoolSetting) WithDefault(v bool) GlobalBoolSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type BoolPropertyFn func() bool
-
-func (s GlobalBoolSetting) Get(c *Collection) BoolPropertyFn {
-	return func() bool {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceGlobal(),
-		)
-	}
-}
+type BoolPropertyFn = TypedPropertyFn[bool]
 
 func GetBoolPropertyFn(value bool) BoolPropertyFn {
-	return func() bool {
-		return value
-	}
+	return GetTypedPropertyFn(value)
 }
 
-type NamespaceBoolSetting setting[bool, func(namespace string)]
+type NamespaceBoolSetting = NamespaceTypedSetting[bool]
 
 func NewNamespaceBoolSetting(key Key, def bool, description string) NamespaceBoolSetting {
-	s := NamespaceBoolSetting{
-		key:         key,
-		def:         def,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConverter[bool](key, convertBool, def, description)
 }
 
 func NewNamespaceBoolSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[bool], description string) NamespaceBoolSetting {
-	s := NamespaceBoolSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConstrainedDefault[bool](key, convertBool, cdef, description)
 }
 
-func (s NamespaceBoolSetting) Key() Key               { return s.key }
-func (s NamespaceBoolSetting) Precedence() Precedence { return PrecedenceNamespace }
-
-func (s NamespaceBoolSetting) WithDefault(v bool) NamespaceBoolSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type BoolPropertyFnWithNamespaceFilter func(namespace string) bool
-
-func (s NamespaceBoolSetting) Get(c *Collection) BoolPropertyFnWithNamespaceFilter {
-	return func(namespace string) bool {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespace(namespace),
-		)
-	}
-}
+type BoolPropertyFnWithNamespaceFilter = TypedPropertyFnWithNamespaceFilter[bool]
 
 func GetBoolPropertyFnFilteredByNamespace(value bool) BoolPropertyFnWithNamespaceFilter {
-	return func(namespace string) bool {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespace(value)
 }
 
-type NamespaceIDBoolSetting setting[bool, func(namespaceID string)]
+type NamespaceIDBoolSetting = NamespaceIDTypedSetting[bool]
 
 func NewNamespaceIDBoolSetting(key Key, def bool, description string) NamespaceIDBoolSetting {
-	s := NamespaceIDBoolSetting{
-		key:         key,
-		def:         def,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConverter[bool](key, convertBool, def, description)
 }
 
 func NewNamespaceIDBoolSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[bool], description string) NamespaceIDBoolSetting {
-	s := NamespaceIDBoolSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConstrainedDefault[bool](key, convertBool, cdef, description)
 }
 
-func (s NamespaceIDBoolSetting) Key() Key               { return s.key }
-func (s NamespaceIDBoolSetting) Precedence() Precedence { return PrecedenceNamespaceID }
-
-func (s NamespaceIDBoolSetting) WithDefault(v bool) NamespaceIDBoolSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type BoolPropertyFnWithNamespaceIDFilter func(namespaceID string) bool
-
-func (s NamespaceIDBoolSetting) Get(c *Collection) BoolPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) bool {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespaceID(namespaceID),
-		)
-	}
-}
+type BoolPropertyFnWithNamespaceIDFilter = TypedPropertyFnWithNamespaceIDFilter[bool]
 
 func GetBoolPropertyFnFilteredByNamespaceID(value bool) BoolPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) bool {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespaceID(value)
 }
 
-type TaskQueueBoolSetting setting[bool, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
+type TaskQueueBoolSetting = TaskQueueTypedSetting[bool]
 
 func NewTaskQueueBoolSetting(key Key, def bool, description string) TaskQueueBoolSetting {
-	s := TaskQueueBoolSetting{
-		key:         key,
-		def:         def,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConverter[bool](key, convertBool, def, description)
 }
 
 func NewTaskQueueBoolSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[bool], description string) TaskQueueBoolSetting {
-	s := TaskQueueBoolSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConstrainedDefault[bool](key, convertBool, cdef, description)
 }
 
-func (s TaskQueueBoolSetting) Key() Key               { return s.key }
-func (s TaskQueueBoolSetting) Precedence() Precedence { return PrecedenceTaskQueue }
-
-func (s TaskQueueBoolSetting) WithDefault(v bool) TaskQueueBoolSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type BoolPropertyFnWithTaskQueueFilter func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) bool
-
-func (s TaskQueueBoolSetting) Get(c *Collection) BoolPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) bool {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskQueue(namespace, taskQueue, taskQueueType),
-		)
-	}
-}
+type BoolPropertyFnWithTaskQueueFilter = TypedPropertyFnWithTaskQueueFilter[bool]
 
 func GetBoolPropertyFnFilteredByTaskQueue(value bool) BoolPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) bool {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskQueue(value)
 }
 
-type ShardIDBoolSetting setting[bool, func(shardID int32)]
+type ShardIDBoolSetting = ShardIDTypedSetting[bool]
 
 func NewShardIDBoolSetting(key Key, def bool, description string) ShardIDBoolSetting {
-	s := ShardIDBoolSetting{
-		key:         key,
-		def:         def,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConverter[bool](key, convertBool, def, description)
 }
 
 func NewShardIDBoolSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[bool], description string) ShardIDBoolSetting {
-	s := ShardIDBoolSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConstrainedDefault[bool](key, convertBool, cdef, description)
 }
 
-func (s ShardIDBoolSetting) Key() Key               { return s.key }
-func (s ShardIDBoolSetting) Precedence() Precedence { return PrecedenceShardID }
-
-func (s ShardIDBoolSetting) WithDefault(v bool) ShardIDBoolSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type BoolPropertyFnWithShardIDFilter func(shardID int32) bool
-
-func (s ShardIDBoolSetting) Get(c *Collection) BoolPropertyFnWithShardIDFilter {
-	return func(shardID int32) bool {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceShardID(shardID),
-		)
-	}
-}
+type BoolPropertyFnWithShardIDFilter = TypedPropertyFnWithShardIDFilter[bool]
 
 func GetBoolPropertyFnFilteredByShardID(value bool) BoolPropertyFnWithShardIDFilter {
-	return func(shardID int32) bool {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByShardID(value)
 }
 
-type TaskTypeBoolSetting setting[bool, func(taskType enumsspb.TaskType)]
+type TaskTypeBoolSetting = TaskTypeTypedSetting[bool]
 
 func NewTaskTypeBoolSetting(key Key, def bool, description string) TaskTypeBoolSetting {
-	s := TaskTypeBoolSetting{
-		key:         key,
-		def:         def,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConverter[bool](key, convertBool, def, description)
 }
 
 func NewTaskTypeBoolSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[bool], description string) TaskTypeBoolSetting {
-	s := TaskTypeBoolSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConstrainedDefault[bool](key, convertBool, cdef, description)
 }
 
-func (s TaskTypeBoolSetting) Key() Key               { return s.key }
-func (s TaskTypeBoolSetting) Precedence() Precedence { return PrecedenceTaskType }
-
-func (s TaskTypeBoolSetting) WithDefault(v bool) TaskTypeBoolSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type BoolPropertyFnWithTaskTypeFilter func(taskType enumsspb.TaskType) bool
-
-func (s TaskTypeBoolSetting) Get(c *Collection) BoolPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) bool {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskType(taskType),
-		)
-	}
-}
+type BoolPropertyFnWithTaskTypeFilter = TypedPropertyFnWithTaskTypeFilter[bool]
 
 func GetBoolPropertyFnFilteredByTaskType(value bool) BoolPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) bool {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskType(value)
 }
 
-type DestinationBoolSetting setting[bool, func(namespace string, destination string)]
+type DestinationBoolSetting = DestinationTypedSetting[bool]
 
 func NewDestinationBoolSetting(key Key, def bool, description string) DestinationBoolSetting {
-	s := DestinationBoolSetting{
-		key:         key,
-		def:         def,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConverter[bool](key, convertBool, def, description)
 }
 
 func NewDestinationBoolSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[bool], description string) DestinationBoolSetting {
-	s := DestinationBoolSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertBool,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConstrainedDefault[bool](key, convertBool, cdef, description)
 }
 
-func (s DestinationBoolSetting) Key() Key               { return s.key }
-func (s DestinationBoolSetting) Precedence() Precedence { return PrecedenceDestination }
-
-func (s DestinationBoolSetting) WithDefault(v bool) DestinationBoolSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type BoolPropertyFnWithDestinationFilter func(namespace string, destination string) bool
-
-func (s DestinationBoolSetting) Get(c *Collection) BoolPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) bool {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceDestination(namespace, destination),
-		)
-	}
-}
+type BoolPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[bool]
 
 func GetBoolPropertyFnFilteredByDestination(value bool) BoolPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) bool {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
-type GlobalIntSetting setting[int, func()]
+type GlobalIntSetting = GlobalTypedSetting[int]
 
 func NewGlobalIntSetting(key Key, def int, description string) GlobalIntSetting {
-	s := GlobalIntSetting{
-		key:         key,
-		def:         def,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConverter[int](key, convertInt, def, description)
 }
 
 func NewGlobalIntSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[int], description string) GlobalIntSetting {
-	s := GlobalIntSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConstrainedDefault[int](key, convertInt, cdef, description)
 }
 
-func (s GlobalIntSetting) Key() Key               { return s.key }
-func (s GlobalIntSetting) Precedence() Precedence { return PrecedenceGlobal }
-
-func (s GlobalIntSetting) WithDefault(v int) GlobalIntSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type IntPropertyFn func() int
-
-func (s GlobalIntSetting) Get(c *Collection) IntPropertyFn {
-	return func() int {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceGlobal(),
-		)
-	}
-}
+type IntPropertyFn = TypedPropertyFn[int]
 
 func GetIntPropertyFn(value int) IntPropertyFn {
-	return func() int {
-		return value
-	}
+	return GetTypedPropertyFn(value)
 }
 
-type NamespaceIntSetting setting[int, func(namespace string)]
+type NamespaceIntSetting = NamespaceTypedSetting[int]
 
 func NewNamespaceIntSetting(key Key, def int, description string) NamespaceIntSetting {
-	s := NamespaceIntSetting{
-		key:         key,
-		def:         def,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConverter[int](key, convertInt, def, description)
 }
 
 func NewNamespaceIntSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[int], description string) NamespaceIntSetting {
-	s := NamespaceIntSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConstrainedDefault[int](key, convertInt, cdef, description)
 }
 
-func (s NamespaceIntSetting) Key() Key               { return s.key }
-func (s NamespaceIntSetting) Precedence() Precedence { return PrecedenceNamespace }
-
-func (s NamespaceIntSetting) WithDefault(v int) NamespaceIntSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type IntPropertyFnWithNamespaceFilter func(namespace string) int
-
-func (s NamespaceIntSetting) Get(c *Collection) IntPropertyFnWithNamespaceFilter {
-	return func(namespace string) int {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespace(namespace),
-		)
-	}
-}
+type IntPropertyFnWithNamespaceFilter = TypedPropertyFnWithNamespaceFilter[int]
 
 func GetIntPropertyFnFilteredByNamespace(value int) IntPropertyFnWithNamespaceFilter {
-	return func(namespace string) int {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespace(value)
 }
 
-type NamespaceIDIntSetting setting[int, func(namespaceID string)]
+type NamespaceIDIntSetting = NamespaceIDTypedSetting[int]
 
 func NewNamespaceIDIntSetting(key Key, def int, description string) NamespaceIDIntSetting {
-	s := NamespaceIDIntSetting{
-		key:         key,
-		def:         def,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConverter[int](key, convertInt, def, description)
 }
 
 func NewNamespaceIDIntSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[int], description string) NamespaceIDIntSetting {
-	s := NamespaceIDIntSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConstrainedDefault[int](key, convertInt, cdef, description)
 }
 
-func (s NamespaceIDIntSetting) Key() Key               { return s.key }
-func (s NamespaceIDIntSetting) Precedence() Precedence { return PrecedenceNamespaceID }
-
-func (s NamespaceIDIntSetting) WithDefault(v int) NamespaceIDIntSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type IntPropertyFnWithNamespaceIDFilter func(namespaceID string) int
-
-func (s NamespaceIDIntSetting) Get(c *Collection) IntPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) int {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespaceID(namespaceID),
-		)
-	}
-}
+type IntPropertyFnWithNamespaceIDFilter = TypedPropertyFnWithNamespaceIDFilter[int]
 
 func GetIntPropertyFnFilteredByNamespaceID(value int) IntPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) int {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespaceID(value)
 }
 
-type TaskQueueIntSetting setting[int, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
+type TaskQueueIntSetting = TaskQueueTypedSetting[int]
 
 func NewTaskQueueIntSetting(key Key, def int, description string) TaskQueueIntSetting {
-	s := TaskQueueIntSetting{
-		key:         key,
-		def:         def,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConverter[int](key, convertInt, def, description)
 }
 
 func NewTaskQueueIntSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[int], description string) TaskQueueIntSetting {
-	s := TaskQueueIntSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConstrainedDefault[int](key, convertInt, cdef, description)
 }
 
-func (s TaskQueueIntSetting) Key() Key               { return s.key }
-func (s TaskQueueIntSetting) Precedence() Precedence { return PrecedenceTaskQueue }
-
-func (s TaskQueueIntSetting) WithDefault(v int) TaskQueueIntSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type IntPropertyFnWithTaskQueueFilter func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) int
-
-func (s TaskQueueIntSetting) Get(c *Collection) IntPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) int {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskQueue(namespace, taskQueue, taskQueueType),
-		)
-	}
-}
+type IntPropertyFnWithTaskQueueFilter = TypedPropertyFnWithTaskQueueFilter[int]
 
 func GetIntPropertyFnFilteredByTaskQueue(value int) IntPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) int {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskQueue(value)
 }
 
-type ShardIDIntSetting setting[int, func(shardID int32)]
+type ShardIDIntSetting = ShardIDTypedSetting[int]
 
 func NewShardIDIntSetting(key Key, def int, description string) ShardIDIntSetting {
-	s := ShardIDIntSetting{
-		key:         key,
-		def:         def,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConverter[int](key, convertInt, def, description)
 }
 
 func NewShardIDIntSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[int], description string) ShardIDIntSetting {
-	s := ShardIDIntSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConstrainedDefault[int](key, convertInt, cdef, description)
 }
 
-func (s ShardIDIntSetting) Key() Key               { return s.key }
-func (s ShardIDIntSetting) Precedence() Precedence { return PrecedenceShardID }
-
-func (s ShardIDIntSetting) WithDefault(v int) ShardIDIntSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type IntPropertyFnWithShardIDFilter func(shardID int32) int
-
-func (s ShardIDIntSetting) Get(c *Collection) IntPropertyFnWithShardIDFilter {
-	return func(shardID int32) int {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceShardID(shardID),
-		)
-	}
-}
+type IntPropertyFnWithShardIDFilter = TypedPropertyFnWithShardIDFilter[int]
 
 func GetIntPropertyFnFilteredByShardID(value int) IntPropertyFnWithShardIDFilter {
-	return func(shardID int32) int {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByShardID(value)
 }
 
-type TaskTypeIntSetting setting[int, func(taskType enumsspb.TaskType)]
+type TaskTypeIntSetting = TaskTypeTypedSetting[int]
 
 func NewTaskTypeIntSetting(key Key, def int, description string) TaskTypeIntSetting {
-	s := TaskTypeIntSetting{
-		key:         key,
-		def:         def,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConverter[int](key, convertInt, def, description)
 }
 
 func NewTaskTypeIntSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[int], description string) TaskTypeIntSetting {
-	s := TaskTypeIntSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConstrainedDefault[int](key, convertInt, cdef, description)
 }
 
-func (s TaskTypeIntSetting) Key() Key               { return s.key }
-func (s TaskTypeIntSetting) Precedence() Precedence { return PrecedenceTaskType }
-
-func (s TaskTypeIntSetting) WithDefault(v int) TaskTypeIntSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type IntPropertyFnWithTaskTypeFilter func(taskType enumsspb.TaskType) int
-
-func (s TaskTypeIntSetting) Get(c *Collection) IntPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) int {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskType(taskType),
-		)
-	}
-}
+type IntPropertyFnWithTaskTypeFilter = TypedPropertyFnWithTaskTypeFilter[int]
 
 func GetIntPropertyFnFilteredByTaskType(value int) IntPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) int {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskType(value)
 }
 
-type DestinationIntSetting setting[int, func(namespace string, destination string)]
+type DestinationIntSetting = DestinationTypedSetting[int]
 
 func NewDestinationIntSetting(key Key, def int, description string) DestinationIntSetting {
-	s := DestinationIntSetting{
-		key:         key,
-		def:         def,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConverter[int](key, convertInt, def, description)
 }
 
 func NewDestinationIntSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[int], description string) DestinationIntSetting {
-	s := DestinationIntSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertInt,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConstrainedDefault[int](key, convertInt, cdef, description)
 }
 
-func (s DestinationIntSetting) Key() Key               { return s.key }
-func (s DestinationIntSetting) Precedence() Precedence { return PrecedenceDestination }
-
-func (s DestinationIntSetting) WithDefault(v int) DestinationIntSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type IntPropertyFnWithDestinationFilter func(namespace string, destination string) int
-
-func (s DestinationIntSetting) Get(c *Collection) IntPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) int {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceDestination(namespace, destination),
-		)
-	}
-}
+type IntPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[int]
 
 func GetIntPropertyFnFilteredByDestination(value int) IntPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) int {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
-type GlobalFloatSetting setting[float64, func()]
+type GlobalFloatSetting = GlobalTypedSetting[float64]
 
 func NewGlobalFloatSetting(key Key, def float64, description string) GlobalFloatSetting {
-	s := GlobalFloatSetting{
-		key:         key,
-		def:         def,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConverter[float64](key, convertFloat, def, description)
 }
 
 func NewGlobalFloatSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[float64], description string) GlobalFloatSetting {
-	s := GlobalFloatSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConstrainedDefault[float64](key, convertFloat, cdef, description)
 }
 
-func (s GlobalFloatSetting) Key() Key               { return s.key }
-func (s GlobalFloatSetting) Precedence() Precedence { return PrecedenceGlobal }
-
-func (s GlobalFloatSetting) WithDefault(v float64) GlobalFloatSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type FloatPropertyFn func() float64
-
-func (s GlobalFloatSetting) Get(c *Collection) FloatPropertyFn {
-	return func() float64 {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceGlobal(),
-		)
-	}
-}
+type FloatPropertyFn = TypedPropertyFn[float64]
 
 func GetFloatPropertyFn(value float64) FloatPropertyFn {
-	return func() float64 {
-		return value
-	}
+	return GetTypedPropertyFn(value)
 }
 
-type NamespaceFloatSetting setting[float64, func(namespace string)]
+type NamespaceFloatSetting = NamespaceTypedSetting[float64]
 
 func NewNamespaceFloatSetting(key Key, def float64, description string) NamespaceFloatSetting {
-	s := NamespaceFloatSetting{
-		key:         key,
-		def:         def,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConverter[float64](key, convertFloat, def, description)
 }
 
 func NewNamespaceFloatSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[float64], description string) NamespaceFloatSetting {
-	s := NamespaceFloatSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConstrainedDefault[float64](key, convertFloat, cdef, description)
 }
 
-func (s NamespaceFloatSetting) Key() Key               { return s.key }
-func (s NamespaceFloatSetting) Precedence() Precedence { return PrecedenceNamespace }
-
-func (s NamespaceFloatSetting) WithDefault(v float64) NamespaceFloatSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type FloatPropertyFnWithNamespaceFilter func(namespace string) float64
-
-func (s NamespaceFloatSetting) Get(c *Collection) FloatPropertyFnWithNamespaceFilter {
-	return func(namespace string) float64 {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespace(namespace),
-		)
-	}
-}
+type FloatPropertyFnWithNamespaceFilter = TypedPropertyFnWithNamespaceFilter[float64]
 
 func GetFloatPropertyFnFilteredByNamespace(value float64) FloatPropertyFnWithNamespaceFilter {
-	return func(namespace string) float64 {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespace(value)
 }
 
-type NamespaceIDFloatSetting setting[float64, func(namespaceID string)]
+type NamespaceIDFloatSetting = NamespaceIDTypedSetting[float64]
 
 func NewNamespaceIDFloatSetting(key Key, def float64, description string) NamespaceIDFloatSetting {
-	s := NamespaceIDFloatSetting{
-		key:         key,
-		def:         def,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConverter[float64](key, convertFloat, def, description)
 }
 
 func NewNamespaceIDFloatSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[float64], description string) NamespaceIDFloatSetting {
-	s := NamespaceIDFloatSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConstrainedDefault[float64](key, convertFloat, cdef, description)
 }
 
-func (s NamespaceIDFloatSetting) Key() Key               { return s.key }
-func (s NamespaceIDFloatSetting) Precedence() Precedence { return PrecedenceNamespaceID }
-
-func (s NamespaceIDFloatSetting) WithDefault(v float64) NamespaceIDFloatSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type FloatPropertyFnWithNamespaceIDFilter func(namespaceID string) float64
-
-func (s NamespaceIDFloatSetting) Get(c *Collection) FloatPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) float64 {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespaceID(namespaceID),
-		)
-	}
-}
+type FloatPropertyFnWithNamespaceIDFilter = TypedPropertyFnWithNamespaceIDFilter[float64]
 
 func GetFloatPropertyFnFilteredByNamespaceID(value float64) FloatPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) float64 {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespaceID(value)
 }
 
-type TaskQueueFloatSetting setting[float64, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
+type TaskQueueFloatSetting = TaskQueueTypedSetting[float64]
 
 func NewTaskQueueFloatSetting(key Key, def float64, description string) TaskQueueFloatSetting {
-	s := TaskQueueFloatSetting{
-		key:         key,
-		def:         def,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConverter[float64](key, convertFloat, def, description)
 }
 
 func NewTaskQueueFloatSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[float64], description string) TaskQueueFloatSetting {
-	s := TaskQueueFloatSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConstrainedDefault[float64](key, convertFloat, cdef, description)
 }
 
-func (s TaskQueueFloatSetting) Key() Key               { return s.key }
-func (s TaskQueueFloatSetting) Precedence() Precedence { return PrecedenceTaskQueue }
-
-func (s TaskQueueFloatSetting) WithDefault(v float64) TaskQueueFloatSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type FloatPropertyFnWithTaskQueueFilter func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) float64
-
-func (s TaskQueueFloatSetting) Get(c *Collection) FloatPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) float64 {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskQueue(namespace, taskQueue, taskQueueType),
-		)
-	}
-}
+type FloatPropertyFnWithTaskQueueFilter = TypedPropertyFnWithTaskQueueFilter[float64]
 
 func GetFloatPropertyFnFilteredByTaskQueue(value float64) FloatPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) float64 {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskQueue(value)
 }
 
-type ShardIDFloatSetting setting[float64, func(shardID int32)]
+type ShardIDFloatSetting = ShardIDTypedSetting[float64]
 
 func NewShardIDFloatSetting(key Key, def float64, description string) ShardIDFloatSetting {
-	s := ShardIDFloatSetting{
-		key:         key,
-		def:         def,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConverter[float64](key, convertFloat, def, description)
 }
 
 func NewShardIDFloatSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[float64], description string) ShardIDFloatSetting {
-	s := ShardIDFloatSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConstrainedDefault[float64](key, convertFloat, cdef, description)
 }
 
-func (s ShardIDFloatSetting) Key() Key               { return s.key }
-func (s ShardIDFloatSetting) Precedence() Precedence { return PrecedenceShardID }
-
-func (s ShardIDFloatSetting) WithDefault(v float64) ShardIDFloatSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type FloatPropertyFnWithShardIDFilter func(shardID int32) float64
-
-func (s ShardIDFloatSetting) Get(c *Collection) FloatPropertyFnWithShardIDFilter {
-	return func(shardID int32) float64 {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceShardID(shardID),
-		)
-	}
-}
+type FloatPropertyFnWithShardIDFilter = TypedPropertyFnWithShardIDFilter[float64]
 
 func GetFloatPropertyFnFilteredByShardID(value float64) FloatPropertyFnWithShardIDFilter {
-	return func(shardID int32) float64 {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByShardID(value)
 }
 
-type TaskTypeFloatSetting setting[float64, func(taskType enumsspb.TaskType)]
+type TaskTypeFloatSetting = TaskTypeTypedSetting[float64]
 
 func NewTaskTypeFloatSetting(key Key, def float64, description string) TaskTypeFloatSetting {
-	s := TaskTypeFloatSetting{
-		key:         key,
-		def:         def,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConverter[float64](key, convertFloat, def, description)
 }
 
 func NewTaskTypeFloatSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[float64], description string) TaskTypeFloatSetting {
-	s := TaskTypeFloatSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConstrainedDefault[float64](key, convertFloat, cdef, description)
 }
 
-func (s TaskTypeFloatSetting) Key() Key               { return s.key }
-func (s TaskTypeFloatSetting) Precedence() Precedence { return PrecedenceTaskType }
-
-func (s TaskTypeFloatSetting) WithDefault(v float64) TaskTypeFloatSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type FloatPropertyFnWithTaskTypeFilter func(taskType enumsspb.TaskType) float64
-
-func (s TaskTypeFloatSetting) Get(c *Collection) FloatPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) float64 {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskType(taskType),
-		)
-	}
-}
+type FloatPropertyFnWithTaskTypeFilter = TypedPropertyFnWithTaskTypeFilter[float64]
 
 func GetFloatPropertyFnFilteredByTaskType(value float64) FloatPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) float64 {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskType(value)
 }
 
-type DestinationFloatSetting setting[float64, func(namespace string, destination string)]
+type DestinationFloatSetting = DestinationTypedSetting[float64]
 
 func NewDestinationFloatSetting(key Key, def float64, description string) DestinationFloatSetting {
-	s := DestinationFloatSetting{
-		key:         key,
-		def:         def,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConverter[float64](key, convertFloat, def, description)
 }
 
 func NewDestinationFloatSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[float64], description string) DestinationFloatSetting {
-	s := DestinationFloatSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertFloat,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConstrainedDefault[float64](key, convertFloat, cdef, description)
 }
 
-func (s DestinationFloatSetting) Key() Key               { return s.key }
-func (s DestinationFloatSetting) Precedence() Precedence { return PrecedenceDestination }
-
-func (s DestinationFloatSetting) WithDefault(v float64) DestinationFloatSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type FloatPropertyFnWithDestinationFilter func(namespace string, destination string) float64
-
-func (s DestinationFloatSetting) Get(c *Collection) FloatPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) float64 {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceDestination(namespace, destination),
-		)
-	}
-}
+type FloatPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[float64]
 
 func GetFloatPropertyFnFilteredByDestination(value float64) FloatPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) float64 {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
-type GlobalStringSetting setting[string, func()]
+type GlobalStringSetting = GlobalTypedSetting[string]
 
 func NewGlobalStringSetting(key Key, def string, description string) GlobalStringSetting {
-	s := GlobalStringSetting{
-		key:         key,
-		def:         def,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConverter[string](key, convertString, def, description)
 }
 
 func NewGlobalStringSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[string], description string) GlobalStringSetting {
-	s := GlobalStringSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConstrainedDefault[string](key, convertString, cdef, description)
 }
 
-func (s GlobalStringSetting) Key() Key               { return s.key }
-func (s GlobalStringSetting) Precedence() Precedence { return PrecedenceGlobal }
-
-func (s GlobalStringSetting) WithDefault(v string) GlobalStringSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type StringPropertyFn func() string
-
-func (s GlobalStringSetting) Get(c *Collection) StringPropertyFn {
-	return func() string {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceGlobal(),
-		)
-	}
-}
+type StringPropertyFn = TypedPropertyFn[string]
 
 func GetStringPropertyFn(value string) StringPropertyFn {
-	return func() string {
-		return value
-	}
+	return GetTypedPropertyFn(value)
 }
 
-type NamespaceStringSetting setting[string, func(namespace string)]
+type NamespaceStringSetting = NamespaceTypedSetting[string]
 
 func NewNamespaceStringSetting(key Key, def string, description string) NamespaceStringSetting {
-	s := NamespaceStringSetting{
-		key:         key,
-		def:         def,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConverter[string](key, convertString, def, description)
 }
 
 func NewNamespaceStringSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[string], description string) NamespaceStringSetting {
-	s := NamespaceStringSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConstrainedDefault[string](key, convertString, cdef, description)
 }
 
-func (s NamespaceStringSetting) Key() Key               { return s.key }
-func (s NamespaceStringSetting) Precedence() Precedence { return PrecedenceNamespace }
-
-func (s NamespaceStringSetting) WithDefault(v string) NamespaceStringSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type StringPropertyFnWithNamespaceFilter func(namespace string) string
-
-func (s NamespaceStringSetting) Get(c *Collection) StringPropertyFnWithNamespaceFilter {
-	return func(namespace string) string {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespace(namespace),
-		)
-	}
-}
+type StringPropertyFnWithNamespaceFilter = TypedPropertyFnWithNamespaceFilter[string]
 
 func GetStringPropertyFnFilteredByNamespace(value string) StringPropertyFnWithNamespaceFilter {
-	return func(namespace string) string {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespace(value)
 }
 
-type NamespaceIDStringSetting setting[string, func(namespaceID string)]
+type NamespaceIDStringSetting = NamespaceIDTypedSetting[string]
 
 func NewNamespaceIDStringSetting(key Key, def string, description string) NamespaceIDStringSetting {
-	s := NamespaceIDStringSetting{
-		key:         key,
-		def:         def,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConverter[string](key, convertString, def, description)
 }
 
 func NewNamespaceIDStringSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[string], description string) NamespaceIDStringSetting {
-	s := NamespaceIDStringSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConstrainedDefault[string](key, convertString, cdef, description)
 }
 
-func (s NamespaceIDStringSetting) Key() Key               { return s.key }
-func (s NamespaceIDStringSetting) Precedence() Precedence { return PrecedenceNamespaceID }
-
-func (s NamespaceIDStringSetting) WithDefault(v string) NamespaceIDStringSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type StringPropertyFnWithNamespaceIDFilter func(namespaceID string) string
-
-func (s NamespaceIDStringSetting) Get(c *Collection) StringPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) string {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespaceID(namespaceID),
-		)
-	}
-}
+type StringPropertyFnWithNamespaceIDFilter = TypedPropertyFnWithNamespaceIDFilter[string]
 
 func GetStringPropertyFnFilteredByNamespaceID(value string) StringPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) string {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespaceID(value)
 }
 
-type TaskQueueStringSetting setting[string, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
+type TaskQueueStringSetting = TaskQueueTypedSetting[string]
 
 func NewTaskQueueStringSetting(key Key, def string, description string) TaskQueueStringSetting {
-	s := TaskQueueStringSetting{
-		key:         key,
-		def:         def,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConverter[string](key, convertString, def, description)
 }
 
 func NewTaskQueueStringSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[string], description string) TaskQueueStringSetting {
-	s := TaskQueueStringSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConstrainedDefault[string](key, convertString, cdef, description)
 }
 
-func (s TaskQueueStringSetting) Key() Key               { return s.key }
-func (s TaskQueueStringSetting) Precedence() Precedence { return PrecedenceTaskQueue }
-
-func (s TaskQueueStringSetting) WithDefault(v string) TaskQueueStringSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type StringPropertyFnWithTaskQueueFilter func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) string
-
-func (s TaskQueueStringSetting) Get(c *Collection) StringPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskQueue(namespace, taskQueue, taskQueueType),
-		)
-	}
-}
+type StringPropertyFnWithTaskQueueFilter = TypedPropertyFnWithTaskQueueFilter[string]
 
 func GetStringPropertyFnFilteredByTaskQueue(value string) StringPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskQueue(value)
 }
 
-type ShardIDStringSetting setting[string, func(shardID int32)]
+type ShardIDStringSetting = ShardIDTypedSetting[string]
 
 func NewShardIDStringSetting(key Key, def string, description string) ShardIDStringSetting {
-	s := ShardIDStringSetting{
-		key:         key,
-		def:         def,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConverter[string](key, convertString, def, description)
 }
 
 func NewShardIDStringSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[string], description string) ShardIDStringSetting {
-	s := ShardIDStringSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConstrainedDefault[string](key, convertString, cdef, description)
 }
 
-func (s ShardIDStringSetting) Key() Key               { return s.key }
-func (s ShardIDStringSetting) Precedence() Precedence { return PrecedenceShardID }
-
-func (s ShardIDStringSetting) WithDefault(v string) ShardIDStringSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type StringPropertyFnWithShardIDFilter func(shardID int32) string
-
-func (s ShardIDStringSetting) Get(c *Collection) StringPropertyFnWithShardIDFilter {
-	return func(shardID int32) string {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceShardID(shardID),
-		)
-	}
-}
+type StringPropertyFnWithShardIDFilter = TypedPropertyFnWithShardIDFilter[string]
 
 func GetStringPropertyFnFilteredByShardID(value string) StringPropertyFnWithShardIDFilter {
-	return func(shardID int32) string {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByShardID(value)
 }
 
-type TaskTypeStringSetting setting[string, func(taskType enumsspb.TaskType)]
+type TaskTypeStringSetting = TaskTypeTypedSetting[string]
 
 func NewTaskTypeStringSetting(key Key, def string, description string) TaskTypeStringSetting {
-	s := TaskTypeStringSetting{
-		key:         key,
-		def:         def,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConverter[string](key, convertString, def, description)
 }
 
 func NewTaskTypeStringSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[string], description string) TaskTypeStringSetting {
-	s := TaskTypeStringSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConstrainedDefault[string](key, convertString, cdef, description)
 }
 
-func (s TaskTypeStringSetting) Key() Key               { return s.key }
-func (s TaskTypeStringSetting) Precedence() Precedence { return PrecedenceTaskType }
-
-func (s TaskTypeStringSetting) WithDefault(v string) TaskTypeStringSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type StringPropertyFnWithTaskTypeFilter func(taskType enumsspb.TaskType) string
-
-func (s TaskTypeStringSetting) Get(c *Collection) StringPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) string {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskType(taskType),
-		)
-	}
-}
+type StringPropertyFnWithTaskTypeFilter = TypedPropertyFnWithTaskTypeFilter[string]
 
 func GetStringPropertyFnFilteredByTaskType(value string) StringPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) string {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskType(value)
 }
 
-type DestinationStringSetting setting[string, func(namespace string, destination string)]
+type DestinationStringSetting = DestinationTypedSetting[string]
 
 func NewDestinationStringSetting(key Key, def string, description string) DestinationStringSetting {
-	s := DestinationStringSetting{
-		key:         key,
-		def:         def,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConverter[string](key, convertString, def, description)
 }
 
 func NewDestinationStringSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[string], description string) DestinationStringSetting {
-	s := DestinationStringSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertString,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConstrainedDefault[string](key, convertString, cdef, description)
 }
 
-func (s DestinationStringSetting) Key() Key               { return s.key }
-func (s DestinationStringSetting) Precedence() Precedence { return PrecedenceDestination }
-
-func (s DestinationStringSetting) WithDefault(v string) DestinationStringSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type StringPropertyFnWithDestinationFilter func(namespace string, destination string) string
-
-func (s DestinationStringSetting) Get(c *Collection) StringPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) string {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceDestination(namespace, destination),
-		)
-	}
-}
+type StringPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[string]
 
 func GetStringPropertyFnFilteredByDestination(value string) StringPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) string {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
-type GlobalDurationSetting setting[time.Duration, func()]
+type GlobalDurationSetting = GlobalTypedSetting[time.Duration]
 
 func NewGlobalDurationSetting(key Key, def time.Duration, description string) GlobalDurationSetting {
-	s := GlobalDurationSetting{
-		key:         key,
-		def:         def,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConverter[time.Duration](key, convertDuration, def, description)
 }
 
 func NewGlobalDurationSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[time.Duration], description string) GlobalDurationSetting {
-	s := GlobalDurationSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConstrainedDefault[time.Duration](key, convertDuration, cdef, description)
 }
 
-func (s GlobalDurationSetting) Key() Key               { return s.key }
-func (s GlobalDurationSetting) Precedence() Precedence { return PrecedenceGlobal }
-
-func (s GlobalDurationSetting) WithDefault(v time.Duration) GlobalDurationSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type DurationPropertyFn func() time.Duration
-
-func (s GlobalDurationSetting) Get(c *Collection) DurationPropertyFn {
-	return func() time.Duration {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceGlobal(),
-		)
-	}
-}
+type DurationPropertyFn = TypedPropertyFn[time.Duration]
 
 func GetDurationPropertyFn(value time.Duration) DurationPropertyFn {
-	return func() time.Duration {
-		return value
-	}
+	return GetTypedPropertyFn(value)
 }
 
-type NamespaceDurationSetting setting[time.Duration, func(namespace string)]
+type NamespaceDurationSetting = NamespaceTypedSetting[time.Duration]
 
 func NewNamespaceDurationSetting(key Key, def time.Duration, description string) NamespaceDurationSetting {
-	s := NamespaceDurationSetting{
-		key:         key,
-		def:         def,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConverter[time.Duration](key, convertDuration, def, description)
 }
 
 func NewNamespaceDurationSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[time.Duration], description string) NamespaceDurationSetting {
-	s := NamespaceDurationSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConstrainedDefault[time.Duration](key, convertDuration, cdef, description)
 }
 
-func (s NamespaceDurationSetting) Key() Key               { return s.key }
-func (s NamespaceDurationSetting) Precedence() Precedence { return PrecedenceNamespace }
-
-func (s NamespaceDurationSetting) WithDefault(v time.Duration) NamespaceDurationSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type DurationPropertyFnWithNamespaceFilter func(namespace string) time.Duration
-
-func (s NamespaceDurationSetting) Get(c *Collection) DurationPropertyFnWithNamespaceFilter {
-	return func(namespace string) time.Duration {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespace(namespace),
-		)
-	}
-}
+type DurationPropertyFnWithNamespaceFilter = TypedPropertyFnWithNamespaceFilter[time.Duration]
 
 func GetDurationPropertyFnFilteredByNamespace(value time.Duration) DurationPropertyFnWithNamespaceFilter {
-	return func(namespace string) time.Duration {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespace(value)
 }
 
-type NamespaceIDDurationSetting setting[time.Duration, func(namespaceID string)]
+type NamespaceIDDurationSetting = NamespaceIDTypedSetting[time.Duration]
 
 func NewNamespaceIDDurationSetting(key Key, def time.Duration, description string) NamespaceIDDurationSetting {
-	s := NamespaceIDDurationSetting{
-		key:         key,
-		def:         def,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConverter[time.Duration](key, convertDuration, def, description)
 }
 
 func NewNamespaceIDDurationSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[time.Duration], description string) NamespaceIDDurationSetting {
-	s := NamespaceIDDurationSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConstrainedDefault[time.Duration](key, convertDuration, cdef, description)
 }
 
-func (s NamespaceIDDurationSetting) Key() Key               { return s.key }
-func (s NamespaceIDDurationSetting) Precedence() Precedence { return PrecedenceNamespaceID }
-
-func (s NamespaceIDDurationSetting) WithDefault(v time.Duration) NamespaceIDDurationSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type DurationPropertyFnWithNamespaceIDFilter func(namespaceID string) time.Duration
-
-func (s NamespaceIDDurationSetting) Get(c *Collection) DurationPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) time.Duration {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespaceID(namespaceID),
-		)
-	}
-}
+type DurationPropertyFnWithNamespaceIDFilter = TypedPropertyFnWithNamespaceIDFilter[time.Duration]
 
 func GetDurationPropertyFnFilteredByNamespaceID(value time.Duration) DurationPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) time.Duration {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespaceID(value)
 }
 
-type TaskQueueDurationSetting setting[time.Duration, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
+type TaskQueueDurationSetting = TaskQueueTypedSetting[time.Duration]
 
 func NewTaskQueueDurationSetting(key Key, def time.Duration, description string) TaskQueueDurationSetting {
-	s := TaskQueueDurationSetting{
-		key:         key,
-		def:         def,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConverter[time.Duration](key, convertDuration, def, description)
 }
 
 func NewTaskQueueDurationSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[time.Duration], description string) TaskQueueDurationSetting {
-	s := TaskQueueDurationSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConstrainedDefault[time.Duration](key, convertDuration, cdef, description)
 }
 
-func (s TaskQueueDurationSetting) Key() Key               { return s.key }
-func (s TaskQueueDurationSetting) Precedence() Precedence { return PrecedenceTaskQueue }
-
-func (s TaskQueueDurationSetting) WithDefault(v time.Duration) TaskQueueDurationSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type DurationPropertyFnWithTaskQueueFilter func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) time.Duration
-
-func (s TaskQueueDurationSetting) Get(c *Collection) DurationPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) time.Duration {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskQueue(namespace, taskQueue, taskQueueType),
-		)
-	}
-}
+type DurationPropertyFnWithTaskQueueFilter = TypedPropertyFnWithTaskQueueFilter[time.Duration]
 
 func GetDurationPropertyFnFilteredByTaskQueue(value time.Duration) DurationPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) time.Duration {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskQueue(value)
 }
 
-type ShardIDDurationSetting setting[time.Duration, func(shardID int32)]
+type ShardIDDurationSetting = ShardIDTypedSetting[time.Duration]
 
 func NewShardIDDurationSetting(key Key, def time.Duration, description string) ShardIDDurationSetting {
-	s := ShardIDDurationSetting{
-		key:         key,
-		def:         def,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConverter[time.Duration](key, convertDuration, def, description)
 }
 
 func NewShardIDDurationSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[time.Duration], description string) ShardIDDurationSetting {
-	s := ShardIDDurationSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConstrainedDefault[time.Duration](key, convertDuration, cdef, description)
 }
 
-func (s ShardIDDurationSetting) Key() Key               { return s.key }
-func (s ShardIDDurationSetting) Precedence() Precedence { return PrecedenceShardID }
-
-func (s ShardIDDurationSetting) WithDefault(v time.Duration) ShardIDDurationSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type DurationPropertyFnWithShardIDFilter func(shardID int32) time.Duration
-
-func (s ShardIDDurationSetting) Get(c *Collection) DurationPropertyFnWithShardIDFilter {
-	return func(shardID int32) time.Duration {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceShardID(shardID),
-		)
-	}
-}
+type DurationPropertyFnWithShardIDFilter = TypedPropertyFnWithShardIDFilter[time.Duration]
 
 func GetDurationPropertyFnFilteredByShardID(value time.Duration) DurationPropertyFnWithShardIDFilter {
-	return func(shardID int32) time.Duration {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByShardID(value)
 }
 
-type TaskTypeDurationSetting setting[time.Duration, func(taskType enumsspb.TaskType)]
+type TaskTypeDurationSetting = TaskTypeTypedSetting[time.Duration]
 
 func NewTaskTypeDurationSetting(key Key, def time.Duration, description string) TaskTypeDurationSetting {
-	s := TaskTypeDurationSetting{
-		key:         key,
-		def:         def,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConverter[time.Duration](key, convertDuration, def, description)
 }
 
 func NewTaskTypeDurationSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[time.Duration], description string) TaskTypeDurationSetting {
-	s := TaskTypeDurationSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConstrainedDefault[time.Duration](key, convertDuration, cdef, description)
 }
 
-func (s TaskTypeDurationSetting) Key() Key               { return s.key }
-func (s TaskTypeDurationSetting) Precedence() Precedence { return PrecedenceTaskType }
-
-func (s TaskTypeDurationSetting) WithDefault(v time.Duration) TaskTypeDurationSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type DurationPropertyFnWithTaskTypeFilter func(taskType enumsspb.TaskType) time.Duration
-
-func (s TaskTypeDurationSetting) Get(c *Collection) DurationPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) time.Duration {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskType(taskType),
-		)
-	}
-}
+type DurationPropertyFnWithTaskTypeFilter = TypedPropertyFnWithTaskTypeFilter[time.Duration]
 
 func GetDurationPropertyFnFilteredByTaskType(value time.Duration) DurationPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) time.Duration {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskType(value)
 }
 
-type DestinationDurationSetting setting[time.Duration, func(namespace string, destination string)]
+type DestinationDurationSetting = DestinationTypedSetting[time.Duration]
 
 func NewDestinationDurationSetting(key Key, def time.Duration, description string) DestinationDurationSetting {
-	s := DestinationDurationSetting{
-		key:         key,
-		def:         def,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConverter[time.Duration](key, convertDuration, def, description)
 }
 
 func NewDestinationDurationSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[time.Duration], description string) DestinationDurationSetting {
-	s := DestinationDurationSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertDuration,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConstrainedDefault[time.Duration](key, convertDuration, cdef, description)
 }
 
-func (s DestinationDurationSetting) Key() Key               { return s.key }
-func (s DestinationDurationSetting) Precedence() Precedence { return PrecedenceDestination }
-
-func (s DestinationDurationSetting) WithDefault(v time.Duration) DestinationDurationSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type DurationPropertyFnWithDestinationFilter func(namespace string, destination string) time.Duration
-
-func (s DestinationDurationSetting) Get(c *Collection) DurationPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) time.Duration {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceDestination(namespace, destination),
-		)
-	}
-}
+type DurationPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[time.Duration]
 
 func GetDurationPropertyFnFilteredByDestination(value time.Duration) DurationPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) time.Duration {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
-type GlobalMapSetting setting[map[string]any, func()]
+type GlobalMapSetting = GlobalTypedSetting[map[string]any]
 
 func NewGlobalMapSetting(key Key, def map[string]any, description string) GlobalMapSetting {
-	s := GlobalMapSetting{
-		key:         key,
-		def:         def,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConverter[map[string]any](key, convertMap, def, description)
 }
 
 func NewGlobalMapSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[map[string]any], description string) GlobalMapSetting {
-	s := GlobalMapSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewGlobalTypedSettingWithConstrainedDefault[map[string]any](key, convertMap, cdef, description)
 }
 
-func (s GlobalMapSetting) Key() Key               { return s.key }
-func (s GlobalMapSetting) Precedence() Precedence { return PrecedenceGlobal }
-
-func (s GlobalMapSetting) WithDefault(v map[string]any) GlobalMapSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type MapPropertyFn func() map[string]any
-
-func (s GlobalMapSetting) Get(c *Collection) MapPropertyFn {
-	return func() map[string]any {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceGlobal(),
-		)
-	}
-}
+type MapPropertyFn = TypedPropertyFn[map[string]any]
 
 func GetMapPropertyFn(value map[string]any) MapPropertyFn {
-	return func() map[string]any {
-		return value
-	}
+	return GetTypedPropertyFn(value)
 }
 
-type NamespaceMapSetting setting[map[string]any, func(namespace string)]
+type NamespaceMapSetting = NamespaceTypedSetting[map[string]any]
 
 func NewNamespaceMapSetting(key Key, def map[string]any, description string) NamespaceMapSetting {
-	s := NamespaceMapSetting{
-		key:         key,
-		def:         def,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConverter[map[string]any](key, convertMap, def, description)
 }
 
 func NewNamespaceMapSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[map[string]any], description string) NamespaceMapSetting {
-	s := NamespaceMapSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewNamespaceTypedSettingWithConstrainedDefault[map[string]any](key, convertMap, cdef, description)
 }
 
-func (s NamespaceMapSetting) Key() Key               { return s.key }
-func (s NamespaceMapSetting) Precedence() Precedence { return PrecedenceNamespace }
-
-func (s NamespaceMapSetting) WithDefault(v map[string]any) NamespaceMapSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type MapPropertyFnWithNamespaceFilter func(namespace string) map[string]any
-
-func (s NamespaceMapSetting) Get(c *Collection) MapPropertyFnWithNamespaceFilter {
-	return func(namespace string) map[string]any {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespace(namespace),
-		)
-	}
-}
+type MapPropertyFnWithNamespaceFilter = TypedPropertyFnWithNamespaceFilter[map[string]any]
 
 func GetMapPropertyFnFilteredByNamespace(value map[string]any) MapPropertyFnWithNamespaceFilter {
-	return func(namespace string) map[string]any {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespace(value)
 }
 
-type NamespaceIDMapSetting setting[map[string]any, func(namespaceID string)]
+type NamespaceIDMapSetting = NamespaceIDTypedSetting[map[string]any]
 
 func NewNamespaceIDMapSetting(key Key, def map[string]any, description string) NamespaceIDMapSetting {
-	s := NamespaceIDMapSetting{
-		key:         key,
-		def:         def,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConverter[map[string]any](key, convertMap, def, description)
 }
 
 func NewNamespaceIDMapSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[map[string]any], description string) NamespaceIDMapSetting {
-	s := NamespaceIDMapSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewNamespaceIDTypedSettingWithConstrainedDefault[map[string]any](key, convertMap, cdef, description)
 }
 
-func (s NamespaceIDMapSetting) Key() Key               { return s.key }
-func (s NamespaceIDMapSetting) Precedence() Precedence { return PrecedenceNamespaceID }
-
-func (s NamespaceIDMapSetting) WithDefault(v map[string]any) NamespaceIDMapSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type MapPropertyFnWithNamespaceIDFilter func(namespaceID string) map[string]any
-
-func (s NamespaceIDMapSetting) Get(c *Collection) MapPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) map[string]any {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceNamespaceID(namespaceID),
-		)
-	}
-}
+type MapPropertyFnWithNamespaceIDFilter = TypedPropertyFnWithNamespaceIDFilter[map[string]any]
 
 func GetMapPropertyFnFilteredByNamespaceID(value map[string]any) MapPropertyFnWithNamespaceIDFilter {
-	return func(namespaceID string) map[string]any {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByNamespaceID(value)
 }
 
-type TaskQueueMapSetting setting[map[string]any, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
+type TaskQueueMapSetting = TaskQueueTypedSetting[map[string]any]
 
 func NewTaskQueueMapSetting(key Key, def map[string]any, description string) TaskQueueMapSetting {
-	s := TaskQueueMapSetting{
-		key:         key,
-		def:         def,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConverter[map[string]any](key, convertMap, def, description)
 }
 
 func NewTaskQueueMapSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[map[string]any], description string) TaskQueueMapSetting {
-	s := TaskQueueMapSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewTaskQueueTypedSettingWithConstrainedDefault[map[string]any](key, convertMap, cdef, description)
 }
 
-func (s TaskQueueMapSetting) Key() Key               { return s.key }
-func (s TaskQueueMapSetting) Precedence() Precedence { return PrecedenceTaskQueue }
-
-func (s TaskQueueMapSetting) WithDefault(v map[string]any) TaskQueueMapSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type MapPropertyFnWithTaskQueueFilter func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) map[string]any
-
-func (s TaskQueueMapSetting) Get(c *Collection) MapPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) map[string]any {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskQueue(namespace, taskQueue, taskQueueType),
-		)
-	}
-}
+type MapPropertyFnWithTaskQueueFilter = TypedPropertyFnWithTaskQueueFilter[map[string]any]
 
 func GetMapPropertyFnFilteredByTaskQueue(value map[string]any) MapPropertyFnWithTaskQueueFilter {
-	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) map[string]any {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskQueue(value)
 }
 
-type ShardIDMapSetting setting[map[string]any, func(shardID int32)]
+type ShardIDMapSetting = ShardIDTypedSetting[map[string]any]
 
 func NewShardIDMapSetting(key Key, def map[string]any, description string) ShardIDMapSetting {
-	s := ShardIDMapSetting{
-		key:         key,
-		def:         def,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConverter[map[string]any](key, convertMap, def, description)
 }
 
 func NewShardIDMapSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[map[string]any], description string) ShardIDMapSetting {
-	s := ShardIDMapSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewShardIDTypedSettingWithConstrainedDefault[map[string]any](key, convertMap, cdef, description)
 }
 
-func (s ShardIDMapSetting) Key() Key               { return s.key }
-func (s ShardIDMapSetting) Precedence() Precedence { return PrecedenceShardID }
-
-func (s ShardIDMapSetting) WithDefault(v map[string]any) ShardIDMapSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type MapPropertyFnWithShardIDFilter func(shardID int32) map[string]any
-
-func (s ShardIDMapSetting) Get(c *Collection) MapPropertyFnWithShardIDFilter {
-	return func(shardID int32) map[string]any {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceShardID(shardID),
-		)
-	}
-}
+type MapPropertyFnWithShardIDFilter = TypedPropertyFnWithShardIDFilter[map[string]any]
 
 func GetMapPropertyFnFilteredByShardID(value map[string]any) MapPropertyFnWithShardIDFilter {
-	return func(shardID int32) map[string]any {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByShardID(value)
 }
 
-type TaskTypeMapSetting setting[map[string]any, func(taskType enumsspb.TaskType)]
+type TaskTypeMapSetting = TaskTypeTypedSetting[map[string]any]
 
 func NewTaskTypeMapSetting(key Key, def map[string]any, description string) TaskTypeMapSetting {
-	s := TaskTypeMapSetting{
-		key:         key,
-		def:         def,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConverter[map[string]any](key, convertMap, def, description)
 }
 
 func NewTaskTypeMapSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[map[string]any], description string) TaskTypeMapSetting {
-	s := TaskTypeMapSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewTaskTypeTypedSettingWithConstrainedDefault[map[string]any](key, convertMap, cdef, description)
 }
 
-func (s TaskTypeMapSetting) Key() Key               { return s.key }
-func (s TaskTypeMapSetting) Precedence() Precedence { return PrecedenceTaskType }
-
-func (s TaskTypeMapSetting) WithDefault(v map[string]any) TaskTypeMapSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type MapPropertyFnWithTaskTypeFilter func(taskType enumsspb.TaskType) map[string]any
-
-func (s TaskTypeMapSetting) Get(c *Collection) MapPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) map[string]any {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceTaskType(taskType),
-		)
-	}
-}
+type MapPropertyFnWithTaskTypeFilter = TypedPropertyFnWithTaskTypeFilter[map[string]any]
 
 func GetMapPropertyFnFilteredByTaskType(value map[string]any) MapPropertyFnWithTaskTypeFilter {
-	return func(taskType enumsspb.TaskType) map[string]any {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByTaskType(value)
 }
 
-type DestinationMapSetting setting[map[string]any, func(namespace string, destination string)]
+type DestinationMapSetting = DestinationTypedSetting[map[string]any]
 
 func NewDestinationMapSetting(key Key, def map[string]any, description string) DestinationMapSetting {
-	s := DestinationMapSetting{
-		key:         key,
-		def:         def,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConverter[map[string]any](key, convertMap, def, description)
 }
 
 func NewDestinationMapSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[map[string]any], description string) DestinationMapSetting {
-	s := DestinationMapSetting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convertMap,
-		description: description,
-	}
-	return s
+	return NewDestinationTypedSettingWithConstrainedDefault[map[string]any](key, convertMap, cdef, description)
 }
 
-func (s DestinationMapSetting) Key() Key               { return s.key }
-func (s DestinationMapSetting) Precedence() Precedence { return PrecedenceDestination }
-
-func (s DestinationMapSetting) WithDefault(v map[string]any) DestinationMapSetting {
-	newS := s
-	newS.def = v
-	return newS
-}
-
-type MapPropertyFnWithDestinationFilter func(namespace string, destination string) map[string]any
-
-func (s DestinationMapSetting) Get(c *Collection) MapPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) map[string]any {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedenceDestination(namespace, destination),
-		)
-	}
-}
+type MapPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[map[string]any]
 
 func GetMapPropertyFnFilteredByDestination(value map[string]any) MapPropertyFnWithDestinationFilter {
-	return func(namespace string, destination string) map[string]any {
-		return value
-	}
+	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
 type GlobalTypedSetting[T any] setting[T, func()]
@@ -2251,6 +739,17 @@ func NewGlobalTypedSettingWithConverter[T any](key Key, convert func(any) (T, er
 	s := GlobalTypedSetting[T]{
 		key:         key,
 		def:         def,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
+// NewGlobalTypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func NewGlobalTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) GlobalTypedSetting[T] {
+	s := GlobalTypedSetting[T]{
+		key:         key,
+		cdef:        cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -2313,6 +812,17 @@ func NewNamespaceTypedSettingWithConverter[T any](key Key, convert func(any) (T,
 	return s
 }
 
+// NewNamespaceTypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func NewNamespaceTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) NamespaceTypedSetting[T] {
+	s := NamespaceTypedSetting[T]{
+		key:         key,
+		cdef:        cdef,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
 func (s NamespaceTypedSetting[T]) Key() Key               { return s.key }
 func (s NamespaceTypedSetting[T]) Precedence() Precedence { return PrecedenceNamespace }
 
@@ -2363,6 +873,17 @@ func NewNamespaceIDTypedSettingWithConverter[T any](key Key, convert func(any) (
 	s := NamespaceIDTypedSetting[T]{
 		key:         key,
 		def:         def,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
+// NewNamespaceIDTypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func NewNamespaceIDTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) NamespaceIDTypedSetting[T] {
+	s := NamespaceIDTypedSetting[T]{
+		key:         key,
+		cdef:        cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -2425,6 +946,17 @@ func NewTaskQueueTypedSettingWithConverter[T any](key Key, convert func(any) (T,
 	return s
 }
 
+// NewTaskQueueTypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func NewTaskQueueTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) TaskQueueTypedSetting[T] {
+	s := TaskQueueTypedSetting[T]{
+		key:         key,
+		cdef:        cdef,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
 func (s TaskQueueTypedSetting[T]) Key() Key               { return s.key }
 func (s TaskQueueTypedSetting[T]) Precedence() Precedence { return PrecedenceTaskQueue }
 
@@ -2475,6 +1007,17 @@ func NewShardIDTypedSettingWithConverter[T any](key Key, convert func(any) (T, e
 	s := ShardIDTypedSetting[T]{
 		key:         key,
 		def:         def,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
+// NewShardIDTypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func NewShardIDTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) ShardIDTypedSetting[T] {
+	s := ShardIDTypedSetting[T]{
+		key:         key,
+		cdef:        cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -2537,6 +1080,17 @@ func NewTaskTypeTypedSettingWithConverter[T any](key Key, convert func(any) (T, 
 	return s
 }
 
+// NewTaskTypeTypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func NewTaskTypeTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) TaskTypeTypedSetting[T] {
+	s := TaskTypeTypedSetting[T]{
+		key:         key,
+		cdef:        cdef,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
 func (s TaskTypeTypedSetting[T]) Key() Key               { return s.key }
 func (s TaskTypeTypedSetting[T]) Precedence() Precedence { return PrecedenceTaskType }
 
@@ -2587,6 +1141,17 @@ func NewDestinationTypedSettingWithConverter[T any](key Key, convert func(any) (
 	s := DestinationTypedSetting[T]{
 		key:         key,
 		def:         def,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
+// NewDestinationTypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func NewDestinationTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) DestinationTypedSetting[T] {
+	s := DestinationTypedSetting[T]{
+		key:         key,
+		cdef:        cdef,
 		convert:     convert,
 		description: description,
 	}

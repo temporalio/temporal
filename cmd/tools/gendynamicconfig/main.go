@@ -159,6 +159,17 @@ func New{{.P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (
 	return s
 }
 
+// New{{.P.Name}}TypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func New{{.P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{.P.Name}}TypedSetting[T] {
+	s := {{.P.Name}}TypedSetting[T]{
+		key:         key,
+		cdef:        cdef,
+		convert:     convert,
+		description: description,
+	}
+	return s
+}
+
 func (s {{.P.Name}}TypedSetting[T]) Key() Key               { return s.key }
 func (s {{.P.Name}}TypedSetting[T]) Precedence() Precedence { return Precedence{{.P.Name}} }
 
@@ -201,69 +212,31 @@ func GetTypedPropertyFnFilteredBy{{.P.Name}}[T any](value T) TypedPropertyFnWith
 	}
 }
 {{- else -}}
-type {{.P.Name}}{{.T.Name}}Setting setting[{{.T.GoType}}, func({{.P.GoArgs}})]
+type {{.P.Name}}{{.T.Name}}Setting = {{.P.Name}}TypedSetting[{{.T.GoType}}]
 
 func New{{.P.Name}}{{.T.Name}}Setting(key Key, def {{.T.GoType}}, description string) {{.P.Name}}{{.T.Name}}Setting {
-	s := {{.P.Name}}{{.T.Name}}Setting{
-		key:         key,
-		def:         def,
-		convert:     convert{{.T.Name}},
-		description: description,
-	}
-	return s
+	return New{{.P.Name}}TypedSettingWithConverter[{{.T.GoType}}](key, convert{{.T.Name}}, def, description)
 }
 
 func New{{.P.Name}}{{.T.Name}}SettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[{{.T.GoType}}], description string) {{.P.Name}}{{.T.Name}}Setting {
-	s := {{.P.Name}}{{.T.Name}}Setting{
-		key:         key,
-		cdef:        cdef,
-		convert:     convert{{.T.Name}},
-		description: description,
-	}
-	return s
-}
-
-func (s {{.P.Name}}{{.T.Name}}Setting) Key() Key               { return s.key }
-func (s {{.P.Name}}{{.T.Name}}Setting) Precedence() Precedence { return Precedence{{.P.Name}} }
-
-func (s {{.P.Name}}{{.T.Name}}Setting) WithDefault(v {{.T.GoType}}) {{.P.Name}}{{.T.Name}}Setting {
-	newS := s
-	newS.def = v
-	return newS
+	return New{{.P.Name}}TypedSettingWithConstrainedDefault[{{.T.GoType}}](key, convert{{.T.Name}}, cdef, description)
 }
 
 {{if eq .P.Name "Global" -}}
-type {{.T.Name}}PropertyFn func({{.P.GoArgs}}) {{.T.GoType}}
+type {{.T.Name}}PropertyFn = TypedPropertyFn[{{.T.GoType}}]
 {{- else -}}
-type {{.T.Name}}PropertyFnWith{{.P.Name}}Filter func({{.P.GoArgs}}) {{.T.GoType}}
+type {{.T.Name}}PropertyFnWith{{.P.Name}}Filter = TypedPropertyFnWith{{.P.Name}}Filter[{{.T.GoType}}]
 {{- end}}
-
-{{if eq .P.Name "Global" -}}
-func (s {{.P.Name}}{{.T.Name}}Setting) Get(c *Collection) {{.T.Name}}PropertyFn {
-{{- else -}}
-func (s {{.P.Name}}{{.T.Name}}Setting) Get(c *Collection) {{.T.Name}}PropertyFnWith{{.P.Name}}Filter {
-{{- end}}
-	return func({{.P.GoArgs}}) {{.T.GoType}} {
-		return matchAndConvert(
-			c,
-			s.key,
-			s.def,
-			s.cdef,
-			s.convert,
-			precedence{{.P.Name}}({{.P.GoArgNames}}),
-		)
-	}
-}
 
 {{if eq .P.Name "Global" -}}
 func Get{{.T.Name}}PropertyFn(value {{.T.GoType}}) {{.T.Name}}PropertyFn {
+	return GetTypedPropertyFn(value)
+}
 {{- else -}}
 func Get{{.T.Name}}PropertyFnFilteredBy{{.P.Name}}(value {{.T.GoType}}) {{.T.Name}}PropertyFnWith{{.P.Name}}Filter {
-{{- end}}
-	return func({{.P.GoArgs}}) {{.T.GoType}} {
-		return value
-	}
+	return GetTypedPropertyFnFilteredBy{{.P.Name}}(value)
 }
+{{- end}}
 {{- end }}
 `, map[string]any{"T": tp, "P": prec})
 }

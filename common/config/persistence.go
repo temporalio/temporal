@@ -41,6 +41,8 @@ const (
 	StoreTypeNoSQL = "nosql"
 )
 
+var ErrPersistenceConfig = errors.New("persistence config error")
+
 // DefaultStoreType returns the storeType for the default persistence store
 func (c *Persistence) DefaultStoreType() string {
 	if c.DataStores[c.DefaultStore].SQL != nil {
@@ -68,50 +70,60 @@ func (c *Persistence) Validate() error {
 	// Valid dual visibility combinations (order: primary, secondary):
 	// - visibilityStore (advanced sql),  secondaryVisibilityStore (advanced sql)
 	// - visibilityStore (es),            visibilityStore (es) [via elasticsearch.indices config]
+	// - visibilityStore (es),            secondaryVisibilityStore (es)
 	//
 	// Invalid dual visibility combinations:
 	// - visibilityStore (advanced sql),  secondaryVisibilityStore (es)
-	// - visibilityStore (es),            secondaryVisibilityStore (any)
+	// - visibilityStore (es),            secondaryVisibilityStore (advanced sql)
 
 	if c.VisibilityStore == "" {
-		return errors.New("persistence config: visibilityStore must be specified")
+		return fmt.Errorf("%w: visibilityStore must be specified", ErrPersistenceConfig)
 	}
-	if c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.SecondaryVisibilityStore != "" {
-		return errors.New(
-			"persistence config: cannot set secondaryVisibilityStore " +
-				"when visibilityStore is setting elasticsearch datastore",
-		)
-	}
-	if c.DataStores[c.SecondaryVisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" {
-		return fmt.Errorf(
-			"persistence config: secondary visibility datastore %q: elasticsearch config: "+
-				"cannot set secondary_visibility",
-			c.SecondaryVisibilityStore,
-		)
+	if c.SecondaryVisibilityStore != "" {
+		isPrimaryEs := c.DataStores[c.VisibilityStore].Elasticsearch != nil
+		isSecondaryEs := c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil
+		if isPrimaryEs != isSecondaryEs {
+			return fmt.Errorf(
+				"%w: cannot set visibilityStore and secondaryVisibilityStore with different datastore types",
+				ErrPersistenceConfig)
+		}
+		if c.DataStores[c.VisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" {
+			return fmt.Errorf(
+				"%w: cannot set secondaryVisibilityStore "+
+					"when visibilityStore is setting Elasticsearch secondary visibility index",
+				ErrPersistenceConfig)
+		}
+		if c.DataStores[c.SecondaryVisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" {
+			return fmt.Errorf(
+				"%w: secondary visibility datastore %q cannot set secondary_visibility",
+				ErrPersistenceConfig,
+				c.SecondaryVisibilityStore)
+		}
+		if isPrimaryEs && isSecondaryEs {
+			// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
+			// `indices.visibility` config key and private fields - this is a restriction due to global ES client
+			esConfig := *c.DataStores[c.VisibilityStore].Elasticsearch
+			secEsConfig := *c.DataStores[c.SecondaryVisibilityStore].Elasticsearch
+			esConfig.Indices = nil
+			secEsConfig.Indices = nil
+			if !reflect.DeepEqual(esConfig, secEsConfig) {
+				return fmt.Errorf(
+					"%w: config mismatch for visibilityStore and secondaryVisibilityStore",
+					ErrPersistenceConfig,
+				)
+			}
+		}
 	}
 
-	cntEsConfigs := 0
 	for _, st := range stores {
 		ds, ok := c.DataStores[st]
 		if !ok {
-			return fmt.Errorf("persistence config: missing config for datastore %q", st)
+			return fmt.Errorf("%w: missing config for datastore %q", ErrPersistenceConfig, st)
 		}
 		if err := ds.Validate(); err != nil {
-			return fmt.Errorf("persistence config: datastore %q: %s", st, err.Error())
-		}
-		if ds.Elasticsearch != nil {
-			cntEsConfigs++
+			return fmt.Errorf("%w: datastore %q: %s", ErrPersistenceConfig, st, err.Error())
 		}
 	}
-
-	if cntEsConfigs > 1 {
-		return fmt.Errorf(
-			"persistence config: cannot have more than one Elasticsearch visibility store config " +
-				"(use `elasticsearch.indices.secondary_visibility` config key if you need to set a " +
-				"secondary Elasticsearch visibility store)",
-		)
-	}
-
 	return nil
 }
 
