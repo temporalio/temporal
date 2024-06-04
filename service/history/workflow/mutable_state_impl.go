@@ -5304,8 +5304,8 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 			return err
 		}
 	} else {
-		for _, events := range eventBatches {
-			if err := ms.eventsToReplicationTask(transactionPolicy, [][]*historypb.HistoryEvent{events}); err != nil {
+		for _, historyEvents := range eventBatches {
+			if err := ms.eventsToReplicationTask(transactionPolicy, [][]*historypb.HistoryEvent{historyEvents}); err != nil {
 				return err
 			}
 		}
