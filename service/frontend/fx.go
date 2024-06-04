@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/scheduler"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -395,7 +396,9 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},
+		map[string]int{
+			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+		},
 	)
 }
 
