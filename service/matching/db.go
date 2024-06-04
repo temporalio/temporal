@@ -208,7 +208,7 @@ func (db *taskQueueDB) UpdateState(
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
-		db.emitApproximateBacklogCount()
+		db.emitBacklogCountAndAge()
 	}
 	return err
 }
@@ -348,9 +348,12 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
-// emitApproximateBacklogCount gets and emits the db's approximateBacklogCount to the metrics handler.
-// It is called after persisting the updated BacklogCount
-func (db *taskQueueDB) emitApproximateBacklogCount() {
+// emitBacklogCountAndAge emits the approximateBacklogCount and the BacklogAge to the metrics handler.
+// It is called after persisting the updated BacklogCount in db
+func (db *taskQueueDB) emitBacklogCountAndAge() {
 	approximateBacklogCount := db.getApproximateBacklogCount()
+	backlogHeadAge := db.backlogMgr.taskReader.getBacklogHeadAge()
+
 	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
+	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(backlogHeadAge))
 }

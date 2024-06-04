@@ -311,25 +311,25 @@ func TestReaderBacklogAge(t *testing.T) {
 	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
 
 	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
-	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Second, 2)
+	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(10*time.Second, 2)
 	tlm.backlogMgr.taskReader.gorogrp.Go(tlm.backlogMgr.taskReader.dispatchBufferedTasks)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		assert.InDelta(t, time.Minute, tlm.backlogMgr.taskReader.getBacklogHeadCreateTime(), float64(5*time.Second))
+		assert.InDelta(t, time.Minute, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err := tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		assert.InDelta(t, time.Second, tlm.backlogMgr.taskReader.getBacklogHeadCreateTime(), float64(500*time.Millisecond))
+		assert.InDelta(t, 10*time.Second, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err = tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		assert.Equalf(t, time.Duration(0), tlm.backlogMgr.taskReader.getBacklogHeadCreateTime(), "backlog age being reset because of no tasks in the buffer")
+		assert.Equalf(t, time.Duration(0), tlm.backlogMgr.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 

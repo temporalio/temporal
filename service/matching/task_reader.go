@@ -124,7 +124,7 @@ func (tr *taskReader) updateBacklogAge(task *internalTask) {
 	tr.backlogHeadCreateTime.Store(ts)
 }
 
-func (tr *taskReader) getBacklogHeadCreateTime() time.Duration {
+func (tr *taskReader) getBacklogHeadAge() time.Duration {
 	if tr.backlogHeadCreateTime.Load() == -1 {
 		return time.Duration(0)
 	}

@@ -150,13 +150,26 @@ func newInternalNexusTask(
 			request:  request,
 		},
 		forwardInfo: request.GetForwardInfo(),
-		responseC:     make(chan error, 1),
+		responseC:   make(chan error, 1),
 		source:      enumsspb.TASK_SOURCE_HISTORY,
 	}
 }
 
 func newInternalStartedTask(info *startedTaskInfo) *internalTask {
 	return &internalTask{started: info}
+}
+
+// hasEmptyResponse is true if a task contains an empty response for the appropriate TaskInfo
+func (info *startedTaskInfo) hasEmptyResponse() bool {
+	if info.workflowTaskInfo != nil && len(info.workflowTaskInfo.TaskToken) != 0 {
+		return false
+	} else if info.activityTaskInfo != nil && len(info.activityTaskInfo.TaskToken) != 0 {
+		return false
+	} else if info.nexusTaskInfo != nil && len(info.nexusTaskInfo.Response.TaskToken) != 0 {
+		return false
+	} else {
+		return true
+	}
 }
 
 // isQuery returns true if the underlying task is a query task
