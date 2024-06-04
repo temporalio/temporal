@@ -27,6 +27,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -50,7 +53,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/service/frontend/configs"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
@@ -362,12 +364,26 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	})
 	s.Greater(startedEventIdx, 0)
 
+	// Completion request fails if the result payload is too large
+	largeCompletion, err := nexus.NewOperationCompletionSuccessful(
+		// Use -10 to avoid hitting MaxNexusAPIRequestBodyBytes. Actual payload will still exceed limit because of
+		// additional Content headers. See common/rpc/grpc.go:66
+		s.mustToPayload(strings.Repeat("a", (2*1024*1024)-10)),
+		nexus.OperationCompletionSuccesfulOptions{Serializer: commonnexus.PayloadSerializer},
+	)
+	s.NoError(err)
+
+	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, largeCompletion, callbackToken)
+	s.Equal(http.StatusBadRequest, res.StatusCode)
+	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_bad_request"})
+
 	// Send a valid - successful completion request.
 	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
-	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
+	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusOK, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "success"})

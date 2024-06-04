@@ -524,6 +524,11 @@ is currently processing a task.
 		1000,
 		`NexusEndpointListMaxPageSize is the maximum page size for listing Nexus endpoints.`,
 	)
+	NexusPayloadSizeLimit = NewNamespaceIntSetting(
+		"limit.nexusPayloadSize",
+		2*1024*1024,
+		`NexusPayloadSizeLimit is the maximum size in bytes of payloads in Nexus requests.`,
+	)
 
 	RemovableBuildIdDurationSinceDefault = NewGlobalDurationSetting(
 		"worker.removableBuildIdDurationSinceDefault",

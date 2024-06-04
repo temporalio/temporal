@@ -35,6 +35,11 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.uber.org/fx"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -46,16 +51,13 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/frontend/configs"
-	"go.uber.org/fx"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/status"
 )
 
 var apiName = configs.CompleteNexusOperation
 
 type Config struct {
-	Enabled dynamicconfig.BoolPropertyFn
+	Enabled          dynamicconfig.BoolPropertyFn
+	PayloadSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 type HandlerOptions struct {
@@ -163,10 +165,13 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
+		if result.Size() > h.Config.PayloadSizeLimit(ns.Name().String()) {
+			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(ns.Name().String()))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result context exceeds size limit")
+		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
 			Success: result,
 		}
-		// TODO(bergundy): Limit payload size.
 	default:
 		// The Nexus SDK ensures this never happens but just in case...
 		logger.Error("invalid operation state in completion request", tag.NewStringTag("state", string(r.State)), tag.Error(err))

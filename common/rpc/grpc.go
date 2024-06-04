@@ -31,13 +31,14 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"go.temporal.io/server/common/log/tag"
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -59,7 +60,7 @@ const (
 	// can have. This is currently set to the max gRPC request size.
 	MaxHTTPAPIRequestBytes = 4 * 1024 * 1024
 
-	// MaxHTTPAPIRequestBytes is the maximum number of bytes a Nexus HTTP API request can have. Because the body is
+	// MaxNexusAPIRequestBodyBytes is the maximum number of bytes a Nexus HTTP API request can have. Because the body is
 	// read into a Payload object, this is currently set to the max Payload size. Content headers are transformed to
 	// Payload metadata and contribute to the Payload size as well. A separate limit is enforced on top of this.
 	MaxNexusAPIRequestBodyBytes = 2 * 1024 * 1024

@@ -84,6 +84,7 @@ type Config struct {
 	MaxConcurrentOperations dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PayloadSizeLimit        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate     dynamicconfig.StringPropertyFn
 	RetryPolicy             func() backoff.RetryPolicy
 }
@@ -95,6 +96,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:  MaxOperationNameLength.Get(dc),
+		PayloadSizeLimit:        dynamicconfig.NexusPayloadSizeLimit.Get(dc),
 		CallbackURLTemplate:     CallbackURLTemplate.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
