@@ -167,9 +167,8 @@ func (info *startedTaskInfo) hasEmptyResponse() bool {
 		return false
 	} else if info.nexusTaskInfo != nil && len(info.nexusTaskInfo.Response.TaskToken) != 0 {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
 // isQuery returns true if the underlying task is a query task
