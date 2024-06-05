@@ -102,4 +102,7 @@ message NexusOperationCompletion {
     // Reference including the path to the backing Operation state machine and a version + transition count for
     // staleness checks.
     temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+    // Request ID as embedded in the Operation state machine, used for staleness checks when transition history is
+    // disabled.
+    string request_id = 5;
 }
