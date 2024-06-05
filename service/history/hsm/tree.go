@@ -318,21 +318,6 @@ func (n *Node) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.H
 	return n.backend.LoadHistoryEvent(ctx, token)
 }
 
-// CheckParentIsRunning checks that the parent node is running if the node is attached to a workflow execution.
-// Returns nil if the parent is running, and ErrWorkflowCompleted otherwise.
-func (n *Node) CheckParentIsRunning() error {
-	if n.Parent != nil {
-		execution, err := MachineData[interface{ IsWorkflowExecutionRunning() bool }](n.Parent)
-		if err != nil {
-			return err
-		}
-		if !execution.IsWorkflowExecutionRunning() {
-			return consts.ErrWorkflowCompleted
-		}
-	}
-	return nil
-}
-
 // MachineData deserializes the persistent state machine's data, casts it to type T, and returns it.
 // Returns an error when deserialization or casting fails.
 func MachineData[T any](n *Node) (T, error) {
@@ -359,6 +344,32 @@ func MachineData[T any](n *Node) (T, error) {
 // TransitionCount returns the transition count for the state machine contained in this node.
 func (n *Node) TransitionCount() int64 {
 	return n.persistence.TransitionCount
+}
+
+// CheckRunning has two modes of operation:
+// 1. If the node is **not** attached to a workflow (not yet supported), it returns nil.
+// 2. If the node is attached to a workflow, it verifies that the workflow execution is running, and returns
+// ErrWorkflowCompleted or nil.
+//
+// May return other errors returned from [MachineData].
+func (n *Node) CheckRunning() error {
+	root := n
+	for root.Parent != nil {
+		root = root.Parent
+	}
+
+	execution, err := MachineData[interface{ IsWorkflowExecutionRunning() bool }](root)
+	if err != nil {
+		if errors.Is(err, ErrIncompatibleType) {
+			// The machine is not attached to a workflow. It is currently assumed to be running.
+			return nil
+		}
+		return err
+	}
+	if !execution.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+	return nil
 }
 
 // MachineTransition runs the given transitionFn on a machine's data for the given key.

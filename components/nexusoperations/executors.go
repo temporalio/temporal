@@ -257,7 +257,7 @@ type startArgs struct {
 func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		if err := node.CheckParentIsRunning(); err != nil {
+		if err := node.CheckRunning(); err != nil {
 			return err
 		}
 		operation, err := hsm.MachineData[Operation](node)
@@ -283,7 +283,7 @@ func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environme
 
 func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := node.CheckParentIsRunning(); err != nil {
+		if err := node.CheckRunning(); err != nil {
 			return err
 		}
 		return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
@@ -384,7 +384,7 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 }
 
 func (e activeExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
-	if err := node.CheckParentIsRunning(); err != nil {
+	if err := node.CheckRunning(); err != nil {
 		return err
 	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
@@ -398,7 +398,7 @@ func (e activeExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, 
 	if err := task.Validate(node); err != nil {
 		return err
 	}
-	if err := node.CheckParentIsRunning(); err != nil {
+	if err := node.CheckRunning(); err != nil {
 		return err
 	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
@@ -499,7 +499,7 @@ type cancelArgs struct {
 // given reference is pointing to.
 func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args cancelArgs, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
-		if err := n.Parent.CheckParentIsRunning(); err != nil {
+		if err := n.CheckRunning(); err != nil {
 			return err
 		}
 		op, err := hsm.MachineData[Operation](n.Parent)
@@ -520,7 +520,7 @@ func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Envi
 
 func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
-		if err := n.Parent.CheckParentIsRunning(); err != nil {
+		if err := n.CheckRunning(); err != nil {
 			return err
 		}
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
@@ -555,7 +555,7 @@ func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Envir
 }
 
 func (e activeExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
-	if err := node.Parent.CheckParentIsRunning(); err != nil {
+	if err := node.CheckRunning(); err != nil {
 		return err
 	}
 	return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {

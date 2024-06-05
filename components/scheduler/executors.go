@@ -57,7 +57,7 @@ func (e activeExecutor) executeScheduleTask(
 	node *hsm.Node,
 	task ScheduleTask,
 ) error {
-	if err := node.CheckParentIsRunning(); err != nil {
+	if err := node.CheckRunning(); err != nil {
 		return err
 	}
 	// TODO(Tianyu): Perform scheduler logic before scheduling self again
