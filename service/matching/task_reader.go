@@ -120,7 +120,6 @@ func (tr *taskReader) updateBacklogAge(task *internalTask) {
 		return // should not happen but for safety
 	}
 	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
-	// update the backlogAge value
 	tr.backlogHeadCreateTime.Store(ts)
 }
 
