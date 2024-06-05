@@ -631,6 +631,8 @@ func (tm *TaskMatcher) unregisterBacklogTask(task *internalTask) {
 	}
 }
 
+// getBacklogAge is the latest age across all backlogs re-directing to this matcher; may momentarily
+// be 0 cause of race conditions when no reader pushes a task into the matcher at this moment
 func (tm *TaskMatcher) getBacklogAge() time.Duration {
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()
