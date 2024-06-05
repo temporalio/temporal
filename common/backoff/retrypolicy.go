@@ -81,6 +81,12 @@ type (
 		delayForError   func(err error) time.Duration
 	}
 
+	ConstantDelayRetryPolicy struct {
+		maximumAttempts int
+		jitterPct       float64
+		delay           time.Duration
+	}
+
 	disabledRetryPolicyImpl struct{}
 
 	retrierImpl struct {
@@ -243,6 +249,34 @@ func (p *ErrorDependentRetryPolicy) ComputeNextDelay(_ time.Duration, attempt in
 	}
 
 	return addJitter(p.delayForError(err), p.jitterPct)
+}
+
+var _ RetryPolicy = (*ConstantDelayRetryPolicy)(nil)
+
+func NewConstantDelayRetryPolicy(delay time.Duration) *ConstantDelayRetryPolicy {
+	return &ConstantDelayRetryPolicy{
+		maximumAttempts: defaultMaximumAttempts,
+		jitterPct:       defaultJitterPct,
+		delay:           delay,
+	}
+}
+
+func (p *ConstantDelayRetryPolicy) WithMaximumAttempts(maximumAttempts int) *ConstantDelayRetryPolicy {
+	p.maximumAttempts = maximumAttempts
+	return p
+}
+
+func (p *ConstantDelayRetryPolicy) WithJitter(jitterPct float64) *ConstantDelayRetryPolicy {
+	p.jitterPct = jitterPct
+	return p
+}
+
+func (p *ConstantDelayRetryPolicy) ComputeNextDelay(_ time.Duration, attempt int, _ error) time.Duration {
+	if p.maximumAttempts != noMaximumAttempts && attempt >= p.maximumAttempts {
+		return done
+	}
+
+	return addJitter(p.delay, p.jitterPct)
 }
 
 func addJitter(duration time.Duration, jitterPct float64) time.Duration {

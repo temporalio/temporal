@@ -279,15 +279,43 @@ func (s *RetryPolicySuite) TestErrorDependentPolicy() {
 	ts.Advance(delay)
 
 	delay = retrier.NextBackOff(threeSecondError)
-	s.Equal(time.Duration(-1), delay)
+	s.Equal(done, delay)
 
 	// test with jitter
 	policy = NewErrorDependentRetryPolicy(delayForError).WithMaximumAttempts(4).WithJitter(0.1)
 	retrier, ts = createRetrier(policy)
 
 	delay = retrier.NextBackOff(fmt.Errorf("other error"))
-	s.True(delay >= 1*time.Second, "Jittered delay too low")
-	s.True(delay < 1500*time.Millisecond, "Jittered delay too high")
+	s.True(delay >= 1*time.Second)
+	s.True(delay < 1500*time.Millisecond)
+}
+
+func (s *RetryPolicySuite) TestConstantDelayPolicy() {
+	policy := NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(4)
+	retrier, ts := createRetrier(policy)
+
+	delay := retrier.NextBackOff(nil)
+	s.Equal(2*time.Second, delay)
+	ts.Advance(delay)
+
+	delay = retrier.NextBackOff(nil)
+	s.Equal(2*time.Second, delay)
+	ts.Advance(delay)
+
+	delay = retrier.NextBackOff(nil)
+	s.Equal(2*time.Second, delay)
+	ts.Advance(delay)
+
+	delay = retrier.NextBackOff(nil)
+	s.Equal(done, delay)
+
+	// test with jitter
+	policy = NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(4).WithJitter(0.1)
+	retrier, ts = createRetrier(policy)
+
+	delay = retrier.NextBackOff(nil)
+	s.True(delay >= 2*time.Second)
+	s.True(delay < 2200*time.Millisecond)
 }
 
 // Validate jitter computation
