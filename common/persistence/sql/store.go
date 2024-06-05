@@ -25,14 +25,19 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
+	"golang.org/x/exp/maps"
 )
+
+var ErrPluginNotSupported = errors.New("plugin not supported")
 
 var supportedPlugins = map[string]sqlplugin.Plugin{}
 
@@ -55,12 +60,10 @@ func NewSQLDB(
 	logger log.Logger,
 	mh metrics.Handler,
 ) (sqlplugin.DB, error) {
-	plugin, ok := supportedPlugins[cfg.PluginName]
-
-	if !ok {
-		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
+	plugin, err := getPlugin(cfg.PluginName)
+	if err != nil {
+		return nil, err
 	}
-
 	return plugin.CreateDB(dbKind, cfg, r, logger, mh)
 }
 
@@ -72,10 +75,24 @@ func NewSQLAdminDB(
 	logger log.Logger,
 	mh metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
-	plugin, ok := supportedPlugins[cfg.PluginName]
-	if !ok {
-		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
+	plugin, err := getPlugin(cfg.PluginName)
+	if err != nil {
+		return nil, err
 	}
-
 	return plugin.CreateAdminDB(dbKind, cfg, r, logger, mh)
+}
+
+func getPlugin(pluginName string) (sqlplugin.Plugin, error) {
+	plugin, ok := supportedPlugins[pluginName]
+	if !ok {
+		keys := maps.Keys(supportedPlugins)
+		slices.Sort(keys)
+		return nil, fmt.Errorf(
+			"%w: unknown plugin %q, supported plugins: %v",
+			ErrPluginNotSupported,
+			pluginName,
+			keys,
+		)
+	}
+	return plugin, nil
 }
