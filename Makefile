@@ -20,9 +20,6 @@ clean: clean-bins clean-test-results
 
 # Recompile proto files.
 proto: clean-proto lint-protos lint-api protoc service-clients goimports-proto proto-mocks copyright-proto
-
-# Update proto submodule from remote and recompile proto files.
-update-proto: update-proto-submodule proto gomodtidy
 ########################################################################
 
 .PHONY: proto proto-mocks protoc install bins ci-build-misc clean
@@ -73,8 +70,7 @@ TEST_TIMEOUT := 30m
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
-PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(PROTO_ROOT)/dependencies
-PROTO_OPTS = paths=source_relative:$(PROTO_OUT)
+API_BINPB := $(PROTO_ROOT)/api.binpb
 PROTO_OUT := api
 PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
 PROTO_PATHS = paths=source_relative:$(PROTO_OUT)
@@ -161,7 +157,7 @@ BUF := $(LOCALBIN)/buf-$(BUF_VER)
 $(BUF): | $(LOCALBIN)
 	$(call go-install-tool,$(BUF),github.com/bufbuild/buf/cmd/buf,$(BUF_VER))
 
-GO_API_VER := v1.29.0
+GO_API_VER := v1.33.0
 PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
@@ -241,18 +237,13 @@ $(PROTO_OUT):
 clean-proto: gomodtidy
 	@rm -rf $(PROTO_OUT)/*
 
-update-proto-submodule:
-	@printf $(COLOR) "Update proto submodule from remote..."
-	git submodule update --force --remote $(PROTO_ROOT)/api
+$(API_BINPB): go.mod go.sum $(PROTO_FILES)
+	@printf $(COLOR) "Generate api.binpb..."
+	@./cmd/tools/getproto/run.sh --out $@
 
-install-proto-submodule:
-	@printf $(COLOR) "Install proto submodule..."
-	git submodule update --init $(PROTO_ROOT)/api
-
-protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS)
+protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
 	@$(PROTOGEN) \
-		-I=proto/api \
-		-I=proto/dependencies \
+		--descriptor_set_in=$(API_BINPB) \
 		--root=proto/internal \
 		--rewrite-enum=BuildId_State:BuildId \
 		-p go-grpc_out=$(PROTO_PATHS) \
@@ -343,21 +334,22 @@ lint-code: $(GOLANGCI_LINT)
 lint: lint-code lint-actions lint-api lint-protos
 	@printf $(COLOR) "Run linters..."
 
-lint-api: $(API_LINTER)
+lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
-	$(call silent_exec, $(API_LINTER) --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
+	$(call silent_exec, $(API_LINTER) --set-exit-status -I=$(PROTO_ROOT)/internal --descriptor-set-in $(API_BINPB) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
-lint-protos: $(BUF)
+lint-protos: $(BUF) $(API_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
-	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) lint)
+	@protoc --descriptor_set_in=$(API_BINPB) -I=proto/internal $(PROTO_FILES) -o /dev/stdout | (cd proto/internal && $(ROOT)/$(BUF) lint -)
 
-buf-build: $(BUF)
-	@printf $(COLOR) "Build image.bin with buf..."
-	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) build -o image.bin)
-
-buf-breaking: $(BUF)
-	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
-	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) check breaking --against image.bin)
+# TODO: fix this to work with getproto + API_BINPB
+# buf-build: $(BUF)
+# 	@printf $(COLOR) "Build image.bin with buf..."
+# 	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) build -o image.bin)
+#
+# buf-breaking: $(BUF)
+# 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
+# 	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) breaking --against image.bin)
 
 shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
