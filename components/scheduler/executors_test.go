@@ -68,7 +68,7 @@ func TestProcessScheduleTask(t *testing.T) {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}
-	schedulerHsm := scheduler.Scheduler{&schedspb.HsmSchedulerState{
+	schedulerHsm := scheduler.Scheduler{HsmSchedulerState: &schedspb.HsmSchedulerState{
 		Args: &schedspb.StartScheduleArgs{
 			Schedule: &sched,
 			State: &schedspb.InternalState{
@@ -81,8 +81,7 @@ func TestProcessScheduleTask(t *testing.T) {
 		HsmState: enums.SCHEDULER_STATE_WAITING,
 	}}
 
-	coll := scheduler.MachineCollection(root)
-	node, err := coll.Add("ID", schedulerHsm)
+	node, err := root.AddChild(hsm.Key{Type: scheduler.StateMachineType.ID}, schedulerHsm)
 	require.NoError(t, err)
 	env := fakeEnv{node}
 
@@ -100,15 +99,15 @@ func TestProcessScheduleTask(t *testing.T) {
 		scheduler.ScheduleTask{Deadline: env.Now().Add(10 * time.Second)},
 	)
 	require.NoError(t, err)
-
-	schedulerHsm, err = coll.Data("ID")
-	require.NoError(t, err)
 	require.Equal(t, enums.SCHEDULER_STATE_WAITING, schedulerHsm.HsmState)
-	// TODO(Tianyu): is there any way to inspect the resulting task queue?
 }
 
 func newMutableState(t *testing.T) mutableState {
 	return mutableState{}
+}
+
+func (mutableState) IsWorkflowExecutionRunning() bool {
+	return true
 }
 
 func newRoot(t *testing.T) *hsm.Node {
