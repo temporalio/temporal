@@ -350,6 +350,7 @@ type (
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 		UpdateBuildIdAssignment(buildId string) error
 		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
+		RefreshExpirationTimeoutTask(ctx context.Context) error
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)
