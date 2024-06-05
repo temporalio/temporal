@@ -75,14 +75,20 @@ func newActivityVisitor(
 	}
 
 	now := timesource.Now().In(time.UTC)
+	retryMaxInterval := ai.RetryMaximumInterval
 	delay := nextRetryDelayFrom(failure)
+
+	// if a delay is specified by the application it should override the maximum interval set by the retry policy.
+	if delay != nil {
+		retryMaxInterval = durationpb.New(*delay)
+	}
 
 	backoff, retryState := nextBackoffInterval(
 		now,
 		ai.Attempt,
 		ai.RetryMaximumAttempts,
 		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
+		retryMaxInterval,
 		ai.RetryExpirationTime,
 		ai.RetryBackoffCoefficient,
 		makeBackoffAlgorithm(delay),
