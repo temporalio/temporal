@@ -17,8 +17,8 @@ CREATE TABLE executions_visibility (
   search_attributes       TEXT          NULL,
   parent_workflow_id      VARCHAR(255)  NULL,
   parent_run_id           VARCHAR(255)  NULL,
-  root_workflow_id        VARCHAR(255)  NULL,
-  root_run_id             VARCHAR(255)  NULL,
+  root_workflow_id        VARCHAR(255)  NOT NULL DEFAULT '',
+  root_run_id             VARCHAR(255)  NOT NULL DEFAULT '',
 
   -- Predefined search attributes
   TemporalChangeVersion         TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalChangeVersion")) STORED,
