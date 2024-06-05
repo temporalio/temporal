@@ -283,7 +283,7 @@ func (s *RetryPolicySuite) TestErrorDependentPolicy() {
 
 	// test with jitter
 	policy = NewErrorDependentRetryPolicy(delayForError).WithMaximumAttempts(4).WithJitter(0.1)
-	retrier, ts = createRetrier(policy)
+	retrier, _ = createRetrier(policy)
 
 	delay = retrier.NextBackOff(fmt.Errorf("other error"))
 	s.True(delay >= 1*time.Second)
@@ -311,7 +311,7 @@ func (s *RetryPolicySuite) TestConstantDelayPolicy() {
 
 	// test with jitter
 	policy = NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(4).WithJitter(0.1)
-	retrier, ts = createRetrier(policy)
+	retrier, _ = createRetrier(policy)
 
 	delay = retrier.NextBackOff(nil)
 	s.True(delay >= 2*time.Second)
