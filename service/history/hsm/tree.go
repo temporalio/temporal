@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/proto"
 )
 
