@@ -31,9 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
@@ -145,25 +143,22 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
-func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout int, expectError bool) {
+func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout int, startDelay int, expectError bool) {
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		workflow.SetQueryHandler(ctx, testname, func() (string, error) {
 			return "should-reach-here", nil
 		})
-		return "", temporal.NewApplicationError("retry-me", "test-error")
+		return "", nil
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)
 
 	id := "test-query-before-backoff"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 id,
-		TaskQueue:          s.taskQueue,
-		WorkflowRunTimeout: 20 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 10 * time.Second,
-		},
+		ID:         id,
+		TaskQueue:  s.taskQueue,
+		StartDelay: time.Duration(startDelay) * time.Second,
 	}
 
 	// Well... contextTimeout is not going to be an actual timeout.
@@ -179,24 +174,6 @@ func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout i
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	// wait until retry with backoff is scheduled
-	findBackoffWorkflow := false
-	for i := 0; i < 5; i++ {
-		historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
-			WorkflowId: id,
-		})
-		if len(historyEvents) == 1 {
-			s.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted {"FirstWorkflowTaskBackoff":{"Seconds":10}}`, historyEvents)
-			findBackoffWorkflow = true
-			break
-		}
-
-		// wait for the retry, which will have backoff
-		time.Sleep(time.Second)
-	}
-	s.True(findBackoffWorkflow)
-
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
 
 	if expectError {
@@ -209,15 +186,17 @@ func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout i
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff_Pass() {
-	contextTimeout := 30
+	contextTimeout := 10
+	startDelay := 5
 	expectError := false
-	s.queryWorkflow_QueryWhileBackoff(contextTimeout, expectError)
+	s.queryWorkflow_QueryWhileBackoff(contextTimeout, startDelay, expectError)
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff_Fail() {
-	contextTimeout := 9
+	contextTimeout := 8
+	startDelay := 10
 	expectError := true
-	s.queryWorkflow_QueryWhileBackoff(contextTimeout, expectError)
+	s.queryWorkflow_QueryWhileBackoff(contextTimeout, startDelay, expectError)
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {

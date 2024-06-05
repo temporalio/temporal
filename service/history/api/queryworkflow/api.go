@@ -262,7 +262,8 @@ func queryWillTimeoutsBeforeTaskStart(
 	workflowTaskStart := workflowStart.Add(workflowTaskBackoffDuration)
 
 	deadline, _ := ctx.Deadline()
-	if workflowTaskStart.After(deadline.UTC()) {
+	deadline = deadline.UTC()
+	if workflowTaskStart.After(deadline) {
 		return true, nil
 	}
 	return false, nil
