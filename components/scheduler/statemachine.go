@@ -78,9 +78,8 @@ func (s Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 		nextInvokeTime := timestamppb.New(s.Args.State.LastProcessedTime.AsTime().Add(1 * time.Second))
 		return []hsm.Task{ScheduleTask{Deadline: nextInvokeTime.AsTime()}}, nil
 	default:
-		return nil, fmt.Errorf("unsupported callback variant %v", s.HsmState) // nolint:goerr113
+		return nil, fmt.Errorf("unexpected scheduler state %v", s.HsmState) // nolint:goerr113
 	}
-	return nil, nil
 }
 
 type stateMachineDefinition struct{}
