@@ -325,18 +325,19 @@ func (t *MatcherTestSuite) TestBacklogAge() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
+
 	time.Sleep(time.Millisecond)
-	t.InEpsilon(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
 
 	// offering the same task twice to make sure of correct counting
 	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
-	t.InEpsilon(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
 
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
-	t.InEpsilon(t.rootMatcher.getBacklogAge(), time.Minute, float64(10*time.Millisecond))
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Minute, float64(10*time.Millisecond))
 
 	task, _ := t.rootMatcher.Poll(ctx, &pollMetadata{})
 	time.Sleep(time.Millisecond)
