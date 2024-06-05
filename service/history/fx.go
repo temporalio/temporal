@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/archival"
@@ -96,6 +97,7 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
+	schedulerhsm.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )

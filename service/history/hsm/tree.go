@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -315,6 +316,21 @@ func (n *Node) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historyp
 // Must be called within an [Environment.Access] function block with either read or write access.
 func (n *Node) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
 	return n.backend.LoadHistoryEvent(ctx, token)
+}
+
+// CheckParentIsRunning checks that the parent node is running if the node is attached to a workflow execution.
+// Returns nil if the parent is running, and ErrWorkflowCompleted otherwise.
+func (n *Node) CheckParentIsRunning() error {
+	if n.Parent != nil {
+		execution, err := MachineData[interface{ IsWorkflowExecutionRunning() bool }](n.Parent)
+		if err != nil {
+			return err
+		}
+		if !execution.IsWorkflowExecutionRunning() {
+			return consts.ErrWorkflowCompleted
+		}
+	}
+	return nil
 }
 
 // MachineData deserializes the persistent state machine's data, casts it to type T, and returns it.

@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,28 +20,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package scheduler
 
-package temporal.server.api.enums.v1;
+import (
+	"go.temporal.io/server/common/dynamicconfig"
+)
 
-option go_package = "go.temporal.io/server/api/enums/v1;enums";
+var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceBoolSetting(
+	"scheduler.use-experimental-hsm-scheduler",
+	false,
+	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
 
-enum DeadLetterQueueType {
-    DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED = 0;
-    DEAD_LETTER_QUEUE_TYPE_REPLICATION = 1;
-    DEAD_LETTER_QUEUE_TYPE_NAMESPACE = 2;
+type Config struct {
 }
 
-enum ChecksumFlavor {
-    CHECKSUM_FLAVOR_UNSPECIFIED = 0;
-    CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
-}
-
-// State of a scheduler.
-enum SchedulerState {
-    // Default value, unspecified state.
-    SCHEDULER_STATE_UNSPECIFIED = 0;
-    // Scheduler is waiting to be activated after the specified amount of time.
-    // TODO(Tianyu): Add more state in the future
-    SCHEDULER_STATE_WAITING = 1;
+func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+	return &Config{}
 }

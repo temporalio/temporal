@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,28 +20,53 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package scheduler
 
-package temporal.server.api.enums.v1;
+import (
+	"fmt"
+	"time"
 
-option go_package = "go.temporal.io/server/api/enums/v1;enums";
+	"go.temporal.io/server/service/history/hsm"
+)
 
-enum DeadLetterQueueType {
-    DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED = 0;
-    DEAD_LETTER_QUEUE_TYPE_REPLICATION = 1;
-    DEAD_LETTER_QUEUE_TYPE_NAMESPACE = 2;
+var (
+	TaskTypeSchedule = hsm.TaskType{
+		ID:   8,
+		Name: "scheduler.Schedule",
+	}
+)
+
+type ScheduleTask struct {
+	Deadline time.Time
 }
 
-enum ChecksumFlavor {
-    CHECKSUM_FLAVOR_UNSPECIFIED = 0;
-    CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
+var _ hsm.Task = ScheduleTask{}
+
+func (ScheduleTask) Type() hsm.TaskType {
+	return TaskTypeSchedule
 }
 
-// State of a scheduler.
-enum SchedulerState {
-    // Default value, unspecified state.
-    SCHEDULER_STATE_UNSPECIFIED = 0;
-    // Scheduler is waiting to be activated after the specified amount of time.
-    // TODO(Tianyu): Add more state in the future
-    SCHEDULER_STATE_WAITING = 1;
+func (t ScheduleTask) Kind() hsm.TaskKind {
+	return hsm.TaskKindTimer{Deadline: t.Deadline}
+}
+
+func (ScheduleTask) Concurrent() bool {
+	return false
+}
+
+type ScheduleTaskSerializer struct{}
+
+func (ScheduleTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
+	if kind, ok := kind.(hsm.TaskKindTimer); ok {
+		return ScheduleTask{Deadline: kind.Deadline}, nil
+	}
+	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
+}
+
+func (ScheduleTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
+	return nil, nil
+}
+
+func RegisterTaskSerializers(reg *hsm.Registry) error {
+	return reg.RegisterTaskSerializer(TaskTypeSchedule.ID, ScheduleTaskSerializer{})
 }
