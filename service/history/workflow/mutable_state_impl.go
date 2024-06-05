@@ -2183,7 +2183,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
-		// TODO: for workflow reset case, re-calculate the expiration time instead of reusing the one in the event
 		ms.executionInfo.WorkflowExecutionExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}
 
@@ -5937,4 +5936,14 @@ func (ms *MutableStateImpl) logDataInconsistency() {
 
 func (ms *MutableStateImpl) HasCompletedAnyWorkflowTask() bool {
 	return ms.GetLastCompletedWorkflowTaskStartedEventId() != common.EmptyEventID
+}
+
+func (ms *MutableStateImpl) RefreshExpirationTimeoutTask(ctx context.Context) error {
+	executionInfo := ms.GetExecutionInfo()
+	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
+	if weTimeout > 0 {
+		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
+	}
+
+	return RefreshTasksForWorkflowStart(ctx, ms, ms.taskGenerator)
 }
