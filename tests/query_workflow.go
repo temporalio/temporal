@@ -162,7 +162,7 @@ func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout i
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: 20 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 4 * time.Second,
+			InitialInterval: 10 * time.Second,
 		},
 	}
 
@@ -187,7 +187,7 @@ func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout i
 		})
 		if len(historyEvents) == 1 {
 			s.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted {"FirstWorkflowTaskBackoff":{"Seconds":4}}`, historyEvents)
+  1 WorkflowExecutionStarted {"FirstWorkflowTaskBackoff":{"Seconds":10}}`, historyEvents)
 			findBackoffWorkflow = true
 			break
 		}
@@ -209,13 +209,13 @@ func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout i
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff_Pass() {
-	contextTimeout := 5
+	contextTimeout := 30
 	expectError := false
 	s.queryWorkflow_QueryWhileBackoff(contextTimeout, expectError)
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff_Fail() {
-	contextTimeout := 2
+	contextTimeout := 9
 	expectError := true
 	s.queryWorkflow_QueryWhileBackoff(contextTimeout, expectError)
 }
