@@ -314,11 +314,13 @@ func historyEventsHandlerProvider(
 	clusterMetadata cluster.Metadata,
 	localHandler eventhandler.LocalGeneratedEventsHandler,
 	remoteHandler eventhandler.RemoteGeneratedEventsHandler,
+	remoteHistoryFetcher eventhandler.HistoryPaginatedFetcher,
 ) eventhandler.HistoryEventsHandler {
 	return eventhandler.NewHistoryEventsHandler(
 		clusterMetadata,
 		localHandler,
 		remoteHandler,
+		remoteHistoryFetcher,
 	)
 }
 

@@ -63,6 +63,17 @@ type (
 			endEventID int64,
 			endEventVersion int64,
 		) collection.Iterator[HistoryBatch]
+		GetWorkflowVersionHistory(
+			ctx context.Context,
+			remoteClusterName string,
+			namespaceID namespace.ID,
+			workflowID string,
+			runID string,
+			startEventID int64,
+			startEventVersion int64,
+			endEventID int64,
+			endEventVersion int64,
+		) (*historyspb.VersionHistory, error)
 	}
 
 	HistoryPaginatedFetcherImpl struct {
@@ -89,7 +100,7 @@ func NewHistoryPaginatedFetcher(
 	serializer serialization.Serializer,
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
 	logger log.Logger,
-) *HistoryPaginatedFetcherImpl {
+) HistoryPaginatedFetcher {
 	return &HistoryPaginatedFetcherImpl{
 		namespaceRegistry:    namespaceRegistry,
 		clientBean:           clientBean,
@@ -133,6 +144,23 @@ func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIterator(
 		endEventID,
 		endEventVersion,
 	))
+}
+func (n *HistoryPaginatedFetcherImpl) GetWorkflowVersionHistory(
+	ctx context.Context,
+	remoteClusterName string,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64,
+) (*historyspb.VersionHistory, error) {
+	res, err := n.getHistory(ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion, nil, defaultPageSize)
+	if err != nil {
+		return nil, err
+	}
+	return res.GetVersionHistory(), nil
 }
 
 func (n *HistoryPaginatedFetcherImpl) getPaginationFn(

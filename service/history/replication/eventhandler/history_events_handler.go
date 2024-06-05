@@ -33,6 +33,7 @@ import (
 	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
@@ -62,12 +63,24 @@ type (
 			newEvents []*historypb.HistoryEvent,
 			newRunID string,
 		) error
+		ResendHistoryEvents(
+			ctx context.Context,
+			remoteClusterName string,
+			namespaceID namespace.ID,
+			workflowID string,
+			runID string,
+			startEventID int64,
+			startEventVersion int64,
+			endEventID int64,
+			endEventVersion int64,
+		) error
 	}
 
 	historyEventsHandlerImpl struct {
-		clusterMetadata     cluster.Metadata
-		localEventsHandler  LocalGeneratedEventsHandler
-		remoteEventsHandler RemoteGeneratedEventsHandler
+		clusterMetadata      cluster.Metadata
+		localEventsHandler   LocalGeneratedEventsHandler
+		remoteEventsHandler  RemoteGeneratedEventsHandler
+		remoteHistoryFetcher HistoryPaginatedFetcher
 	}
 )
 
@@ -75,11 +88,13 @@ func NewHistoryEventsHandler(
 	clusterMetadata cluster.Metadata,
 	localHandler LocalGeneratedEventsHandler,
 	remoteHandler RemoteGeneratedEventsHandler,
+	remoteHistoryFetcher HistoryPaginatedFetcher,
 ) HistoryEventsHandler {
 	return &historyEventsHandlerImpl{
 		clusterMetadata,
 		localHandler,
 		remoteHandler,
+		remoteHistoryFetcher,
 	}
 }
 
@@ -126,6 +141,64 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 		}
 	}
 	return nil
+}
+
+func (h *historyEventsHandlerImpl) ResendHistoryEvents(
+	ctx context.Context,
+	remoteClusterName string,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	startEventID int64, // exclusive
+	startEventVersion int64,
+	endEventID int64, // exclusive
+	endEventVersion int64,
+) error {
+	versionHistory, err := h.remoteHistoryFetcher.GetWorkflowVersionHistory(
+		ctx,
+		remoteClusterName,
+		namespaceID,
+		workflowID,
+		runID,
+		startEventID,
+		startEventVersion,
+		endEventID,
+		endEventVersion,
+	)
+	if err != nil {
+		return err
+	}
+	localVersionHistory, remoteVersionHistory := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistory.GetItems(), h.clusterMetadata.GetClusterID(), h.clusterMetadata.GetFailoverVersionIncrement())
+	// resend request has local generated events portion, handle them first
+	if len(localVersionHistory) != 0 && startEventID < localVersionHistory[len(localVersionHistory)-1].EventId {
+		nextEventVersion, err := versionhistory.GetVersionHistoryEventVersion(versionHistory, startEventID+1)
+		if err != nil {
+			return err
+		}
+		localLastItem := localVersionHistory[len(localVersionHistory)-1]
+		err = h.localEventsHandler.ResendLocalGeneratedHistoryEvents(
+			ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID+1, nextEventVersion, localLastItem.EventId, localLastItem.Version)
+		if err != nil {
+			return err
+		}
+		startEventID = localLastItem.EventId
+		startEventVersion = localLastItem.Version
+	}
+	if startEventID >= endEventID || len(remoteVersionHistory) == 0 {
+		return nil
+	}
+
+	return h.remoteEventsHandler.ResendRemoteGeneratedHistoryEvents(
+		ctx,
+		remoteClusterName,
+		namespaceID,
+		workflowID,
+		runID,
+		remoteVersionHistory[0].EventId,
+		remoteVersionHistory[0].Version,
+		endEventID,
+		endEventVersion,
+	)
 }
 
 func (h *historyEventsHandlerImpl) splitBatchesToLocalAndRemote(

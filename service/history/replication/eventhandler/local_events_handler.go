@@ -60,6 +60,17 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			localEvents [][]*historypb.HistoryEvent,
 		) error
+		ResendLocalGeneratedHistoryEvents(
+			ctx context.Context,
+			remoteClusterName string,
+			namespaceID namespace.ID,
+			workflowID string,
+			runID string,
+			startEventID int64,
+			startEventVersion int64,
+			endEventID int64,
+			endEventVersion int64,
+		) error
 	}
 
 	localEventsHandlerImpl struct {
@@ -70,6 +81,42 @@ type (
 		historyPaginatedFetcher HistoryPaginatedFetcher
 	}
 )
+
+func (h *localEventsHandlerImpl) ResendLocalGeneratedHistoryEvents(
+	ctx context.Context,
+	remoteClusterName string,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64,
+) error {
+	shardContext, err := h.shardController.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return err
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return err
+	}
+	return h.importEvents(
+		ctx,
+		remoteClusterName,
+		engine,
+		definition.WorkflowKey{
+			NamespaceID: namespaceID.String(),
+			WorkflowID:  workflowID,
+			RunID:       runID,
+		},
+		startEventID,
+		startEventVersion,
+		endEventID,
+		endEventVersion,
+		nil,
+	)
+}
 
 func NewLocalEventsHandler(
 	clusterMetadata cluster.Metadata,
