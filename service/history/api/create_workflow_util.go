@@ -91,7 +91,9 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
-	// This workflow is created for the hsm attached to it and will not generate actual workflow tasks
+	// This workflow is created for the hsm attached to it and will not generate actual workflow tasks.
+	// This is a bit of a hacky way to distinguish between a "real" workflow and a top level state machine.
+	// This code will change as the scheduler HSM project progresses.
 	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId)
 	if hsmOnlyWorkflow {
 		args := schedule.StartScheduleArgs{}
@@ -99,6 +101,7 @@ func NewWorkflowWithSignal(
 			return nil, err
 		}
 
+		// Key ID is left empty as the scheduler machine is a singleton.
 		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType.ID}, schedulerhsm.NewScheduler(&args))
 		if err != nil {
 			return nil, err

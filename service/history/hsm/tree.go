@@ -318,7 +318,7 @@ func (n *Node) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.H
 	return n.backend.LoadHistoryEvent(ctx, token)
 }
 
-// CheckParentIsRunning checks that the parent node is running if the operation is attached to a workflow execution.
+// CheckParentIsRunning checks that the parent node is running if the node is attached to a workflow execution.
 // Returns nil if the parent is running, and ErrWorkflowCompleted otherwise.
 func (n *Node) CheckParentIsRunning() error {
 	if n.Parent != nil {

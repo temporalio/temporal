@@ -27,7 +27,7 @@ import (
 )
 
 var Module = fx.Module(
-	"component.callbacks",
+	"component.scheduler",
 	fx.Provide(ConfigProvider),
 	fx.Provide(ActiveExecutorOptionsProvider),
 	fx.Provide(StandbyExecutorOptionsProvider),
