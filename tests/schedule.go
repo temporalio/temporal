@@ -681,7 +681,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 	_, err = s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 	// TODO(Tianyu): For now, simply test that no workflow tasks are generated and the scheduler does not run
-	<-time.After(5 * time.Second)
+	<-time.NewTimer(5 * time.Second).C
 	s.True(atomic.LoadInt32(&runs) == 0)
 	s.NoError(err)
 

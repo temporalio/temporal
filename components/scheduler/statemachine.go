@@ -65,7 +65,7 @@ func (s Scheduler) State() enumsspb.SchedulerState {
 }
 
 func (s Scheduler) SetState(state enumsspb.SchedulerState) {
-	s.HsmState = state
+	s.HsmSchedulerState.HsmState = state
 }
 
 func (s Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
@@ -77,6 +77,8 @@ func (s Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 		// TODO(Tianyu): Replace with actual scheduling logic
 		nextInvokeTime := timestamppb.New(s.Args.State.LastProcessedTime.AsTime().Add(1 * time.Second))
 		return []hsm.Task{ScheduleTask{Deadline: nextInvokeTime.AsTime()}}, nil
+	default:
+		return nil, fmt.Errorf("unsupported callback variant %v", s.HsmState) // nolint:goerr113
 	}
 	return nil, nil
 }

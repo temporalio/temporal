@@ -67,8 +67,5 @@ func (ScheduleTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {
-	if err := reg.RegisterTaskSerializer(TaskTypeSchedule.ID, ScheduleTaskSerializer{}); err != nil {
-		return err
-	}
-	return nil
+	return reg.RegisterTaskSerializer(TaskTypeSchedule.ID, ScheduleTaskSerializer{})
 }
