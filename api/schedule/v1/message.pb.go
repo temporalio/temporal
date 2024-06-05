@@ -955,7 +955,7 @@ func (x *NextTimeCache) GetCompleted() bool {
 	return false
 }
 
-// State of a scheduler using hierarchical state machines
+// State of a scheduler using hierarchical state machines.
 type HsmSchedulerState struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

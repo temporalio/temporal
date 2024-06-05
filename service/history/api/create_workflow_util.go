@@ -26,8 +26,8 @@ package api
 
 import (
 	"context"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/sdk"
 	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -91,21 +91,24 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
-	if startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId) {
-		// TODO(Tianyu): Should actually ensure the data converter is correct
+	// This workflow is created for the hsm attached to it and will not generate actual workflow tasks
+	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId)
+	if hsmOnlyWorkflow {
 		args := schedule.StartScheduleArgs{}
-		if err = converter.GetDefaultDataConverter().FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
+		if err := sdk.PreferProtoDataConverter.FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
 			return nil, err
 		}
 
-		var node *hsm.Node
-		node, err = newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType.ID}, schedulerhsm.NewScheduler(&args))
+		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType.ID}, schedulerhsm.NewScheduler(&args))
 		if err != nil {
 			return nil, err
 		}
 		err = hsm.MachineTransition(node, func(scheduler schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
 			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if signalWithStartRequest != nil {
@@ -125,7 +128,7 @@ func NewWorkflowWithSignal(
 	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
 
 	var scheduledEventID int64
-	if startRequest.StartRequest.WorkflowType.Name != scheduler.WorkflowType || !shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId) {
+	if !hsmOnlyWorkflow {
 		// Generate first workflow task event if not child WF and no first workflow task backoff
 		scheduledEventID, err = GenerateFirstWorkflowTask(
 			newMutableState,

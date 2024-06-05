@@ -7,7 +7,6 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/schedule/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/history/hsm"
@@ -46,7 +45,7 @@ func TestProcessScheduleTask(t *testing.T) {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}
-	schedulerHsm := scheduler.Scheduler{&schedule.HsmSchedulerState{
+	schedulerHsm := scheduler.Scheduler{&schedspb.HsmSchedulerState{
 		Args: &schedspb.StartScheduleArgs{
 			Schedule: &sched,
 			State: &schedspb.InternalState{

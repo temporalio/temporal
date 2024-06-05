@@ -84,7 +84,7 @@ func RegisterStateMachine(r *hsm.Registry) error {
 	return r.RegisterMachine(stateMachineDefinition{})
 }
 
-// EventSchedulerActivate is triggered when the scheduler state machine should wake up and perform work
+// EventSchedulerActivate is triggered when the scheduler state machine should wake up and perform work.
 type EventSchedulerActivate struct{}
 
 var TransitionSchedulerActivate = hsm.NewTransition(

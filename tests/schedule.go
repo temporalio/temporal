@@ -123,7 +123,6 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 func (s *ScheduleFunctionalSuite) TearDownTest() {
 	s.worker.Stop()
 	s.sdkClient.Close()
-
 }
 
 func (s *ScheduleFunctionalSuite) TestBasics() {
@@ -686,6 +685,10 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 	s.True(atomic.LoadInt32(&runs) == 0)
 	s.NoError(err)
 
+	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	expectedHistory := `1 WorkflowExecutionStarted`
+	s.EqualHistoryEvents(expectedHistory, events)
+
 	// cleanup
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
 		Namespace:  s.namespace,
@@ -693,7 +696,6 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 		Identity:   "test",
 	})
 	s.NoError(err)
-	s.testCluster.host.dcClient.RemoveOverride(schedulerhsm.UseExperimentalHsmScheduler)
 }
 
 func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {

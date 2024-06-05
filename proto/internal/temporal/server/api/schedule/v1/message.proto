@@ -148,7 +148,7 @@ message NextTimeCache {
 }
 
 
-// State of a scheduler using hierarchical state machines
+// State of a scheduler using hierarchical state machines.
 message HsmSchedulerState {
     StartScheduleArgs args = 1;
     temporal.server.api.enums.v1.SchedulerState hsm_state = 2;

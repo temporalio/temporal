@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -31,26 +30,12 @@ type (
 	}
 )
 
-// checkParentIsRunning checks that the parent node is running if the operation is attached to a workflow execution.
-func checkParentIsRunning(node *hsm.Node) error {
-	if node.Parent != nil {
-		execution, err := hsm.MachineData[interface{ IsWorkflowExecutionRunning() bool }](node.Parent)
-		if err != nil {
-			return err
-		}
-		if !execution.IsWorkflowExecutionRunning() {
-			return consts.ErrWorkflowCompleted
-		}
-	}
-	return nil
-}
-
 func (e activeExecutor) executeScheduleTask(
 	env hsm.Environment,
 	node *hsm.Node,
 	task ScheduleTask,
 ) error {
-	if err := checkParentIsRunning(node); err != nil {
+	if err := node.CheckParentIsRunning(); err != nil {
 		return err
 	}
 	// TODO(Tianyu): Perform scheduler logic before scheduling self again
