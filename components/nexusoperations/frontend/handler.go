@@ -167,7 +167,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 		if result.Size() > h.Config.PayloadSizeLimit(ns.Name().String()) {
 			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(ns.Name().String()))
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result context exceeds size limit")
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
 			Success: result,

@@ -96,7 +96,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:  MaxOperationNameLength.Get(dc),
-		PayloadSizeLimit:        dynamicconfig.NexusPayloadSizeLimit.Get(dc),
+		PayloadSizeLimit:        dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:     CallbackURLTemplate.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(

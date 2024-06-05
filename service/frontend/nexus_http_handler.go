@@ -107,7 +107,7 @@ func NewNexusHTTPHandler(
 				redirectionInterceptor:        redirectionInterceptor,
 				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
 				forwardingClients:             clientCache,
-				payloadSizeLimit:              serviceConfig.NexusPayloadSizeLimit,
+				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

@@ -334,46 +334,13 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 		response := unexpectedResponseError.Response
 		if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
-			node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
-				// nolint:revive
-				e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-					NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-						Failure: nexusOperationFailure(
-							operation,
-							eventID,
-							&failurepb.Failure{
-								Message: unexpectedResponseError.Message,
-								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-									ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-										NonRetryable: true,
-									},
-								},
-							},
-						),
-						ScheduledEventId: eventID,
-					},
-				}
-			})
-
-			return TransitionFailed.Apply(operation, EventFailed{
-				AttemptFailure: &AttemptFailure{
-					Time: env.Now(),
-					Err:  callErr,
-				},
-				Node: node,
-			})
+			return handleNonRetryableStartOperationError(env, node, operation, callErr, eventID, unexpectedResponseError.Message)
 		}
 		// Fall through to the AttemptFailed transition.
-	} else if errors.Is(err, ErrResponseBodyTooLarge) {
+	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
-		return TransitionFailed.Apply(operation, EventFailed{
-			AttemptFailure: &AttemptFailure{
-				Time: env.Now(),
-				Err:  callErr,
-			},
-			Node: node,
-		})
+		return handleNonRetryableStartOperationError(env, node, operation, callErr, eventID, "result of StartOperation exceeds size limit")
 	}
 	return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
 		AttemptFailure: AttemptFailure{
@@ -382,6 +349,37 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 		},
 		Node:        node,
 		RetryPolicy: e.Config.RetryPolicy(),
+	})
+}
+
+func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error, eventID int64, message string) (hsm.TransitionOutput, error) {
+	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+		// nolint:revive
+		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+			NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
+				Failure: nexusOperationFailure(
+					operation,
+					eventID,
+					&failurepb.Failure{
+						Message: message,
+						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+								NonRetryable: true,
+							},
+						},
+					},
+				),
+				ScheduledEventId: eventID,
+			},
+		}
+	})
+
+	return TransitionFailed.Apply(operation, EventFailed{
+		AttemptFailure: &AttemptFailure{
+			Time: env.Now(),
+			Err:  callErr,
+		},
+		Node: node,
 	})
 }
 
