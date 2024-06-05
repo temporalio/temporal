@@ -145,7 +145,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
-func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout int, retryTimeout int, expectError bool) {
+func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout int, expectError bool) {
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		workflow.SetQueryHandler(ctx, testname, func() (string, error) {
@@ -162,7 +162,7 @@ func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout i
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: 20 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: time.Duration(retryTimeout) * time.Second,
+			InitialInterval: 4 * time.Second,
 		},
 	}
 
@@ -210,16 +210,14 @@ func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout i
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff_Pass() {
 	contextTimeout := 5
-	retryTimeout := 4
 	expectError := false
-	s.queryWorkflow_QueryWhileBackoff(contextTimeout, retryTimeout, expectError)
+	s.queryWorkflow_QueryWhileBackoff(contextTimeout, expectError)
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff_Fail() {
 	contextTimeout := 2
-	retryTimeout := 4
 	expectError := true
-	s.queryWorkflow_QueryWhileBackoff(contextTimeout, retryTimeout, expectError)
+	s.queryWorkflow_QueryWhileBackoff(contextTimeout, expectError)
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
