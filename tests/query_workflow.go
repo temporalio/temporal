@@ -145,7 +145,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
-func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
+func (s *ClientFunctionalSuite) queryWorkflow_QueryWhileBackoff(contextTimeout int, retryTimeout int, expectError bool) {
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		workflow.SetQueryHandler(ctx, testname, func() (string, error) {
@@ -162,10 +162,14 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: 20 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 10 * time.Second,
+			InitialInterval: time.Duration(retryTimeout) * time.Second,
 		},
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+	// Well... contextTimeout is not going to be an actual timeout.
+	// It is going to be timeout / 2.
+	// See 	newGRPCContext implementation.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(2*contextTimeout)*time.Second)
 	defer cancel()
 	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
@@ -183,7 +187,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		})
 		if len(historyEvents) == 1 {
 			s.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted {"FirstWorkflowTaskBackoff":{"Seconds":10}}`, historyEvents)
+  1 WorkflowExecutionStarted {"FirstWorkflowTaskBackoff":{"Seconds":4}}`, historyEvents)
 			findBackoffWorkflow = true
 			break
 		}
@@ -194,8 +198,28 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	s.True(findBackoffWorkflow)
 
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
-	s.Error(err)
-	s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
+
+	if expectError {
+		s.Error(err)
+		s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
+	} else {
+		s.NoError(err)
+	}
+
+}
+
+func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff_Pass() {
+	contextTimeout := 5
+	retryTimeout := 4
+	expectError := false
+	s.queryWorkflow_QueryWhileBackoff(contextTimeout, retryTimeout, expectError)
+}
+
+func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff_Fail() {
+	contextTimeout := 2
+	retryTimeout := 4
+	expectError := true
+	s.queryWorkflow_QueryWhileBackoff(contextTimeout, retryTimeout, expectError)
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
