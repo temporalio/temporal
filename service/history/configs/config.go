@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/common/retrypolicy"
 )
 

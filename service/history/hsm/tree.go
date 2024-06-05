@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/service/history/consts"
 	"reflect"
 
 	enumspb "go.temporal.io/api/enums/v1"

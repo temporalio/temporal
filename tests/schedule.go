@@ -27,7 +27,6 @@ package tests
 import (
 	"errors"
 	"fmt"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"strings"
 	"sync/atomic"
 	"time"

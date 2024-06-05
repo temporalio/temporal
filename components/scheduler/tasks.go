@@ -24,8 +24,9 @@ package scheduler
 
 import (
 	"fmt"
-	"go.temporal.io/server/service/history/hsm"
 	"time"
+
+	"go.temporal.io/server/service/history/hsm"
 )
 
 var (

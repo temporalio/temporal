@@ -24,6 +24,8 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
@@ -31,7 +33,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"time"
 )
 
 // Unique type identifier for this state machine.
@@ -69,7 +70,7 @@ func (s Scheduler) SetState(state enumsspb.SchedulerState) {
 }
 
 func (s Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
-	switch s.HsmState {
+	switch s.HsmState { // nolint:exhaustive
 	case enumsspb.SCHEDULER_STATE_WAITING:
 		s.Args.State.LastProcessedTime = timestamppb.Now()
 		// TODO(Tianyu): Replace with actual scheduler work
@@ -77,9 +78,8 @@ func (s Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 		// TODO(Tianyu): Replace with actual scheduling logic
 		nextInvokeTime := timestamppb.New(s.Args.State.LastProcessedTime.AsTime().Add(1 * time.Second))
 		return []hsm.Task{ScheduleTask{Deadline: nextInvokeTime.AsTime()}}, nil
-	default:
-		return nil, fmt.Errorf("unexpected scheduler state %v", s.HsmState) // nolint:goerr113
 	}
+	return nil, nil
 }
 
 type stateMachineDefinition struct{}
@@ -100,7 +100,7 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Scheduler); ok {
 		return proto.Marshal(state.HsmSchedulerState)
 	}
-	return nil, fmt.Errorf("invalid callback provided: %v", state) // nolint:goerr113
+	return nil, fmt.Errorf("invalid scheduler state provided: %v", state) // nolint:goerr113
 }
 
 func RegisterStateMachine(r *hsm.Registry) error {
