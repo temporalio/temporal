@@ -189,19 +189,14 @@ func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
 	// meaning start version check will always pass.
 	// Also there's no way we can perform version check before first run may already be deleted due to retention
 
-	return true
+	// Check if workflow timeout is not expired
+	// This can happen if the workflow is reset since reset re-calculates
+	// the execution timeout but shares the same firstRunID as the base run
 
-	// TODO: uncomment the following logic when fixing
-	// https://github.com/temporalio/temporal/issues/1913
+	now := t.shardContext.GetTimeSource().Now()
+	expired := queues.IsTimeExpired(now, executionInfo.WorkflowExecutionExpirationTime.AsTime())
 
-	// // workflow timeout is not expired
-	// // This can happen if the workflow is reset since reset re-calculates the execution timeout but shares the same firstRunID
-	// // as the base run
-
-	// now := t.shardContext.GetTimeSource().Now()
-	// expired := queues.IsTimeExpired(now, executionInfo.WorkflowExecutionExpirationTime.AsTime())
-
-	// return expired
+	return expired
 }
 
 func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(

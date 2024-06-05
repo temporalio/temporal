@@ -97,8 +97,6 @@ func NewStateRebuilder(
 		executionMgr:      shard.GetExecutionManager(),
 		taskRefresher: workflow.NewTaskRefresher(
 			shard,
-			shard.GetConfig(),
-			shard.GetNamespaceRegistry(),
 			logger,
 		),
 		rebuiltHistorySize: 0,

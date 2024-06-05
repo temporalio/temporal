@@ -240,7 +240,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 
-	taskRefresh := workflow.NewTaskRefresher(r.shardContext, r.shardContext.GetConfig(), r.namespaceRegistry, r.logger)
+	taskRefresh := workflow.NewTaskRefresher(r.shardContext, r.logger)
 	err = taskRefresh.RefreshTasks(ctx, mutableState)
 	if err != nil {
 		return err
