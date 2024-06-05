@@ -26,6 +26,7 @@ package dynamicconfig_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/retrypolicy"
 )
 
 // Note: fileBasedClientSuite also heavily tests Collection, since some tests are easier with data
@@ -73,6 +75,7 @@ func (s *fileBasedClientSuite) TearDownSuite() {
 
 func (s *fileBasedClientSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	dynamicconfig.ResetRegistryForTest()
 }
 
 func (s *fileBasedClientSuite) TestGetValue() {
@@ -150,20 +153,20 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
 	expectedValue := 1004
-	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
-		"another-namespace", "test-tq", 0)
+	setting := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "")
+	v := setting.Get(s.collection)("another-namespace", "test-tq", 0)
 	s.Equal(expectedValue, v)
 	expectedValue = 1005
-	v = dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
-		"another-namespace", "other-test-tq", 0)
+	v = setting.Get(s.collection)("another-namespace", "other-test-tq", 0)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
 	// should return 1001 as the most specific match
-	v1 := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 1001, "").Get(s.collection)(
+	setting := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 1001, "")
+	v1 := setting.Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	v2 := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
+	v2 := setting.WithDefault(0).Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(v1, v2)
 }
@@ -270,13 +273,10 @@ func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
 
 func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	expectedValue := time.Second * 10
-	v := dynamicconfig.NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, 0, "").Get(s.collection)(
-		enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
-	)
+	setting := dynamicconfig.NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, 0, "")
+	v := setting.Get(s.collection)(enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER)
 	s.Equal(expectedValue, v)
-	v = dynamicconfig.NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, 0, "").Get(s.collection)(
-		enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-	)
+	v = setting.Get(s.collection)(enumsspb.TASK_TYPE_REPLICATION_HISTORY)
 	s.Equal(expectedValue, v)
 }
 
@@ -315,6 +315,10 @@ func (mfi MockFileInfo) IsDir() bool        { return mfi.IsDirectory }
 func (mfi MockFileInfo) Sys() interface{}   { return nil }
 
 func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+	dynamicconfig.NewNamespaceFloatSetting(testGetFloat64PropertyKey, 0, "")
+	dynamicconfig.NewNamespaceBoolSetting(testGetBoolPropertyKey, false, "")
+
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
@@ -389,7 +393,9 @@ testGetBoolPropertyKey:
 	close(doneCh)
 }
 
-func (s *fileBasedClientSuite) TestUpdate_ChangedMapValue() {
+func (s *fileBasedClientSuite) TestUpdate_ChangedTypedValue() {
+	dynamicconfig.NewNamespaceTypedSetting("history.fakeRetryPolicy", retrypolicy.DefaultDefaultRetrySettings, "")
+
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
@@ -402,7 +408,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedMapValue() {
 	updatedFileInfo := &MockFileInfo{ModTimeValue: originFileInfo.ModTimeValue.Add(updateInterval + time.Second)}
 
 	originFileData := []byte(`
-history.defaultActivityRetryPolicy:
+history.fakeRetryPolicy:
 - value:
     InitialIntervalInSeconds: 1
     MaximumIntervalCoefficient: 100.0
@@ -410,7 +416,7 @@ history.defaultActivityRetryPolicy:
     MaximumAttempts: 0
 `)
 	updatedFileData := []byte(`
-history.defaultActivityRetryPolicy:
+history.fakeRetryPolicy:
 - value:
     InitialIntervalInSeconds: 3
     MaximumIntervalCoefficient: 100.0
@@ -432,7 +438,7 @@ history.defaultActivityRetryPolicy:
 	reader.EXPECT().Stat(gomock.Any()).Return(updatedFileInfo, nil)
 	reader.EXPECT().ReadFile(gomock.Any()).Return(updatedFileData, nil)
 
-	mockLogger.EXPECT().Info("dynamic config changed for the key: history.defaultactivityretrypolicy oldValue: { constraints: {} value: map[BackoffCoefficient:3 InitialIntervalInSeconds:1 MaximumAttempts:0 MaximumIntervalCoefficient:100] } newValue: { constraints: {} value: map[BackoffCoefficient:2 InitialIntervalInSeconds:3 MaximumAttempts:0 MaximumIntervalCoefficient:100] }", gomock.Any())
+	mockLogger.EXPECT().Info("dynamic config changed for the key: history.fakeretrypolicy oldValue: { constraints: {} value: map[BackoffCoefficient:3 InitialIntervalInSeconds:1 MaximumAttempts:0 MaximumIntervalCoefficient:100] } newValue: { constraints: {} value: map[BackoffCoefficient:2 InitialIntervalInSeconds:3 MaximumAttempts:0 MaximumIntervalCoefficient:100] }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
 	s.NoError(client.Update())
 	s.NoError(err)
@@ -440,6 +446,9 @@ history.defaultActivityRetryPolicy:
 }
 
 func (s *fileBasedClientSuite) TestUpdate_NewEntry() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+	dynamicconfig.NewNamespaceFloatSetting(testGetFloat64PropertyKey, 0, "")
+
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
@@ -493,6 +502,9 @@ testGetIntPropertyKey:
 }
 
 func (s *fileBasedClientSuite) TestUpdate_ChangeOrder_ShouldNotWriteLog() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+	dynamicconfig.NewNamespaceFloatSetting(testGetFloat64PropertyKey, 0, "")
+
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
@@ -547,4 +559,106 @@ testGetFloat64PropertyKey:
 	s.NoError(client.Update())
 	s.NoError(err)
 	close(doneCh)
+}
+
+func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	lr := dynamicconfig.ValidateFile([]byte(`
+testGetIntPropertyKey:
+- value: 2000
+testGetFloat64PropertyKey:
+- value: 22.222
+`))
+	s.Empty(lr.Errors)
+	s.Equal(1, len(lr.Warnings))
+	s.ErrorContains(lr.Warnings[0], `unregistered key "testGetFloat64PropertyKey"`)
+}
+
+func (s *fileBasedClientSuite) TestWarnValidationInt() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	lr := dynamicconfig.ValidateFile([]byte(`
+testGetIntPropertyKey:
+- value: not a number
+`))
+	s.Empty(lr.Errors)
+	s.Equal(1, len(lr.Warnings))
+	s.ErrorContains(lr.Warnings[0], `validation failed: key "testGetIntPropertyKey" value not a number: value type is not int`)
+}
+
+func (s *fileBasedClientSuite) TestWarnConstraint() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	lr := dynamicconfig.ValidateFile([]byte(`
+testGetIntPropertyKey:
+- value: 5005
+  constraints:
+    namespace: samples-namespace
+`))
+	s.Empty(lr.Errors)
+	s.Equal(1, len(lr.Warnings))
+	s.ErrorContains(lr.Warnings[0], `constraint "namespace" isn't valid for dynamic config key "testGetIntPropertyKey"`)
+}
+
+func (s *fileBasedClientSuite) TestWarnMultiple() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	lr := dynamicconfig.ValidateFile([]byte(`
+unknownKey:
+- value: "5d"
+testGetIntPropertyKey:
+- value: not a number
+  constraints:
+    namespace: samples-namespace
+`))
+	s.Empty(lr.Errors)
+	s.Equal(3, len(lr.Warnings))
+}
+
+func (s *fileBasedClientSuite) TestErrorYamlDecode() {
+	lr := dynamicconfig.ValidateFile([]byte(`}}}}}}}}}`))
+	s.Equal(1, len(lr.Errors))
+	s.ErrorContains(lr.Errors[0], "decode error")
+}
+
+func (s *fileBasedClientSuite) TestErrorBadConstraint() {
+	dynamicconfig.NewNamespaceBoolSetting(testGetBoolPropertyKey, true, "")
+
+	lr := dynamicconfig.ValidateFile([]byte(`
+testGetBoolPropertyKey:
+- value: false
+  constraints:
+    namespace: 35
+`))
+	s.Equal(1, len(lr.Errors))
+	s.ErrorContains(lr.Errors[0], "namespace constraint must be string")
+}
+
+func (s *fileBasedClientSuite) TestErrorBadConstraints() {
+	dynamicconfig.NewTaskQueueBoolSetting(testGetBoolPropertyKey, true, "")
+
+	lr := dynamicconfig.ValidateFile([]byte(`
+testGetBoolPropertyKey:
+- value: false
+  constraints:
+    taskQueueName: 22
+    taskType: invalid
+- value: true
+  constraints:
+    color: blue
+`))
+	found := 0
+	for _, err := range lr.Errors {
+		e := err.Error()
+		switch {
+		case strings.Contains(e, "taskQueueName constraint must be string"):
+			found++
+		case strings.Contains(e, "invalid is not a valid TaskQueueType"):
+			found++
+		case strings.Contains(e, `unknown constraint type "color"`):
+			found++
+		}
+	}
+	s.Equal(3, found)
 }

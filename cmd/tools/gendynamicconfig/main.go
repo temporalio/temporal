@@ -145,6 +145,7 @@ func New{{.P.Name}}TypedSetting[T any](key Key, def T, description string) {{.P.
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -156,6 +157,7 @@ func New{{.P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -172,6 +174,10 @@ func New{{.P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert fu
 
 func (s {{.P.Name}}TypedSetting[T]) Key() Key               { return s.key }
 func (s {{.P.Name}}TypedSetting[T]) Precedence() Precedence { return Precedence{{.P.Name}} }
+func (s {{.P.Name}}TypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
 
 func (s {{.P.Name}}TypedSetting[T]) WithDefault(v T) {{.P.Name}}TypedSetting[T] {
 	newS := s
@@ -251,10 +257,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
+
+const PrecedenceUnknown Precedence = 0
 `, nil)
 	for idx, prec := range precedences {
 		// fill in Index and GoArgNames
-		prec.Index = idx
+		prec.Index = idx + 1
 		var argNames []string
 		for _, argAndType := range strings.Split(prec.GoArgs, ",") {
 			argNames = append(argNames, strings.Split(strings.TrimSpace(argAndType), " ")[0])

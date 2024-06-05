@@ -33,19 +33,21 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
-const PrecedenceGlobal Precedence = 0
+const PrecedenceUnknown Precedence = 0
 
-const PrecedenceNamespace Precedence = 1
+const PrecedenceGlobal Precedence = 1
 
-const PrecedenceNamespaceID Precedence = 2
+const PrecedenceNamespace Precedence = 2
 
-const PrecedenceTaskQueue Precedence = 3
+const PrecedenceNamespaceID Precedence = 3
 
-const PrecedenceShardID Precedence = 4
+const PrecedenceTaskQueue Precedence = 4
 
-const PrecedenceTaskType Precedence = 5
+const PrecedenceShardID Precedence = 5
 
-const PrecedenceDestination Precedence = 6
+const PrecedenceTaskType Precedence = 6
+
+const PrecedenceDestination Precedence = 7
 
 type GlobalBoolSetting = GlobalTypedSetting[bool]
 
@@ -731,6 +733,7 @@ func NewGlobalTypedSetting[T any](key Key, def T, description string) GlobalType
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -742,6 +745,7 @@ func NewGlobalTypedSettingWithConverter[T any](key Key, convert func(any) (T, er
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -758,6 +762,10 @@ func NewGlobalTypedSettingWithConstrainedDefault[T any](key Key, convert func(an
 
 func (s GlobalTypedSetting[T]) Key() Key               { return s.key }
 func (s GlobalTypedSetting[T]) Precedence() Precedence { return PrecedenceGlobal }
+func (s GlobalTypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
 
 func (s GlobalTypedSetting[T]) WithDefault(v T) GlobalTypedSetting[T] {
 	newS := s
@@ -798,6 +806,7 @@ func NewNamespaceTypedSetting[T any](key Key, def T, description string) Namespa
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -809,6 +818,7 @@ func NewNamespaceTypedSettingWithConverter[T any](key Key, convert func(any) (T,
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -825,6 +835,10 @@ func NewNamespaceTypedSettingWithConstrainedDefault[T any](key Key, convert func
 
 func (s NamespaceTypedSetting[T]) Key() Key               { return s.key }
 func (s NamespaceTypedSetting[T]) Precedence() Precedence { return PrecedenceNamespace }
+func (s NamespaceTypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
 
 func (s NamespaceTypedSetting[T]) WithDefault(v T) NamespaceTypedSetting[T] {
 	newS := s
@@ -865,6 +879,7 @@ func NewNamespaceIDTypedSetting[T any](key Key, def T, description string) Names
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -876,6 +891,7 @@ func NewNamespaceIDTypedSettingWithConverter[T any](key Key, convert func(any) (
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -892,6 +908,10 @@ func NewNamespaceIDTypedSettingWithConstrainedDefault[T any](key Key, convert fu
 
 func (s NamespaceIDTypedSetting[T]) Key() Key               { return s.key }
 func (s NamespaceIDTypedSetting[T]) Precedence() Precedence { return PrecedenceNamespaceID }
+func (s NamespaceIDTypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
 
 func (s NamespaceIDTypedSetting[T]) WithDefault(v T) NamespaceIDTypedSetting[T] {
 	newS := s
@@ -932,6 +952,7 @@ func NewTaskQueueTypedSetting[T any](key Key, def T, description string) TaskQue
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -943,6 +964,7 @@ func NewTaskQueueTypedSettingWithConverter[T any](key Key, convert func(any) (T,
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -959,6 +981,10 @@ func NewTaskQueueTypedSettingWithConstrainedDefault[T any](key Key, convert func
 
 func (s TaskQueueTypedSetting[T]) Key() Key               { return s.key }
 func (s TaskQueueTypedSetting[T]) Precedence() Precedence { return PrecedenceTaskQueue }
+func (s TaskQueueTypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
 
 func (s TaskQueueTypedSetting[T]) WithDefault(v T) TaskQueueTypedSetting[T] {
 	newS := s
@@ -999,6 +1025,7 @@ func NewShardIDTypedSetting[T any](key Key, def T, description string) ShardIDTy
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1010,6 +1037,7 @@ func NewShardIDTypedSettingWithConverter[T any](key Key, convert func(any) (T, e
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1026,6 +1054,10 @@ func NewShardIDTypedSettingWithConstrainedDefault[T any](key Key, convert func(a
 
 func (s ShardIDTypedSetting[T]) Key() Key               { return s.key }
 func (s ShardIDTypedSetting[T]) Precedence() Precedence { return PrecedenceShardID }
+func (s ShardIDTypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
 
 func (s ShardIDTypedSetting[T]) WithDefault(v T) ShardIDTypedSetting[T] {
 	newS := s
@@ -1066,6 +1098,7 @@ func NewTaskTypeTypedSetting[T any](key Key, def T, description string) TaskType
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1077,6 +1110,7 @@ func NewTaskTypeTypedSettingWithConverter[T any](key Key, convert func(any) (T, 
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1093,6 +1127,10 @@ func NewTaskTypeTypedSettingWithConstrainedDefault[T any](key Key, convert func(
 
 func (s TaskTypeTypedSetting[T]) Key() Key               { return s.key }
 func (s TaskTypeTypedSetting[T]) Precedence() Precedence { return PrecedenceTaskType }
+func (s TaskTypeTypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
 
 func (s TaskTypeTypedSetting[T]) WithDefault(v T) TaskTypeTypedSetting[T] {
 	newS := s
@@ -1133,6 +1171,7 @@ func NewDestinationTypedSetting[T any](key Key, def T, description string) Desti
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1144,6 +1183,7 @@ func NewDestinationTypedSettingWithConverter[T any](key Key, convert func(any) (
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1160,6 +1200,10 @@ func NewDestinationTypedSettingWithConstrainedDefault[T any](key Key, convert fu
 
 func (s DestinationTypedSetting[T]) Key() Key               { return s.key }
 func (s DestinationTypedSetting[T]) Precedence() Precedence { return PrecedenceDestination }
+func (s DestinationTypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
 
 func (s DestinationTypedSetting[T]) WithDefault(v T) DestinationTypedSetting[T] {
 	newS := s
