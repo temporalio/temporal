@@ -178,7 +178,7 @@ Loop:
 				if common.IsResourceExhausted(err) {
 					tr.reEnqueueAfterDelay(taskReaderThrottleRetryDelay)
 				} else {
-					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff())
+					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff(err))
 				}
 				continue Loop
 			}

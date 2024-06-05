@@ -31,12 +31,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/hsm"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Unique type identifier for this state machine.
@@ -180,7 +181,7 @@ var TransitionAttemptFailed = hsm.NewTransition(
 	func(cb Callback, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		cb.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.PublicInfo.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.PublicInfo.Attempt), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		cb.PublicInfo.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
 		cb.PublicInfo.LastAttemptFailure = &failurepb.Failure{
