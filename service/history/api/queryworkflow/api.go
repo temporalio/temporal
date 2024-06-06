@@ -127,7 +127,7 @@ func Invoke(
 		// Workflow has no workflow task scheduled.
 		// This can be due to firstWorkflowTaskBackoff (cron / retry)
 		// In this case, check if query can wait.
-		queryWillTimeout, err := queryWillTimeoutsBeforeTaskStart(ctx, shardContext, mutableState)
+		queryWillTimeout, err := queryWillTimeoutsBeforeFirstWorkflowTaskStart(ctx, mutableState)
 		if err != nil {
 			return nil, err
 		}
@@ -248,8 +248,8 @@ func Invoke(
 	}
 }
 
-func queryWillTimeoutsBeforeTaskStart(
-	ctx context.Context, shardContext shard.Context, mutableState workflow.MutableState,
+func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
+	ctx context.Context, mutableState workflow.MutableState,
 ) (bool, error) {
 	startEvent, err := mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -261,7 +261,10 @@ func queryWillTimeoutsBeforeTaskStart(
 	workflowStart := mutableState.GetExecutionInfo().StartTime.AsTime().UTC()
 	workflowTaskStart := workflowStart.Add(workflowTaskBackoffDuration)
 
-	deadline, _ := ctx.Deadline()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return true, nil
+	}
 	deadline = deadline.UTC()
 	if workflowTaskStart.After(deadline) {
 		return true, nil
