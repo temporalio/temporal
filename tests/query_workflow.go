@@ -146,63 +146,87 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
-	testCases := []struct {
-		contextTimeout time.Duration
-		startDelay     time.Duration
-		expectError    bool
-	}{
+	testnameFail := "backoff_query_fail"
+	testnamePass := "backoff_query_pass"
 
-		{
-			contextTimeout: time.Duration(10) * time.Second,
-			startDelay:     time.Duration(5) * time.Second,
-			expectError:    false,
-		},
-		{
-			contextTimeout: time.Duration(8) * time.Second,
-			startDelay:     time.Duration(10) * time.Second,
-			expectError:    true,
-		},
+	workflowFnFail := func(ctx workflow.Context) (string, error) {
+		workflow.SetQueryHandler(ctx, testnameFail, func() (string, error) {
+			return "should-reach-here", nil
+		})
+		return "", nil
 	}
-
-	testname := s.T().Name()
-	workflowFn := func(ctx workflow.Context) (string, error) {
-		workflow.SetQueryHandler(ctx, testname, func() (string, error) {
+	workflowFnPass := func(ctx workflow.Context) (string, error) {
+		workflow.SetQueryHandler(ctx, testnamePass, func() (string, error) {
 			return "should-reach-here", nil
 		})
 		return "", nil
 	}
 
+	testCases := []struct {
+		contextTimeout time.Duration
+		startDelay     time.Duration
+		expectError    bool
+		workflowFn     any
+		testname       string
+	}{
+		{
+			contextTimeout: time.Duration(10) * time.Second,
+			startDelay:     time.Duration(5) * time.Second,
+			expectError:    false,
+			workflowFn:     workflowFnFail,
+			testname:       testnameFail,
+		},
+		{
+			contextTimeout: time.Duration(8) * time.Second,
+			startDelay:     time.Duration(10) * time.Second,
+			expectError:    true,
+			workflowFn:     workflowFnPass,
+			testname:       testnamePass,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.testQueryWorkflow_QueryWhileBackoff(
+			tc.contextTimeout, tc.startDelay, tc.expectError, tc.workflowFn, tc.testname,
+		)
+	}
+}
+
+func (s *ClientFunctionalSuite) testQueryWorkflow_QueryWhileBackoff(
+	contextTimeout time.Duration,
+	startDelay time.Duration,
+	expectError bool,
+	workflowFn any,
+	testname string,
+) {
 	s.worker.RegisterWorkflow(workflowFn)
 
-	for ind, tc := range testCases {
+	id := fmt.Sprintf("test-query-before-backoff-%s", testname)
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:         id,
+		TaskQueue:  s.taskQueue,
+		StartDelay: startDelay,
+	}
 
-		id := fmt.Sprintf("test-query-before-backoff-%d", ind)
-		workflowOptions := sdkclient.StartWorkflowOptions{
-			ID:         id,
-			TaskQueue:  s.taskQueue,
-			StartDelay: tc.startDelay,
-		}
+	//  context timeout is not going to be the provided timeout.
+	// It is going to be timeout / 2. See newGRPCContext implementation.
+	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout*2)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
 
-		//  context timeout is not going to be the provided timeout.
-		// It is going to be timeout / 2. See newGRPCContext implementation.
-		ctx, cancel := context.WithTimeout(context.Background(), tc.contextTimeout*2)
-		defer cancel()
-		workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-		if err != nil {
-			s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-		}
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
 
-		s.NotNil(workflowRun)
-		s.True(workflowRun.GetRunID() != "")
+	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
 
-		_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
-
-		if tc.expectError {
-			s.Error(err)
-			s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
-		} else {
-			s.NoError(err)
-		}
+	if expectError {
+		s.Error(err)
+		s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
+	} else {
+		s.NoError(err)
 	}
 }
 
