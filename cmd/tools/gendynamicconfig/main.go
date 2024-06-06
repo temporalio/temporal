@@ -169,6 +169,7 @@ func New{{.P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert fu
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -182,6 +183,7 @@ func (s {{.P.Name}}TypedSetting[T]) Validate(v any) error {
 func (s {{.P.Name}}TypedSetting[T]) WithDefault(v T) {{.P.Name}}TypedSetting[T] {
 	newS := s
 	newS.def = v
+	{{/* The base setting should be registered so we do not register the return value here */ -}}
 	return newS
 }
 

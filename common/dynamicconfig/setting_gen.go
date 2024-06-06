@@ -757,6 +757,7 @@ func NewGlobalTypedSettingWithConstrainedDefault[T any](key Key, convert func(an
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -830,6 +831,7 @@ func NewNamespaceTypedSettingWithConstrainedDefault[T any](key Key, convert func
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -903,6 +905,7 @@ func NewNamespaceIDTypedSettingWithConstrainedDefault[T any](key Key, convert fu
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -976,6 +979,7 @@ func NewTaskQueueTypedSettingWithConstrainedDefault[T any](key Key, convert func
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1049,6 +1053,7 @@ func NewShardIDTypedSettingWithConstrainedDefault[T any](key Key, convert func(a
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1122,6 +1127,7 @@ func NewTaskTypeTypedSettingWithConstrainedDefault[T any](key Key, convert func(
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
@@ -1195,6 +1201,7 @@ func NewDestinationTypedSettingWithConstrainedDefault[T any](key Key, convert fu
 		convert:     convert,
 		description: description,
 	}
+	register(s)
 	return s
 }
 
