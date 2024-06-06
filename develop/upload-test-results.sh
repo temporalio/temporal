@@ -1,5 +1,10 @@
 #!/bin/sh
 
+if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
+  echo "BUILDKITE_ANALYTICS_TOKEN is not set. Skipping."
+  exit 0  # we don't want the script to fail here
+fi
+
 echo "uploading test results from $(pwd)"
 
 for file in *.junit.xml; do
