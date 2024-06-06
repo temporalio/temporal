@@ -150,13 +150,13 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	testnamePass := "backoff_query_pass"
 
 	workflowFnFail := func(ctx workflow.Context) (string, error) {
-		workflow.SetQueryHandler(ctx, testnameFail, func() (string, error) {
+		_ = workflow.SetQueryHandler(ctx, testnameFail, func() (string, error) {
 			return "should-reach-here", nil
 		})
 		return "", nil
 	}
 	workflowFnPass := func(ctx workflow.Context) (string, error) {
-		workflow.SetQueryHandler(ctx, testnamePass, func() (string, error) {
+		_ = workflow.SetQueryHandler(ctx, testnamePass, func() (string, error) {
 			return "should-reach-here", nil
 		})
 		return "", nil
