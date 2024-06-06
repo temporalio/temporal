@@ -1729,11 +1729,6 @@ func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
 
 // Tests that a signal between a nominal time and jittered time for a start won't interrupt the start.
 func (s *workflowSuite) TestSignalBetweenNominalAndJittered() {
-	// TODO: remove once default version is UseLastAction
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = UseLastAction
-	defer func() { currentTweakablePolicies = prevTweakables }()
-
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -2159,11 +2154,6 @@ func (s *workflowSuite) TestCANBySuggested() {
 }
 
 func (s *workflowSuite) TestCANBySuggestedWithSignals() {
-	// TODO: remove once default version is CANAfterSignals
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = CANAfterSignals
-	defer func() { currentTweakablePolicies = prevTweakables }()
-
 	// written using low-level mocks so we can control iteration count
 
 	runs := []time.Duration{
