@@ -221,7 +221,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 		WorkflowKey:     ms.GetWorkflowKey(),
 		StateMachineRef: timer.Ref,
 	}
-	if err := t.validateStateMachineRef(ms, ref); err != nil {
+	if err := t.validateStateMachineRef(ms, ref, false); err != nil {
 		return err
 	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())

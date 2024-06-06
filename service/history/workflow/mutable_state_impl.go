@@ -707,7 +707,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if ms.config.EnableNexus() &&
+	if ms.config.EnableTransitionHistory() &&
 		len(ms.executionInfo.TransitionHistory) != 0 {
 
 		// this make sure current version >= last write version
@@ -746,7 +746,6 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 }
 
 func (ms *MutableStateImpl) GetCurrentVersion() int64 {
-
 	if ms.executionInfo.VersionHistories != nil {
 		return ms.currentVersion
 	}
@@ -754,8 +753,16 @@ func (ms *MutableStateImpl) GetCurrentVersion() int64 {
 	return common.EmptyVersion
 }
 
-func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
+// TransitionCount implements hsm.NodeBackend.
+func (ms *MutableStateImpl) TransitionCount() int64 {
+	hist := ms.executionInfo.TransitionHistory
+	if len(hist) == 0 {
+		return 0
+	}
+	return hist[len(hist)-1].MaxTransitionCount
+}
 
+func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
 	if ms.executionInfo.VersionHistories != nil {
 		versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 		if err != nil {
@@ -788,7 +795,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
-	if ms.config.EnableNexus() &&
+	if ms.config.EnableTransitionHistory() &&
 		len(ms.executionInfo.TransitionHistory) != 0 {
 
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
@@ -5264,7 +5271,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		return nil
 	}
 
-	if !ms.config.EnableNexus() {
+	if !ms.config.EnableTransitionHistory() {
 		return nil
 	}
 

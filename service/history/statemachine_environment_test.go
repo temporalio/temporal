@@ -71,7 +71,7 @@ type taskExecutorTestContext struct {
 	timeSource     *clock.EventTimeSource
 }
 
-func newTaskExecutorTestContext(t *testing.T) *taskExecutorTestContext {
+func newTaskExecutorTestContext(t *testing.T, enableTransitionHistory bool) *taskExecutorTestContext {
 	s := taskExecutorTestContext{}
 	s.t = t
 	s.namespaceID = tests.NamespaceID
@@ -80,6 +80,7 @@ func newTaskExecutorTestContext(t *testing.T) *taskExecutorTestContext {
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 	s.controller = gomock.NewController(t)
 	config := tests.NewDynamicConfig()
+	config.EnableTransitionHistory = func() bool { return enableTransitionHistory }
 	s.version = s.namespaceEntry.FailoverVersion()
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
@@ -138,14 +139,16 @@ func (s *taskExecutorTestContext) TearDown() {
 	s.mockShard.StopForTest()
 }
 
-func TestValidateStateMachineTask(t *testing.T) {
+func TestValidateStateMachineRef(t *testing.T) {
 	cases := []struct {
-		name          string
-		mutateRef     func(*hsm.Ref)
-		assertOutcome func(*testing.T, error)
+		name                    string
+		enableTransitionHistory bool
+		mutateRef               func(*hsm.Ref)
+		assertOutcome           func(*testing.T, error)
 	}{
 		{
-			name: "staleness check failure",
+			name:                    "WithTransitionHistory/StalenessCheckFailure",
+			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
 			},
@@ -154,7 +157,50 @@ func TestValidateStateMachineTask(t *testing.T) {
 			},
 		},
 		{
-			name: "node not found",
+			name:                    "WithoutTransitionHistory/CanBeStale/RootStalenessCheckFailure",
+			enableTransitionHistory: false,
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
+				ref.CanReferenceStaleState = true
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleState)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/CannotBeStale/RootStalenessCheckFailure",
+			enableTransitionHistory: false,
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleReference)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/CanBeStale/MachineStalenessCheckFailure",
+			enableTransitionHistory: false,
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.MachineInitialNamespaceFailoverVersion++
+				ref.CanReferenceStaleState = true
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleState)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/CannotBeStale/MachineStalenessCheckFailure",
+			enableTransitionHistory: false,
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.MachineInitialNamespaceFailoverVersion++
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleReference)
+			},
+		},
+		{
+			name:                    "WithTransitionHistory/NodeNotFound",
+			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.Path[0].Id = "not-found"
 			},
@@ -163,7 +209,28 @@ func TestValidateStateMachineTask(t *testing.T) {
 			},
 		},
 		{
-			name: "machine transition inequality",
+			name:                    "WithoutTransitionHistory/NodeNotFound",
+			enableTransitionHistory: false,
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.Path[0].Id = "not-found"
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleReference)
+			},
+		},
+		{
+			name:                    "WithTransitionHistory/MachineLastUpdateTransitionInequality",
+			enableTransitionHistory: true,
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.MachineLastUpdateMutableStateTransitionCount++
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleReference)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/MachineTransitionInequality",
+			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.MachineTransitionCount++
 			},
@@ -172,7 +239,17 @@ func TestValidateStateMachineTask(t *testing.T) {
 			},
 		},
 		{
-			name: "valid",
+			name:                    "WithTransitionHistory/Valid",
+			enableTransitionHistory: true,
+			mutateRef: func(ref *hsm.Ref) {
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/Valid",
+			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
 			},
 			assertOutcome: func(t *testing.T, err error) {
@@ -181,8 +258,10 @@ func TestValidateStateMachineTask(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			s := newTaskExecutorTestContext(t)
+			t.Parallel()
+			s := newTaskExecutorTestContext(t, tc.enableTransitionHistory)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
 			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
 			require.NoError(t, err)
@@ -200,7 +279,7 @@ func TestValidateStateMachineTask(t *testing.T) {
 				StateMachineRef: cbt.Info.Ref,
 			}
 			tc.mutateRef(&ref)
-			err = exec.validateStateMachineRef(mutableState, ref)
+			err = exec.validateStateMachineRef(mutableState, ref, true)
 			tc.assertOutcome(t, err)
 		})
 	}
@@ -262,7 +341,7 @@ func TestAccess(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newTaskExecutorTestContext(t)
+			s := newTaskExecutorTestContext(t, true)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
 			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
 			require.NoError(t, err)

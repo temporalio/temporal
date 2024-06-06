@@ -80,6 +80,7 @@ type Config struct {
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
+	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -400,6 +401,7 @@ func NewConfig(
 		EnableHostLevelHistoryCache:           dynamicconfig.EnableHostHistoryCache.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
+		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB

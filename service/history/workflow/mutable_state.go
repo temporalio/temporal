@@ -378,5 +378,9 @@ type (
 		HasCompletedAnyWorkflowTask() bool
 
 		HSM() *hsm.Node
+
+		// TransitionCount returns the current state transition count from the state transition history.
+		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
+		TransitionCount() int64
 	}
 )

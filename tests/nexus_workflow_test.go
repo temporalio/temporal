@@ -480,31 +480,10 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_bad_request"})
 
-	// Send a valid - successful completion request.
-	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
+	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload(nil), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
-	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
-	s.Equal(http.StatusOK, res.StatusCode)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "success"})
-
-	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
-	s.Condition(func() bool {
-		for _, m := range snap["service_requests"] {
-			if opTag, ok := m.Tags["operation"]; ok && opTag == "CompleteNexusOperation" {
-				return true
-			}
-		}
-		return false
-	})
-
-	// Resend the request and verify we get a not found error since the operation has already completed.
-	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
-	s.Equal(http.StatusNotFound, res.StatusCode)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_not_found"})
 
 	invalidNamespace := s.randomizeStr("ns")
 	_, err = s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
@@ -540,10 +519,47 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 
 	// Request fails if the state machine reference is stale.
 	staleToken := common.CloneProto(completionToken)
-	staleToken.Ref.MutableStateTransitionCount -= 1
-	callbackToken, err = gen.Tokenize(workflowNotFoundToken)
+	staleToken.Ref.MachineInitialNamespaceFailoverVersion += 1
+	callbackToken, err = gen.Tokenize(staleToken)
 	s.NoError(err)
 
+	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
+	s.Equal(http.StatusNotFound, res.StatusCode)
+	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_not_found"})
+
+	// Request fails if the request ID is invalid.
+	invalidToken := common.CloneProto(completionToken)
+	invalidToken.RequestId = "invalid"
+	callbackToken, err = gen.Tokenize(invalidToken)
+	s.NoError(err)
+
+	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
+	s.Equal(http.StatusNotFound, res.StatusCode)
+	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_not_found"})
+
+	// Send a valid - successful completion request.
+	completion, err = nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	})
+	s.NoError(err)
+
+	callbackToken, err = gen.Tokenize(completionToken)
+	s.NoError(err)
+
+	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
+	s.Equal(http.StatusOK, res.StatusCode)
+	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "success"})
+	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
+	idx := slices.IndexFunc(snap["service_requests"], func(m *metricstest.CapturedRecording) bool {
+		opTag, ok := m.Tags["operation"]
+		return ok && opTag == "CompleteNexusOperation"
+	})
+	s.Greater(idx, -1)
+
+	// Resend the request and verify we get a not found error since the operation has already completed.
 	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusNotFound, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))

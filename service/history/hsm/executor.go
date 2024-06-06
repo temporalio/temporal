@@ -31,11 +31,15 @@ import (
 )
 
 // Ref is a reference to a statemachine on a specific workflow.
-// It contains the workflow key and the key of the statemachine in the state machine [Store] as well as the namespace
-// failover version and transition count that is expected to match on the referenced state machine.
+// It contains the workflow key and the key of the statemachine in the state machine [Environment] as well as the
+// information to perform staleness checks for itself or the state that it is referencing.
 type Ref struct {
 	WorkflowKey     definition.WorkflowKey
 	StateMachineRef *persistencespb.StateMachineRef
+	// An indicator whether this Ref can reference stale state. This should be set to false during task processing where
+	// we can validate the task that embeds this reference against shard clock. And it should be set to true when
+	// constructing references from API requests.
+	CanReferenceStaleState bool
 }
 
 // StateMachinePath gets the state machine path for from this reference.

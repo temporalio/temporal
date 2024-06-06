@@ -142,11 +142,17 @@ func CompletionHandler(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
+	requestID string,
 	result *commonpb.Payload,
 	opFailedError *nexus.UnsuccessfulOperationError,
 ) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+			// TODO(bergundy): This check is only required for references that are generated with transition history disabled.
+			// Ensure that we can remove this check once transition history is enabled.
+			if operation.RequestId != requestID {
+				return hsm.TransitionOutput{}, status.Errorf(codes.NotFound, "operation not found")
+			}
 			if opFailedError != nil {
 				return handleUnsuccessfulOperationError(node, operation, opFailedError, nil)
 			}

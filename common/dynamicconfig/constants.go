@@ -1257,6 +1257,12 @@ timeout timer when execution timeout is specified when starting a workflow.
 For backward compatibility, this feature is disabled by default and should only be enabled after server version
 containing this flag is deployed to all history service nodes in the cluster.`,
 	)
+	EnableTransitionHistory = NewGlobalBoolSetting(
+		"history.enableTransitionHistory",
+		false,
+		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.
+This feature is still under development and should NOT be enabled.`,
+	)
 	HistoryStartupMembershipJoinDelay = NewGlobalDurationSetting(
 		"history.startupMembershipJoinDelay",
 		0*time.Second,

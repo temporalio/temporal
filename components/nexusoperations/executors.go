@@ -165,6 +165,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// Reset the machine transition count to 0 so it is ignored in the completion staleness check.
 	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
 	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
+	smRef.MachineLastUpdateMutableStateTransitionCount = 0
 	smRef.MachineTransitionCount = 0
 
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
@@ -172,6 +173,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,
 		Ref:         smRef,
+		// TODO(bergundy): Don't put request ID on the token once we support versioned transition.
+		RequestId: args.requestID,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)

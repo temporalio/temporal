@@ -106,6 +106,14 @@ type nodeBackend struct {
 	events []*historypb.HistoryEvent
 }
 
+func (n *nodeBackend) GetCurrentVersion() int64 {
+	return 1
+}
+
+func (n *nodeBackend) TransitionCount() int64 {
+	return 2
+}
+
 func (n *nodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
 	event := &historypb.HistoryEvent{EventType: t, EventId: 2}
 	setAttributes(event)
