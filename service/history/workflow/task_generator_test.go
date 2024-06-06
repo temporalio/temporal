@@ -334,6 +334,11 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
+
+	mutableState := NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
+	mutableState.EXPECT().TransitionCount().Return(int64(2)).AnyTimes()
+
 	subStateMachinesByType := map[int32]*persistencespb.StateMachineMap{}
 	reg := hsm.NewRegistry()
 	require.NoError(t, RegisterStateMachine(reg))
@@ -341,7 +346,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
 	require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
-	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType, nil)
+	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType, mutableState)
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 
@@ -378,16 +383,8 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mutableState := NewMockMutableState(ctrl)
 	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node }).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencespb.VersionedTransition{
-			{
-				NamespaceFailoverVersion: 3,
-				MaxTransitionCount:       2,
-			},
-		},
-	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
 	cfg := &configs.Config{}
@@ -421,9 +418,12 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 					Id:   "sched",
 				},
 			},
-			MutableStateNamespaceFailoverVersion: 3,
-			MutableStateTransitionCount:          2,
-			MachineTransitionCount:               1,
+			MachineInitialNamespaceFailoverVersion:       3,
+			MachineInitialMutableStateTransitionCount:    2,
+			MutableStateNamespaceFailoverVersion:         3,
+			MutableStateTransitionCount:                  2,
+			MachineLastUpdateMutableStateTransitionCount: 2,
+			MachineTransitionCount:                       1,
 		},
 		Type: callbacks.TaskTypeInvocation.ID,
 		Data: nil,
@@ -447,9 +447,12 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 							Id:   "backoff",
 						},
 					},
-					MutableStateNamespaceFailoverVersion: 3,
-					MutableStateTransitionCount:          2,
-					MachineTransitionCount:               1,
+					MachineInitialNamespaceFailoverVersion:       3,
+					MachineInitialMutableStateTransitionCount:    2,
+					MutableStateNamespaceFailoverVersion:         3,
+					MutableStateTransitionCount:                  2,
+					MachineLastUpdateMutableStateTransitionCount: 2,
+					MachineTransitionCount:                       1,
 				},
 				Type: callbacks.TaskTypeBackoff.ID,
 				Data: nil,
@@ -491,9 +494,11 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 					Id:   opNode.Key.ID,
 				},
 			},
-			MutableStateNamespaceFailoverVersion: 3,
-			MutableStateTransitionCount:          2,
-			MachineTransitionCount:               0, // concurrent tasks don't store the machine transition count.
+			MachineInitialNamespaceFailoverVersion:    3,
+			MachineInitialMutableStateTransitionCount: 2,
+			MutableStateNamespaceFailoverVersion:      3,
+			MutableStateTransitionCount:               2,
+			MachineTransitionCount:                    0, // concurrent tasks don't store the machine transition count.
 		},
 		Type: nexusoperations.TaskTypeTimeout.ID,
 		Data: nil,

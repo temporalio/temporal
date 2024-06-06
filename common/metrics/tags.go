@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -92,6 +93,10 @@ func (v *tagImpl) Key() string {
 
 func (v *tagImpl) Value() string {
 	return v.value
+}
+
+func (v *tagImpl) String() string {
+	return fmt.Sprintf("tag{key: %s, value: %s}", v.key, v.value)
 }
 
 // NamespaceTag returns a new namespace tag. For timers, this also ensures that we
