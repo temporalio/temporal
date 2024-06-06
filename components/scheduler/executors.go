@@ -36,7 +36,6 @@ func RegisterExecutor(
 	standbyExec := standbyExecutor{options: standbyExecutorOptions}
 	return hsm.RegisterTimerExecutors(
 		registry,
-		TaskTypeSchedule.ID,
 		activeExec.executeScheduleTask,
 		standbyExec.executeScheduleTask,
 	)

@@ -77,17 +77,14 @@ func RegisterExecutor(
 	options ActiveExecutorOptions,
 ) error {
 	exec := activeExecutor{options}
-	if err := hsm.RegisterImmediateExecutors(
+	if err := hsm.RegisterImmediateExecutor(
 		registry,
-		TaskTypeInvocation.ID,
 		exec.executeInvocationTask,
-		nil,
 	); err != nil {
 		return err
 	}
 	if err := hsm.RegisterTimerExecutors(
 		registry,
-		TaskTypeBackoff.ID,
 		exec.executeBackoffTask,
 		nil,
 	); err != nil {
@@ -95,23 +92,19 @@ func RegisterExecutor(
 	}
 	if err := hsm.RegisterTimerExecutors(
 		registry,
-		TaskTypeTimeout.ID,
 		exec.executeTimeoutTask,
 		nil,
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterImmediateExecutors(
+	if err := hsm.RegisterImmediateExecutor(
 		registry,
-		TaskTypeCancelation.ID,
 		exec.executeCancelationTask,
-		nil,
 	); err != nil {
 		return err
 	}
 	return hsm.RegisterTimerExecutors(
 		registry,
-		TaskTypeCancelationBackoff.ID,
 		exec.executeCancelationBackoffTask,
 		nil,
 	)

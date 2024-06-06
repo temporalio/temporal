@@ -241,6 +241,7 @@ func (f *outboundQueueFactory) CreateQueue(
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
 		shardContext,
 		workflowCache,
+		currentClusterName,
 		logger,
 		metricsHandler,
 	)
