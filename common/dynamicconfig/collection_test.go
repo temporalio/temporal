@@ -143,6 +143,8 @@ func (s *collectionSuite) TestGetBoolProperty() {
 	s.Equal(true, value())
 	s.client[testGetBoolPropertyKey] = false
 	s.Equal(false, value())
+	s.client[testGetBoolPropertyKey] = "false"
+	s.Equal(false, value())
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
