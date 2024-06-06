@@ -1106,7 +1106,7 @@ type HistoryTaskAttributes struct {
 	RunId               string                    `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	VersionHistoryItems []*v15.VersionHistoryItem `protobuf:"bytes,5,rep,name=version_history_items,json=versionHistoryItems,proto3" json:"version_history_items,omitempty"`
 	// to be deprecated in favor of using events_batches
-	Events              *v11.DataBlob             `protobuf:"bytes,6,opt,name=events,proto3" json:"events,omitempty"`
+	Events *v11.DataBlob `protobuf:"bytes,6,opt,name=events,proto3" json:"events,omitempty"`
 	// New run events does not need version history since there is no prior events.
 	NewRunEvents      *v11.DataBlob          `protobuf:"bytes,7,opt,name=new_run_events,json=newRunEvents,proto3" json:"new_run_events,omitempty"`
 	BaseExecutionInfo *v16.BaseExecutionInfo `protobuf:"bytes,8,opt,name=base_execution_info,json=baseExecutionInfo,proto3" json:"base_execution_info,omitempty"`
