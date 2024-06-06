@@ -699,15 +699,22 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	if len(eventBatches) == 0 {
 		return nil
 	}
+	for _, events := range eventBatches {
+		if len(events) == 0 {
+			return serviceerror.NewInternal("TaskGeneratorImpl encountered empty event batch")
+		}
+	}
 
 	firstBatch := eventBatches[0]
 	firstEvent := firstBatch[0]
 	lastBatch := eventBatches[len(eventBatches)-1]
 	lastEvent := lastBatch[len(lastBatch)-1]
-	if firstEvent.GetVersion() != lastEvent.GetVersion() {
-		return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
-	}
 	version := firstEvent.GetVersion()
+	for _, events := range eventBatches {
+		if events[0].GetVersion() != version || events[len(events)-1].GetVersion() != version {
+			return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
+		}
+	}
 
 	r.mutableState.AddTasks(&tasks.HistoryReplicationTask{
 		// TaskID, VisibilityTimestamp is set by shard

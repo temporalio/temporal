@@ -164,6 +164,8 @@ message HistoryTaskAttributes {
     string workflow_id = 3;
     string run_id = 4;
     repeated temporal.server.api.history.v1.VersionHistoryItem version_history_items = 5;
+
+    // to be deprecated in favor of using events_batches
     temporal.api.common.v1.DataBlob events = 6;
     // New run events does not need version history since there is no prior events.
     temporal.api.common.v1.DataBlob new_run_events = 7;
