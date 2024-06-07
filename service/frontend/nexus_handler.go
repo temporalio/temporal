@@ -69,6 +69,7 @@ type nexusContext struct {
 // Context for a specific Nexus operation, includes a resolved namespace, and a bound metrics handler and logger.
 type operationContext struct {
 	nexusContext
+	method          string
 	clusterMetadata cluster.Metadata
 	namespace       *namespace.Namespace
 	// "Special" metrics handler that should only be passed to interceptors, which require a different set of
@@ -77,6 +78,7 @@ type operationContext struct {
 	metricsHandler                metrics.Handler
 	logger                        log.Logger
 	auth                          *authorization.Interceptor
+	telemetryInterceptor          *interceptor.TelemetryInterceptor
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	cleanupFunctions              []func(error)
@@ -84,7 +86,7 @@ type operationContext struct {
 
 // Panic handler and metrics recording function.
 // Used as a deferred statement in Nexus handler methods.
-func (c *operationContext) capturePanicAndRecordMetrics(errPtr *error) {
+func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
 	recovered := recover() //nolint:revive
 	if recovered != nil {
 		err, ok := recovered.(error)
@@ -98,8 +100,13 @@ func (c *operationContext) capturePanicAndRecordMetrics(errPtr *error) {
 		*errPtr = err
 	}
 
+	// Record Nexus-specific metrics
 	c.metricsHandler.Counter(metrics.NexusRequests.Name()).Record(1)
 	c.metricsHandler.Histogram(metrics.NexusLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
+
+	// Record general telemetry metrics
+	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
+	c.telemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors)
 
 	for _, fn := range c.cleanupFunctions {
 		fn(*errPtr)
@@ -115,6 +122,8 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 }
 
 func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {
+	ctx = metrics.AddMetricsContext(ctx)
+
 	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:           c.apiName,
 		Namespace:         c.namespaceName,
@@ -147,6 +156,19 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
 
+	// Bookkeeping for telemetry interceptor. Actual service telemetry metrics are recorded in capturePanicAndRecordMetrics.
+	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
+		if retErr != nil {
+			c.telemetryInterceptor.HandleError(
+				request,
+				c.metricsHandlerForInterceptors,
+				[]tag.Tag{tag.Operation(c.method), tag.WorkflowNamespace(c.namespaceName)},
+				retErr,
+			)
+		}
+	})
+
 	cleanup, err := c.namespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), c.apiName, c.metricsHandlerForInterceptors, request)
 	c.cleanupFunctions = append(c.cleanupFunctions, func(error) { cleanup() })
 	if err != nil {
@@ -164,7 +186,6 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 
-	// TODO: Apply other relevant interceptors.
 	return nil
 }
 
@@ -198,6 +219,7 @@ type nexusHandler struct {
 	namespaceRegistry             namespace.Registry
 	matchingClient                matchingservice.MatchingServiceClient
 	auth                          *authorization.Interceptor
+	telemetryInterceptor          *interceptor.TelemetryInterceptor
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	forwardingClients             *cluster.FrontendHTTPClientCache
@@ -213,14 +235,16 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 	}
 	oc := operationContext{
 		nexusContext:                  nc,
+		method:                        method,
 		clusterMetadata:               h.clusterMetadata,
 		auth:                          h.auth,
+		telemetryInterceptor:          h.telemetryInterceptor,
 		redirectionInterceptor:        h.redirectionInterceptor,
 		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
 		cleanupFunctions:              make([]func(error), 0),
 	}
 	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
-		metrics.OperationTag(nc.apiName),
+		metrics.OperationTag(method),
 		metrics.NamespaceTag(nc.namespaceName),
 	)
 	oc.metricsHandler = h.metricsHandler.WithTags(
@@ -255,7 +279,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 	if err != nil {
 		return nil, err
 	}
-	defer oc.capturePanicAndRecordMetrics(&retErr)
+	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	startOperationRequest := nexuspb.StartOperationRequest{
 		Service:        service,
@@ -369,7 +393,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	if err != nil {
 		return err
 	}
-	defer oc.capturePanicAndRecordMetrics(&retErr)
+	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
 		Header:        options.Header,

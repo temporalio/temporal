@@ -69,6 +69,7 @@ type HandlerOptions struct {
 	Config                               *Config
 	CallbackTokenGenerator               *commonnexus.CallbackTokenGenerator
 	HistoryClient                        resource.HistoryClient
+	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
 	NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	NamespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
 	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
@@ -112,12 +113,12 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		logger:            log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
 		metricsHandler:    h.MetricsHandler.WithTags(metrics.NamespaceTag(nsName)),
 		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
-			metrics.OperationTag(apiName),
+			metrics.OperationTag("CompleteOperation"),
 			metrics.NamespaceTag(nsName),
 		),
 		requestStartTime: startTime,
 	}
-	defer rCtx.capturePanicAndRecordMetrics(&retErr)
+	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
 		return err
@@ -194,12 +195,12 @@ type requestContext struct {
 	metricsHandler                metrics.Handler
 	metricsHandlerForInterceptors metrics.Handler
 	namespace                     *namespace.Namespace
-	cleanupFunctions              []func()
+	cleanupFunctions              []func(error)
 	requestStartTime              time.Time
 	outcomeTag                    metrics.Tag
 }
 
-func (c *requestContext) capturePanicAndRecordMetrics(errPtr *error) {
+func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
 	recovered := recover() //nolint:revive
 	if recovered != nil {
 		err, ok := recovered.(error)
@@ -225,11 +226,16 @@ func (c *requestContext) capturePanicAndRecordMetrics(errPtr *error) {
 		}
 	}
 
+	// Record Nexus-specific metrics
 	c.metricsHandler.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
 	c.metricsHandler.Histogram(metrics.NexusCompletionLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
 
+	// Record general telemetry metrics
+	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
+	c.TelemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors)
+
 	for _, fn := range c.cleanupFunctions {
-		fn()
+		fn(*errPtr)
 	}
 }
 
@@ -273,9 +279,21 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 	}
 	// TODO: Redirect if current cluster is passive for this namespace.
 
+	// Bookkeeping for telemetry interceptor. Actual service telemetry metrics are recorded in capturePanicAndRecordMetrics.
+	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
+		if retErr != nil {
+			c.TelemetryInterceptor.HandleError(
+				request,
+				c.metricsHandlerForInterceptors,
+				[]tag.Tag{tag.Operation("CompleteOperation"), tag.WorkflowNamespace(c.namespace.Name().String())},
+				retErr,
+			)
+		}
+	})
+
 	cleanup, err := c.NamespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), apiName, c.metricsHandlerForInterceptors, request)
-	_ = cleanup
-	c.cleanupFunctions = append(c.cleanupFunctions, cleanup)
+	c.cleanupFunctions = append(c.cleanupFunctions, func(error) { cleanup() })
 	if err != nil {
 		c.outcomeTag = metrics.NexusOutcomeTag("namespace_concurrency_limited")
 		return commonnexus.ConvertGRPCError(err, false)

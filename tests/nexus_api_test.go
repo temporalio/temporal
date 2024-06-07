@@ -223,6 +223,16 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
 		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+
+		// Ensure that StartOperation request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "StartOperation" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	for _, tc := range testCases {
@@ -651,6 +661,16 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
 		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+
+		// Ensure that CancelOperation request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "CancelOperation" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	for _, tc := range testCases {
