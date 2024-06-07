@@ -516,7 +516,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 	return extractMutableStateInfo(mutableState)
 }
 
-func (s *Starter) getMutableState(ctx context.Context, runID string) (workflow.MutableState, error) {
+func (s *Starter) getMutableState(ctx context.Context, runID string) (mutableState workflow.MutableState, retErr error) {
 	// We technically never want to create a new execution but in practice this should not happen.
 	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
 		ctx,
@@ -529,14 +529,10 @@ func (s *Starter) getMutableState(ctx context.Context, runID string) (workflow.M
 		return nil, err
 	}
 
-	var releaseErr error
-	defer func() {
-		releaseFn(releaseErr)
-	}()
+	defer func() { releaseFn(retErr) }()
 
-	var mutableState workflow.MutableState
-	mutableState, releaseErr = workflowContext.LoadMutableState(ctx, s.shardContext)
-	return mutableState, nil
+	mutableState, retErr = workflowContext.LoadMutableState(ctx, s.shardContext)
+	return
 }
 
 // extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task.
