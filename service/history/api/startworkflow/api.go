@@ -508,13 +508,13 @@ func (s *Starter) respondToRetriedRequest(
 }
 
 func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (time.Time, error) {
-	mutableState, releaseFn, retError := s.getMutableState(ctx, runID)
+	mutableState, releaseFn, err := s.getMutableState(ctx, runID)
 	var workflowStartTime time.Time
-	if retError != nil {
-		return workflowStartTime, retError
+	if err != nil {
+		return workflowStartTime, err
 	}
 
-	defer func() { releaseFn(retError) }()
+	defer func() { releaseFn(err) }()
 
 	workflowStartTime = mutableState.GetExecutionInfo().StartTime.AsTime()
 	return workflowStartTime, nil
@@ -522,13 +522,13 @@ func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (time.
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
 // workflow cache and managing the cache lease.
-func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (mutableSateInfo *mutableStateInfo, retError error) {
-	mutableState, releaseFn, retError := s.getMutableState(ctx, runID)
+func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutableStateInfo, error) {
+	mutableState, releaseFn, err := s.getMutableState(ctx, runID)
 
-	if retError != nil {
-		return nil, retError
+	if err != nil {
+		return nil, err
 	}
-	defer func() { releaseFn(retError) }()
+	defer func() { releaseFn(err) }()
 
 	return extractMutableStateInfo(mutableState)
 }
