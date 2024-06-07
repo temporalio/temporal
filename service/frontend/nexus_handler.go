@@ -121,9 +121,12 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 	}
 }
 
-func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {
+func (c *operationContext) augmentContext(ctx context.Context) context.Context {
 	ctx = metrics.AddMetricsContext(ctx)
+	return interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+}
 
+func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {
 	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:           c.apiName,
 		Namespace:         c.namespaceName,
@@ -156,8 +159,6 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
 
-	// Bookkeeping for telemetry interceptor. Actual service telemetry metrics are recorded in capturePanicAndRecordMetrics.
-	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
 	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 		if retErr != nil {
 			c.telemetryInterceptor.HandleError(
@@ -279,6 +280,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 	if err != nil {
 		return nil, err
 	}
+	ctx = oc.augmentContext(ctx)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	startOperationRequest := nexuspb.StartOperationRequest{

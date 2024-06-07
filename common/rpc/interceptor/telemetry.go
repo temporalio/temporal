@@ -240,7 +240,7 @@ func (ti *Telemetry) StreamIntercept(
 	return nil
 }
 
-func (ti *Telemetry) emitActionMetric(
+func (ti *Telemetry) emitActionMetric( //nolint:revive // TODO: refactor this method to reduce cognitive complexity
 	methodName string,
 	fullName string,
 	req interface{},

@@ -118,6 +118,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		),
 		requestStartTime: startTime,
 	}
+	ctx = rCtx.augmentContext(ctx)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
@@ -200,6 +201,11 @@ type requestContext struct {
 	outcomeTag                    metrics.Tag
 }
 
+func (c *requestContext) augmentContext(ctx context.Context) context.Context {
+	ctx = metrics.AddMetricsContext(ctx)
+	return interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+}
+
 func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
 	recovered := recover() //nolint:revive
 	if recovered != nil {
@@ -279,8 +285,6 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 	}
 	// TODO: Redirect if current cluster is passive for this namespace.
 
-	// Bookkeeping for telemetry interceptor. Actual service telemetry metrics are recorded in capturePanicAndRecordMetrics.
-	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
 	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 		if retErr != nil {
 			c.TelemetryInterceptor.HandleError(
