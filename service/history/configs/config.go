@@ -192,7 +192,6 @@ type Config struct {
 	ShardSyncTimerJitterCoefficient dynamicconfig.FloatPropertyFn
 
 	// Time to hold a poll request before returning an empty response
-	// right now only used by GetMutableState
 	LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// encoding the history events
