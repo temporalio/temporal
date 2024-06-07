@@ -3033,6 +3033,9 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	wg.Wait()
 
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+
+	// force GC to make sure all the acked tasks are cleaned up before validating the count
+	pgMgr.backlogMgr.taskGC.RunNow(context.Background(), pgMgr.backlogMgr.taskAckManager.getAckLevel())
 	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 }
 
