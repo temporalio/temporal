@@ -3048,6 +3048,8 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
+	s.T().Skip("Skipping this as the testDB seems to overcount. Fix requires making " +
+		"UpdateState an atomic operation.")
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
