@@ -227,7 +227,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		// Ensure that StartOperation request is tracked as part of normal service telemetry metrics
 		require.Condition(t, func() bool {
 			for _, m := range snap["service_requests"] {
-				if opTag, ok := m.Tags["operation"]; ok && opTag == "StartOperation" {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "StartNexusOperation" {
 					return true
 				}
 			}
@@ -665,7 +665,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		// Ensure that CancelOperation request is tracked as part of normal service telemetry metrics
 		require.Condition(t, func() bool {
 			for _, m := range snap["service_requests"] {
-				if opTag, ok := m.Tags["operation"]; ok && opTag == "CancelOperation" {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "CancelNexusOperation" {
 					return true
 				}
 			}

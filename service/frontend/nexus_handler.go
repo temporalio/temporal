@@ -276,7 +276,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 
 // StartOperation implements the nexus.Handler interface.
 func (h *nexusHandler) StartOperation(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (result nexus.HandlerStartOperationResult[any], retErr error) {
-	oc, err := h.getOperationContext(ctx, "StartOperation")
+	oc, err := h.getOperationContext(ctx, "StartNexusOperation")
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +391,7 @@ func (h *nexusHandler) forwardStartOperation(
 }
 
 func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
-	oc, err := h.getOperationContext(ctx, "CancelOperation")
+	oc, err := h.getOperationContext(ctx, "CancelNexusOperation")
 	if err != nil {
 		return err
 	}

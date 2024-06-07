@@ -55,6 +55,8 @@ import (
 
 var apiName = configs.CompleteNexusOperation
 
+const methodNameForMetrics = "CompleteNexusOperation"
+
 type Config struct {
 	Enabled          dynamicconfig.BoolPropertyFn
 	PayloadSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -113,7 +115,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		logger:            log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
 		metricsHandler:    h.MetricsHandler.WithTags(metrics.NamespaceTag(nsName)),
 		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
-			metrics.OperationTag("CompleteOperation"),
+			metrics.OperationTag(methodNameForMetrics),
 			metrics.NamespaceTag(nsName),
 		),
 		requestStartTime: startTime,
@@ -290,7 +292,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 			c.TelemetryInterceptor.HandleError(
 				request,
 				c.metricsHandlerForInterceptors,
-				[]tag.Tag{tag.Operation("CompleteOperation"), tag.WorkflowNamespace(c.namespace.Name().String())},
+				[]tag.Tag{tag.Operation(methodNameForMetrics), tag.WorkflowNamespace(c.namespace.Name().String())},
 				retErr,
 			)
 		}
