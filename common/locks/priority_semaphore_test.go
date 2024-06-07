@@ -194,7 +194,6 @@ func (s *prioritySemaphoreSuite) Test_AllThreadsAreWokenUp() {
 }
 
 func (s *prioritySemaphoreSuite) Test_ContextCanceledBeforeAcquire() {
-	s.T().Parallel()
 	semaphore := NewPrioritySemaphore(1)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -202,7 +201,6 @@ func (s *prioritySemaphoreSuite) Test_ContextCanceledBeforeAcquire() {
 }
 
 func (s *prioritySemaphoreSuite) Test_InvalidPriority() {
-	s.T().Parallel()
 	semaphore := NewPrioritySemaphore(1)
 	s.Panics(func() {
 		_ = semaphore.Acquire(context.Background(), Priority(10), 1)
@@ -210,7 +208,6 @@ func (s *prioritySemaphoreSuite) Test_InvalidPriority() {
 }
 
 func (s *prioritySemaphoreSuite) Test_TimedOutWaitingForLock() {
-	s.T().Parallel()
 	semaphore := NewPrioritySemaphore(1)
 	s.NoError(semaphore.Acquire(context.Background(), PriorityHigh, 1))
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -219,7 +216,6 @@ func (s *prioritySemaphoreSuite) Test_TimedOutWaitingForLock() {
 }
 
 func (s *prioritySemaphoreSuite) Test_AcquireMoreThanAvailable() {
-	s.T().Parallel()
 	semaphore := NewPrioritySemaphore(1)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
