@@ -35,6 +35,8 @@ jobs:
           go-version-file: 'go.mod'
           check-latest: true
 
+      - uses: arduino/setup-protoc@v3
+
       - name: lint protobuf definitions
         run: |
           make lint-protos
@@ -50,6 +52,8 @@ jobs:
         with:
           go-version-file: 'go.mod'
           check-latest: true
+
+      - uses: arduino/setup-protoc@v3
 
       - name: lint protobuf API definitions
         run: |

@@ -59,17 +59,14 @@ func RegisterExecutor(
 ) error {
 	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
 	standbyExec := standbyExecutor{options: standbyExecutorOptions}
-	if err := hsm.RegisterImmediateExecutors(
+	if err := hsm.RegisterImmediateExecutor(
 		registry,
-		TaskTypeInvocation.ID,
 		activeExec.executeInvocationTask,
-		standbyExec.executeInvocationTask,
 	); err != nil {
 		return err
 	}
 	return hsm.RegisterTimerExecutors(
 		registry,
-		TaskTypeBackoff.ID,
 		activeExec.executeBackoffTask,
 		standbyExec.executeBackoffTask,
 	)
@@ -244,15 +241,6 @@ type (
 		options StandbyExecutorOptions
 	}
 )
-
-func (e standbyExecutor) executeInvocationTask(
-	ctx context.Context,
-	env hsm.Environment,
-	ref hsm.Ref,
-	task InvocationTask,
-) error {
-	panic("unimplemented")
-}
 
 func (e standbyExecutor) executeBackoffTask(
 	env hsm.Environment,
