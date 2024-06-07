@@ -517,10 +517,6 @@ func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (time.
 
 	defer func() { releaseFn(retError) }()
 
-	if mutableState == nil {
-		return workflowStartTime, serviceerror.NewInternal("Can't load mutable state")
-	}
-
 	workflowStartTime = mutableState.GetExecutionInfo().StartTime.AsTime()
 	return workflowStartTime, nil
 }
