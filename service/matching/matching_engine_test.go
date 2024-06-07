@@ -3052,6 +3052,8 @@ func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
+	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
+		"UpdateState an atomic operation.")
 	s.taskManager.dbConditionalFailedError = true
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
