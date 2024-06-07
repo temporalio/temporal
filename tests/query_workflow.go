@@ -170,8 +170,8 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		testname       string
 	}{
 		{
-			contextTimeout: time.Duration(10) * time.Second,
-			startDelay:     time.Duration(5) * time.Second,
+			contextTimeout: 10 * time.Second,
+			startDelay:     5 * time.Second,
 			expectError:    false,
 			workflowFn:     workflowFnFail,
 			testname:       testnameFail,
