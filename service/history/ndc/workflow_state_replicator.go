@@ -285,9 +285,8 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		if rec := recover(); rec != nil {
 			wfReleaseFn(errPanic)
 			panic(rec)
-		} else {
-			wfReleaseFn(retError)
 		}
+		wfReleaseFn(retError)
 	}()
 
 	// Get the last batch node id to check if the history data is already in DB.
