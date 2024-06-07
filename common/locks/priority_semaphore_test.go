@@ -226,9 +226,7 @@ func (s *prioritySemaphoreSuite) Test_AcquireMoreThanAvailable() {
 func waitUntilBlockedInSemaphore(n int) {
 	for {
 		buf := make([]byte, 10000)
-		runtime.Stack(buf, true) // Get all goroutines' stack trace
-
-		// Look for the specific stack trace pattern indicating blocking in targetFunction on a channel
+		runtime.Stack(buf, true)
 		goroutines := bytes.Split(buf, []byte("\n\n"))
 		threads := 0
 		for _, goroutine := range goroutines {
