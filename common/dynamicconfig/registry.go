@@ -22,35 +22,48 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate go run ../../cmd/tools/gendynamicconfig
-
 package dynamicconfig
 
+import (
+	"fmt"
+	"strings"
+	"sync/atomic"
+)
+
 type (
-	// Precedence is an enum for the search order precedence of a dynamic config setting.
-	// E.g., use the global value, check namespace then global, check task queue then
-	// namespace then global, etc.
-	Precedence int
-
-	// setting is one dynamic config setting. setting should not be used or created directly,
-	// but use one of the generated constructors for instantiated Setting types in
-	// setting_gen.go, e.g. NewNamespaceBoolSetting.
-	// T is the data type of the setting. P is a go type representing the precedence, which is
-	// just used to make the types more unique.
-	setting[T any, P any] struct {
-		key         Key // string value of key. case-insensitive.
-		def         T   // default value. cdef is used in preference to def if non-nil.
-		cdef        []TypedConstrainedValue[T]
-		convert     func(any) (T, error) // converter function
-		description string               // documentation
-	}
-
-	// GenericSetting is an interface that all instances of Setting implement (by generated
-	// code in setting_gen.go). It can be used to refer to settings of any type and deal with
-	// them generically..
-	GenericSetting interface {
-		Key() Key
-		Precedence() Precedence
-		Validate(v any) error
+	registry struct {
+		settings map[string]GenericSetting
+		queried  atomic.Bool
 	}
 )
+
+var (
+	globalRegistry registry
+)
+
+func register(s GenericSetting) {
+	if globalRegistry.queried.Load() {
+		panic("dynamicconfig.New*Setting must only be called from static initializers")
+	}
+	if globalRegistry.settings == nil {
+		globalRegistry.settings = make(map[string]GenericSetting)
+	}
+	keyStr := strings.ToLower(s.Key().String())
+	if globalRegistry.settings[keyStr] != nil {
+		panic(fmt.Sprintf("duplicate registration of dynamic config key: %q", keyStr))
+	}
+	globalRegistry.settings[keyStr] = s
+}
+
+func queryRegistry(k Key) GenericSetting {
+	if !globalRegistry.queried.Load() {
+		globalRegistry.queried.Store(true)
+	}
+	return globalRegistry.settings[strings.ToLower(k.String())]
+}
+
+// For testing only; do not call from regular code!
+func ResetRegistryForTest() {
+	globalRegistry.settings = nil
+	globalRegistry.queried.Store(false)
+}

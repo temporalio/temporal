@@ -80,6 +80,10 @@ func (s *collectionSuite) SetupSuite() {
 	s.cln = dynamicconfig.NewCollection(s.client, logger)
 }
 
+func (s *collectionSuite) SetupTest() {
+	dynamicconfig.ResetRegistryForTest()
+}
+
 func (s *collectionSuite) TestGetIntProperty() {
 	setting := dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 10, "")
 	value := setting.Get(s.cln)
