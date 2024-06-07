@@ -200,6 +200,9 @@ type runAcrossContinueState struct {
 }
 
 func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcrossContinueState) {
+	// capture this to avoid races between end of one test and start of next
+	env := s.env
+
 	for _, run := range runs {
 		run := run // capture fresh value
 		// set up start
@@ -234,7 +237,8 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 			return req.Execution.WorkflowId == run.id && req.LongPoll
 		})
 		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchLongPoll).Times(0).Maybe().AfterFn(func() time.Duration {
-			return run.end.Sub(s.now())
+			// this can be called after end of workflow, use captured env
+			return run.end.Sub(env.Now().UTC())
 		}).Return(func(_ context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
 			return &schedspb.WatchWorkflowResponse{Status: run.result}, nil
 		})
