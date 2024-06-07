@@ -54,12 +54,24 @@ type TaskType struct {
 // Non-concurrent tasks are persisted with a [Ref] that contains the machine transition count at the time they was
 // generated, which is expected to match the current machine's transition count upon execution. Concurrent tasks skip
 // this validation.
+// If the task is concurrent, you must implement the ConcurrentTask interface below.
 type Task interface {
 	// Task type that must be unique per task definition.
 	Type() TaskType
 	// Kind of the task, see [TaskKind] for more info.
 	Kind() TaskKind
 	Concurrent() bool
+}
+
+// A concurrent task can run concurrently with other tasks.
+type ConcurrentTask interface {
+	Task
+	// Validate checks if the [ConcurrentTask] is still valid for processing in
+	// either active or standby queue task executor.
+	// Must return ErrStaleReference if the task is no longer valid.
+	// A typical implementation may check if the state of the machine is still
+	// relevant for running this task.
+	Validate(node *Node) error
 }
 
 // TaskKind represents the possible set of kinds for a task.
