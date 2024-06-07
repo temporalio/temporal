@@ -1,0 +1,9 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+history_tree: {
+    shape: sql_table
+    tree_id: uuid { constraint: [PartitionKey, PK] }
+    branch_id: uuid { constraint: PK }
+    branch: blob
+}

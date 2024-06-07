@@ -285,3 +285,73 @@ Call sites:
 - Consistency of Mutable State and History Tasks is achieved via use of database transactions.
 - Consistency of these with History Events is achieved by storing in Mutable State the identity of the latest History Event reflected in Mutable State; a History Event is only "valid" if it is in Mutable State and, on failure to persist dirty Mutable State and associated History Tasks, we reload from persistence.
 - Consistency with Matching Service is achieved by the combination of the above within-History Service consistency guarantees, and the Transfer Task queue processor which ensures that Transfer Tasks written by a History Shard will eventually result in the required Workflow or Activity Task being created in the Matching Service (this is known as the [Transactional Outbox](https://microservices.io/patterns/data/transactional-outbox.html) Pattern).
+
+## Persistence
+
+### Cassandra
+
+[schema.cql](../../schema/cassandra/temporal/schema.cql) contains the full schema.
+
+#### Shard Info, Mutable State and History Task
+
+<table width="100%">
+    <tr>
+        <td width="60%">
+            <img align="center" width="800" src="../_assets/schema_executions.svg">
+        </td>
+        <td width="40%">
+            The Shard Info, Mutable State and History Tasks are stored in the <code>executions</code>
+            table since Cassandra can only ensures atomicity of updates or support 
+            Leightweight Transactions within a single partition key.
+            <br/><br/>
+            The <code>type</code> field denotes the type of data stored in a given row. Every
+            data type only uses a subset of the primary keys and data fields.
+            Note that non-applicable primary keys are filled with hard-coded sentinel values.
+        </td>
+    </tr>
+    <tr>
+        <td width="60%">
+            <img align="center" width="800" src="../_assets/schema_executions_shard.svg">
+        </td>
+        <td width="40%">
+            The Shard Info.
+        </td>
+    </tr>
+    <tr>
+        <td width="60%">
+            <img align="center" width="800" src="../_assets/schema_executions_execution.svg">
+        </td>
+        <td width="40%">
+            The Mutable State.
+        </td>
+    </tr>
+    <tr>
+        <td width="60%">
+            <img align="center" width="800" src="../_assets/schema_executions_transfer_task.svg">
+        </td>
+        <td width="40%">
+            A Transfer Task, shown here, is a type of History Task.
+        </td>
+    </tr>
+</table>
+
+#### History Events
+
+<table width="100%">
+    <tr>
+        <td width="60%">
+            <img align="center" width="800" src="../_assets/schema_history_tree.svg">
+        </td>
+        <td width="40%">
+            TBD
+        </td>
+    </tr>
+    <tr>
+        <td width="60%">
+            <img align="center" width="800" src="../_assets/schema_history_node.svg">
+        </td>
+        <td width="40%">
+            TBD
+        </td>
+    </tr>
+</table>
