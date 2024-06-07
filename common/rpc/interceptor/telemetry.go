@@ -192,6 +192,8 @@ func (ti *Telemetry) UnaryIntercept(
 	metrics.ServiceRequests.With(metricsHandler).Record(1)
 
 	startTime := time.Now().UTC()
+	defer ti.RecordLatencyMetrics(ctx, startTime, metricsHandler)
+
 	resp, err := handler(ctx, req)
 
 	if err != nil {
@@ -201,7 +203,6 @@ func (ti *Telemetry) UnaryIntercept(
 		ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
 	}
 
-	ti.RecordLatencyMetrics(ctx, startTime, metricsHandler)
 	return resp, err
 }
 
