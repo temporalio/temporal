@@ -133,8 +133,8 @@ func (u *Updater) ApplyRequest(
 	updateReg update.Registry,
 	ms workflow.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
-	if !ms.IsWorkflowExecutionRunning() {
-		return nil, consts.ErrWorkflowCompleted
+	if !(ms.IsWorkflowExecutionRunning() || ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED) {
+		return nil, serviceerror.NewNotFound("invalid workflow execution state for update request")
 	}
 	u.wfKey = ms.GetWorkflowKey()
 
