@@ -203,29 +203,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 
-	_, wfReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		r.shardContext,
-		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: wid,
-			RunId:      "",
-		},
-		workflow.LockPriorityLow,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if rec := recover(); rec != nil {
-			wfReleaseFn(errPanic)
-			panic(rec)
-		} else {
-			wfReleaseFn(retError)
-		}
-	}()
-
-	lastFirstTxnID, err := r.backfillHistoryWithWorkflowIDLocked(
+	lastFirstTxnID, err := r.backfillHistory(
 		ctx,
 		request.GetRemoteCluster(),
 		namespaceID,
@@ -278,7 +256,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	)
 }
 
-func (r *WorkflowStateReplicatorImpl) backfillHistoryWithWorkflowIDLocked(
+func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	ctx context.Context,
 	remoteClusterName string,
 	namespaceID namespace.ID,
@@ -287,7 +265,30 @@ func (r *WorkflowStateReplicatorImpl) backfillHistoryWithWorkflowIDLocked(
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
-) (int64, error) {
+) (taskID int64, retError error) {
+
+	// Get the workflow lock to make sure no concurrent backfill history across multiple runs.
+	_, wfReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		r.shardContext,
+		namespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      "",
+		},
+		workflow.LockPriorityLow,
+	)
+	if err != nil {
+		return common.EmptyEventTaskID, err
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			wfReleaseFn(errPanic)
+			panic(rec)
+		} else {
+			wfReleaseFn(retError)
+		}
+	}()
 
 	// Get the last batch node id to check if the history data is already in DB.
 	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
