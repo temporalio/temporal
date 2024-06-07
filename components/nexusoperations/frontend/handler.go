@@ -55,6 +55,8 @@ import (
 
 var apiName = configs.CompleteNexusOperation
 
+const methodNameForMetrics = "CompleteOperation"
+
 type Config struct {
 	Enabled          dynamicconfig.BoolPropertyFn
 	PayloadSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -113,7 +115,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		logger:            log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
 		metricsHandler:    h.MetricsHandler.WithTags(metrics.NamespaceTag(nsName)),
 		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
-			metrics.OperationTag("CompleteOperation"),
+			metrics.OperationTag(methodNameForMetrics),
 			metrics.NamespaceTag(nsName),
 		),
 		requestStartTime: startTime,
@@ -203,7 +205,11 @@ type requestContext struct {
 
 func (c *requestContext) augmentContext(ctx context.Context) context.Context {
 	ctx = metrics.AddMetricsContext(ctx)
-	return interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	return interceptor.PopulateCallerInfo(
+		ctx,
+		func() string { return c.namespace.Name().String() },
+		func() string { return methodNameForMetrics })
 }
 
 func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
@@ -290,7 +296,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 			c.TelemetryInterceptor.HandleError(
 				request,
 				c.metricsHandlerForInterceptors,
-				[]tag.Tag{tag.Operation("CompleteOperation"), tag.WorkflowNamespace(c.namespace.Name().String())},
+				[]tag.Tag{tag.Operation(methodNameForMetrics), tag.WorkflowNamespace(c.namespace.Name().String())},
 				retErr,
 			)
 		}

@@ -35,32 +35,48 @@ import (
 )
 
 type (
-	CallerInfoInterceptor struct {
+	CallerInfo struct {
 		namespaceRegistry namespace.Registry
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*CallerInfoInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*CallerInfo)(nil).Intercept
 
-func NewCallerInfoInterceptor(
+func NewCallerInfo(
 	namespaceRegistry namespace.Registry,
-) *CallerInfoInterceptor {
-	return &CallerInfoInterceptor{
+) *CallerInfo {
+	return &CallerInfo{
 		namespaceRegistry: namespaceRegistry,
 	}
 }
 
-func (i *CallerInfoInterceptor) Intercept(
+func (i *CallerInfo) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+	ctx = PopulateCallerInfo(
+		ctx,
+		func() string { return string(MustGetNamespaceName(i.namespaceRegistry, req)) },
+		func() string { return api.MethodName(info.FullMethod) },
+	)
+
+	return handler(ctx, req)
+}
+
+// PopulateCallerInfo gets current caller info value from the context and updates any that are missing.
+// Namespace name and method are passed as functions to avoid expensive lookups if those values are already set.
+func PopulateCallerInfo(
+	ctx context.Context,
+	nsNameGetter func() string,
+	methodGetter func() string,
+) context.Context {
 	callerInfo := headers.GetCallerInfo(ctx)
 
 	updateInfo := false
 	if callerInfo.CallerName == "" {
-		callerInfo.CallerName = string(MustGetNamespaceName(i.namespaceRegistry, req))
+		callerInfo.CallerName = nsNameGetter()
 		updateInfo = callerInfo.CallerName != ""
 	}
 	if callerInfo.CallerType == "" {
@@ -69,8 +85,7 @@ func (i *CallerInfoInterceptor) Intercept(
 	}
 	if (callerInfo.CallerType == headers.CallerTypeAPI || callerInfo.CallerType == headers.CallerTypeOperator) &&
 		callerInfo.CallOrigin == "" {
-		method := api.MethodName(info.FullMethod)
-		callerInfo.CallOrigin = method
+		callerInfo.CallOrigin = methodGetter()
 		updateInfo = true
 	}
 
@@ -78,5 +93,5 @@ func (i *CallerInfoInterceptor) Intercept(
 		ctx = headers.SetCallerInfo(ctx, callerInfo)
 	}
 
-	return handler(ctx, req)
+	return ctx
 }
