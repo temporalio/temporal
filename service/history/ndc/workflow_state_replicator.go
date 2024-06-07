@@ -203,7 +203,29 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 
-	lastFirstTxnID, err := r.backfillHistory(
+	_, wfReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		r.shardContext,
+		namespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      "",
+		},
+		workflow.LockPriorityLow,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			wfReleaseFn(errPanic)
+			panic(rec)
+		} else {
+			wfReleaseFn(retError)
+		}
+	}()
+
+	lastFirstTxnID, err := r.backfillHistoryWithWorkflowIDLocked(
 		ctx,
 		request.GetRemoteCluster(),
 		namespaceID,
@@ -256,7 +278,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	)
 }
 
-func (r *WorkflowStateReplicatorImpl) backfillHistory(
+func (r *WorkflowStateReplicatorImpl) backfillHistoryWithWorkflowIDLocked(
 	ctx context.Context,
 	remoteClusterName string,
 	namespaceID namespace.ID,
