@@ -8,6 +8,7 @@ fi
 echo "uploading test results from $(pwd)"
 
 for file in *.junit.xml; do
+  if [ -e "$file" ]; then
     echo "uploading ${file}"
 
     curl -i -X POST \
@@ -21,4 +22,5 @@ for file in *.junit.xml; do
       -F "run_env[commit_sha]=${GITHUB_SHA}" \
       -F "run_env[url]=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
       https://analytics-api.buildkite.com/v1/uploads
+  fi
 done
