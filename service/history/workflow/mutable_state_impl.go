@@ -2447,7 +2447,14 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 ) (int64, error) {
 	assignedBuildId := ms.GetAssignedBuildId()
 	redirectCounter := ms.GetExecutionInfo().GetBuildIdRedirectCounter()
-	if !startedWorkerStamp.GetUseVersioning() || startedWorkerStamp.GetBuildId() == assignedBuildId {
+
+	if !startedWorkerStamp.GetUseVersioning() && assignedBuildId != "" && ms.HasCompletedAnyWorkflowTask() {
+		// We don't allow moving from versioned to unversioned once the wf has completed the first WFT.
+		// If this happens, it must be a stale task.
+		return 0, serviceerrors.NewObsoleteDispatchBuildId()
+	}
+
+	if startedWorkerStamp.GetBuildId() == assignedBuildId {
 		// dispatch build ID is the same as wf assigned build ID, hence noop.
 		return redirectCounter, nil
 	}

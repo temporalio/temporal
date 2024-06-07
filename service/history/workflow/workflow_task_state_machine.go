@@ -568,10 +568,11 @@ func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 	workflowTask *WorkflowTaskInfo,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 ) (newWorkflowTask *WorkflowTaskInfo, converted bool, redirectCounter int64, err error) {
-	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() == "" {
+	buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp)
+	if buildId == "" && m.ms.IsStickyTaskQueueSet() {
+		// build ID is expected to be empty for sticky queues until old versioning is removed [cleanup-old-wv]
 		return workflowTask, false, 0, nil
 	}
-	buildId := versioningStamp.GetBuildId()
 
 	redirectCounter, err = m.ms.validateBuildIdRedirectInfo(versioningStamp, redirectInfo)
 	if err != nil {
