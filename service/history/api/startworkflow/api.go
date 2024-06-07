@@ -373,7 +373,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
 
-	workflowStartTime, err := s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
+	currentWorkflowStartTime, err := s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.RequestID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
-		workflowStartTime,
+		currentWorkflowStartTime,
 	)
 
 	switch {
@@ -507,18 +507,16 @@ func (s *Starter) respondToRetriedRequest(
 	return s.generateResponse(runID, mutableStateInfo.workflowTask, events)
 }
 
-func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (start time.Time, retError error) {
+func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (time.Time, error) {
+
 	mutableState, releaseFn, retError := s.getMutableState(ctx, runID)
 	var workflowStartTime time.Time
-
-	defer func() {
-		// do we need "recover" here?
-		releaseFn(retError)
-	}()
-
 	if retError != nil {
 		return workflowStartTime, retError
 	}
+
+	defer func() { releaseFn(retError) }()
+
 	if mutableState == nil {
 		return workflowStartTime, serviceerror.NewInternal("Can't load mutable state")
 	}
@@ -532,18 +530,16 @@ func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (start
 func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (mutableSateInfo *mutableStateInfo, retError error) {
 	mutableState, releaseFn, retError := s.getMutableState(ctx, runID)
 
-	defer func() {
-		// do we need "recover" here?
-		releaseFn(retError)
-	}()
 	if retError != nil {
 		return nil, retError
 	}
+	defer func() { releaseFn(retError) }()
+
 	return extractMutableStateInfo(mutableState)
 }
 
 func (s *Starter) getMutableState(ctx context.Context, runID string) (
-	workflow.MutableState, wcache.ReleaseCacheFunc, error,
+	workflow.MutableState, cache.ReleaseCacheFunc, error,
 ) {
 	// We technically never want to create a new execution but in practice this should not happen.
 	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
@@ -554,7 +550,7 @@ func (s *Starter) getMutableState(ctx context.Context, runID string) (
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
-		return nil, releaseFn, err
+		return nil, nil, err
 	}
 
 	mutableState, retErr := workflowContext.LoadMutableState(ctx, s.shardContext)
