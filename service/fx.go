@@ -66,7 +66,7 @@ type (
 		Logger                 log.Logger
 		RpcFactory             common.RPCFactory
 		RetryableInterceptor   *interceptor.RetryableInterceptor
-		TelemetryInterceptor   *interceptor.TelemetryInterceptor
+		TelemetryInterceptor   *interceptor.Telemetry
 		RateLimitInterceptor   *interceptor.RateLimitInterceptor
 		TracingInterceptor     telemetry.ServerTraceInterceptor
 		AdditionalInterceptors []grpc.UnaryServerInterceptor `optional:"true"`

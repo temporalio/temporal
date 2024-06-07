@@ -69,7 +69,7 @@ type HandlerOptions struct {
 	Config                               *Config
 	CallbackTokenGenerator               *commonnexus.CallbackTokenGenerator
 	HistoryClient                        resource.HistoryClient
-	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
+	TelemetryInterceptor                 *interceptor.Telemetry
 	NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	NamespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
 	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor

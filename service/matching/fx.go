@@ -27,6 +27,8 @@ package matching
 import (
 	"go.uber.org/fx"
 
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -45,7 +47,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var Module = fx.Options(
@@ -85,8 +86,8 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
-) *interceptor.TelemetryInterceptor {
-	return interceptor.NewTelemetryInterceptor(
+) *interceptor.Telemetry {
+	return interceptor.NewTelemetry(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
