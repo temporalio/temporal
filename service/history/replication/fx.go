@@ -210,6 +210,8 @@ func replicationStreamLowPrioritySchedulerProvider(
 	channelWeightFn := func(key ClusterChannelKey) int {
 		return 1
 	}
+	// This creates a per cluster channel.
+	// They share the same weight so it just does a round-robin on all clusters' tasks.
 	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
 		ctasks.InterleavedWeightedRoundRobinSchedulerOptions[TrackableExecutableTask, ClusterChannelKey]{
 			TaskChannelKeyFn: taskChannelKeyFn,
