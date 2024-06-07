@@ -508,7 +508,6 @@ func (s *Starter) respondToRetriedRequest(
 }
 
 func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (time.Time, error) {
-
 	mutableState, releaseFn, retError := s.getMutableState(ctx, runID)
 	var workflowStartTime time.Time
 	if retError != nil {
