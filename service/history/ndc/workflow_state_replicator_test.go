@@ -187,16 +187,13 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		we,
 		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-	currentRun := &commonpb.WorkflowExecution{
-		WorkflowId: s.workflowID,
-	}
-	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
-		currentRun,
+		s.workflowID,
 		workflow.LockPriorityLow,
-	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	).Return(wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
@@ -303,16 +300,13 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		we,
 		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-	currentRun := &commonpb.WorkflowExecution{
-		WorkflowId: s.workflowID,
-	}
-	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
-		currentRun,
+		s.workflowID,
 		workflow.LockPriorityLow,
-	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	).Return(wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
