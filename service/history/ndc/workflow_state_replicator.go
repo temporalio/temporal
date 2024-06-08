@@ -267,15 +267,12 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	branchToken []byte,
 ) (taskID int64, retError error) {
 
-	// Get the workflow lock to make sure no concurrent backfill history across multiple runs.
-	_, wfReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+	// Get the current run lock to make sure no concurrent backfill history across multiple runs.
+	currentRunReleaseFn, err := r.workflowCache.GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		r.shardContext,
 		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      "",
-		},
+		workflowID,
 		workflow.LockPriorityLow,
 	)
 	if err != nil {
@@ -283,10 +280,10 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
-			wfReleaseFn(errPanic)
+			currentRunReleaseFn(errPanic)
 			panic(rec)
 		}
-		wfReleaseFn(retError)
+		currentRunReleaseFn(retError)
 	}()
 
 	// Get the last batch node id to check if the history data is already in DB.
