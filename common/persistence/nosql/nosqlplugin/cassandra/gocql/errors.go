@@ -81,7 +81,7 @@ func ConvertError(
 		}
 	}
 
-	return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
+	return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered (%T) %v", operation, err, err.Error()))
 }
 
 func IsNotFoundError(err error) bool {
