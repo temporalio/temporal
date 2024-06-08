@@ -199,8 +199,8 @@ message DescribeTaskQueuePartitionRequest {
 
     temporal.api.taskqueue.v1.TaskQueueVersionSelection versions = 3;
 
-    // Report backlog info for the requested task queue types and versions
-    bool report_backlog_info = 4;
+    // Report task queue stats for the requested task queue types and versions
+    bool report_stats = 4;
     // Report list of pollers for requested task queue types and versions
     bool report_pollers = 5;
 }

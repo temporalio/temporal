@@ -38,8 +38,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	"go.temporal.io/server/common/testing/protorequire"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -250,9 +251,9 @@ func TestPollOutcome(t *testing.T) {
 		}()
 
 		evStore := mockUpdateEventStore{}
-		require.NoError(t, upd.Admit(context.TODO(), &reqMsg, evStore))
-		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208})
-		require.NoError(t, upd.OnProtocolMessage(context.TODO(), &rejMsg, evStore))
+		require.NoError(t, upd.Admit(&reqMsg, evStore))
+		upd.Send(false, &protocolpb.Message_EventId{EventId: 2208})
+		require.NoError(t, upd.OnProtocolMessage(&rejMsg, evStore))
 
 		require.NoError(t, <-errCh)
 		resp := <-respCh

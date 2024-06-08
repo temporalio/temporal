@@ -339,21 +339,6 @@ func newEndpointEntry(name string) *persistencepb.NexusEndpointEntry {
 	}
 }
 
-func endpointToEntry(endpoint *nexus.Endpoint) *persistencepb.NexusEndpointEntry {
-	return &persistencepb.NexusEndpointEntry{
-		Version: endpoint.Version,
-		Id:      endpoint.Id,
-		Endpoint: &persistencepb.NexusEndpoint{
-			Spec: &persistencepb.NexusEndpointSpec{
-				Name:        endpoint.GetSpec().GetName(),
-				Description: endpoint.GetSpec().GetDescription(),
-				Target:      publicToInternalEndpointTarget(endpoint.GetSpec().GetTarget()),
-			},
-			CreatedTime: endpoint.CreatedTime,
-		},
-	}
-}
-
 func publicToInternalEndpointTarget(target *nexus.EndpointTarget) *persistencepb.NexusEndpointTarget {
 	switch v := target.Variant.(type) {
 	case *nexus.EndpointTarget_Worker_:

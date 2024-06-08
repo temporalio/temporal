@@ -22,6 +22,7 @@ env:
   COMMIT: ${{ github.event.inputs.commit || github.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
 
 jobs:
   misc-checks:
@@ -93,7 +94,7 @@ jobs:
 
       - name: Run unit test
         timeout-minutes: 15
-        run: make unit-test-coverage
+        run: make unit-test-coverage upload-test-results
 
   integration-test:
     name: Integration test
@@ -124,7 +125,7 @@ jobs:
 
       - name: Run integration test
         timeout-minutes: 15
-        run: make integration-test-coverage
+        run: make integration-test-coverage upload-test-results
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -193,7 +194,7 @@ jobs:
 
       - name: Run functional test
         timeout-minutes: 25
-        run: make functional-test-coverage
+        run: make functional-test-coverage upload-test-results
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -256,7 +257,7 @@ jobs:
 
       - name: Run functional test xdc
         timeout-minutes: 15
-        run: make functional-test-xdc-coverage
+        run: make functional-test-xdc-coverage upload-test-results
 
       - name: Tear down docker compose
         if: ${{ always() }}

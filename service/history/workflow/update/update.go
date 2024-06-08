@@ -106,18 +106,6 @@ func New(id string, opts ...updateOpt) *Update {
 	return upd
 }
 
-func withCompletionCallback(cb func()) updateOpt {
-	return func(u *Update) {
-		u.onComplete = cb
-	}
-}
-
-func withInstrumentation(i *instrumentation) updateOpt {
-	return func(u *Update) {
-		u.instrumentation = i
-	}
-}
-
 func newAdmitted(id string, request *anypb.Any, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
@@ -169,6 +157,18 @@ func newCompleted(
 		opt(upd)
 	}
 	return upd
+}
+
+func withCompletionCallback(cb func()) updateOpt {
+	return func(u *Update) {
+		u.onComplete = cb
+	}
+}
+
+func withInstrumentation(i *instrumentation) updateOpt {
+	return func(u *Update) {
+		u.instrumentation = i
+	}
 }
 
 // WaitLifecycleStage waits until the Update has reached waitStage or a timeout.
@@ -283,7 +283,6 @@ func (u *Update) abort(reason AbortReason) {
 // is in stateCreated then it builds a protocolpb.Message that will be sent
 // when Send is called.
 func (u *Update) Admit(
-	_ context.Context,
 	req *updatepb.Request,
 	eventStore EventStore, // Will be useful for durable admitted.
 ) error {
@@ -301,6 +300,7 @@ func (u *Update) Admit(
 	}
 
 	u.instrumentation.countRequestMsg()
+
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
 	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
 		return invalidArgf("unable to validate utf-8 request: %v", err)
@@ -310,6 +310,7 @@ func (u *Update) Admit(
 		return invalidArgf("unable to unmarshal request: %v", err)
 	}
 	u.request = reqAny
+
 	prevState := u.setState(stateProvisionallyAdmitted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		if u.state != stateProvisionallyAdmitted {
@@ -326,6 +327,7 @@ func (u *Update) Admit(
 		var timeZero time.Time
 		u.admittedTime = timeZero
 	})
+
 	return nil
 }
 
@@ -340,7 +342,6 @@ func (u *Update) Admit(
 // If you modify the state machine please update the diagram in
 // service/history/workflow/update/README.md.
 func (u *Update) OnProtocolMessage(
-	ctx context.Context,
 	protocolMsg *protocolpb.Message,
 	eventStore EventStore,
 ) error {
@@ -373,11 +374,11 @@ func (u *Update) OnProtocolMessage(
 
 	switch updMsg := body.(type) {
 	case *updatepb.Acceptance:
-		return u.onAcceptanceMsg(ctx, updMsg, eventStore)
+		return u.onAcceptanceMsg(updMsg, eventStore)
 	case *updatepb.Rejection:
-		return u.onRejectionMsg(ctx, updMsg, eventStore)
+		return u.onRejectionMsg(updMsg, eventStore)
 	case *updatepb.Response:
-		return u.onResponseMsg(ctx, updMsg, eventStore)
+		return u.onResponseMsg(updMsg, eventStore)
 	default:
 		return invalidArgf("Message type %T not supported", body)
 	}
@@ -396,9 +397,8 @@ func (u *Update) needToSend(includeAlreadySent bool) bool {
 // If update is not in expected stateAdmitted, Send does nothing and returns nil.
 // If includeAlreadySent is set to true then Send will return message even if update was already sent but not processed by worker.
 // If update lacks a request then return nil; the request will be communicated to the worker via an UpdateAdmitted event.
-// Note: once update moved to stateSent it never moves back to stateRequested.
+// Note: once update moved to stateSent it never moves back to stateAdmitted.
 func (u *Update) Send(
-	_ context.Context,
 	includeAlreadySent bool,
 	sequencingID *protocolpb.Message_EventId,
 ) *protocolpb.Message {
@@ -443,7 +443,6 @@ func (u *Update) outgoingMessageID() string {
 // and on commit the accepted future is completed and the Update transitions to
 // stateAccepted.
 func (u *Update) onAcceptanceMsg(
-	_ context.Context,
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
 ) error {
@@ -487,6 +486,7 @@ func (u *Update) onAcceptanceMsg(
 		return err
 	}
 	u.acceptedEventID = event.EventId
+
 	prevState := u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
@@ -512,7 +512,6 @@ func (u *Update) onAcceptanceMsg(
 // are both completed with the failurepb.Failure value from the
 // updatepb.Rejection input message.
 func (u *Update) onRejectionMsg(
-	ctx context.Context,
 	rej *updatepb.Rejection,
 	effects effect.Controller,
 ) error {
@@ -524,12 +523,11 @@ func (u *Update) onRejectionMsg(
 		return err
 	}
 	u.instrumentation.countRejectionMsg()
-	return u.reject(ctx, rej.Failure, effects)
+	return u.reject(rej.Failure, effects)
 }
 
 // reject an update with provided failure.
 func (u *Update) reject(
-	_ context.Context,
 	rejectionFailure *failurepb.Failure,
 	effects effect.Controller,
 ) error {
@@ -563,7 +561,6 @@ func (u *Update) reject(
 // outcome future is completed with the updatepb.Outcome from the
 // updatepb.Response input message.
 func (u *Update) onResponseMsg(
-	ctx context.Context,
 	res *updatepb.Response,
 	eventStore EventStore,
 ) error {
@@ -593,15 +590,6 @@ func (u *Update) onResponseMsg(
 		u.setState(prevState)
 	})
 	return nil
-}
-
-// isIncomplete checks if update is already completed (rejected or processed).
-func (u *Update) isIncomplete() bool {
-	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted | stateAborted))
-}
-
-func (u *Update) checkState(msg proto.Message, expected state) error {
-	return u.checkStateSet(msg, stateSet(expected))
 }
 
 func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -289,10 +290,14 @@ func convertString(val any) (string, error) {
 }
 
 func convertBool(val any) (bool, error) {
-	if boolVal, ok := val.(bool); ok {
-		return boolVal, nil
+	switch v := val.(type) {
+	case bool:
+		return v, nil
+	case string:
+		return strconv.ParseBool(v)
+	default:
+		return false, errors.New("value type is not bool")
 	}
-	return false, errors.New("value type is not bool")
 }
 
 func convertMap(val any) (map[string]any, error) {

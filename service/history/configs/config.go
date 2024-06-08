@@ -28,6 +28,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/retrypolicy"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
 )
 
 // Config represents configuration for history service
@@ -45,7 +47,7 @@ type Config struct {
 	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
@@ -88,13 +90,13 @@ type Config struct {
 	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
 
 	// ShardController settings
-	RangeSizeBits                  uint
-	AcquireShardInterval           dynamicconfig.DurationPropertyFn
-	AcquireShardConcurrency        dynamicconfig.IntPropertyFn
-	ShardIOConcurrency             dynamicconfig.IntPropertyFn
-	ShardLingerOwnershipCheckQPS   dynamicconfig.IntPropertyFn
-	ShardLingerTimeLimit           dynamicconfig.DurationPropertyFn
-	ShardOwnershipAssertionEnabled dynamicconfig.BoolPropertyFn
+	RangeSizeBits                uint
+	AcquireShardInterval         dynamicconfig.DurationPropertyFn
+	AcquireShardConcurrency      dynamicconfig.IntPropertyFn
+	ShardIOConcurrency           dynamicconfig.IntPropertyFn
+	ShardIOTimeout               dynamicconfig.DurationPropertyFn
+	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
+	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -167,7 +169,7 @@ type Config struct {
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
-	OutboundQueueCircuitBreakerSettings                 dynamicconfig.MapPropertyFnWithDestinationFilter
+	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedPropertyFnWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -228,11 +230,11 @@ type Config struct {
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
-	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultActivityRetryPolicy dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 
 	// DefaultWorkflowRetryPolicy specifies the out-of-box retry policy for
 	// any unset fields on a RetryPolicy configured on a Workflow
-	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultWorkflowRetryPolicy dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 
 	// Workflow task settings
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
@@ -274,6 +276,9 @@ type Config struct {
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicateLocalGeneratedEvent                  dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
+	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
+	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
+	ReplicationReceiverMaxOutstandingTaskCount          dynamicconfig.IntPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -339,8 +344,9 @@ type Config struct {
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
-	FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
+	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFn
+
+	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -401,12 +407,12 @@ func NewConfig(
 
 		RangeSizeBits: 20, // 20 bits for sequencer, 2^20 sequence number for any range
 
-		AcquireShardInterval:           dynamicconfig.AcquireShardInterval.Get(dc),
-		AcquireShardConcurrency:        dynamicconfig.AcquireShardConcurrency.Get(dc),
-		ShardIOConcurrency:             dynamicconfig.ShardIOConcurrency.Get(dc),
-		ShardLingerOwnershipCheckQPS:   dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
-		ShardLingerTimeLimit:           dynamicconfig.ShardLingerTimeLimit.Get(dc),
-		ShardOwnershipAssertionEnabled: dynamicconfig.ShardOwnershipAssertionEnabled.Get(dc),
+		AcquireShardInterval:         dynamicconfig.AcquireShardInterval.Get(dc),
+		AcquireShardConcurrency:      dynamicconfig.AcquireShardConcurrency.Get(dc),
+		ShardIOConcurrency:           dynamicconfig.ShardIOConcurrency.Get(dc),
+		ShardIOTimeout:               dynamicconfig.ShardIOTimeout.Get(dc),
+		ShardLingerOwnershipCheckQPS: dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
+		ShardLingerTimeLimit:         dynamicconfig.ShardLingerTimeLimit.Get(dc),
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
@@ -494,6 +500,9 @@ func NewConfig(
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicateLocalGeneratedEvent:                  dynamicconfig.EnableReplicateLocalGeneratedEvents.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
+		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
+		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
+		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
@@ -618,9 +627,10 @@ func NewConfig(
 		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
 		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
-		SendRawWorkflowHistory: dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		SendRawWorkflowHistory:         dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 
-		FrontendAccessHistoryFraction: dynamicconfig.FrontendAccessHistoryFraction.Get(dc),
+		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
 	}
 
 	return cfg

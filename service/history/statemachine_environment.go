@@ -110,12 +110,10 @@ func getCurrentWorkflowExecutionContext(
 	workflowID string,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	shardOwnershipAsserted := false
 	currentRunID, err := wcache.GetCurrentRunID(
 		ctx,
 		shardContext,
 		workflowCache,
-		&shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
 		lockPriority,
@@ -152,7 +150,6 @@ func getCurrentWorkflowExecutionContext(
 		ctx,
 		shardContext,
 		workflowCache,
-		&shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
 		lockPriority,

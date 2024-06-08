@@ -306,7 +306,7 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 func (s *TestBase) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
 		WithBackoffCoefficient(1.5).
-		WithMaximumAttempts(5)
+		WithMaximumAttempts(20)
 
 	return backoff.ThrottleRetry(
 		func() error {

@@ -39,10 +39,13 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/converter"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -76,11 +79,12 @@ func (h handler) CancelOperation(ctx context.Context, service, operation, operat
 
 func TestProcessInvocationTask(t *testing.T) {
 	cases := []struct {
-		name             string
-		endpointNotFound bool
-		onStartOperation func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
-		checkOutcome     func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
-		requestTimeout   time.Duration
+		name                  string
+		endpointNotFound      bool
+		onStartOperation      func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
+		expectedMetricOutcome string
+		checkOutcome          func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
+		requestTimeout        time.Duration
 	}{
 		{
 			name:           "async start",
@@ -88,6 +92,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
 			},
+			expectedMetricOutcome: "pending",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
 				require.Equal(t, 1, len(events))
@@ -121,6 +126,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				}
 				return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
 			},
+			expectedMetricOutcome: "successful",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED, op.State())
 				require.Equal(t, 1, len(events))
@@ -141,6 +147,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					State:   nexus.OperationStateFailed,
 				}
 			},
+			expectedMetricOutcome: "operation-unsuccessful:failed",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
@@ -185,6 +192,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					State:   nexus.OperationStateCanceled,
 				}
 			},
+			expectedMetricOutcome: "operation-unsuccessful:canceled",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_CANCELED, op.State())
 				require.Equal(t, 1, len(events))
@@ -224,6 +232,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
+			expectedMetricOutcome: "request-error:500",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
@@ -232,8 +241,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:           "invocation timeout",
-			requestTimeout: time.Microsecond,
+			name:                  "invocation timeout",
+			requestTimeout:        time.Microsecond,
+			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				time.Sleep(time.Millisecond * 100)
 				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
@@ -275,6 +285,24 @@ func TestProcessInvocationTask(t *testing.T) {
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 				namespace.NewNamespaceForTest(&persistence.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
+			metricsHandler := metrics.NewMockHandler(ctrl)
+			if tc.expectedMetricOutcome != "" {
+				counter := metrics.NewMockCounterIface(ctrl)
+				timer := metrics.NewMockTimerIface(ctrl)
+				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
+				counter.EXPECT().Record(int64(1),
+					metrics.NamespaceTag("ns-name"),
+					metrics.DestinationTag("endpoint-name"),
+					metrics.NexusMethodTag("StartOperation"),
+					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatencyHistogram.Name()).Return(timer)
+				timer.EXPECT().Record(gomock.Any(),
+					metrics.NamespaceTag("ns-name"),
+					metrics.DestinationTag("endpoint-name"),
+					metrics.NexusMethodTag("StartOperation"),
+					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+			}
+
 			endpointChecker := func(ctx context.Context, namespaceName, endpointName string) error {
 				if tc.endpointNotFound {
 					return serviceerror.NewNotFound("endpoint not found")
@@ -286,10 +314,15 @@ func TestProcessInvocationTask(t *testing.T) {
 				Config: &nexusoperations.Config{
 					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					PayloadSizeLimit:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					CallbackURLTemplate: dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
 				},
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
+				MetricsHandler:         metricsHandler,
 				EndpointChecker:        endpointChecker,
 				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
@@ -300,7 +333,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				},
 			}))
 
-			err := reg.ExecuteActiveTask(
+			err := reg.ExecuteActiveImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -331,14 +364,14 @@ func TestProcessBackoffTask(t *testing.T) {
 				Time: time.Now(),
 				Err:  errors.New("test"),
 			},
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})
 	require.NoError(t, err)
 
-	err = reg.ExecuteActiveTask(
-		context.Background(),
+	err = reg.ExecuteActiveTimerTask(
 		env,
-		hsm.Ref{},
+		node,
 		nexusoperations.BackoffTask{},
 	)
 	require.NoError(t, err)
@@ -356,10 +389,9 @@ func TestProcessTimeoutTask(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
 
-	err := reg.ExecuteActiveTask(
-		context.Background(),
+	err := reg.ExecuteActiveTimerTask(
 		env,
-		hsm.Ref{},
+		node,
 		nexusoperations.TimeoutTask{},
 	)
 	require.NoError(t, err)
@@ -394,11 +426,12 @@ func TestProcessTimeoutTask(t *testing.T) {
 
 func TestProcessCancelationTask(t *testing.T) {
 	cases := []struct {
-		name              string
-		endpointNotFound  bool
-		onCancelOperation func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error
-		checkOutcome      func(t *testing.T, op nexusoperations.Cancelation)
-		requestTimeout    time.Duration
+		name                  string
+		endpointNotFound      bool
+		onCancelOperation     func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error
+		expectedMetricOutcome string
+		checkOutcome          func(t *testing.T, op nexusoperations.Cancelation)
+		requestTimeout        time.Duration
 	}{
 		{
 			name:           "failure",
@@ -406,6 +439,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
 			},
+			expectedMetricOutcome: "request-error:404",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
@@ -418,6 +452,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nil
 			},
+			expectedMetricOutcome: "successful",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, c.State())
 				require.Nil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
@@ -429,6 +464,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
+			expectedMetricOutcome: "request-error:500",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
@@ -442,6 +478,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				time.Sleep(time.Millisecond * 100)
 				return nil
 			},
+			expectedMetricOutcome: "request-timeout",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
@@ -492,6 +529,23 @@ func TestProcessCancelationTask(t *testing.T) {
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 				namespace.NewNamespaceForTest(&persistence.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
+			metricsHandler := metrics.NewMockHandler(ctrl)
+			if tc.expectedMetricOutcome != "" {
+				counter := metrics.NewMockCounterIface(ctrl)
+				timer := metrics.NewMockTimerIface(ctrl)
+				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
+				counter.EXPECT().Record(int64(1),
+					metrics.NamespaceTag("ns-name"),
+					metrics.DestinationTag("endpoint-name"),
+					metrics.NexusMethodTag("CancelOperation"),
+					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatencyHistogram.Name()).Return(timer)
+				timer.EXPECT().Record(gomock.Any(),
+					metrics.NamespaceTag("ns-name"),
+					metrics.DestinationTag("endpoint-name"),
+					metrics.NexusMethodTag("CancelOperation"),
+					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+			}
 			endpointChecker := func(ctx context.Context, namespaceName, endpointName string) error {
 				if tc.endpointNotFound {
 					return serviceerror.NewNotFound("endpoint not found")
@@ -503,8 +557,12 @@ func TestProcessCancelationTask(t *testing.T) {
 				Config: &nexusoperations.Config{
 					Enabled:        dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
 				},
 				NamespaceRegistry: namespaceRegistry,
+				MetricsHandler:    metricsHandler,
 				EndpointChecker:   endpointChecker,
 				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
@@ -515,7 +573,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				},
 			}))
 
-			err = reg.ExecuteActiveTask(
+			err = reg.ExecuteActiveImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -567,6 +625,9 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		Config: &nexusoperations.Config{
 			Enabled:        dynamicconfig.GetBoolPropertyFn(true),
 			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
+			RetryPolicy: func() backoff.RetryPolicy {
+				return backoff.NewExponentialRetryPolicy(time.Second)
+			},
 		},
 		NamespaceRegistry: namespaceRegistry,
 		EndpointChecker: func(ctx context.Context, namespaceName, endpointName string) error {
@@ -577,7 +638,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		},
 	}))
 
-	err = reg.ExecuteActiveTask(
+	err = reg.ExecuteActiveImmediateTask(
 		context.Background(),
 		env,
 		hsm.Ref{
@@ -611,9 +672,10 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 
 	err = hsm.MachineTransition(node, func(c nexusoperations.Cancelation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionCancelationAttemptFailed.Apply(c, nexusoperations.EventCancelationAttemptFailed{
-			Time: time.Now(),
-			Err:  fmt.Errorf("test attempt failed"),
-			Node: node,
+			Time:        time.Now(),
+			Err:         fmt.Errorf("test attempt failed"),
+			Node:        node,
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})
 	require.NoError(t, err)
@@ -622,10 +684,9 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
 
-	err = reg.ExecuteActiveTask(
-		context.Background(),
+	err = reg.ExecuteActiveTimerTask(
 		env,
-		hsm.Ref{},
+		node,
 		nexusoperations.CancelationBackoffTask{},
 	)
 	require.NoError(t, err)

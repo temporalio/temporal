@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -322,6 +323,9 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 			}
 		}
 	}
+
+	AddNextStateMachineTimerTask(r.mutableState)
+
 	return nil
 }
 
@@ -486,7 +490,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 	}
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// It WT is still speculative, create task in in-memory task queue.
+		// If WT is still speculative, create task in in-memory task queue.
 		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
 	}
 
@@ -821,30 +825,28 @@ func generateSubStateMachineTask(
 	if !task.Concurrent() {
 		transitionCount = node.TransitionCount()
 	}
-	smt := tasks.StateMachineTask{
-		WorkflowKey: mutableState.GetWorkflowKey(),
-		Info: &persistencespb.StateMachineTaskInfo{
-			Ref: &persistencespb.StateMachineRef{
-				Path:                                 ppath,
-				MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
-				MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
-				MachineTransitionCount:               transitionCount,
-			},
-			Type: task.Type().ID,
-			Data: data,
+
+	taskInfo := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path:                                 ppath,
+			MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
+			MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
+			MachineTransitionCount:               transitionCount,
 		},
+		Type: task.Type().ID,
+		Data: data,
 	}
 	switch kind := task.Kind().(type) {
 	case hsm.TaskKindOutbound:
 		mutableState.AddTasks(&tasks.StateMachineOutboundTask{
-			StateMachineTask: smt,
-			Destination:      kind.Destination,
+			StateMachineTask: tasks.StateMachineTask{
+				WorkflowKey: mutableState.GetWorkflowKey(),
+				Info:        taskInfo,
+			},
+			Destination: kind.Destination,
 		})
 	case hsm.TaskKindTimer:
-		smt.VisibilityTimestamp = kind.Deadline
-		mutableState.AddTasks(&tasks.StateMachineTimerTask{
-			StateMachineTask: smt,
-		})
+		TrackStateMachineTimer(mutableState, kind.Deadline, taskInfo)
 	}
 
 	return nil

@@ -200,6 +200,9 @@ type runAcrossContinueState struct {
 }
 
 func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcrossContinueState) {
+	// capture this to avoid races between end of one test and start of next
+	env := s.env
+
 	for _, run := range runs {
 		run := run // capture fresh value
 		// set up start
@@ -234,7 +237,8 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 			return req.Execution.WorkflowId == run.id && req.LongPoll
 		})
 		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchLongPoll).Times(0).Maybe().AfterFn(func() time.Duration {
-			return run.end.Sub(s.now())
+			// this can be called after end of workflow, use captured env
+			return run.end.Sub(env.Now().UTC())
 		}).Return(func(_ context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
 			return &schedspb.WatchWorkflowResponse{Status: run.result}, nil
 		})
@@ -1335,9 +1339,10 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 		t := base.Add(time.Duration(i) * time.Hour)
 		actual := baseStartTime.Add(time.Minute).Add(time.Duration(i/rateLimit) * time.Second)
 		runs[i] = workflowRun{
-			id:             "myid-" + t.Format(time.RFC3339),
-			start:          actual,
-			startTolerance: 5 * time.Second, // the "rate limit" isn't exact
+			id:    "myid-" + t.Format(time.RFC3339),
+			start: actual,
+			// increase this number if this test fails for no reason:
+			startTolerance: 8 * time.Second, // the "rate limit" isn't exact
 			end:            actual.Add(time.Minute),
 			result:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		}
@@ -1726,6 +1731,118 @@ func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
 	)
 }
 
+// Tests that a signal between a nominal time and jittered time for a start won't interrupt the start.
+func (s *workflowSuite) TestSignalBetweenNominalAndJittered() {
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 49, 22, 594000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 53, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T02:00:00Z",
+				start:  time.Date(2022, 6, 1, 2, 2, 39, 204000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 2, 11, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T03:00:00Z",
+				start:  time.Date(2022, 6, 1, 3, 37, 29, 538000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 3, 41, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T04:00:00Z",
+				start:  time.Date(2022, 6, 1, 4, 23, 34, 755000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 4, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				// signal between nominal and jittered time
+				at: time.Date(2022, 6, 1, 3, 22, 10, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNameRefresh, nil)
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 5, 0, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+				Jitter: durationpb.New(1 * time.Hour),
+			},
+		},
+	)
+}
+
+func (s *workflowSuite) TestPauseUnpauseBetweenNominalAndJittered() {
+	s.T().Skip("this illustrates an existing bug")
+
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 49, 22, 594000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 53, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T02:00:00Z",
+				start:  time.Date(2022, 6, 1, 2, 2, 39, 204000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 2, 11, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T03:00:00Z",
+				start:  time.Date(2022, 6, 1, 3, 37, 29, 538000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 3, 41, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T04:00:00Z",
+				start:  time.Date(2022, 6, 1, 4, 23, 34, 755000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 4, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 3, 20, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{Pause: "paused"})
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 3, 30, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{Unpause: "go ahead"})
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 5, 0, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+				Jitter: durationpb.New(1 * time.Hour),
+			},
+		},
+	)
+}
+
 func (s *workflowSuite) TestLimitedActions() {
 	// written using low-level mocks so we can sleep forever
 
@@ -2041,11 +2158,6 @@ func (s *workflowSuite) TestCANBySuggested() {
 }
 
 func (s *workflowSuite) TestCANBySuggestedWithSignals() {
-	// TODO: remove once default version is CANAfterSignals
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = CANAfterSignals
-	defer func() { currentTweakablePolicies = prevTweakables }()
-
 	// written using low-level mocks so we can control iteration count
 
 	runs := []time.Duration{

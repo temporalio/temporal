@@ -299,12 +299,10 @@ func (m *nexusEndpointClient) ListNexusEndpoints(
 		nextPageToken = []byte(m.endpointEntries[endIdx].Id)
 	}
 
-	entries := m.endpointEntries[startIdx:endIdx]
-
 	resp := &matchingservice.ListNexusEndpointsResponse{
 		TableVersion:  m.tableVersion,
 		NextPageToken: nextPageToken,
-		Entries:       entries,
+		Entries:       slices.Clone(m.endpointEntries[startIdx:endIdx]),
 	}
 
 	return resp, m.tableVersionChanged, nil

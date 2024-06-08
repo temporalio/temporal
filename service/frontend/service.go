@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/retrypolicy"
 )
 
 // Config represents configuration for frontend service
@@ -54,7 +55,7 @@ type Config struct {
 	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
@@ -116,7 +117,7 @@ type Config struct {
 
 	// DefaultWorkflowRetryPolicy represents default values for unset fields on a Workflow's
 	// specified RetryPolicy
-	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultWorkflowRetryPolicy dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
@@ -185,10 +186,6 @@ type Config struct {
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
-	// AccessHistoryFraction are interim flags across 2 minor releases and will be removed once fully enabled.
-	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
-	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
 
 	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
@@ -300,9 +297,6 @@ func NewConfig(
 		EnableWorkerVersioningData:     dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Get(dc),
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
-
-		AccessHistoryFraction:            dynamicconfig.FrontendAccessHistoryFraction.Get(dc),
-		AdminDeleteAccessHistoryFraction: dynamicconfig.FrontendAdminDeleteAccessHistoryFraction.Get(dc),
 
 		EnableNexusAPIs:             dynamicconfig.EnableNexus.Get(dc),
 		CallbackURLMaxLength:        dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),

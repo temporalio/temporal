@@ -25,6 +25,7 @@ package nexusoperations
 import (
 	"time"
 
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
@@ -60,9 +61,21 @@ Uses Go's len() function to determine the length.`,
 var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
 	"component.nexusoperations.callback.endpoint.template",
 	"unset",
-	`controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver asynchronous completion.
+	`Controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver asynchronous completion.
 The template can be used to interpolate the {{.NamepaceName}} and {{.NamespaceID}} parameters to construct a publicly accessible URL.
 Must be set in order to use Nexus Operations.`,
+)
+
+var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
+	"component.nexusoperations.retryPolicy.initialInterval",
+	time.Second,
+	`The initial backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
+)
+
+var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
+	"component.nexusoperations.retryPolicy.maxInterval",
+	time.Second,
+	`The maximum backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
 )
 
 type Config struct {
@@ -71,7 +84,9 @@ type Config struct {
 	MaxConcurrentOperations dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PayloadSizeLimit        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate     dynamicconfig.StringPropertyFn
+	RetryPolicy             func() backoff.RetryPolicy
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -81,6 +96,16 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:  MaxOperationNameLength.Get(dc),
+		PayloadSizeLimit:        dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:     CallbackURLTemplate.Get(dc),
+		RetryPolicy: func() backoff.RetryPolicy {
+			return backoff.NewExponentialRetryPolicy(
+				RetryPolicyInitialInterval.Get(dc)(),
+			).WithMaximumInterval(
+				RetryPolicyMaximumInterval.Get(dc)(),
+			).WithExpirationInterval(
+				backoff.NoInterval,
+			)
+		},
 	}
 }

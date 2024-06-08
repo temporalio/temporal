@@ -43,6 +43,9 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
+// outboundQueuePersistenceMaxRPSRatio is meant to ensure queue loading doesn't consume more than 30% of the host's
+// persistence tokens. This is especially important upon host restart when we need to perform a load for all shards.
+// This value was copied from the transfer queue factory.
 const outboundQueuePersistenceMaxRPSRatio = 0.3
 
 var (
@@ -131,7 +134,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 					key.NamespaceID,
 					key.Destination,
 				),
-				SettingsFn: func() map[string]any {
+				SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
 					nsName, err := params.NamespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
 					if err != nil {
 						// This is intentionally not failing the function in case of error. The circuit
@@ -238,6 +241,7 @@ func (f *outboundQueueFactory) CreateQueue(
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
 		shardContext,
 		workflowCache,
+		currentClusterName,
 		logger,
 		metricsHandler,
 	)

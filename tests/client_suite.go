@@ -616,7 +616,7 @@ func (s *ClientFunctionalSuite) TestTooManyPendingActivities() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED,
 	)
 
-	// mark one of the pending activities as complete and verify that the worfklow can now complete
+	// mark one of the pending activities as complete and verify that the workflow can now complete
 	s.NoError(s.sdkClient.CompleteActivity(ctx, activityInfo.TaskToken, nil, nil))
 	s.eventuallySucceeds(ctx, func(ctx context.Context) error {
 		return workflowRun.Get(ctx, nil)

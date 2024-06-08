@@ -343,6 +343,10 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
+	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
+	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
+	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
+	HistoryPollWorkflowExecutionHistoryScope = "PollWorkflowExecutionHistory"
 	// HistoryGetWorkflowExecutionRawHistoryScope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
 	HistoryGetWorkflowExecutionRawHistoryScope = "GetWorkflowExecutionRawHistory"
 	// HistoryGetWorkflowExecutionRawHistoryV2Scope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
@@ -792,45 +796,15 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled      = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency        = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram   = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram    = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter          = NewCounterDef("queue_actions")
-	ActivityE2ELatency          = NewTimerDef("activity_end_to_end_latency")
-	AckLevelUpdateCounter       = NewCounterDef("ack_level_update")
-	AckLevelUpdateFailedCounter = NewCounterDef("ack_level_update_failed")
-	CommandCounter              = NewCounterDef("command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeScheduleActivityCounter = NewCounterDef("schedule_activity_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeCompleteWorkflowCounter = NewCounterDef("complete_workflow_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeFailWorkflowCounter = NewCounterDef("fail_workflow_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeCancelWorkflowCounter = NewCounterDef("cancel_workflow_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeStartTimerCounter = NewCounterDef("start_timer_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeCancelActivityCounter = NewCounterDef("cancel_activity_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeCancelTimerCounter = NewCounterDef("cancel_timer_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeRecordMarkerCounter = NewCounterDef("record_marker_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeCancelExternalWorkflowCounter = NewCounterDef("cancel_external_workflow_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeContinueAsNewCounter = NewCounterDef("continue_as_new_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeSignalExternalWorkflowCounter = NewCounterDef("signal_external_workflow_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeUpsertWorkflowSearchAttributesCounter = NewCounterDef("upsert_workflow_search_attributes_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeModifyWorkflowPropertiesCounter = NewCounterDef("modify_workflow_properties_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeChildWorkflowCounter = NewCounterDef("child_workflow_command")
-	// Deprecated: replaced by CommandCounter and will be removed in a future release
-	CommandTypeProtocolMessage                           = NewCounterDef("protocol_message_command")
+	TaskSchedulerThrottled                               = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency                                 = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram                            = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram                             = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter                                   = NewCounterDef("queue_actions")
+	ActivityE2ELatency                                   = NewTimerDef("activity_end_to_end_latency")
+	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
+	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
+	CommandCounter                                       = NewCounterDef("command")
 	MessageTypeRequestWorkflowExecutionUpdateCounter     = NewCounterDef("request_workflow_update_message")
 	MessageTypeAcceptWorkflowExecutionUpdateCounter      = NewCounterDef("accept_workflow_update_message")
 	MessageTypeRespondWorkflowExecutionUpdateCounter     = NewCounterDef("respond_workflow_update_message")
@@ -848,6 +822,9 @@ var (
 	WorkflowExecutionUpdateNormalWorkflowTask            = NewCounterDef("workflow_update_normal_workflow_task")
 	WorkflowExecutionUpdateClientTimeout                 = NewCounterDef("workflow_update_client_timeout")
 	WorkflowExecutionUpdateServerTimeout                 = NewCounterDef("workflow_update_server_timeout")
+	ConvertSpeculativeWorkflowTask                       = NewCounterDef(
+		"workflow_task_convert_speculative_to_normal",
+		WithDescription("The number of speculative workflow tasks converted to normal workflow tasks."))
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
@@ -1023,6 +1000,7 @@ var (
 	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
 	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                   = NewGaugeDef("approximate_backlog_count")
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
@@ -1186,18 +1164,4 @@ var (
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
 	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
-)
-
-// DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration
-const (
-	AccessHistoryOld = "AccessHistoryOld"
-	AccessHistoryNew = "AccessHistoryNew"
-
-	AdminGetWorkflowExecutionRawHistoryV2Tag      = "GetWorkflowExecutionRawHistoryV2"
-	AdminDeleteWorkflowExecutionTag               = "DeleteWorkflowExecution"
-	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
-	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
-	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
-	MatchingPollWorkflowTaskQueueTag              = "PollWorkflowTaskQueue"
-	HistoryHandleWorkflowTaskStartedTag           = "HandleWorkflowTaskStarted"
 )

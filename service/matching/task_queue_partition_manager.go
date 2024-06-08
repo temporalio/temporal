@@ -51,7 +51,7 @@ import (
 type (
 	taskQueuePartitionManager interface {
 		Start()
-		Stop()
+		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
@@ -82,7 +82,7 @@ type (
 		HasAnyPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		Describe(buildIds map[string]bool, includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
+		Describe(buildIds map[string]bool, includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
@@ -173,13 +173,13 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
 // unloading the partition. For stopping and unloading a partition call unloadFromEngine instead.
-func (pm *taskQueuePartitionManagerImpl) Stop() {
+func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.versionedQueuesLock.Lock()
 	defer pm.versionedQueuesLock.Unlock()
 	for _, vq := range pm.versionedQueues {
-		vq.Stop()
+		vq.Stop(unloadCause)
 	}
-	pm.defaultQueue.Stop()
+	pm.defaultQueue.Stop(unloadCause)
 	pm.userDataManager.Stop()
 	pm.engine.updateTaskQueuePartitionGauge(pm, -1)
 }
@@ -469,7 +469,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	buildIds map[string]bool,
-	includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
@@ -497,6 +497,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			if reportPollers {
 				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 			}
+			if reportStats {
+				vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
+			}
 		}
 		versionsInfo[bid] = vInfo
 	}
@@ -522,7 +525,7 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(pm.ns.Name().String()))
 }
 
-func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager) {
+func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager, unloadCause unloadCause) {
 	version := unloadedDbq.QueueKey().VersionSet()
 	if version == "" {
 		version = unloadedDbq.QueueKey().BuildId()
@@ -531,7 +534,7 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	if version == "" {
 		// this is the default queue, unload the whole partition if it is not healthy
 		if pm.defaultQueue == unloadedDbq {
-			pm.unloadFromEngine()
+			pm.unloadFromEngine(unloadCause)
 		}
 		return
 	}
@@ -540,16 +543,16 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	foundDbq, ok := pm.versionedQueues[version]
 	if !ok || foundDbq != unloadedDbq {
 		pm.versionedQueuesLock.Unlock()
-		unloadedDbq.Stop()
+		unloadedDbq.Stop(unloadCause)
 		return
 	}
 	delete(pm.versionedQueues, version)
 	pm.versionedQueuesLock.Unlock()
-	unloadedDbq.Stop()
+	unloadedDbq.Stop(unloadCause)
 }
 
-func (pm *taskQueuePartitionManagerImpl) unloadFromEngine() {
-	pm.engine.unloadTaskQueuePartition(pm)
+func (pm *taskQueuePartitionManagerImpl) unloadFromEngine(unloadCause unloadCause) {
+	pm.engine.unloadTaskQueuePartition(pm, unloadCause)
 }
 
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string) (physicalTaskQueueManager, error) {

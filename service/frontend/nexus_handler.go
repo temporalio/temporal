@@ -116,10 +116,10 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 
 func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {
 	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
-		APIName:   c.apiName,
-		Namespace: c.namespaceName,
+		APIName:           c.apiName,
+		Namespace:         c.namespaceName,
 		NexusEndpointName: c.endpointName,
-		Request:   request,
+		Request:           request,
 	})
 	if err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unauthorized"))
@@ -201,6 +201,7 @@ type nexusHandler struct {
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	forwardingClients             *cluster.FrontendHTTPClientCache
+	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -284,7 +285,10 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 		oc.logger.Warn("invalid input", tag.Error(err))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
-	// TODO(bergundy): Limit payload size.
+	if startOperationRequest.Payload.Size() > h.payloadSizeLimit(oc.namespaceName) {
+		oc.logger.Error("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
+		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
+	}
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus

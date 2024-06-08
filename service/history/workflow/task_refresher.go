@@ -36,9 +36,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -49,25 +47,19 @@ type (
 	}
 
 	TaskRefresherImpl struct {
-		shard             shard.Context
-		config            *configs.Config
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
+		shard  shard.Context
+		logger log.Logger
 	}
 )
 
 func NewTaskRefresher(
 	shard shard.Context,
-	config *configs.Config,
-	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) *TaskRefresherImpl {
 
 	return &TaskRefresherImpl{
-		shard:             shard,
-		config:            config,
-		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
+		shard:  shard,
+		logger: logger,
 	}
 }
 
@@ -81,7 +73,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 		mutableState,
 	)
 
-	if err := r.refreshTasksForWorkflowStart(
+	if err := RefreshTasksForWorkflowStart(
 		ctx,
 		mutableState,
 		taskGenerator,
@@ -162,7 +154,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	)
 }
 
-func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
+func RefreshTasksForWorkflowStart(
 	ctx context.Context,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
@@ -489,9 +481,12 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		// transition history not enabled.
 		return nil
 	}
+	// Reset all the state machine timers, we'll recreate them all.
+	mutableState.GetExecutionInfo().StateMachineTimers = nil
+
 	versionedTransition := transitionHistory[len(transitionHistory)-1]
 
-	return mutableState.HSM().Walk(func(node *hsm.Node) error {
+	err := mutableState.HSM().Walk(func(node *hsm.Node) error {
 		taskRegenerator, err := hsm.MachineData[hsm.TaskRegenerator](node)
 		if err != nil {
 			if node.Parent == nil && errors.Is(err, hsm.ErrIncompatibleType) {
@@ -520,4 +515,11 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	AddNextStateMachineTimerTask(mutableState)
+
+	return nil
 }

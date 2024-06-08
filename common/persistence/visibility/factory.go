@@ -30,9 +30,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -114,21 +111,6 @@ func NewManager(
 	}
 
 	if secondaryVisibilityManager != nil {
-		isPrimaryAdvancedSQL := false
-		isSecondaryAdvancedSQL := false
-		switch visibilityManager.GetStoreNames()[0] {
-		case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
-			isPrimaryAdvancedSQL = true
-		}
-		switch secondaryVisibilityManager.GetStoreNames()[0] {
-		case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
-			isSecondaryAdvancedSQL = true
-		}
-		if isPrimaryAdvancedSQL && !isSecondaryAdvancedSQL {
-			logger.Fatal("invalid config: dual visibility combination not supported")
-			return nil, nil
-		}
-
 		managerSelector := newDefaultManagerSelector(
 			visibilityManager,
 			secondaryVisibilityManager,

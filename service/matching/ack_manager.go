@@ -38,16 +38,18 @@ import (
 // Used to convert out of order acks into ackLevel movement.
 type ackManager struct {
 	sync.RWMutex
-	outstandingTasks *treemap.Map // TaskID->acked
-	readLevel        int64        // Maximum TaskID inserted into outstandingTasks
-	ackLevel         int64        // Maximum TaskID below which all tasks are acked
-	backlogCounter   atomic.Int64
+	backlogMgr       *backlogManagerImpl // accessing approximateBacklogCounter
+	outstandingTasks *treemap.Map        // TaskID->acked
+	readLevel        int64               // Maximum TaskID inserted into outstandingTasks
+	ackLevel         int64               // Maximum TaskID below which all tasks are acked
+	backlogCountHint atomic.Int64
 	logger           log.Logger
 }
 
-func newAckManager(logger log.Logger) ackManager {
+func newAckManager(backlogMgr *backlogManagerImpl) ackManager {
 	return ackManager{
-		logger:           logger,
+		backlogMgr:       backlogMgr,
+		logger:           backlogMgr.logger,
 		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
 		readLevel:        -1,
 		ackLevel:         -1}
@@ -67,7 +69,7 @@ func (m *ackManager) addTask(taskID int64) {
 		m.logger.Fatal("Already present in outstanding tasks", tag.TaskID(taskID))
 	}
 	m.outstandingTasks.Put(taskID, false)
-	m.backlogCounter.Inc()
+	m.backlogCountHint.Inc()
 }
 
 func (m *ackManager) getReadLevel() int64 {
@@ -134,19 +136,25 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 	// TODO the ack level management should be done by a dedicated coroutine
 	//  this is only a temporarily solution
 	m.outstandingTasks.Put(taskID, true)
-	m.backlogCounter.Dec()
+	m.backlogCountHint.Dec()
 
 	// Adjust the ack level as far as we can
+	var numberOfAckedTasks int64
 	for {
 		min, acked := m.outstandingTasks.Min()
 		if min == nil || !acked.(bool) {
-			return m.ackLevel
+			break
 		}
 		m.ackLevel = min.(int64)
 		m.outstandingTasks.Remove(min)
+		numberOfAckedTasks += 1
 	}
+	if numberOfAckedTasks > 0 {
+		m.backlogMgr.db.updateApproximateBacklogCount(-numberOfAckedTasks)
+	}
+	return m.ackLevel
 }
 
 func (m *ackManager) getBacklogCountHint() int64 {
-	return m.backlogCounter.Load()
+	return m.backlogCountHint.Load()
 }

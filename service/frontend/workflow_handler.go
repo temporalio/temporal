@@ -118,10 +118,11 @@ type (
 		config                          *Config
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                *namespaceHandler
-		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		getDefaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 		visibilityMgr                   manager.VisibilityManager
 		logger                          log.Logger
 		throttledLogger                 log.Logger
+		persistenceExecutionName        string
 		clusterMetadataManager          persistence.ClusterMetadataManager
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
@@ -137,9 +138,6 @@ type (
 		membershipMonitor               membership.Monitor
 		healthInterceptor               *interceptor.HealthInterceptor
 		scheduleSpecBuilder             *scheduler.SpecBuilder
-
-		// DEPRECATED
-		persistenceExecutionManager persistence.ExecutionManager
 	}
 )
 
@@ -150,7 +148,7 @@ func NewWorkflowHandler(
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	throttledLogger log.Logger,
-	persistenceExecutionManager persistence.ExecutionManager, // TODO: remove
+	persistenceExecutionName string,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -189,7 +187,7 @@ func NewWorkflowHandler(
 		visibilityMgr:                   visibilityMgr,
 		logger:                          logger,
 		throttledLogger:                 throttledLogger,
-		persistenceExecutionManager:     persistenceExecutionManager,
+		persistenceExecutionName:        persistenceExecutionName,
 		clusterMetadataManager:          clusterMetadataManager,
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
@@ -693,18 +691,15 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
-	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryTag))) {
-		response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
-			&historyservice.GetWorkflowExecutionHistoryRequest{
-				NamespaceId: namespaceID.String(),
-				Request:     request,
-			})
-		if err != nil {
-			return nil, err
-		}
-		return response.Response, nil
+	response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
+		&historyservice.GetWorkflowExecutionHistoryRequest{
+			NamespaceId: namespaceID.String(),
+			Request:     request,
+		})
+	if err != nil {
+		return nil, err
 	}
-	return wh.getWorkflowExecutionHistory(ctx, request)
+	return response.Response, nil
 }
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
@@ -738,18 +733,15 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		request.MaximumPageSize = primitives.GetHistoryMaxPageSize
 	}
 
-	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
-		response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
-			&historyservice.GetWorkflowExecutionHistoryReverseRequest{
-				NamespaceId: namespaceID.String(),
-				Request:     request,
-			})
-		if err != nil {
-			return nil, err
-		}
-		return response.Response, nil
+	response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
+		&historyservice.GetWorkflowExecutionHistoryReverseRequest{
+			NamespaceId: namespaceID.String(),
+			Request:     request,
+		})
+	if err != nil {
+		return nil, err
 	}
-	return wh.getWorkflowExecutionHistoryReverse(ctx, request)
+	return response.Response, nil
 }
 
 // PollWorkflowTaskQueue is called by application worker to process WorkflowTask from a specific task queue.  A
@@ -842,17 +834,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if matchingResp.History == nil {
-		// Got an old matching response, need to lookup history
-		// Eventually empty history will only happen for sticky query tasks
-		return wh.createPollWorkflowTaskQueueResponse(
-			ctx,
-			namespaceID,
-			matchingResp,
-			matchingResp.BranchToken,
-		)
-	}
-
 	return &workflowservice.PollWorkflowTaskQueueResponse{
 		TaskToken:                  matchingResp.TaskToken,
 		WorkflowExecution:          matchingResp.WorkflowExecution,
@@ -909,29 +890,26 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
-	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendRespondWorkflowTaskCompletedTag))) {
-		namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-		if err != nil {
-			return nil, err
-		}
-
-		response, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx,
-			&historyservice.RespondWorkflowTaskCompletedRequest{
-				NamespaceId:     namespaceID.String(),
-				CompleteRequest: request,
-			},
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		return &workflowservice.RespondWorkflowTaskCompletedResponse{
-			WorkflowTask:        response.NewWorkflowTask,
-			ActivityTasks:       response.ActivityTasks,
-			ResetHistoryEventId: response.ResetHistoryEventId,
-		}, nil
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
 	}
-	return wh.respondWorkflowTaskCompleted(ctx, request)
+
+	response, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx,
+		&historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId:     namespaceID.String(),
+			CompleteRequest: request,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.RespondWorkflowTaskCompletedResponse{
+		WorkflowTask:        response.NewWorkflowTask,
+		ActivityTasks:       response.ActivityTasks,
+		ResetHistoryEventId: response.ResetHistoryEventId,
+	}, nil
 }
 
 // RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
@@ -2815,7 +2793,7 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 		VersionInfo:       metadata.VersionInfo,
 		ClusterName:       metadata.ClusterName,
 		HistoryShardCount: metadata.HistoryShardCount,
-		PersistenceStore:  wh.persistenceExecutionManager.GetName(),
+		PersistenceStore:  wh.persistenceExecutionName,
 		VisibilityStore:   strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
 	}, nil
 }
@@ -4018,6 +3996,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		identity = op.ResetOperation.GetIdentity()
 		operationType = batcher.BatchTypeReset
 		if op.ResetOperation.Options != nil {
+			if op.ResetOperation.Options.Target == nil {
+				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
+			}
 			encoded, err := op.ResetOperation.Options.Marshal()
 			if err != nil {
 				return nil, err
@@ -4025,7 +4006,11 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			resetParams.ResetOptions = encoded
 		} else {
 			// TODO: remove support for old fields later
-			resetParams.ResetType = op.ResetOperation.GetResetType()
+			resetType := op.ResetOperation.GetResetType()
+			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown batch reset type %v", resetType))
+			}
+			resetParams.ResetType = resetType
 			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
 		}
 
@@ -4756,7 +4741,7 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 		return nil
 	}
 
-	defaultWorkflowRetrySettings := retrypolicy.FromConfigToDefault(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	defaultWorkflowRetrySettings := wh.getDefaultWorkflowRetrySettings(namespaceName.String())
 	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }

@@ -93,7 +93,7 @@ func (s *taskRefresherSuite) SetupTest() {
 		tests.RunID,
 	)
 
-	s.taskRefresher = NewTaskRefresher(s.mockShard, config, s.mockNamespaceRegistry, s.mockShard.GetLogger())
+	s.taskRefresher = NewTaskRefresher(s.mockShard, s.mockShard.GetLogger())
 }
 
 func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
@@ -124,7 +124,8 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 
 	refreshedTasks := s.mutableState.PopTasks()
 	s.Len(refreshedTasks[tasks.CategoryOutbound], 3)
-	s.Len(refreshedTasks[tasks.CategoryTimer], 3)
+	s.Len(s.mutableState.GetExecutionInfo().StateMachineTimers, 3)
+	s.Len(refreshedTasks[tasks.CategoryTimer], 1)
 
 	s.False(hsmRoot.Dirty())
 }

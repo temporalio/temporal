@@ -127,7 +127,6 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 	s.mockNamespaceCache = mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = mockShard.Resource.ExecutionMgr
 
-	mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 	mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	mockClusterMetadata := mockShard.Resource.ClusterMetadata
@@ -242,11 +241,11 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 		eventStore := workflow.WithEffects(effect.Immediate(ctx), ms)
 
-		err = upd.Admit(ctx, updReq, eventStore)
+		err = upd.Admit(updReq, eventStore)
 		s.NoError(err)
 
 		seqID := &protocolpb.Message_EventId{EventId: tv.Any().EventID()}
-		msg := upd.Send(ctx, false, seqID)
+		msg := upd.Send(false, seqID)
 		s.NotNil(msg)
 
 		updRequestMsg := &protocolpb.Message{
