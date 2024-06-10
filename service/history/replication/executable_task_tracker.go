@@ -47,6 +47,7 @@ type (
 		TaskID() int64
 		TaskCreationTime() time.Time
 		MarkPoisonPill() error
+		SourceClusterName() string
 	}
 	WatermarkInfo struct {
 		Watermark int64

@@ -37,13 +37,12 @@ func RegisterExecutor(
 	standbyExec := standbyExecutor{options: standbyExecutorOptions}
 	if err := hsm.RegisterTimerExecutors(
 		registry,
-		TaskTypeSchedulerWait.ID,
 		activeExec.executeSchedulerWaitTask,
 		standbyExec.executeSchedulerWaitTask,
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterImmediateExecutors(registry, TaskTypeSchedulerExecute.ID, activeExec.executeSchedulerRunTask, standbyExec.executeSchedulerRunTask)
+	return hsm.RegisterImmediateExecutor(registry, activeExec.executeSchedulerRunTask)
 }
 
 type (
