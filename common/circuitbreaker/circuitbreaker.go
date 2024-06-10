@@ -24,8 +24,6 @@ package circuitbreaker
 
 import (
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/sony/gobreaker"
 
@@ -45,10 +43,6 @@ type (
 	// breaker if there is a change in the settings object. Note that in this case, the previous
 	// state of the circuit breaker is lost.
 	TwoStepCircuitBreakerWithDynamicSettings struct {
-		settingsFn           dynamicconfig.TypedPropertyFn[dynamicconfig.CircuitBreakerSettings]
-		settingsEvalInterval time.Duration
-		settingsLastCheck    atomic.Pointer[time.Time]
-
 		name          string
 		readyToTrip   func(counts gobreaker.Counts) bool
 		onStateChange func(name string, from gobreaker.State, to gobreaker.State)
@@ -59,14 +53,7 @@ type (
 	}
 
 	Settings struct {
-		// Function to get the dynamic settings.
-		SettingsFn dynamicconfig.TypedPropertyFn[dynamicconfig.CircuitBreakerSettings]
-		// Min interval time between calls to SettingsFn. If not set or zero, then it defaults
-		// to 1 minute.
-		SettingsEvalInterval time.Duration
-
 		// For the following options, check gobreaker docs for details.
-
 		Name          string
 		ReadyToTrip   func(counts gobreaker.Counts) bool
 		OnStateChange func(name string, from gobreaker.State, to gobreaker.State)
@@ -75,29 +62,36 @@ type (
 
 var _ TwoStepCircuitBreaker = (*TwoStepCircuitBreakerWithDynamicSettings)(nil)
 
-const (
-	defaultSettingsEvalInterval = 1 * time.Minute
-)
-
+// Caller must call UpdateSettings once before using this object.
 func NewTwoStepCircuitBreakerWithDynamicSettings(
 	settings Settings,
 ) *TwoStepCircuitBreakerWithDynamicSettings {
-	c := &TwoStepCircuitBreakerWithDynamicSettings{
-		settingsEvalInterval: settings.SettingsEvalInterval,
-
+	return &TwoStepCircuitBreakerWithDynamicSettings{
 		name:          settings.Name,
-		settingsFn:    settings.SettingsFn,
 		readyToTrip:   settings.ReadyToTrip,
 		onStateChange: settings.OnStateChange,
 
 		cbLock: &sync.RWMutex{},
 	}
-	if c.settingsEvalInterval <= 0 {
-		c.settingsEvalInterval = defaultSettingsEvalInterval
+}
+
+func (c *TwoStepCircuitBreakerWithDynamicSettings) UpdateSettings(
+	ds dynamicconfig.CircuitBreakerSettings,
+) {
+	c.cbLock.Lock()
+	defer c.cbLock.Unlock()
+	if c.cb != nil && ds == c.dynamicSettings {
+		return // no change
 	}
-	c.settingsLastCheck.Store(&time.Time{})
-	_ = c.getInternalCircuitBreaker()
-	return c
+	c.dynamicSettings = ds
+	c.cb = gobreaker.NewTwoStepCircuitBreaker(gobreaker.Settings{
+		Name:          c.name,
+		MaxRequests:   uint32(ds.MaxRequests),
+		Interval:      ds.Interval,
+		Timeout:       ds.Timeout,
+		ReadyToTrip:   c.readyToTrip,
+		OnStateChange: c.onStateChange,
+	})
 }
 
 func (c *TwoStepCircuitBreakerWithDynamicSettings) Name() string {
@@ -117,42 +111,8 @@ func (c *TwoStepCircuitBreakerWithDynamicSettings) Allow() (done func(success bo
 	return cb.Allow()
 }
 
-// getInternalCircuitBreaker checks if the dynamic settings changed, updating
-// the cirbuit breaker if necessary, and returns the up-to-date reference to
-// the circuit breaker.
 func (c *TwoStepCircuitBreakerWithDynamicSettings) getInternalCircuitBreaker() *gobreaker.TwoStepCircuitBreaker {
 	c.cbLock.RLock()
-	currentCb := c.cb
-	currentDs := c.dynamicSettings
-	c.cbLock.RUnlock()
-
-	now := time.Now()
-	lastCheck := c.settingsLastCheck.Load()
-	if now.Sub(*lastCheck) < c.settingsEvalInterval {
-		return currentCb
-	}
-	if !c.settingsLastCheck.CompareAndSwap(lastCheck, &now) {
-		return currentCb
-	}
-
-	ds := c.settingsFn()
-	if currentCb != nil && ds == currentDs {
-		return currentCb
-	}
-
-	c.cbLock.Lock()
-	defer c.cbLock.Unlock()
-	if c.cb != nil && ds == c.dynamicSettings {
-		return c.cb
-	}
-	c.dynamicSettings = ds
-	c.cb = gobreaker.NewTwoStepCircuitBreaker(gobreaker.Settings{
-		Name:          c.name,
-		MaxRequests:   uint32(ds.MaxRequests),
-		Interval:      ds.Interval,
-		Timeout:       ds.Timeout,
-		ReadyToTrip:   c.readyToTrip,
-		OnStateChange: c.onStateChange,
-	})
+	defer c.cbLock.RUnlock()
 	return c.cb
 }
