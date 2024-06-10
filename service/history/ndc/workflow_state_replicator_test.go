@@ -30,6 +30,7 @@ import (
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 
@@ -186,6 +187,13 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		we,
 		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+		gomock.Any(),
+		s.mockShard,
+		namespace.ID(namespaceID),
+		s.workflowID,
+		workflow.LockPriorityLow,
+	).Return(wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
@@ -292,6 +300,13 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		we,
 		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+		gomock.Any(),
+		s.mockShard,
+		namespace.ID(namespaceID),
+		s.workflowID,
+		workflow.LockPriorityLow,
+	).Return(wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
