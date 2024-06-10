@@ -29,6 +29,7 @@ import (
 	"net/url"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -36,6 +37,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -43,6 +45,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -50,6 +53,10 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
 )
+
+// user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
+const headerUserAgent = "user-agent"
+const clientNameVersionDelim = "/v"
 
 // Generic Nexus context that is not bound to a specific operation.
 // Includes fields extracted from an incoming Nexus request before being handled by the Nexus HTTP handler.
@@ -77,6 +84,7 @@ type operationContext struct {
 	metricsHandlerForInterceptors metrics.Handler
 	metricsHandler                metrics.Handler
 	logger                        log.Logger
+	clientVersionChecker          headers.VersionChecker
 	auth                          *authorization.Interceptor
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
 	redirectionInterceptor        *interceptor.Redirection
@@ -121,13 +129,24 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 	}
 }
 
-func (c *operationContext) augmentContext(ctx context.Context) context.Context {
+func (c *operationContext) augmentContext(ctx context.Context, header nexus.Header) context.Context {
 	ctx = metrics.AddMetricsContext(ctx)
 	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
-	return interceptor.PopulateCallerInfo(
+	ctx = interceptor.PopulateCallerInfo(
 		ctx,
 		func() string { return c.namespaceName },
-		func() string { return c.method })
+		func() string { return c.method },
+	)
+	if userAgent, ok := header[headerUserAgent]; ok {
+		parts := strings.Split(userAgent, clientNameVersionDelim)
+		if len(parts) > 1 {
+			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
+				headers.ClientNameHeaderName:    parts[0],
+				headers.ClientVersionHeaderName: parts[1],
+			}))
+		}
+	}
+	return ctx
 }
 
 func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {
@@ -191,6 +210,12 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 
+	if err := c.clientVersionChecker.ClientSupported(ctx); err != nil {
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unsupported_client"))
+		converted := commonnexus.ConvertGRPCError(err, true)
+		return converted
+	}
+
 	return nil
 }
 
@@ -242,6 +267,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		nexusContext:                  nc,
 		method:                        method,
 		clusterMetadata:               h.clusterMetadata,
+		clientVersionChecker:          headers.NewDefaultVersionChecker(),
 		auth:                          h.auth,
 		telemetryInterceptor:          h.telemetryInterceptor,
 		redirectionInterceptor:        h.redirectionInterceptor,
@@ -284,7 +310,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 	if err != nil {
 		return nil, err
 	}
-	ctx = oc.augmentContext(ctx)
+	ctx = oc.augmentContext(ctx, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	startOperationRequest := nexuspb.StartOperationRequest{
