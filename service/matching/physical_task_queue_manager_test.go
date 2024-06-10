@@ -27,16 +27,22 @@ package matching
 import (
 	"context"
 	"math"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -92,6 +98,54 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	return func(tqm *physicalTaskQueueManagerImpl) {
 		tqm.backlogMgr.taskWriter.idAlloc = ibl
 	}
+}
+
+// addTasks is a helper which adds numberOfTasks to a taskTracker
+func trackTasksHelper(tr *taskTracker, numberOfTasks int) {
+	for i := 0; i < numberOfTasks; i++ {
+		// adding a bunch of tasks
+		tr.incrementTaskCount()
+	}
+}
+
+func TestAddTasksRate(t *testing.T) {
+	// define a fake clock and it's time for testing
+	timeSource := clock.NewEventTimeSource()
+	currentTime := time.Now()
+	timeSource.Update(currentTime)
+
+	tr := newTaskTracker(timeSource)
+
+	// mini windows will have the following format : (start time, end time)
+	// (0 - 4), (5 - 9), (10 - 14), (15 - 19), (20 - 24), (25 - 29), (30 - 34), ...
+
+	// tasks should be placed in the first mini-window
+	timeSource.Advance(1 * time.Second) // time: 1 second
+	trackTasksHelper(tr, 100)
+	require.InEpsilon(t, float32(100), tr.rate(), 0.001) // 100 tasks added in 1 second = 100 / 1 = 100
+
+	// tasks should be placed in the second mini-window with 6 total seconds elapsed
+	timeSource.Advance(5 * time.Second)
+	trackTasksHelper(tr, 200)                           // time: 6 second
+	require.InEpsilon(t, float32(50), tr.rate(), 0.001) // (100 + 200) tasks added in 6 seconds = 300/6 = 50
+
+	timeSource.Advance(24 * time.Second) // time: 30 second
+	trackTasksHelper(tr, 300)
+	require.InEpsilon(t, float32(20), tr.rate(), 0.001) // (100 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 600/30 = 20
+
+	// this should clear out the first mini-window of 100 tasks
+	timeSource.Advance(5 * time.Second) // time: 35 second
+	trackTasksHelper(tr, 10)
+	require.InEpsilon(t, float32(17), tr.rate(), 0.001) // (10 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 510/30 = 17
+
+	// this should clear out the second and third mini-windows
+	timeSource.Advance(15 * time.Second) // time: 50 second
+	trackTasksHelper(tr, 10)
+	require.InEpsilon(t, float32(10.666667), tr.rate(), 0.001) // (10 + 10 + 300) tasks added in (30 + 0 (current window)) seconds = 320/30 = 10.66
+
+	// a minute passes and no tasks are added
+	timeSource.Advance(60 * time.Second)
+	require.Equal(t, float32(0), tr.rate()) // 0 tasks have been added in the last 30 seconds
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
@@ -247,6 +301,55 @@ func createTestTaskQueuePartitionManager(ns *namespace.Namespace, partition tqid
 	return pm
 }
 
+func TestReaderBacklogAge(t *testing.T) {
+	controller := gomock.NewController(t)
+
+	// Create queue Manager and set queue state
+	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tlm.backlogMgr.db.rangeID = int64(1)
+	tlm.backlogMgr.db.ackLevel = int64(0)
+	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
+
+	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
+	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(10*time.Second, 2)
+	tlm.backlogMgr.taskReader.gorogrp.Go(tlm.backlogMgr.taskReader.dispatchBufferedTasks)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.InDelta(t, time.Minute, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(time.Second))
+	}, time.Second, 10*time.Millisecond)
+
+	_, err := tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	require.NoError(t, err)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.InDelta(t, 10*time.Second, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+	}, time.Second, 10*time.Millisecond)
+
+	_, err = tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	require.NoError(t, err)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Equalf(t, time.Duration(0), tlm.backlogMgr.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+	}, time.Second, 10*time.Millisecond)
+}
+
+func randomTaskInfoWithAgeTaskID(age time.Duration, TaskID int64) *persistencespb.AllocatedTaskInfo {
+	rt1 := time.Now().Add(-age)
+	rt2 := rt1.Add(time.Hour)
+
+	return &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
+			NamespaceId:      uuid.New(),
+			WorkflowId:       uuid.New(),
+			RunId:            uuid.New(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamppb.New(rt1),
+			ExpiryTime:       timestamppb.New(rt2),
+		},
+		TaskId: TaskID,
+	}
+}
+
 func TestLegacyDescribeTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -264,6 +367,10 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	for i := int64(0); i < taskCount; i++ {
 		tlm.backlogMgr.taskAckManager.addTask(startTaskID + i)
 	}
+
+	// Manually increase the backlog counter since it does not get incremented by taskAckManager.addTask
+	// Only doing this for the purpose of this test
+	tlm.backlogMgr.db.updateApproximateBacklogCount(taskCount)
 
 	includeTaskStatus := false
 	descResp := tlm.LegacyDescribeTaskQueue(includeTaskStatus)
@@ -301,7 +408,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	taskQueueStatus = descResp.DescResponse.GetTaskQueueStatus()
 	require.NotNil(t, taskQueueStatus)
 	require.Equal(t, taskCount, taskQueueStatus.GetAckLevel())
-	require.Zero(t, taskQueueStatus.GetBacklogCountHint())
+	require.Zero(t, taskQueueStatus.GetBacklogCountHint()) // should be 0 since AckManager.CompleteTask decrements the updated backlog counter
 }
 
 func TestCheckIdleTaskQueue(t *testing.T) {

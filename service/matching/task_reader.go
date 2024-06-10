@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -54,14 +55,15 @@ type (
 		backlogMgr *backlogManagerImpl
 		gorogrp    goro.Group
 
-		backoffTimerLock sync.Mutex
-		backoffTimer     *time.Timer
-		retrier          backoff.Retrier
+		backoffTimerLock      sync.Mutex
+		backoffTimer          *time.Timer
+		retrier               backoff.Retrier
+		backlogHeadCreateTime atomic.Int64
 	}
 )
 
 func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
-	return &taskReader{
+	tr := &taskReader{
 		status:     common.DaemonStatusInitialized,
 		backlogMgr: backlogMgr,
 		notifyC:    make(chan struct{}, 1),
@@ -73,6 +75,8 @@ func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 			clock.NewRealTimeSource(),
 		),
 	}
+	tr.backlogHeadCreateTime.Store(-1)
+	return tr
 }
 
 // Start reading pump for the given task queue.
@@ -111,11 +115,30 @@ func (tr *taskReader) Signal() {
 	}
 }
 
+func (tr *taskReader) updateBacklogAge(task *internalTask) {
+	if task.event.Data.CreateTime == nil {
+		return // should not happen but for safety
+	}
+	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
+	tr.backlogHeadCreateTime.Store(ts)
+}
+
+func (tr *taskReader) getBacklogHeadAge() time.Duration {
+	if tr.backlogHeadCreateTime.Load() == -1 {
+		return time.Duration(0)
+	}
+	return time.Since(time.Unix(0, tr.backlogHeadCreateTime.Load()))
+}
+
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
 	ctx = tr.backlogMgr.contextInfoProvider(ctx)
 
 dispatchLoop:
 	for ctx.Err() == nil {
+		if len(tr.taskBuffer) == 0 {
+			// reset the atomic since we have no tasks from the backlog
+			tr.backlogHeadCreateTime.Store(-1)
+		}
 		select {
 		case taskInfo, ok := <-tr.taskBuffer:
 			if !ok { // Task queue getTasks pump is shutdown
@@ -123,6 +146,7 @@ dispatchLoop:
 			}
 			task := newInternalTaskFromBacklog(taskInfo, tr.backlogMgr.completeTask)
 			for ctx.Err() == nil {
+				tr.updateBacklogAge(task)
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
 				err := tr.backlogMgr.processSpooledTask(taskCtx, task)
 				cancel()

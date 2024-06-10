@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -607,6 +608,86 @@ func (s *ScheduleFunctionalSuite) TestInput() {
 	_, err = s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 5*time.Second, 200*time.Millisecond)
+
+	// cleanup
+	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
+}
+
+func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
+	sid := "sched-test-experimental-hsm"
+	wid := "sched-test-experimental-hsm-wf"
+	wt := "sched-test-experimental-hsm-wt"
+
+	s.testCluster.host.dcClient.OverrideValue(
+		s.T(),
+		schedulerhsm.UseExperimentalHsmScheduler,
+		true)
+
+	type myData struct {
+		Stuff  string
+		Things []int
+	}
+
+	input1 := &myData{
+		Stuff:  "here's some data",
+		Things: []int{7, 8, 9},
+	}
+	input2 := map[int]float64{11: 1.4375}
+	inputPayloads, err := s.dataConverter.ToPayloads(input1, input2)
+	s.NoError(err)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Input:        inputPayloads,
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	}
+
+	var runs int32
+	workflowFn := func(ctx workflow.Context, arg1 *myData, arg2 map[int]float64) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			s.Equal(*input1, *arg1)
+			s.Equal(input2, arg2)
+			atomic.AddInt32(&runs, 1)
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	_, err = s.engine.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+	// TODO(Tianyu): For now, simply test that no workflow tasks are generated and the scheduler does not run
+	<-time.NewTimer(5 * time.Second).C
+	s.True(atomic.LoadInt32(&runs) == 0)
+	s.NoError(err)
+
+	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	expectedHistory := `1 WorkflowExecutionStarted`
+	s.EqualHistoryEvents(expectedHistory, events)
 
 	// cleanup
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{

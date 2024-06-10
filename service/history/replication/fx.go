@@ -50,6 +50,12 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
+type (
+	ClusterChannelKey struct {
+		ClusterName string
+	}
+)
+
 var Module = fx.Provide(
 	NewTaskFetcherFactory,
 	func(m persistence.ExecutionManager) ExecutionManager {
@@ -146,8 +152,26 @@ func replicationStreamHighPrioritySchedulerProvider(
 		queueFactory,
 		logger,
 	)
-	lc.Append(fx.StartStopHook(scheduler.Start, scheduler.Stop))
-	return scheduler
+	taskChannelKeyFn := func(e TrackableExecutableTask) ClusterChannelKey {
+		return ClusterChannelKey{
+			ClusterName: e.SourceClusterName(),
+		}
+	}
+	channelWeightFn := func(key ClusterChannelKey) int {
+		return 1
+	}
+	// This creates a per cluster channel.
+	// They share the same weight so it just does a round-robin on all clusters' tasks.
+	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
+		ctasks.InterleavedWeightedRoundRobinSchedulerOptions[TrackableExecutableTask, ClusterChannelKey]{
+			TaskChannelKeyFn: taskChannelKeyFn,
+			ChannelWeightFn:  channelWeightFn,
+		},
+		scheduler,
+		logger,
+	)
+	lc.Append(fx.StartStopHook(rrScheduler.Start, rrScheduler.Stop))
+	return rrScheduler
 }
 
 func replicationStreamLowPrioritySchedulerProvider(
@@ -178,8 +202,26 @@ func replicationStreamLowPrioritySchedulerProvider(
 		queueFactory,
 		logger,
 	)
-	lc.Append(fx.StartStopHook(scheduler.Start, scheduler.Stop))
-	return scheduler
+	taskChannelKeyFn := func(e TrackableExecutableTask) ClusterChannelKey {
+		return ClusterChannelKey{
+			ClusterName: e.SourceClusterName(),
+		}
+	}
+	channelWeightFn := func(key ClusterChannelKey) int {
+		return 1
+	}
+	// This creates a per cluster channel.
+	// They share the same weight so it just does a round-robin on all clusters' tasks.
+	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
+		ctasks.InterleavedWeightedRoundRobinSchedulerOptions[TrackableExecutableTask, ClusterChannelKey]{
+			TaskChannelKeyFn: taskChannelKeyFn,
+			ChannelWeightFn:  channelWeightFn,
+		},
+		scheduler,
+		logger,
+	)
+	lc.Append(fx.StartStopHook(rrScheduler.Start, rrScheduler.Stop))
+	return rrScheduler
 }
 
 func sequentialTaskQueueFactoryProvider(

@@ -1149,6 +1149,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+	metrics.ConvertSpeculativeWorkflowTask.With(m.ms.metricsHandler).
+		Record(1, metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()))
 
 	wt := m.getWorkflowTaskInfo()
 
@@ -1163,8 +1165,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, scheduled event Id: %d for normal workflow task doesn't match the one from speculative workflow task: %d", scheduledEvent.EventId, wt.ScheduledEventID))
 	}
 
-	if wt.StartedEventID != common.EmptyEventID {
-		// If WT is started then started event is written to the history and
+	if wtAlreadyStarted := wt.StartedEventID != common.EmptyEventID; wtAlreadyStarted {
+		// If WT was already started then started event is written to the history and
 		// timeout timer task (for START_TO_CLOSE timeout) is created.
 
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(

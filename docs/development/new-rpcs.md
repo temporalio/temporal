@@ -9,9 +9,8 @@ Here's a list of what you'll need to modify:
    or generate them here with `make proto` (for history/matching).
 3. Add metric scope defs for client-side metrics to `common/metrics/defs.go`
    (this is going away soon).
-4. `make go-generate` to generate wrappers in `client`.
-5. For frontend: add definitions to `service/frontend/dcRedirectionHandler.go`.
-   (In the future hopefully we can make this generated or use interceptors.)
+4. `make service-clients` to generate wrappers in `client`.
+5. For frontend: add definitions to `service/frontend/redirection_interceptor.go`.
 6. Add your new methods to `service/<service>/configs/quotas.go`.
 7. Finally, implement your new methods in the RPC handler.
 

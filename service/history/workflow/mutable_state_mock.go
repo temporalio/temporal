@@ -2750,6 +2750,20 @@ func (mr *MockMutableStateMockRecorder) PopTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopTasks", reflect.TypeOf((*MockMutableState)(nil).PopTasks))
 }
 
+// RefreshExpirationTimeoutTask mocks base method.
+func (m *MockMutableState) RefreshExpirationTimeoutTask(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshExpirationTimeoutTask", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshExpirationTimeoutTask indicates an expected call of RefreshExpirationTimeoutTask.
+func (mr *MockMutableStateMockRecorder) RefreshExpirationTimeoutTask(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshExpirationTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).RefreshExpirationTimeoutTask), ctx)
+}
+
 // RejectWorkflowExecutionUpdate mocks base method.
 func (m *MockMutableState) RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *v15.Rejection) error {
 	m.ctrl.T.Helper()

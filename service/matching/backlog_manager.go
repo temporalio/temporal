@@ -198,7 +198,7 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel:        c.taskAckManager.getReadLevel(),
 		AckLevel:         c.taskAckManager.getAckLevel(),
-		BacklogCountHint: c.BacklogCountHint(),
+		BacklogCountHint: c.db.getApproximateBacklogCount(), // use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
