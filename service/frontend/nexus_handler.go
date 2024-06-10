@@ -209,13 +209,13 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("global_rate_limited"))
 		return commonnexus.ConvertGRPCError(err, true)
 	}
-
+	
 	if err := c.clientVersionChecker.ClientSupported(ctx); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unsupported_client"))
 		converted := commonnexus.ConvertGRPCError(err, true)
 		return converted
 	}
-
+	
 	return nil
 }
 
