@@ -52,7 +52,7 @@ import (
 type (
 	metricsContextKey struct{}
 
-	Telemetry struct {
+	TelemetryInterceptor struct {
 		namespaceRegistry namespace.Registry
 		serializer        common.TaskTokenSerializer
 		metricsHandler    metrics.Handler
@@ -84,8 +84,8 @@ var (
 	updateResponseMessageBody anypb.Any
 	_                         = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
 
-	_ grpc.UnaryServerInterceptor  = (*Telemetry)(nil).UnaryIntercept
-	_ grpc.StreamServerInterceptor = (*Telemetry)(nil).StreamIntercept
+	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).UnaryIntercept
+	_ grpc.StreamServerInterceptor = (*TelemetryInterceptor)(nil).StreamIntercept
 )
 
 var (
@@ -122,12 +122,12 @@ var (
 	}
 )
 
-func NewTelemetry(
+func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) *Telemetry {
-	return &Telemetry{
+) *TelemetryInterceptor {
+	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
 		serializer:        common.NewProtoTaskTokenSerializer(),
 		metricsHandler:    metricsHandler,
@@ -137,7 +137,7 @@ func NewTelemetry(
 
 // Use this method to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *Telemetry) unaryOverrideOperationTag(fullName, operation string, req interface{}) string {
+func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation string, req interface{}) string {
 	if strings.HasPrefix(fullName, api.WorkflowServicePrefix) {
 		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
@@ -167,7 +167,7 @@ func (ti *Telemetry) unaryOverrideOperationTag(fullName, operation string, req i
 
 // Use this method to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *Telemetry) overrideOperationTag(fullName, operation string) string {
+func (ti *TelemetryInterceptor) overrideOperationTag(fullName, operation string) string {
 	// prepend Operator prefix to Operator APIs
 	if strings.HasPrefix(fullName, api.OperatorServicePrefix) {
 		return "Operator" + operation
@@ -179,7 +179,7 @@ func (ti *Telemetry) overrideOperationTag(fullName, operation string) string {
 	return operation
 }
 
-func (ti *Telemetry) UnaryIntercept(
+func (ti *TelemetryInterceptor) UnaryIntercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -192,6 +192,10 @@ func (ti *Telemetry) UnaryIntercept(
 	metrics.ServiceRequests.With(metricsHandler).Record(1)
 
 	startTime := time.Now().UTC()
+	defer func() {
+		ti.RecordLatencyMetrics(ctx, startTime, metricsHandler)
+	}()
+
 	resp, err := handler(ctx, req)
 
 	if err != nil {
@@ -201,7 +205,6 @@ func (ti *Telemetry) UnaryIntercept(
 		ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
 	}
 
-	ti.RecordLatencyMetrics(ctx, startTime, metricsHandler)
 	return resp, err
 }
 
@@ -209,7 +212,7 @@ func AddTelemetryContext(ctx context.Context, metricsHandler metrics.Handler) co
 	return context.WithValue(ctx, metricsCtxKey, metricsHandler)
 }
 
-func (ti *Telemetry) RecordLatencyMetrics(ctx context.Context, startTime time.Time, metricsHandler metrics.Handler) {
+func (ti *TelemetryInterceptor) RecordLatencyMetrics(ctx context.Context, startTime time.Time, metricsHandler metrics.Handler) {
 	userLatencyDuration := time.Duration(0)
 	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name()); ok {
 		userLatencyDuration = time.Duration(val)
@@ -222,7 +225,7 @@ func (ti *Telemetry) RecordLatencyMetrics(ctx context.Context, startTime time.Ti
 	metrics.ServiceLatencyNoUserLatency.With(metricsHandler).Record(noUserLatency)
 }
 
-func (ti *Telemetry) StreamIntercept(
+func (ti *TelemetryInterceptor) StreamIntercept(
 	service interface{},
 	serverStream grpc.ServerStream,
 	info *grpc.StreamServerInfo,
@@ -240,7 +243,7 @@ func (ti *Telemetry) StreamIntercept(
 	return nil
 }
 
-func (ti *Telemetry) emitActionMetric( //nolint:revive // TODO: refactor this method to reduce cognitive complexity
+func (ti *TelemetryInterceptor) emitActionMetric(
 	methodName string,
 	fullName string,
 	req interface{},
@@ -331,7 +334,7 @@ func (ti *Telemetry) emitActionMetric( //nolint:revive // TODO: refactor this me
 	}
 }
 
-func (ti *Telemetry) unaryMetricsHandlerLogTags(
+func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(
 	req interface{},
 	fullMethod string,
 	methodName string,
@@ -347,7 +350,7 @@ func (ti *Telemetry) unaryMetricsHandlerLogTags(
 		[]tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
 }
 
-func (ti *Telemetry) streamMetricsHandlerLogTags(
+func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	fullMethod string,
 	methodName string,
 ) (metrics.Handler, []tag.Tag) {
@@ -358,7 +361,7 @@ func (ti *Telemetry) streamMetricsHandlerLogTags(
 	), []tag.Tag{tag.Operation(overridedMethodName)}
 }
 
-func (ti *Telemetry) HandleError(
+func (ti *TelemetryInterceptor) HandleError(
 	req interface{},
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
@@ -431,7 +434,7 @@ func (ti *Telemetry) HandleError(
 	}
 }
 
-func (ti *Telemetry) getWorkflowTags(
+func (ti *TelemetryInterceptor) getWorkflowTags(
 	req interface{},
 ) []tag.Tag {
 	if executionGetter, ok := req.(ExecutionGetter); ok {

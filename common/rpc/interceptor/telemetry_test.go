@@ -57,7 +57,7 @@ func TestEmitActionMetric(t *testing.T) {
 	controller := gomock.NewController(t)
 	register := namespace.NewMockRegistry(controller)
 	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetry(register, metricsHandler, log.NewNoopLogger())
+	telemetry := NewTelemetryInterceptor(register, metricsHandler, log.NewNoopLogger())
 
 	testCases := []struct {
 		methodName        string
@@ -149,7 +149,7 @@ func TestHandleError(t *testing.T) {
 	controller := gomock.NewController(t)
 	registry := namespace.NewMockRegistry(controller)
 	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetry(registry, metricsHandler, log.NewNoopLogger())
+	telemetry := NewTelemetryInterceptor(registry, metricsHandler, log.NewNoopLogger())
 
 	testCases := []struct {
 		name                 string
@@ -195,7 +195,7 @@ func TestOperationOverwrite(t *testing.T) {
 	controller := gomock.NewController(t)
 	register := namespace.NewMockRegistry(controller)
 	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetry(register, metricsHandler, log.NewNoopLogger())
+	telemetry := NewTelemetryInterceptor(register, metricsHandler, log.NewNoopLogger())
 
 	testCases := []struct {
 		methodName        string
@@ -232,7 +232,7 @@ func TestGetWorkflowTags(t *testing.T) {
 	registry := namespace.NewMockRegistry(controller)
 	metricsHandler := metrics.NewMockHandler(controller)
 	serializer := common.NewProtoTaskTokenSerializer()
-	telemetry := NewTelemetry(registry, metricsHandler, log.NewTestLogger())
+	telemetry := NewTelemetryInterceptor(registry, metricsHandler, log.NewTestLogger())
 
 	wid := "test_workflow_id"
 	rid := "test_run_id"
@@ -313,7 +313,7 @@ func TestOperationOverride(t *testing.T) {
 	controller := gomock.NewController(t)
 	register := namespace.NewMockRegistry(controller)
 	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetry(register, metricsHandler, log.NewNoopLogger())
+	telemetry := NewTelemetryInterceptor(register, metricsHandler, log.NewNoopLogger())
 
 	wid := "test_workflow_id"
 	rid := "test_run_id"
