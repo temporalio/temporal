@@ -145,6 +145,8 @@ func (s *stateBuilderSuite) SetupTest() {
 		WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.mockMutableState.EXPECT().TransitionCount().Return(int64(1)).AnyTimes()
 
 	taskGeneratorProvider = &testTaskGeneratorProvider{
 		mockMutableState:  s.mockMutableState,
@@ -170,6 +172,7 @@ func (s *stateBuilderSuite) mockUpdateVersion(events ...*historypb.HistoryEvent)
 	}
 	s.mockTaskGenerator.EXPECT().GenerateActivityTimerTasks().Return(nil)
 	s.mockTaskGenerator.EXPECT().GenerateUserTimerTasks().Return(nil)
+	s.mockTaskGenerator.EXPECT().GenerateDirtySubStateMachineTasks(s.stateMachineRegistry).Return(nil).AnyTimes()
 	s.mockMutableState.EXPECT().SetHistoryBuilder(historybuilder.NewImmutable(events))
 }
 
@@ -2162,7 +2165,6 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 	s.mockMutableState.HSM()
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 	s.mockUpdateVersion(event)
-	s.mockTaskGenerator.EXPECT().GenerateDirtySubStateMachineTasks(s.stateMachineRegistry).Return(nil).AnyTimes()
 
 	_, err = s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
 	s.NoError(err)

@@ -23,7 +23,6 @@
 package nexusoperations
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 
@@ -190,7 +189,7 @@ func transitionOperation(root *hsm.Node, event *historypb.HistoryEvent, fn func(
 
 	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
 	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		panic("invalid event, expected Attributes field to a single field struct")
+		panic("invalid event, expected Attributes field with a single field struct")
 	}
 
 	f := attrs.Field(0).Interface()
@@ -203,7 +202,7 @@ func transitionOperation(root *hsm.Node, event *historypb.HistoryEvent, fn func(
 	nodeID := strconv.FormatInt(getter.GetScheduledEventId(), 10)
 	node, err := coll.Node(nodeID)
 	if err != nil {
-		return fmt.Errorf("TODO: %w", err)
+		return err
 	}
 	return coll.Transition(nodeID, func(o Operation) (hsm.TransitionOutput, error) {
 		return fn(node, o)
