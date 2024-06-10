@@ -23,6 +23,7 @@
 package scheduler
 
 import (
+	"context"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -34,12 +35,15 @@ func RegisterExecutor(
 ) error {
 	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
 	standbyExec := standbyExecutor{options: standbyExecutorOptions}
-	return hsm.RegisterTimerExecutors(
+	if err := hsm.RegisterTimerExecutors(
 		registry,
-		TaskTypeSchedule.ID,
-		activeExec.executeScheduleTask,
-		standbyExec.executeScheduleTask,
-	)
+		TaskTypeSchedulerWait.ID,
+		activeExec.executeSchedulerWaitTask,
+		standbyExec.executeSchedulerWaitTask,
+	); err != nil {
+		return err
+	}
+	return hsm.RegisterImmediateExecutors(registry, TaskTypeSchedulerExecute.ID, activeExec.executeSchedulerRunTask, standbyExec.executeSchedulerRunTask)
 }
 
 type (
@@ -52,17 +56,37 @@ type (
 	}
 )
 
-func (e activeExecutor) executeScheduleTask(
+func (e activeExecutor) executeSchedulerWaitTask(
 	env hsm.Environment,
 	node *hsm.Node,
-	task ScheduleTask,
+	task SchedulerWaitTask,
 ) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
-	// TODO(Tianyu): Perform scheduler logic before scheduling self again
 	return hsm.MachineTransition(node, func(scheduler Scheduler) (hsm.TransitionOutput, error) {
 		return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
+	})
+}
+
+func (e activeExecutor) executeSchedulerRunTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task SchedulerRunTask,
+) error {
+	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		if err := node.CheckRunning(); err != nil {
+			return err
+		}
+		//scheduler, err := hsm.MachineData[Scheduler](node)
+		//if err != nil {
+		//	return err
+		//}
+
+		return hsm.MachineTransition(node, func(scheduler Scheduler) (hsm.TransitionOutput, error) {
+			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
+		})
 	})
 }
 
@@ -74,10 +98,19 @@ type (
 	}
 )
 
-func (e standbyExecutor) executeScheduleTask(
+func (e standbyExecutor) executeSchedulerWaitTask(
 	env hsm.Environment,
 	node *hsm.Node,
-	task ScheduleTask,
+	task SchedulerWaitTask,
+) error {
+	panic("unimplemented")
+}
+
+func (e standbyExecutor) executeSchedulerRunTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task SchedulerRunTask,
 ) error {
 	panic("unimplemented")
 }

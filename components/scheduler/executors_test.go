@@ -96,7 +96,7 @@ func TestProcessScheduleTask(t *testing.T) {
 	err = reg.ExecuteActiveTimerTask(
 		env,
 		node,
-		scheduler.ScheduleTask{Deadline: env.Now().Add(10 * time.Second)},
+		scheduler.SchedulerWaitTask{Deadline: env.Now().Add(10 * time.Second)},
 	)
 	require.NoError(t, err)
 	require.Equal(t, enums.SCHEDULER_STATE_WAITING, schedulerHsm.HsmState)

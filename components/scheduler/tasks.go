@@ -30,43 +30,83 @@ import (
 )
 
 var (
-	TaskTypeSchedule = hsm.TaskType{
+	TaskTypeSchedulerWait = hsm.TaskType{
 		ID:   8,
-		Name: "scheduler.Schedule",
+		Name: "scheduler.SchedulerWait",
+	}
+
+	TaskTypeSchedulerExecute = hsm.TaskType{
+		ID:   9,
+		Name: "scheduler.SchedulerExecute",
 	}
 )
 
-type ScheduleTask struct {
+type SchedulerWaitTask struct {
 	Deadline time.Time
 }
 
-var _ hsm.Task = ScheduleTask{}
+var _ hsm.Task = SchedulerWaitTask{}
 
-func (ScheduleTask) Type() hsm.TaskType {
-	return TaskTypeSchedule
+func (SchedulerWaitTask) Type() hsm.TaskType {
+	return TaskTypeSchedulerWait
 }
 
-func (t ScheduleTask) Kind() hsm.TaskKind {
+func (t SchedulerWaitTask) Kind() hsm.TaskKind {
 	return hsm.TaskKindTimer{Deadline: t.Deadline}
 }
 
-func (ScheduleTask) Concurrent() bool {
+func (SchedulerWaitTask) Concurrent() bool {
 	return false
 }
 
-type ScheduleTaskSerializer struct{}
+type ScheduleWaitTaskSerializer struct{}
 
-func (ScheduleTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
+func (ScheduleWaitTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return ScheduleTask{Deadline: kind.Deadline}, nil
+		return SchedulerWaitTask{Deadline: kind.Deadline}, nil
 	}
 	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
 }
 
-func (ScheduleTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
+func (ScheduleWaitTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
+	return nil, nil
+}
+
+type SchedulerRunTask struct {
+	Destination string
+}
+
+var _ hsm.Task = SchedulerRunTask{}
+
+func (SchedulerRunTask) Type() hsm.TaskType {
+	return TaskTypeSchedulerExecute
+}
+
+func (t SchedulerRunTask) Kind() hsm.TaskKind {
+	return hsm.TaskKindOutbound{Destination: t.Destination}
+}
+
+func (SchedulerRunTask) Concurrent() bool {
+	return false
+}
+
+type ScheduleExecuteTaskSerializer struct{}
+
+func (ScheduleExecuteTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
+	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
+		return SchedulerRunTask{Destination: kind.Destination}, nil
+	}
+	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
+}
+
+func (ScheduleExecuteTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 	return nil, nil
 }
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {
-	return reg.RegisterTaskSerializer(TaskTypeSchedule.ID, ScheduleTaskSerializer{})
+	if err := reg.RegisterTaskSerializer(TaskTypeSchedulerWait.ID, ScheduleWaitTaskSerializer{}); err != nil {
+		return err
+	}
+	return reg.RegisterTaskSerializer(TaskTypeSchedulerExecute.ID, ScheduleExecuteTaskSerializer{})
+
 }

@@ -24,15 +24,12 @@ package scheduler
 
 import (
 	"fmt"
-	"time"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Unique type identifier for this state machine.
@@ -72,12 +69,9 @@ func (s Scheduler) SetState(state enumsspb.SchedulerState) {
 func (s Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch s.HsmState { // nolint:exhaustive
 	case enumsspb.SCHEDULER_STATE_WAITING:
-		s.Args.State.LastProcessedTime = timestamppb.Now()
-		// TODO(Tianyu): Replace with actual scheduler work
-		fmt.Printf("Scheduler has been invoked\n")
-		// TODO(Tianyu): Replace with actual scheduling logic
-		nextInvokeTime := timestamppb.New(s.Args.State.LastProcessedTime.AsTime().Add(1 * time.Second))
-		return []hsm.Task{ScheduleTask{Deadline: nextInvokeTime.AsTime()}}, nil
+		return []hsm.Task{SchedulerWaitTask{Deadline: s.NextInvokeTime.AsTime()}}, nil
+	case enumsspb.SCHEDULER_STATE_EXECUTING:
+		return []hsm.Task{SchedulerRunTask{Destination: s.Args.State.NamespaceId}}, nil
 	}
 	return nil, nil
 }
@@ -112,8 +106,19 @@ type EventSchedulerActivate struct{}
 
 var TransitionSchedulerActivate = hsm.NewTransition(
 	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_WAITING},
-	enumsspb.SCHEDULER_STATE_WAITING,
+	enumsspb.SCHEDULER_STATE_EXECUTING,
 	func(scheduler Scheduler, event EventSchedulerActivate) (hsm.TransitionOutput, error) {
+		tasks, err := scheduler.RegenerateTasks(nil)
+		return hsm.TransitionOutput{Tasks: tasks}, err
+	})
+
+// EventSchedulerWait is triggered when the scheduler state machine is done working and goes back to waiting.
+type EventSchedulerWait struct{}
+
+var TransitionSchedulerWait = hsm.NewTransition(
+	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_EXECUTING},
+	enumsspb.SCHEDULER_STATE_WAITING,
+	func(scheduler Scheduler, event EventSchedulerWait) (hsm.TransitionOutput, error) {
 		tasks, err := scheduler.RegenerateTasks(nil)
 		return hsm.TransitionOutput{Tasks: tasks}, err
 	})
