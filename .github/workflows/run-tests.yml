@@ -93,7 +93,7 @@ jobs:
         run: make unit-test-coverage
 
       - name: Upload test results
-        if: ${{ always() }}
+        if: ${{ !cancelled() }}
         run: make upload-test-results
 
   integration-test:
@@ -128,7 +128,7 @@ jobs:
         run: make integration-test-coverage
 
       - name: Upload test results
-        if: ${{ always() }}
+        if: ${{ !cancelled() }}
         run: make upload-test-results
 
       - name: Tear down docker compose
@@ -201,7 +201,7 @@ jobs:
         run: make functional-test-coverage
 
       - name: Upload test results
-        if: ${{ always() }}
+        if: ${{ !cancelled() }}
         run: make upload-test-results
 
       - name: Tear down docker compose
@@ -268,7 +268,7 @@ jobs:
         run: make functional-test-xdc-coverage
 
       - name: Upload test results
-        if: ${{ always() }}
+        if: ${{ !cancelled() }}
         run: make upload-test-results
 
       - name: Tear down docker compose
