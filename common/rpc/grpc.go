@@ -203,7 +203,7 @@ func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err 
 			ResourceExhaustedScopeHeader, reErr.Scope.String(),
 		))
 		if headerErr != nil {
-			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))
+			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(headerErr))
 		}
 	}
 }
