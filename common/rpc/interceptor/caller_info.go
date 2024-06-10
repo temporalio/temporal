@@ -35,22 +35,22 @@ import (
 )
 
 type (
-	CallerInfo struct {
+	CallerInfoInterceptor struct {
 		namespaceRegistry namespace.Registry
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*CallerInfo)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*CallerInfoInterceptor)(nil).Intercept
 
-func NewCallerInfo(
+func NewCallerInfoInterceptor(
 	namespaceRegistry namespace.Registry,
-) *CallerInfo {
-	return &CallerInfo{
+) *CallerInfoInterceptor {
+	return &CallerInfoInterceptor{
 		namespaceRegistry: namespaceRegistry,
 	}
 }
 
-func (i *CallerInfo) Intercept(
+func (i *CallerInfoInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,

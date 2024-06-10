@@ -223,7 +223,7 @@ func GrpcServerOptionsProvider(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
-	callerInfoInterceptor *interceptor.CallerInfo,
+	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	utf8Validator *utf8validator.Validator,
@@ -505,8 +505,8 @@ func SDKVersionInterceptorProvider() *interceptor.SDKVersionInterceptor {
 
 func CallerInfoInterceptorProvider(
 	namespaceRegistry namespace.Registry,
-) *interceptor.CallerInfo {
-	return interceptor.NewCallerInfo(namespaceRegistry)
+) *interceptor.CallerInfoInterceptor {
+	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
 }
 
 func PersistenceRateLimitingParamsProvider(

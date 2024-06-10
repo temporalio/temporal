@@ -46,7 +46,7 @@ type (
 		controller   *gomock.Controller
 		mockRegistry *namespace.MockRegistry
 
-		interceptor *CallerInfo
+		interceptor *CallerInfoInterceptor
 	}
 )
 
@@ -61,7 +61,7 @@ func (s *callerInfoSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockRegistry = namespace.NewMockRegistry(s.controller)
 
-	s.interceptor = NewCallerInfo(s.mockRegistry)
+	s.interceptor = NewCallerInfoInterceptor(s.mockRegistry)
 }
 
 func (s *callerInfoSuite) TearDownSuite() {
