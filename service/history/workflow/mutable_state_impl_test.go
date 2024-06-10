@@ -1932,7 +1932,10 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks() {
 					return
 				}
 				ms.InsertTasks[tasks.CategoryReplication] = []tasks.Task{}
-				ms.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, eventBatches)
+				err := ms.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, eventBatches)
+				if err != nil {
+					s.Fail("closeTransactionPrepareReplicationTasks failed", err)
+				}
 				repicationTasks := ms.InsertTasks[tasks.CategoryReplication]
 				s.Equal(len(tc.tasks), len(repicationTasks))
 				for i, task := range tc.tasks {

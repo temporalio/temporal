@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/protorequire"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -81,19 +82,40 @@ type (
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
 
-		taskID         int64
-		task           *ExecutableHistoryTask
-		events         []*historypb.HistoryEvent
-		eventsBatches  [][]*historypb.HistoryEvent
-		newRunEvents   []*historypb.HistoryEvent
-		newRunID       string
-		processToolBox ProcessToolBox
+		taskID                     int64
+		task                       *ExecutableHistoryTask
+		events                     []*historypb.HistoryEvent
+		eventsBatches              [][]*historypb.HistoryEvent
+		eventsBlob                 *commonpb.DataBlob
+		eventsBlobs                []*commonpb.DataBlob
+		newRunEvents               []*historypb.HistoryEvent
+		newRunID                   string
+		processToolBox             ProcessToolBox
+		replicationMultipleBatches bool
 	}
 )
 
 func TestExecutableHistoryTaskSuite(t *testing.T) {
-	s := new(executableHistoryTaskSuite)
-	suite.Run(t, s)
+	for _, tc := range []struct {
+		name                       string
+		replicationMultipleBatches bool
+	}{
+		{
+			name:                       "ReplicationMultipleBatchesEnabled",
+			replicationMultipleBatches: true,
+		},
+		{
+			name:                       "ReplicationMultipleBatchesDisabled",
+			replicationMultipleBatches: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &executableHistoryTaskSuite{
+				replicationMultipleBatches: tc.replicationMultipleBatches,
+			}
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *executableHistoryTaskSuite) SetupSuite() {
@@ -132,6 +154,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  tests.NewDynamicConfig(),
 	}
+	s.processToolBox.Config.ReplicationMultipleBatches = dynamicconfig.GetBoolPropertyFn(s.replicationMultipleBatches)
 
 	firstEventID := rand.Int63()
 	nextEventID := firstEventID + 1
@@ -149,12 +172,10 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
 	s.newRunID = uuid.NewString()
 
-	var events *commonpb.DataBlob
-	var eventsBatches []*commonpb.DataBlob
 	if s.processToolBox.Config.ReplicationMultipleBatches() {
-		eventsBatches = []*commonpb.DataBlob{eventsBlob}
+		s.eventsBlobs = []*commonpb.DataBlob{eventsBlob}
 	} else {
-		events = eventsBlob
+		s.eventsBlob = eventsBlob
 	}
 
 	s.replicationTask = &replicationspb.HistoryTaskAttributes{
@@ -166,10 +187,10 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 			EventId: nextEventID - 1,
 			Version: version,
 		}},
-		Events:        events,
+		Events:        s.eventsBlob,
 		NewRunEvents:  newEventsBlob,
 		NewRunId:      s.newRunID,
-		EventsBatches: eventsBatches,
+		EventsBatches: s.eventsBlobs,
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 
@@ -486,6 +507,15 @@ func (s *executableHistoryTaskSuite) TestBatchWith_IncomingTaskHasNewRunEvents_B
 	batchedTask, success := currentTask.BatchWith(incomingTask)
 	s.True(success)
 	s.Equal(incomingTask.newRunID, batchedTask.(*ExecutableHistoryTask).newRunID)
+}
+
+func (s *executableHistoryTaskSuite) TestNewExecutableHistoryTask() {
+	if s.processToolBox.Config.ReplicationMultipleBatches() {
+		s.Equal(s.eventsBlobs, s.task.eventsBlobs)
+	} else {
+		s.Equal(len(s.task.eventsBlobs), 1)
+		s.Equal(s.eventsBlob, s.task.eventsBlobs[0])
+	}
 }
 
 func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHistoryTask, *ExecutableHistoryTask) {
