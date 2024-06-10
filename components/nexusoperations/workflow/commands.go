@@ -140,8 +140,8 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 		he.UserMetadata = command.UserMetadata
 	})
-	// TODO: make this prettier
-	return nexusoperations.ScheduledEventDefinition.Apply(nexusoperations.ScheduledEventDefinition{}, root, event)
+
+	return nexusoperations.ScheduledEventDefinition{}.Apply(root, event)
 }
 
 func (ch *commandHandler) HandleCancelCommand(
@@ -202,7 +202,7 @@ func (ch *commandHandler) HandleCancelCommand(
 		he.UserMetadata = command.UserMetadata
 	})
 
-	err = nexusoperations.CancelRequestedEventDefinition.Apply(nexusoperations.CancelRequestedEventDefinition{}, ms.HSM(), event)
+	err = nexusoperations.CancelRequestedEventDefinition{}.Apply(ms.HSM(), event)
 
 	// Cancel spawns a child Cancelation machine, if that machine already exists we got a duplicate cancelation request.
 	if errors.Is(err, hsm.ErrStateMachineAlreadyExists) {
