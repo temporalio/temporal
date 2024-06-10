@@ -34,6 +34,8 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -71,7 +73,6 @@ import (
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/scheduler"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -732,6 +733,7 @@ func RegisterNexusHTTPHandler(
 	namespaceRegistry namespace.Registry,
 	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -749,6 +751,7 @@ func RegisterNexusHTTPHandler(
 		namespaceRegistry,
 		endpointRegistry,
 		authInterceptor,
+		telemetryInterceptor,
 		redirectionInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceRateLimiterInterceptor,

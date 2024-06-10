@@ -188,38 +188,41 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	methodName := api.MethodName(info.FullMethod)
 	metricsHandler, logTags := ti.unaryMetricsHandlerLogTags(req, info.FullMethod, methodName)
 
-	ctx = context.WithValue(ctx, metricsCtxKey, metricsHandler)
+	ctx = AddTelemetryContext(ctx, metricsHandler)
 	metrics.ServiceRequests.With(metricsHandler).Record(1)
 
 	startTime := time.Now().UTC()
-	userLatencyDuration := time.Duration(0)
 	defer func() {
-		latency := time.Since(startTime)
-		metrics.ServiceLatency.With(metricsHandler).Record(latency)
-		noUserLatency := latency - userLatencyDuration
-		if noUserLatency < 0 {
-			noUserLatency = 0
-		}
-		metrics.ServiceLatencyNoUserLatency.With(metricsHandler).Record(noUserLatency)
+		ti.RecordLatencyMetrics(ctx, startTime, metricsHandler)
 	}()
 
 	resp, err := handler(ctx, req)
 
+	if err != nil {
+		ti.HandleError(req, metricsHandler, logTags, err)
+	} else {
+		// emit action metrics only after successful calls
+		ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
+	}
+
+	return resp, err
+}
+
+func AddTelemetryContext(ctx context.Context, metricsHandler metrics.Handler) context.Context {
+	return context.WithValue(ctx, metricsCtxKey, metricsHandler)
+}
+
+func (ti *TelemetryInterceptor) RecordLatencyMetrics(ctx context.Context, startTime time.Time, metricsHandler metrics.Handler) {
+	userLatencyDuration := time.Duration(0)
 	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name()); ok {
 		userLatencyDuration = time.Duration(val)
-		startTime.Add(userLatencyDuration)
 		metrics.ServiceLatencyUserLatency.With(metricsHandler).Record(userLatencyDuration)
 	}
 
-	if err != nil {
-		ti.handleError(req, metricsHandler, logTags, err)
-		return nil, err
-	}
-
-	// emit action metrics only after successful calls
-	ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
-
-	return resp, nil
+	latency := time.Since(startTime)
+	metrics.ServiceLatency.With(metricsHandler).Record(latency)
+	noUserLatency := max(0, latency-userLatencyDuration)
+	metrics.ServiceLatencyNoUserLatency.With(metricsHandler).Record(noUserLatency)
 }
 
 func (ti *TelemetryInterceptor) StreamIntercept(
@@ -234,7 +237,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 
 	err := handler(service, serverStream)
 	if err != nil {
-		ti.handleError(nil, metricsHandler, logTags, err)
+		ti.HandleError(nil, metricsHandler, logTags, err)
 		return err
 	}
 	return nil
@@ -358,7 +361,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	), []tag.Tag{tag.Operation(overridedMethodName)}
 }
 
-func (ti *TelemetryInterceptor) handleError(
+func (ti *TelemetryInterceptor) HandleError(
 	req interface{},
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
