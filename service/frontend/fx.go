@@ -217,7 +217,7 @@ func GrpcServerOptionsProvider(
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
-	telemetryInterceptor *interceptor.Telemetry,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
@@ -354,8 +354,8 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
-) *interceptor.Telemetry {
-	return interceptor.NewTelemetry(
+) *interceptor.TelemetryInterceptor {
+	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
@@ -733,7 +733,7 @@ func RegisterNexusHTTPHandler(
 	namespaceRegistry namespace.Registry,
 	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
-	telemetryInterceptor *interceptor.Telemetry,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
