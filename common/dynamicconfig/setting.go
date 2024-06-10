@@ -27,9 +27,6 @@
 package dynamicconfig
 
 type (
-	// Type is an enum for the data type of a dynamic config setting.
-	Type int
-
 	// Precedence is an enum for the search order precedence of a dynamic config setting.
 	// E.g., use the global value, check namespace then global, check task queue then
 	// namespace then global, etc.
@@ -54,5 +51,6 @@ type (
 	GenericSetting interface {
 		Key() Key
 		Precedence() Precedence
+		Validate(v any) error
 	}
 )

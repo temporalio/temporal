@@ -26,6 +26,8 @@
 
 # Buf proto image
 /proto/image.bin
+# api+google proto dependencies
+/proto/api.binpb
 
 # Goreleaser
 /dist

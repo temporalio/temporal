@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -495,6 +496,50 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 			})
 		})
 	}
+}
+
+func (s *ClientFunctionalSuite) TestNexusStartOperation_PayloadSizeLimit() {
+	taskQueue := s.randomizeStr("task-queue")
+	testEndpoint := s.createNexusEndpoint(s.randomizeStr("test-endpoint"), taskQueue)
+
+	// Use -10 to avoid hitting MaxNexusAPIRequestBodyBytes. Actual payload will still exceed limit because of
+	// additional Content headers. See common/rpc/grpc.go:66
+	input := strings.Repeat("a", (2*1024*1024)-10)
+
+	testFn := func(t *testing.T, dispatchURL string) {
+		ctx, cancel := context.WithCancel(NewContext())
+		defer cancel()
+
+		client, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+		require.NoError(t, err)
+		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
+		var result *nexus.ClientStartOperationResult[string]
+
+		// Wait until the endpoint is loaded into the registry.
+		s.Eventually(func() bool {
+			result, err = nexus.StartOperation(ctx, client, op, input, nexus.StartOperationOptions{
+				CallbackURL: "http://localhost/callback",
+				RequestID:   "request-id",
+			})
+			var unexpectedResponseErr *nexus.UnexpectedResponseError
+			return err == nil || !(errors.As(err, &unexpectedResponseErr) && unexpectedResponseErr.Response.StatusCode == http.StatusNotFound)
+		}, 10*time.Second, 500*time.Millisecond)
+
+		require.Nil(t, result)
+		var unexpectedError *nexus.UnexpectedResponseError
+		require.ErrorAs(t, err, &unexpectedError)
+		require.Equal(t, http.StatusBadRequest, unexpectedError.Response.StatusCode)
+		require.Equal(t, "input exceeds size limit", unexpectedError.Failure.Message)
+	}
+
+	s.T().Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
+		testFn(t, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, taskQueue))
+	})
+	s.T().Run("ByEndpoint", func(t *testing.T) {
+		testFn(t, getDispatchByEndpointURL(s.httpAPIAddress, testEndpoint.Id))
+	})
 }
 
 func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {

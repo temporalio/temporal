@@ -37,7 +37,6 @@ import (
 	v1 "go.temporal.io/api/taskqueue/v1"
 	v10 "go.temporal.io/server/api/matchingservice/v1"
 	v11 "go.temporal.io/server/api/persistence/v1"
-	v12 "go.temporal.io/server/api/taskqueue/v1"
 )
 
 // MockphysicalTaskQueueManager is a mock of physicalTaskQueueManager interface.
@@ -61,20 +60,6 @@ func NewMockphysicalTaskQueueManager(ctrl *gomock.Controller) *MockphysicalTaskQ
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockphysicalTaskQueueManager) EXPECT() *MockphysicalTaskQueueManagerMockRecorder {
 	return m.recorder
-}
-
-// Describe mocks base method.
-func (m *MockphysicalTaskQueueManager) Describe() *v12.PhysicalTaskQueueInfo {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Describe")
-	ret0, _ := ret[0].(*v12.PhysicalTaskQueueInfo)
-	return ret0
-}
-
-// Describe indicates an expected call of Describe.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) Describe() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Describe", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Describe))
 }
 
 // DispatchNexusTask mocks base method.

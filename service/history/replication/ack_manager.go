@@ -482,7 +482,9 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 	maxExclusiveTaskID int64,
 ) (collection.Iterator[tasks.Task], error) {
 	return collection.NewPagingIterator(func(paginationToken []byte) ([]tasks.Task, []byte, error) {
-		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+		ctx1, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		response, err := p.executionMgr.GetHistoryTasks(ctx1, &persistence.GetHistoryTasksRequest{
 			ShardID:             p.shardContext.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minInclusiveTaskID),

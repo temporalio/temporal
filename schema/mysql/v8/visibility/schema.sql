@@ -17,8 +17,8 @@ CREATE TABLE executions_visibility (
   search_attributes       JSON          NULL,
   parent_workflow_id      VARCHAR(255)  NULL,
   parent_run_id           VARCHAR(255)  NULL,
-  root_workflow_id        VARCHAR(255)  NULL,
-  root_run_id             VARCHAR(255)  NULL,
+  root_workflow_id        VARCHAR(255)  NOT NULL DEFAULT '',
+  root_run_id             VARCHAR(255)  NOT NULL DEFAULT '',
 
   -- Each search attribute has its own generated column.
   -- For string types (keyword and text), we need to unquote the json string,
