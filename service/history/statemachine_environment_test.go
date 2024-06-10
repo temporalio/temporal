@@ -157,27 +157,6 @@ func TestValidateStateMachineRef(t *testing.T) {
 			},
 		},
 		{
-			name:                    "WithoutTransitionHistory/CanBeStale/RootStalenessCheckFailure",
-			enableTransitionHistory: false,
-			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
-				ref.CanReferenceStaleState = true
-			},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleState)
-			},
-		},
-		{
-			name:                    "WithoutTransitionHistory/CannotBeStale/RootStalenessCheckFailure",
-			enableTransitionHistory: false,
-			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
-			},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
-			},
-		},
-		{
 			name:                    "WithoutTransitionHistory/CanBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
@@ -209,7 +188,18 @@ func TestValidateStateMachineRef(t *testing.T) {
 			},
 		},
 		{
-			name:                    "WithoutTransitionHistory/NodeNotFound",
+			name:                    "WithoutTransitionHistory/CanBeStale/NodeNotFound",
+			enableTransitionHistory: false,
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.Path[0].Id = "not-found"
+				ref.CanReferenceStaleState = true
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleState)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/CannotBeStale/NodeNotFound",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.Path[0].Id = "not-found"

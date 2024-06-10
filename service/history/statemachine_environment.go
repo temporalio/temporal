@@ -254,21 +254,21 @@ func (e *stateMachineEnvironment) validateStateMachineRef(ms workflow.MutableSta
 }
 
 func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistory(ms workflow.MutableState, ref hsm.Ref, potentialStaleState bool) error {
-	// Ignore potentialStaleState if the reference can't cannot reference stale state (e.g it came from task executor
+	// Ignore potentialStaleState if the reference cannot reference stale state (e.g if it came from task executor and
 	// not an API request).
 	potentialStaleState = potentialStaleState && ref.CanReferenceStaleState
 
-	if ms.GetCurrentVersion() < ref.StateMachineRef.MutableStateNamespaceFailoverVersion {
-		if potentialStaleState {
-			return fmt.Errorf("%w: mutable state version < ref version", consts.ErrStaleState)
-		}
-		return fmt.Errorf("%w: mutable state version < ref version", consts.ErrStaleReference)
-	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())
 	if err != nil {
 		if errors.Is(err, hsm.ErrStateMachineNotFound) {
-			// We checked above that mutable state is up-to-date with our ref, if we can't find the state machine node,
+			if potentialStaleState {
+				return fmt.Errorf("%w: %w", consts.ErrStaleState, err)
+			}
+			// We checked above that mutable state is up-to-date with our ref. If we can't find the state machine node,
 			// we must assume the reference is stale.
+			// This isn't bulletproof since the ref may have been generated on a different cluster and come from an API
+			// request before the state has been replicated to the current cluster.
+			// We accept the imperfection here and plan to solve it with the introduction of transition history.
 			return fmt.Errorf("%w: %w", consts.ErrStaleReference, err)
 		}
 		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)

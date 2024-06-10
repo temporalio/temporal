@@ -159,6 +159,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
+	s.mockConfig.EnableTransitionHistory = func() bool { return true }
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
 	namespaceEntry := tests.GlobalNamespaceEntry
@@ -1589,7 +1590,6 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-
 			dbState := s.buildWorkflowMutableState()
 			if tc.dbStateMutationFn != nil {
 				tc.dbStateMutationFn(dbState)

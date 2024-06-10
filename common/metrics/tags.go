@@ -96,7 +96,7 @@ func (v *tagImpl) Value() string {
 }
 
 func (v *tagImpl) String() string {
-	return fmt.Sprintf("tag{key: %s, value: %s}", v.key, v.value)
+	return fmt.Sprintf("tag{key: %q, value: %q}", v.key, v.value)
 }
 
 // NamespaceTag returns a new namespace tag. For timers, this also ensures that we
