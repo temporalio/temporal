@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -49,7 +50,7 @@ import (
 
 type (
 	EndpointRegistryConfig struct {
-		refreshEnabled         dynamicconfig.BoolPropertyFn
+		refreshEnabled         dynamicconfig.TypedSubscribable[bool]
 		refreshLongPollTimeout dynamicconfig.DurationPropertyFn
 		refreshPageSize        dynamicconfig.IntPropertyFn
 		refreshMinWait         dynamicconfig.DurationPropertyFn
@@ -80,7 +81,8 @@ type (
 		endpointsByID   map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint ID -> endpoint.
 		endpointsByName map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint name -> endpoint.
 
-		refreshPoller *goro.Handle
+		refreshPoller atomic.Pointer[goro.Handle]
+		cancelDcSub   func()
 
 		matchingClient matchingservice.MatchingServiceClient
 		persistence    p.NexusEndpointManager
@@ -92,7 +94,7 @@ type (
 
 func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryConfig {
 	config := &EndpointRegistryConfig{
-		refreshEnabled:         dynamicconfig.EnableNexus.Get(dc),
+		refreshEnabled:         dynamicconfig.EnableNexus.Subscribe(dc),
 		refreshLongPollTimeout: dynamicconfig.RefreshNexusEndpointsLongPollTimeout.Get(dc),
 		refreshPageSize:        dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc),
 		refreshMinWait:         dynamicconfig.RefreshNexusEndpointsMinWait.Get(dc),
@@ -127,19 +129,36 @@ func NewEndpointRegistry(
 // StartLifecycle starts this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StopLifecycle()
 func (r *EndpointRegistryImpl) StartLifecycle() {
-	backgroundCtx := headers.SetCallerInfo(
-		context.Background(),
-		headers.SystemBackgroundCallerInfo,
-	)
-	r.refreshPoller = goro.NewHandle(backgroundCtx).Go(r.refreshEndpointsLoop)
+	initial, cancel := r.config.refreshEnabled(r.setEnabled)
+	r.cancelDcSub = cancel
+	r.setEnabled(initial)
 }
 
 // StopLifecycle stops this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StartLifecycle()
 func (r *EndpointRegistryImpl) StopLifecycle() {
-	if r.refreshPoller != nil {
-		r.refreshPoller.Cancel()
-		<-r.refreshPoller.Done()
+	r.cancelDcSub()
+	r.setEnabled(false)
+}
+
+func (r *EndpointRegistryImpl) setEnabled(enabled bool) {
+	oldPoller := r.refreshPoller.Load()
+	if oldPoller == nil && enabled {
+		backgroundCtx := headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemBackgroundCallerInfo,
+		)
+		newPoller := goro.NewHandle(backgroundCtx)
+		oldPoller = r.refreshPoller.Swap(newPoller)
+		if oldPoller == nil {
+			newPoller.Go(r.refreshEndpointsLoop)
+		}
+	} else if oldPoller != nil && !enabled {
+		oldPoller = r.refreshPoller.Swap(nil)
+		if oldPoller != nil {
+			oldPoller.Cancel()
+			<-oldPoller.Done()
+		}
 	}
 }
 
@@ -198,20 +217,9 @@ func (r *EndpointRegistryImpl) waitUntilInitialized(ctx context.Context) error {
 
 func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context) error {
 	hasLoadedEndpointData := false
-	minWaitTime := r.config.refreshMinWait()
 
 	for ctx.Err() == nil {
-		if !r.config.refreshEnabled() {
-			if hasLoadedEndpointData {
-				// Nexus APIs were previously enabled and endpoint data loaded, so make future requests wait for
-				// reload once the FF is re-enabled.
-				r.dataReady = make(chan struct{})
-			}
-			hasLoadedEndpointData = false
-			util.InterruptibleSleep(ctx, r.config.refreshMinWait())
-			continue
-		}
-
+		minWaitTime := r.config.refreshMinWait()
 		start := time.Now()
 		if !hasLoadedEndpointData {
 			// Loading endpoints for the first time after being (re)enabled, so load with fallback to persistence
