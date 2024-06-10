@@ -1311,7 +1311,7 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 		case *serviceerror.ResourceExhausted:
 			metrics.PersistenceErrResourceExhaustedCounter.With(handler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
 		default:
-			logger.Error("Operation failed with internal error.", tag.Error(err), tag.Operation(operation))
+			logger.Error("Operation failed with internal error.", tag.Error(err), tag.ErrorType(err), tag.Operation(operation))
 			metrics.PersistenceFailures.With(handler).Record(1)
 		}
 	}
