@@ -88,12 +88,11 @@ func TestProcessScheduleTask(t *testing.T) {
 	reg := hsm.NewRegistry()
 	require.NoError(t, scheduler.RegisterExecutor(
 		reg,
-		scheduler.ActiveExecutorOptions{},
-		scheduler.StandbyExecutorOptions{},
+		scheduler.TaskExecutorOptions{},
 		&scheduler.Config{},
 	))
 
-	err = reg.ExecuteActiveTimerTask(
+	err = reg.ExecuteTimerTask(
 		env,
 		node,
 		scheduler.ScheduleTask{Deadline: env.Now().Add(10 * time.Second)},

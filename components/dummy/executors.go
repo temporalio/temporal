@@ -20,44 +20,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package scheduler
+package dummy
 
 import (
+	"context"
+
 	"go.temporal.io/server/service/history/hsm"
 )
 
 func RegisterExecutor(
 	registry *hsm.Registry,
-	executorOptions TaskExecutorOptions,
-	config *Config,
+	taskExecutorOptions TaskExecutorOptions,
 ) error {
-	activeExec := taskExecutor{options: executorOptions, config: config}
+	activeExec := taskExecutor{
+		TaskExecutorOptions: taskExecutorOptions,
+	}
+	if err := hsm.RegisterImmediateExecutor(
+		registry,
+		activeExec.executeImmediateTask,
+	); err != nil {
+		return err
+	}
 	return hsm.RegisterTimerExecutor(
 		registry,
-		activeExec.executeScheduleTask,
+		activeExec.executeTimerTask,
 	)
 }
 
 type (
 	TaskExecutorOptions struct {
+		ImmediateExecutor hsm.ImmediateExecutor[ImmediateTask]
+		TimerExecutor     hsm.TimerExecutor[TimerTask]
 	}
 
 	taskExecutor struct {
-		options TaskExecutorOptions
-		config  *Config
+		TaskExecutorOptions
 	}
 )
 
-func (e taskExecutor) executeScheduleTask(
+func (e taskExecutor) executeImmediateTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task ImmediateTask,
+) error {
+	return e.ImmediateExecutor(ctx, env, ref, task)
+}
+
+func (e taskExecutor) executeTimerTask(
 	env hsm.Environment,
 	node *hsm.Node,
-	task ScheduleTask,
+	task TimerTask,
 ) error {
-	if err := node.CheckRunning(); err != nil {
-		return err
-	}
-	// TODO(Tianyu): Perform scheduler logic before scheduling self again
-	return hsm.MachineTransition(node, func(scheduler Scheduler) (hsm.TransitionOutput, error) {
-		return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
-	})
+	return e.TimerExecutor(env, node, task)
 }

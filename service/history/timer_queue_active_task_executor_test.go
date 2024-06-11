@@ -58,6 +58,8 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	pm "go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/dummy"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
@@ -90,6 +92,7 @@ type (
 		mockDeleteManager *deletemanager.MockDeleteManager
 		mockExecutionMgr  *persistence.MockExecutionManager
 
+		config                       *configs.Config
 		workflowCache                wcache.Cache
 		logger                       log.Logger
 		namespaceID                  namespace.ID
@@ -132,14 +135,14 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
-	config := tests.NewDynamicConfig()
+	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistencespb.ShardInfo{
 			ShardId: 1,
 			RangeId: 1,
 		},
-		config,
+		s.config,
 		s.timeSource,
 	)
 
@@ -198,7 +201,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockDeleteManager,
 		s.logger,
 		metrics.NoopMetricsHandler,
-		config,
+		s.config,
 		s.mockShard.Resource.GetMatchingClient(),
 	).(*timerQueueActiveTaskExecutor)
 }
@@ -1789,6 +1792,114 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Noop() 
 
 	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(resp.ExecutionErr)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_ExecutesAllAvailableTimers() {
+	numInvocations := 0
+
+	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterTaskSerializers(reg))
+	s.NoError(dummy.RegisterExecutor(
+		reg,
+		dummy.TaskExecutorOptions{
+			ImmediateExecutor: nil,
+			TimerExecutor: func(env hsm.Environment, node *hsm.Node, task dummy.TimerTask) error {
+				numInvocations++
+				return nil
+			},
+		},
+	))
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	ms := workflow.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 2, MaxTransitionCount: 1},
+		},
+	}
+	root, err := hsm.NewRoot(
+		reg,
+		workflow.StateMachineType.ID,
+		ms,
+		make(map[int32]*persistencespb.StateMachineMap),
+		ms,
+	)
+	s.NoError(err)
+	ms.EXPECT().GetNextEventID().Return(int64(2))
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(
+		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	).AnyTimes()
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+
+	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
+	s.NoError(err)
+
+	// Track some tasks.
+
+	// Invalid reference, should be dropped.
+	invalidTask := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			MutableStateNamespaceFailoverVersion: 1,
+			MutableStateTransitionCount:          1,
+		},
+		Type: dummy.TaskTypeTimer.ID,
+	}
+	validTask := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{Type: dummy.StateMachineType.ID, Id: "dummy"},
+			},
+			MutableStateNamespaceFailoverVersion: 2,
+			MutableStateTransitionCount:          1,
+		},
+		Type: dummy.TaskTypeTimer.ID,
+	}
+
+	// Past deadline, should get executed.
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(-time.Hour), invalidTask)
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(-time.Hour), validTask)
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(-time.Minute), validTask)
+	// Future deadline, new task should be scheduled.
+	futureDeadline := s.mockShard.GetTimeSource().Now().Add(time.Hour)
+	workflow.TrackStateMachineTimer(ms, futureDeadline, validTask)
+
+	wfCtx := workflow.NewMockContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
+	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any())
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, workflow.LockPriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	task := &tasks.StateMachineTimerTask{
+		WorkflowKey:                 tests.WorkflowKey,
+		Version:                     2,
+		MutableStateTransitionCount: 1,
+	}
+
+	//nolint:revive // unchecked-type-assertion
+	timerQueueActiveTaskExecutor := newTimerQueueActiveTaskExecutor(
+		s.mockShard,
+		mockCache,
+		s.mockDeleteManager,
+		s.mockShard.GetLogger(),
+		metrics.NoopMetricsHandler,
+		s.config,
+		s.mockShard.Resource.GetMatchingClient(),
+	).(*timerQueueActiveTaskExecutor)
+
+	err = timerQueueActiveTaskExecutor.executeStateMachineTimerTask(context.Background(), task)
+	s.NoError(err)
+	s.Equal(2, numInvocations) // two valid tasks within the deadline.
+	s.Equal(1, len(info.StateMachineTimers))
+	s.Equal(futureDeadline, info.StateMachineTimers[0].Deadline.AsTime())
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(

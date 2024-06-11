@@ -35,29 +35,24 @@ import (
 var Module = fx.Module(
 	"component.callbacks",
 	fx.Provide(ConfigProvider),
-	fx.Provide(ActiveExecutorOptionsProvider),
-	fx.Provide(StandbyExecutorOptionsProvider),
+	fx.Provide(TaskExecutorOptionsProvider),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterStateMachine),
 	fx.Invoke(RegisterExecutor),
 )
 
-func ActiveExecutorOptionsProvider(
+func TaskExecutorOptionsProvider(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
-) ActiveExecutorOptions {
+) TaskExecutorOptions {
 	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
 		// In the future, we'll want to support HTTP2 clients as well and inject headers and certs here.
 		client := &http.Client{}
 		return client.Do
 	})
-	return ActiveExecutorOptions{
+	return TaskExecutorOptions{
 		NamespaceRegistry: namespaceRegistry,
 		MetricsHandler:    metricsHandler,
 		CallerProvider:    m.Get,
 	}
-}
-
-func StandbyExecutorOptionsProvider() StandbyExecutorOptions {
-	return StandbyExecutorOptions{}
 }

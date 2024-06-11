@@ -178,14 +178,13 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			reg := hsm.NewRegistry()
 			require.NoError(t, callbacks.RegisterExecutor(
 				reg,
-				callbacks.ActiveExecutorOptions{
+				callbacks.TaskExecutorOptions{
 					NamespaceRegistry: namespaceRegistryMock,
 					MetricsHandler:    metricsHandler,
 					CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
 				},
-				callbacks.StandbyExecutorOptions{},
 				&callbacks.Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -194,7 +193,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				},
 			))
 
-			err = reg.ExecuteActiveImmediateTask(
+			err = reg.ExecuteImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -248,12 +247,11 @@ func TestProcessBackoffTask(t *testing.T) {
 	reg := hsm.NewRegistry()
 	require.NoError(t, callbacks.RegisterExecutor(
 		reg,
-		callbacks.ActiveExecutorOptions{
+		callbacks.TaskExecutorOptions{
 			CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 				return nil
 			},
 		},
-		callbacks.StandbyExecutorOptions{},
 		&callbacks.Config{
 			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 			RetryPolicy: func() backoff.RetryPolicy {
@@ -262,7 +260,7 @@ func TestProcessBackoffTask(t *testing.T) {
 		},
 	))
 
-	err = reg.ExecuteActiveTimerTask(
+	err = reg.ExecuteTimerTask(
 		env,
 		node,
 		callbacks.BackoffTask{},
