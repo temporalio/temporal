@@ -139,7 +139,7 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 	)
 	if userAgent, ok := header[headerUserAgent]; ok {
 		parts := strings.Split(userAgent, clientNameVersionDelim)
-		if len(parts) == 1 {
+		if len(parts) == 2 {
 			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
 				headers.ClientNameHeaderName:    parts[0],
 				headers.ClientVersionHeaderName: parts[1],
