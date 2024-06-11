@@ -139,7 +139,7 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 	)
 	if userAgent, ok := header[headerUserAgent]; ok {
 		parts := strings.Split(userAgent, clientNameVersionDelim)
-		if len(parts) > 1 {
+		if len(parts) == 1 {
 			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
 				headers.ClientNameHeaderName:    parts[0],
 				headers.ClientVersionHeaderName: parts[1],
@@ -209,13 +209,13 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("global_rate_limited"))
 		return commonnexus.ConvertGRPCError(err, true)
 	}
-	
+
 	if err := c.clientVersionChecker.ClientSupported(ctx); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unsupported_client"))
 		converted := commonnexus.ConvertGRPCError(err, true)
 		return converted
 	}
-	
+
 	return nil
 }
 

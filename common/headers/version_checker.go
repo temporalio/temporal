@@ -76,7 +76,7 @@ var (
 		ClientNameCLI:           "<2.0.0",
 		ClientNameServer:        "<2.0.0",
 		ClientNameUI:            "<3.0.0",
-		ClientNameNexusGoSDK:    "<1.0.0",
+		ClientNameNexusGoSDK:    "<2.0.0",
 	}
 
 	internalVersionHeaderPairs = []string{
