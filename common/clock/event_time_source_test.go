@@ -203,3 +203,25 @@ func TestEventTimeSource_Update(t *testing.T) {
 	ev1.AssertFiredOnce("Timer should fire after deadline")
 	ev2.AssertFiredOnce("Timer should fire after deadline")
 }
+
+func TestEventTimeSource_NewTimer(t *testing.T) {
+	t.Parallel()
+
+	source := clock.NewEventTimeSource()
+
+	ch, _ := source.NewTimer(time.Second)
+
+	select {
+	case <-ch:
+		t.Error("shouldn't fire yet")
+	default:
+	}
+
+	source.Advance(2 * time.Second)
+
+	select {
+	case <-ch:
+	default:
+		t.Error("should have fired")
+	}
+}

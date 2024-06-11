@@ -89,6 +89,15 @@ func (ts *EventTimeSource) AfterFunc(d time.Duration, f func()) Timer {
 	return t
 }
 
+// NewTimer creates a Timer that will send the current time on a channel after at least
+// duration d. It returns the channel and the Timer.
+func (ts *EventTimeSource) NewTimer(d time.Duration) (<-chan time.Time, Timer) {
+	c := make(chan time.Time, 1)
+	// we can't call ts.Now() from the callback so just calculate what it should be
+	target := ts.Now().Add(d)
+	return c, ts.AfterFunc(d, func() { c <- target })
+}
+
 // Update the fake current time. It returns the timeSource so that you can chain calls like this:
 // timeSource := NewEventTimeSource().Update(time.Now())
 func (ts *EventTimeSource) Update(now time.Time) *EventTimeSource {
