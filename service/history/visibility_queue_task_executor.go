@@ -330,6 +330,10 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		request.CloseTime = &task.CloseTime
 	}
 
+	if task.CloseTime.After(time.Unix(0, 0)) {
+		request.CloseTime = &task.CloseTime
+	}
+
 	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task
 		// (which change workflow execution status by uploading new visibility record) will resurrect visibility record.

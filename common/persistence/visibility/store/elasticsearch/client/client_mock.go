@@ -982,3 +982,63 @@ func (mr *MockIntegrationTestsClientMockRecorder) WaitForYellowStatus(ctx, index
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockIntegrationTestsClient)(nil).WaitForYellowStatus), ctx, index)
 }
+
+// RunBulkProcessor mocks base method.
+func (m *MockIntegrationTestsClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunBulkProcessor", ctx, p)
+	ret0, _ := ret[0].(BulkProcessor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RunBulkProcessor indicates an expected call of RunBulkProcessor.
+func (mr *MockIntegrationTestsClientMockRecorder) RunBulkProcessor(ctx, p interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockIntegrationTestsClient)(nil).RunBulkProcessor), ctx, p)
+}
+
+// Scroll mocks base method.
+func (m *MockIntegrationTestsClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Scroll", ctx, id, keepAliveInterval)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Scroll indicates an expected call of Scroll.
+func (mr *MockIntegrationTestsClientMockRecorder) Scroll(ctx, id, keepAliveInterval interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scroll", reflect.TypeOf((*MockIntegrationTestsClient)(nil).Scroll), ctx, id, keepAliveInterval)
+}
+
+// Search mocks base method.
+func (m *MockIntegrationTestsClient) Search(ctx context.Context, p *SearchParameters) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Search", ctx, p)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Search indicates an expected call of Search.
+func (mr *MockIntegrationTestsClientMockRecorder) Search(ctx, p interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Search", reflect.TypeOf((*MockIntegrationTestsClient)(nil).Search), ctx, p)
+}
+
+// WaitForYellowStatus mocks base method.
+func (m *MockIntegrationTestsClient) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForYellowStatus", ctx, index)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForYellowStatus indicates an expected call of WaitForYellowStatus.
+func (mr *MockIntegrationTestsClientMockRecorder) WaitForYellowStatus(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockIntegrationTestsClient)(nil).WaitForYellowStatus), ctx, index)
+}
