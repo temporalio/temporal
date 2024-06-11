@@ -392,7 +392,9 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	// generate references to this node.
 	n.persistence.TransitionCount++
 	prevMSTransitionCount := n.persistence.LastUpdateMutableStateTransitionCount
-	n.persistence.LastUpdateMutableStateTransitionCount = n.backend.TransitionCount()
+	// The transition count for the backend is only incremented before the current transaction is closed but it is
+	// monotonically increasing so we can safely assume that incrementing by 1 here is safe.
+	n.persistence.LastUpdateMutableStateTransitionCount = n.backend.TransitionCount() + 1
 	// Rollback on error
 	defer func() {
 		if retErr != nil {
