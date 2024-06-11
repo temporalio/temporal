@@ -60,17 +60,6 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			localEvents [][]*historypb.HistoryEvent,
 		) error
-		ResendLocalGeneratedHistoryEvents(
-			ctx context.Context,
-			remoteClusterName string,
-			namespaceID namespace.ID,
-			workflowID string,
-			runID string,
-			startEventID int64,
-			startEventVersion int64,
-			endEventID int64,
-			endEventVersion int64,
-		) error
 	}
 
 	localEventsHandlerImpl struct {
@@ -81,42 +70,6 @@ type (
 		historyPaginatedFetcher HistoryPaginatedFetcher
 	}
 )
-
-func (h *localEventsHandlerImpl) ResendLocalGeneratedHistoryEvents(
-	ctx context.Context,
-	remoteClusterName string,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	startEventID int64,
-	startEventVersion int64,
-	endEventID int64,
-	endEventVersion int64,
-) error {
-	shardContext, err := h.shardController.GetShardByNamespaceWorkflow(namespaceID, workflowID)
-	if err != nil {
-		return err
-	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return err
-	}
-	return h.importEvents(
-		ctx,
-		remoteClusterName,
-		engine,
-		definition.WorkflowKey{
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  workflowID,
-			RunID:       runID,
-		},
-		startEventID,
-		startEventVersion,
-		endEventID,
-		endEventVersion,
-		nil,
-	)
-}
 
 func NewLocalEventsHandler(
 	clusterMetadata cluster.Metadata,
@@ -176,7 +129,7 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	case nil:
 	case *serviceerror.NotFound:
 		// if mutable state not found, we import from beginning
-		return h.importEvents(
+		return importEvents(
 			ctx,
 			sourceClusterName,
 			engine,
@@ -186,14 +139,18 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 			localVersionHistory[len(localVersionHistory)-1].EventId,
 			localVersionHistory[len(localVersionHistory)-1].Version,
 			nil,
+			h.historyPaginatedFetcher,
+			h.logger,
+			h.eventSerializer,
 		)
 	default:
 		return err
 	}
-	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, localEventsBlobs, versionHistory, nil)
+	response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, localEventsBlobs, versionHistory, nil, h.logger)
 	if err != nil {
 		return err
 	}
+	// handle the case: local already have events[1,10], replication task for event 10 comes again due to retry
 	if !response.EventsApplied { // means local events were already existing before importing, no more action needed
 		return nil
 	}
@@ -201,9 +158,11 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	lastBatch := localEvents[len(localEvents)-1]
 	lastEvent := lastBatch[len(lastBatch)-1]
 
+	// handle the case: local events are [1,10], now the cluster already have [1,9], and the api is supplied with localEvents[[10]],
+	// so all local events are imported after the first invokeImportWorkflowExecutionCall.
 	if lastEvent.EventId == localVersionHistory[len(localVersionHistory)-1].EventId {
 		// all local events were imported successfully, we call commit to finish the transaction
-		_, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, nil, versionHistory, response.Token)
+		_, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, nil, versionHistory, response.Token, h.logger)
 		if err != nil {
 			return err
 		}
@@ -214,7 +173,7 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	if err != nil {
 		return err
 	}
-	return h.importEvents(
+	return importEvents(
 		ctx,
 		sourceClusterName,
 		engine,
@@ -224,10 +183,13 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 		localVersionHistory[len(localVersionHistory)-1].EventId,
 		localVersionHistory[len(localVersionHistory)-1].Version,
 		response.Token,
+		h.historyPaginatedFetcher,
+		h.logger,
+		h.eventSerializer,
 	)
 }
 
-func (h *localEventsHandlerImpl) importEvents(
+func importEvents(
 	ctx context.Context,
 	remoteCluster string,
 	engine shard.Engine,
@@ -237,8 +199,11 @@ func (h *localEventsHandlerImpl) importEvents(
 	endEventId int64,
 	endEventVersion int64,
 	token []byte,
+	historyFetcher HistoryPaginatedFetcher,
+	logger log.Logger,
+	serializer serialization.Serializer,
 ) error {
-	historyIterator := h.historyPaginatedFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	historyIterator := historyFetcher.GetSingleWorkflowHistoryPaginatedIterator(
 		ctx,
 		remoteCluster,
 		namespace.ID(workflowKey.NamespaceID),
@@ -256,7 +221,7 @@ func (h *localEventsHandlerImpl) importEvents(
 	for historyIterator.HasNext() {
 		batch, err := historyIterator.Next()
 		if err != nil {
-			h.logger.Error("failed to get history events",
+			logger.Error("failed to get history events",
 				tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 				tag.WorkflowID(workflowKey.WorkflowID),
 				tag.WorkflowRunID(workflowKey.RunID),
@@ -271,15 +236,15 @@ func (h *localEventsHandlerImpl) importEvents(
 
 		blobSize++
 		blobs = append(blobs, batch.RawEventBatch)
-		events, err := h.eventSerializer.DeserializeEvents(batch.RawEventBatch)
+		events, err := serializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
 			return err
 		}
 
 		if blobSize >= historyImportBlobSize ||
 			len(blobs) >= historyImportPageSize ||
-			h.isLastEventAtHistoryBoundary(events[len(events)-1], versionHistory) { // Import API only take events that has same version
-			response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token)
+			isLastEventAtHistoryBoundary(events[len(events)-1], versionHistory) { // Import API only take events that has same version
+			response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, logger)
 			if err != nil {
 				return err
 			}
@@ -289,7 +254,7 @@ func (h *localEventsHandlerImpl) importEvents(
 		}
 	}
 	if len(blobs) != 0 {
-		response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token)
+		response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, logger)
 		if err != nil {
 			return err
 		}
@@ -298,9 +263,9 @@ func (h *localEventsHandlerImpl) importEvents(
 
 	// call with empty event blob to commit the import
 	blobs = []*common.DataBlob{}
-	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token)
+	response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, logger)
 	if err != nil || len(response.Token) != 0 {
-		h.logger.Error("failed to commit import action",
+		logger.Error("failed to commit import action",
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID),
@@ -310,7 +275,7 @@ func (h *localEventsHandlerImpl) importEvents(
 	return nil
 }
 
-func (h *localEventsHandlerImpl) isLastEventAtHistoryBoundary(
+func isLastEventAtHistoryBoundary(
 	lastLocalEvent *historypb.HistoryEvent,
 	versionHistory *historyspb.VersionHistory,
 ) bool {
@@ -322,13 +287,14 @@ func (h *localEventsHandlerImpl) isLastEventAtHistoryBoundary(
 	return false
 }
 
-func (h *localEventsHandlerImpl) invokeImportWorkflowExecutionCall(
+func invokeImportWorkflowExecutionCall(
 	ctx context.Context,
 	historyEngine shard.Engine,
 	workflowKey definition.WorkflowKey,
 	historyBatches []*common.DataBlob,
 	versionHistory *historyspb.VersionHistory,
 	token []byte,
+	logger log.Logger,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
 	request := &historyservice.ImportWorkflowExecutionRequest{
 		NamespaceId: workflowKey.NamespaceID,
@@ -342,7 +308,7 @@ func (h *localEventsHandlerImpl) invokeImportWorkflowExecutionCall(
 	}
 	response, err := historyEngine.ImportWorkflowExecution(ctx, request)
 	if err != nil {
-		h.logger.Error("failed to import events",
+		logger.Error("failed to import events",
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID),

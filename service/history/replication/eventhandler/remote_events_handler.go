@@ -49,17 +49,6 @@ type (
 			newEvents []*historypb.HistoryEvent,
 			newRunID string,
 		) error
-		ResendRemoteGeneratedHistoryEvents(
-			ctx context.Context,
-			remoteClusterName string,
-			namespaceID namespace.ID,
-			workflowID string,
-			runID string,
-			startEventID int64,
-			startEventVersion int64,
-			endEventID int64,
-			endEventVersion int64,
-		) error
 	}
 
 	futureEventsHandlerImpl struct {
@@ -104,61 +93,4 @@ func (f futureEventsHandlerImpl) HandleRemoteGeneratedHistoryEvents(
 		newEvents,
 		newRunID,
 	)
-}
-
-func (f futureEventsHandlerImpl) ResendRemoteGeneratedHistoryEvents(
-	ctx context.Context,
-	remoteClusterName string,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	startEventID int64,
-	startEventVersion int64,
-	endEventID int64,
-	endEventVersion int64,
-) error {
-	historyEventIterator := f.historyPaginatedFetcher.GetSingleWorkflowHistoryPaginatedIterator(
-		ctx,
-		remoteClusterName,
-		namespaceID,
-		workflowID,
-		runID,
-		startEventID,
-		startEventVersion,
-		endEventID,
-		endEventVersion)
-	shardContext, err := f.shardController.GetShardByNamespaceWorkflow(
-		namespaceID,
-		workflowID,
-	)
-	if err != nil {
-		return err
-	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return err
-	}
-	for historyEventIterator.HasNext() {
-		historyBatch, err := historyEventIterator.Next()
-		if err != nil {
-			return err
-		}
-		events, err := f.eventSerializer.DeserializeEvents(historyBatch.RawEventBatch)
-		if err != nil {
-			return err
-		}
-		err = engine.ReplicateHistoryEvents(
-			ctx,
-			definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
-			nil,
-			historyBatch.VersionHistory.GetItems(),
-			[][]*historypb.HistoryEvent{events},
-			nil,
-			"",
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

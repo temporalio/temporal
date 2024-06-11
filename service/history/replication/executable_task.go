@@ -322,18 +322,33 @@ func (e *ExecutableTaskImpl) Resend(
 			metrics.OperationTag(e.metricsTag+"Resend"),
 		)
 	}()
-
-	switch resendErr := e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
-		ctx,
-		remoteCluster,
-		namespace.ID(retryErr.NamespaceId),
-		retryErr.WorkflowId,
-		retryErr.RunId,
-		retryErr.StartEventId,
-		retryErr.StartEventVersion,
-		retryErr.EndEventId,
-		retryErr.EndEventVersion,
-	).(type) {
+	var resendErr error
+	if e.Config.EnableReplicateLocalGeneratedEvent() {
+		resendErr = e.ProcessToolBox.ResendHandler.ResendHistoryEvents(
+			ctx,
+			remoteCluster,
+			namespace.ID(retryErr.NamespaceId),
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
+		)
+	} else {
+		resendErr = e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			remoteCluster,
+			namespace.ID(retryErr.NamespaceId),
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
+		)
+	}
+	switch resendErr := resendErr.(type) {
 	case nil:
 		// no-op
 		return true, nil

@@ -29,12 +29,12 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -77,11 +77,12 @@ type (
 	}
 
 	HistoryPaginatedFetcherImpl struct {
-		namespaceRegistry    namespace.Registry
-		clientBean           client.Bean
-		serializer           serialization.Serializer
-		rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
-		logger               log.Logger
+		fx.In
+
+		NamespaceRegistry namespace.Registry
+		ClientBean        client.Bean
+		Serializer        serialization.Serializer
+		Logger            log.Logger
 	}
 
 	HistoryBatch struct {
@@ -98,15 +99,13 @@ func NewHistoryPaginatedFetcher(
 	namespaceRegistry namespace.Registry,
 	clientBean client.Bean,
 	serializer serialization.Serializer,
-	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
 	logger log.Logger,
 ) HistoryPaginatedFetcher {
 	return &HistoryPaginatedFetcherImpl{
-		namespaceRegistry:    namespaceRegistry,
-		clientBean:           clientBean,
-		serializer:           serializer,
-		rereplicationTimeout: rereplicationTimeout,
-		logger:               logger,
+		NamespaceRegistry: namespaceRegistry,
+		ClientBean:        clientBean,
+		Serializer:        serializer,
+		Logger:            logger,
 	}
 }
 
@@ -121,20 +120,8 @@ func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIterator(
 	endEventID int64,
 	endEventVersion int64,
 ) collection.Iterator[HistoryBatch] {
-
-	resendCtx := context.Background()
-	var cancel context.CancelFunc
-	if n.rereplicationTimeout != nil {
-		resendContextTimeout := n.rereplicationTimeout(namespaceID.String())
-		if resendContextTimeout > 0 {
-			resendCtx, cancel = context.WithTimeout(resendCtx, resendContextTimeout)
-			defer cancel()
-		}
-	}
-	resendCtx = rpc.CopyContextValues(resendCtx, ctx)
-
 	return collection.NewPagingIterator(n.getPaginationFn(
-		resendCtx,
+		ctx,
 		remoteClusterName,
 		namespaceID,
 		workflowID,
@@ -220,12 +207,12 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 	pageSize int32,
 ) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
-	logger := log.With(n.logger, tag.WorkflowRunID(runID))
+	logger := log.With(n.Logger, tag.WorkflowRunID(runID))
 
 	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(ctx, resendContextTimeout)
 	defer cancel()
 
-	adminClient, err := n.clientBean.GetRemoteAdminClient(remoteClusterName)
+	adminClient, err := n.ClientBean.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {
 		return nil, err
 	}

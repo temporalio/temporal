@@ -74,6 +74,7 @@ var Module = fx.Provide(
 	dlqWriterAdapterProvider,
 	newDLQWriterToggle,
 	historyPaginatedFetcherProvider,
+	resendHandlerProvider,
 	remoteEventHandlerProvider,
 	localEventHandlerProvider,
 	historyEventsHandlerProvider,
@@ -281,6 +282,37 @@ func ndcHistoryResenderProvider(
 	)
 }
 
+func resendHandlerProvider(
+	namespaceRegistry namespace.Registry,
+	clientBean client.Bean,
+	serializer serialization.Serializer,
+	clusterMetadata cluster.Metadata,
+	shardController shard.Controller,
+	config *configs.Config,
+	remoteHistoryFetcher eventhandler.HistoryPaginatedFetcher,
+	logger log.Logger,
+) eventhandler.ResendHandler {
+	return eventhandler.NewResendHandler(
+		namespaceRegistry,
+		clientBean,
+		serializer,
+		clusterMetadata,
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+			shardContext, err := shardController.GetShardByNamespaceWorkflow(
+				namespaceId,
+				workflowId,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return shardContext.GetEngine(ctx)
+		},
+		nil,
+		remoteHistoryFetcher,
+		logger,
+	)
+}
+
 func dlqWriterAdapterProvider(
 	dlqWriter *queues.DLQWriter,
 	taskSerializer serialization.Serializer,
@@ -314,13 +346,11 @@ func historyEventsHandlerProvider(
 	clusterMetadata cluster.Metadata,
 	localHandler eventhandler.LocalGeneratedEventsHandler,
 	remoteHandler eventhandler.RemoteGeneratedEventsHandler,
-	remoteHistoryFetcher eventhandler.HistoryPaginatedFetcher,
 ) eventhandler.HistoryEventsHandler {
 	return eventhandler.NewHistoryEventsHandler(
 		clusterMetadata,
 		localHandler,
 		remoteHandler,
-		remoteHistoryFetcher,
 	)
 }
 
@@ -328,14 +358,12 @@ func historyPaginatedFetcherProvider(
 	namespaceRegistry namespace.Registry,
 	clientBean client.Bean,
 	serializer serialization.Serializer,
-	config *configs.Config,
 	logger log.Logger,
 ) eventhandler.HistoryPaginatedFetcher {
 	return eventhandler.NewHistoryPaginatedFetcher(
 		namespaceRegistry,
 		clientBean,
 		serializer,
-		config.StandbyTaskReReplicationContextTimeout,
 		logger,
 	)
 }
