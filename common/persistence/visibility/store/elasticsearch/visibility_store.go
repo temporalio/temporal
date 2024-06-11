@@ -190,6 +190,10 @@ func (s *VisibilityStore) GetIndexName() string {
 	return s.index
 }
 
+func (s *VisibilityStore) GetEsClient() client.Client {
+	return s.esClient
+}
+
 func (s *VisibilityStore) ValidateCustomSearchAttributes(
 	searchAttributes map[string]any,
 ) (map[string]any, error) {
