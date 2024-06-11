@@ -491,6 +491,16 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "success"})
 
+	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
+	s.Condition(func() bool {
+		for _, m := range snap["service_requests"] {
+			if opTag, ok := m.Tags["operation"]; ok && opTag == "CompleteNexusOperation" {
+				return true
+			}
+		}
+		return false
+	})
+
 	// Resend the request and verify we get a not found error since the operation has already completed.
 	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusNotFound, res.StatusCode)
