@@ -219,6 +219,10 @@ func (e *stateMachineEnvironment) loadAndValidateMutableState(
 
 // validateStateMachineRef compares the ref and associated state machine's version and transition count to detect staleness.
 func (e *stateMachineEnvironment) validateStateMachineRef(ms workflow.MutableState, ref hsm.Ref, potentialStaleState bool) error {
+	if err := validateTaskGeneration(ms, ref.TaskID); err != nil {
+		return err
+	}
+
 	if ref.StateMachineRef.MutableStateTransitionCount == 0 {
 		// Transtion history was disabled when the ref is generated, fallback to the old validation logic.
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
@@ -256,7 +260,7 @@ func (e *stateMachineEnvironment) validateStateMachineRef(ms workflow.MutableSta
 func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistory(ms workflow.MutableState, ref hsm.Ref, potentialStaleState bool) error {
 	// Ignore potentialStaleState if the reference cannot reference stale state (e.g if it came from task executor and
 	// not an API request).
-	potentialStaleState = potentialStaleState && ref.CanReferenceStaleState
+	potentialStaleState = potentialStaleState && ref.TaskID == 0
 
 	node, err := ms.HSM().Child(ref.StateMachinePath())
 	if err != nil {

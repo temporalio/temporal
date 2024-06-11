@@ -2296,10 +2296,6 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	ref := hsm.Ref{
 		WorkflowKey:     definition.NewWorkflowKey(request.Completion.NamespaceId, request.Completion.WorkflowId, request.Completion.RunId),
 		StateMachineRef: request.Completion.Ref,
-		// The ref came from an API request and does not have enough information to ensure that it isn't referencing
-		// stale mutable state. The machinery to access the state machine node will check this flag and reload mutable
-		// state if it suspects mutable state staleness.
-		CanReferenceStaleState: true,
 	}
 	var opErr *nexus.UnsuccessfulOperationError
 	if request.State != string(nexus.OperationStateSucceeded) {

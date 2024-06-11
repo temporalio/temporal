@@ -289,10 +289,11 @@ func NewMutableState(
 
 		LastCompletedWorkflowTaskStartedEventId: common.EmptyEventID,
 
-		StartTime:              timestamppb.New(startTime),
-		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
-		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
-		SubStateMachinesByType: make(map[int32]*persistencespb.StateMachineMap),
+		StartTime:                         timestamppb.New(startTime),
+		VersionHistories:                  versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
+		ExecutionStats:                    &persistencespb.ExecutionStats{HistorySize: 0},
+		SubStateMachinesByType:            make(map[int32]*persistencespb.StateMachineMap),
+		TaskGenerationShardClockTimestamp: shard.CurrentVectorClock().GetClock(),
 	}
 	s.approximateSize += s.executionInfo.Size()
 	s.executionState = &persistencespb.WorkflowExecutionState{
@@ -464,6 +465,7 @@ func NewSanitizedMutableState(
 	}
 	// Timer tasks are generated locally, do not sync them.
 	mutableState.executionInfo.StateMachineTimers = nil
+	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 0
 
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil

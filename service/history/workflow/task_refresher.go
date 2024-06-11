@@ -67,6 +67,8 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	ctx context.Context,
 	mutableState MutableState,
 ) error {
+	// Invalidate all tasks generated for this mutable state before the refresh.
+	mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(
 		r.shard,

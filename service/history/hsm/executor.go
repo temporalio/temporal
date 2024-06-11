@@ -36,10 +36,10 @@ import (
 type Ref struct {
 	WorkflowKey     definition.WorkflowKey
 	StateMachineRef *persistencespb.StateMachineRef
-	// An indicator whether this Ref can reference stale state. This should be set to false during task processing where
-	// we can validate the task that embeds this reference against shard clock. And it should be set to true when
-	// constructing references from API requests.
-	CanReferenceStaleState bool
+	// If non-zero, this field represents the ID of the task this Ref came from. Used for stale task detection and
+	// serves as an indicator whether this Ref can reference stale state. This should be set during task processing
+	// where we can validate the task that embeds this reference against shard clock.
+	TaskID int64
 }
 
 // StateMachinePath gets the state machine path for from this reference.
