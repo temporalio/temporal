@@ -46,6 +46,7 @@ const (
 	instance       = "instance"
 	namespace      = "namespace"
 	namespaceState = "namespace_state"
+	sourceCluster  = "source_cluster"
 	targetCluster  = "target_cluster"
 	fromCluster    = "from_cluster"
 	toCluster      = "to_cluster"
@@ -134,6 +135,14 @@ func TaskQueueUnknownTag() Tag {
 // InstanceTag returns a new instance tag
 func InstanceTag(value string) Tag {
 	return &tagImpl{key: instance, value: value}
+}
+
+// SourceClusterTag returns a new source cluster tag.
+func SourceClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: sourceCluster, value: value}
 }
 
 // TargetClusterTag returns a new target cluster tag.

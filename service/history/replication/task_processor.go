@@ -255,7 +255,9 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 			now := p.shard.GetTimeSource().Now()
 			metrics.ReplicationLatency.With(p.metricsHandler).Record(
 				now.Sub(taskCreationTime.AsTime()),
-				metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
+				metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+				metrics.SourceClusterTag(p.sourceCluster),
+			)
 		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
 			return err
