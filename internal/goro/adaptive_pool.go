@@ -26,6 +26,8 @@ import (
 	"math/rand"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 )
 
 type (
@@ -33,28 +35,33 @@ type (
 	// The size of the pool starts with minWorkers but can grow if needed, up to maxWorkers,
 	// and can shrink back down to minWorkers.
 	AdaptivePool struct {
+		ts           clock.TimeSource
 		minWorkers   int
 		maxWorkers   int
 		targetDelay  time.Duration
 		shrinkFactor float64
 
 		ch      chan func()
+		stopCh  chan struct{}
 		workers atomic.Int64
 	}
 )
 
 func NewAdaptivePool(
+	ts clock.TimeSource,
 	minWorkers int,
 	maxWorkers int,
 	targetDelay time.Duration,
 	shrinkFactor float64,
 ) *AdaptivePool {
 	p := &AdaptivePool{
+		ts:           ts,
 		minWorkers:   minWorkers,
 		maxWorkers:   maxWorkers,
 		targetDelay:  targetDelay,
 		shrinkFactor: shrinkFactor,
 		ch:           make(chan func()),
+		stopCh:       make(chan struct{}),
 	}
 	for i := 0; i < minWorkers; i++ {
 		go p.work()
@@ -65,7 +72,7 @@ func NewAdaptivePool(
 
 // Stops workers. Note that this does not wait for workers to exit.
 func (p *AdaptivePool) Stop() {
-	close(p.ch)
+	close(p.stopCh)
 }
 
 // Do calls f() on a worker. If the call can't be started within targetDelay, it adds another
@@ -74,12 +81,14 @@ func (p *AdaptivePool) Do(f func()) {
 	have := p.workers.Load()
 	if have < int64(p.maxWorkers) {
 		// we might want to add a worker, send with timeout
-		timeout := time.NewTimer(p.targetDelay)
+		timech, timer := p.ts.NewTimer(p.targetDelay)
 		select {
-		case p.ch <- f:
-			timeout.Stop()
+		case <-p.stopCh:
 			return
-		case <-timeout.C:
+		case p.ch <- f:
+			timer.Stop()
+			return
+		case <-timech:
 		}
 
 		if p.workers.CompareAndSwap(have, have+1) {
@@ -88,7 +97,10 @@ func (p *AdaptivePool) Do(f func()) {
 	}
 
 	// blocking send
-	p.ch <- f
+	select {
+	case p.ch <- f:
+	case <-p.stopCh:
+	}
 }
 
 func (p *AdaptivePool) work() {
@@ -97,15 +109,15 @@ func (p *AdaptivePool) work() {
 		if have > int64(p.minWorkers) {
 			// we might want to exit, receive with timeout
 			// jitter this so we shrink slower than we grow
-			timeout := time.NewTimer(time.Duration(float64(p.targetDelay) * (1 + p.shrinkFactor*rand.Float64())))
+			timech, timer := p.ts.NewTimer(time.Duration(float64(p.targetDelay) * p.shrinkFactor * rand.Float64()))
 			select {
-			case f, ok := <-p.ch:
-				if !ok {
-					return
-				}
+			case <-p.stopCh:
+				return
+			case f := <-p.ch:
+				timer.Stop()
 				f()
 				continue
-			case <-timeout.C:
+			case <-timech:
 			}
 			if p.workers.CompareAndSwap(have, have-1) {
 				return
@@ -113,10 +125,11 @@ func (p *AdaptivePool) work() {
 		}
 
 		// blocking receive
-		f, ok := <-p.ch
-		if !ok {
+		select {
+		case <-p.stopCh:
 			return
+		case f := <-p.ch:
+			f()
 		}
-		f()
 	}
 }

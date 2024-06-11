@@ -27,97 +27,146 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/internal/goro"
 )
 
+func block()   { <-make(chan struct{}) }
+func nothing() {}
+
 func TestAdaptivePool_CallsF(t *testing.T) {
-	p := goro.NewAdaptivePool(1, 10, time.Millisecond, 10)
+	t.Parallel()
+	ts := clock.NewEventTimeSource()
+
+	p := goro.NewAdaptivePool(ts, 1, 10, 10*time.Millisecond, 10)
 	defer p.Stop()
 
-	start := time.Now()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	p.Do(wg.Done)
 	wg.Wait()
-	assert.Less(t, time.Since(start), time.Second)
 }
 
 func TestAdaptivePool_Grows(t *testing.T) {
-	p := goro.NewAdaptivePool(1, 10, time.Millisecond, 10)
+	t.Parallel()
+	ts := clock.NewEventTimeSource()
+
+	p := goro.NewAdaptivePool(ts, 5, 10, 10*time.Millisecond, 10)
 	defer p.Stop()
 
-	start := time.Now()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	// occupy five workers for 1s
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() { time.Sleep(time.Second) })
-	// sixth call will start new worker and complete in < 1s
-	p.Do(wg.Done)
-	wg.Wait()
+	// occupy five workers
+	p.Do(block)
+	p.Do(block)
+	p.Do(block)
+	p.Do(block)
+	p.Do(block)
 
-	assert.Less(t, time.Since(start), time.Second)
-}
-
-func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
-	p := goro.NewAdaptivePool(1, 5, time.Millisecond, 10)
-	defer p.Stop()
-
-	start := time.Now()
-	interruptCh := make(chan struct{})
+	// sixth call will still start new worker after delay
 	doneCh := make(chan struct{})
-	// occupy five workers, one is interruptible
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() { interruptCh <- struct{}{} })
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() { time.Sleep(time.Second) })
-	// sixth call will block
 	go func() {
-		p.Do(func() { time.Sleep(time.Second) })
+		p.Do(block)
 		doneCh <- struct{}{}
 	}()
 
-	// wait for done
+	// wait for goroutine to block in Do
+	time.Sleep(10 * time.Millisecond)
+
 	select {
 	case <-doneCh:
-		t.Error("should not be done yet")
+		t.Error("should be blocked")
 		return
-	case <-time.After(10 * time.Millisecond):
+	default:
 	}
-	// unblock fifth, allow sixth to run
+
+	ts.Advance(15 * time.Millisecond)
+	<-doneCh
+}
+
+func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
+	t.Parallel()
+	ts := clock.NewEventTimeSource()
+
+	p := goro.NewAdaptivePool(ts, 5, 5, 10*time.Millisecond, 10)
+	defer p.Stop()
+
+	// occupy five workers, one is interruptible
+	p.Do(block)
+	p.Do(block)
+	interruptCh := make(chan struct{})
+	p.Do(func() { interruptCh <- struct{}{} })
+	p.Do(block)
+	p.Do(block)
+
+	// sixth call will block
+	doneCh := make(chan struct{})
+	go func() {
+		p.Do(block)
+		doneCh <- struct{}{}
+	}()
+
+	// wait for goroutine to block in Do
+	time.Sleep(10 * time.Millisecond)
+
+	select {
+	case <-doneCh:
+		t.Error("should be blocked")
+		return
+	default:
+	}
+
+	// unblock fifth, which will allow sixth to run immediately
 	<-interruptCh
 	// wait for sixth
 	<-doneCh
-
-	assert.Less(t, time.Since(start), time.Second)
 }
 
 func TestAdaptivePool_ShrinksAgain(t *testing.T) {
-	p := goro.NewAdaptivePool(1, 5, 10*time.Millisecond, 1)
+	t.Parallel()
+	ts := clock.NewEventTimeSource()
+
+	p := goro.NewAdaptivePool(ts, 1, 5, 10*time.Millisecond, 1)
 	defer p.Stop()
 
 	// make 3 calls to force it to grow to 3 workers
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() { time.Sleep(time.Second) })
-	p.Do(func() {})
+	p.Do(block)
 
-	// now there are 3 workers with one free, another call or two should start immediately
-	start := time.Now()
-	p.Do(func() {})
-	p.Do(func() {})
-	assert.Less(t, time.Since(start), 10*time.Millisecond)
+	go p.Do(block)
+	time.Sleep(10 * time.Millisecond) // wait until blocked
+	ts.Advance(10 * time.Millisecond) // allow it to start another
+	time.Sleep(10 * time.Millisecond) // wait for it to start + call blck
 
-	// after 10ms, it should shrink back to 2
-	time.Sleep(20 * time.Millisecond)
+	go p.Do(nothing)
+	time.Sleep(10 * time.Millisecond) // wait until blocked
+	ts.Advance(10 * time.Millisecond) // allow it to start another
+	time.Sleep(10 * time.Millisecond) // wait for it to start + call nothing + return
 
-	// next call will wait for targetDelay
-	start = time.Now()
-	p.Do(func() {})
-	assert.Greater(t, time.Since(start), 10*time.Millisecond)
+	// now there are 3 workers with one free, another call or three should start immediately
+	p.Do(nothing)
+	p.Do(nothing)
+	p.Do(nothing)
+
+	// after no more than 10ms, the free worker should exit
+	time.Sleep(10 * time.Millisecond) // wait until blocked
+	ts.Advance(20 * time.Millisecond) // let timer fire
+	time.Sleep(10 * time.Millisecond) // wait until exits
+
+	// next call will have to wait for targetDelay
+	doneCh := make(chan struct{})
+	go func() {
+		p.Do(block)
+		doneCh <- struct{}{}
+	}()
+
+	// wait for goroutine to block in Do
+	time.Sleep(10 * time.Millisecond)
+
+	select {
+	case <-doneCh:
+		t.Error("should be blocked")
+		return
+	default:
+	}
+
+	ts.Advance(10 * time.Millisecond)
+	<-doneCh
 }
