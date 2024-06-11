@@ -61,7 +61,7 @@ type ClientProvider func(ctx context.Context, key queues.NamespaceIDAndDestinati
 // any other error to indicate lookup has failed.
 type EndpointChecker func(ctx context.Context, namespaceName, endpointName string) error
 
-type ActiveExecutorOptions struct {
+type TaskExecutorOptions struct {
 	fx.In
 
 	Config                 *Config
@@ -74,26 +74,24 @@ type ActiveExecutorOptions struct {
 
 func RegisterExecutor(
 	registry *hsm.Registry,
-	options ActiveExecutorOptions,
+	options TaskExecutorOptions,
 ) error {
-	exec := activeExecutor{options}
+	exec := taskExecutor{options}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,
 		exec.executeInvocationTask,
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterTimerExecutors(
+	if err := hsm.RegisterTimerExecutor(
 		registry,
 		exec.executeBackoffTask,
-		nil,
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterTimerExecutors(
+	if err := hsm.RegisterTimerExecutor(
 		registry,
 		exec.executeTimeoutTask,
-		nil,
 	); err != nil {
 		return err
 	}
@@ -103,18 +101,17 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterTimerExecutors(
+	return hsm.RegisterTimerExecutor(
 		registry,
 		exec.executeCancelationBackoffTask,
-		nil,
 	)
 }
 
-type activeExecutor struct {
-	ActiveExecutorOptions
+type taskExecutor struct {
+	TaskExecutorOptions
 }
 
-func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
+func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
@@ -247,7 +244,7 @@ type startArgs struct {
 	namespaceFailoverVersion int64
 }
 
-func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
+func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
@@ -274,7 +271,7 @@ func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environme
 	return
 }
 
-func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
+func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
@@ -312,7 +309,7 @@ func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref
 	})
 }
 
-func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
+func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
 		return hsm.TransitionOutput{}, err
@@ -376,7 +373,7 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 	})
 }
 
-func (e activeExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
+func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
@@ -387,7 +384,7 @@ func (e activeExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, 
 	})
 }
 
-func (e activeExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
+func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
 	if err := task.Validate(node); err != nil {
 		return err
 	}
@@ -426,7 +423,7 @@ func (e activeExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, 
 	})
 }
 
-func (e activeExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {
+func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
@@ -490,7 +487,7 @@ type cancelArgs struct {
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
 // given reference is pointing to.
-func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args cancelArgs, err error) {
+func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args cancelArgs, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
 		if err := n.CheckRunning(); err != nil {
 			return err
@@ -511,7 +508,7 @@ func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Envi
 	return
 }
 
-func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
+func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
 		if err := n.CheckRunning(); err != nil {
 			return err
@@ -547,7 +544,7 @@ func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Envir
 	})
 }
 
-func (e activeExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
+func (e taskExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
