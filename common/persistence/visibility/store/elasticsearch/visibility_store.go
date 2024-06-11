@@ -236,8 +236,8 @@ func (s *VisibilityStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,
 ) error {
-	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc, err := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	visibilityTaskKey := GetVisibilityTaskKey(request.ShardID, request.TaskID)
+	doc, err := s.GenerateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 	if err != nil {
 		return err
 	}
@@ -249,8 +249,8 @@ func (s *VisibilityStore) RecordWorkflowExecutionClosed(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionClosedRequest,
 ) error {
-	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc, err := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	visibilityTaskKey := GetVisibilityTaskKey(request.ShardID, request.TaskID)
+	doc, err := s.GenerateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 	if err != nil {
 		return err
 	}
@@ -268,8 +268,8 @@ func (s *VisibilityStore) UpsertWorkflowExecution(
 	ctx context.Context,
 	request *store.InternalUpsertWorkflowExecutionRequest,
 ) error {
-	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc, err := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	visibilityTaskKey := GetVisibilityTaskKey(request.ShardID, request.TaskID)
+	doc, err := s.GenerateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 	if err != nil {
 		return err
 	}
@@ -281,7 +281,7 @@ func (s *VisibilityStore) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
-	docID := getDocID(request.WorkflowID, request.RunID)
+	docID := GetDocID(request.WorkflowID, request.RunID)
 
 	bulkDeleteRequest := &client.BulkableRequest{
 		Index:       s.index,
@@ -290,10 +290,10 @@ func (s *VisibilityStore) DeleteWorkflowExecution(
 		RequestType: client.BulkableRequestTypeDelete,
 	}
 
-	return s.addBulkRequestAndWait(ctx, bulkDeleteRequest, docID)
+	return s.AddBulkRequestAndWait(ctx, bulkDeleteRequest, docID)
 }
 
-func getDocID(workflowID string, runID string) string {
+func GetDocID(workflowID string, runID string) string {
 	// From Elasticsearch doc: _id is limited to 512 bytes in size and larger values will be rejected.
 	const maxDocIDLength = 512
 	// Generally runID is guid and this should never be the case.
@@ -311,7 +311,7 @@ func getDocID(workflowID string, runID string) string {
 	return workflowID + delimiter + runID
 }
 
-func getVisibilityTaskKey(shardID int32, taskID int64) string {
+func GetVisibilityTaskKey(shardID int32, taskID int64) string {
 	return strconv.FormatInt(int64(shardID), 10) + delimiter + strconv.FormatInt(taskID, 10)
 }
 
@@ -323,16 +323,16 @@ func (s *VisibilityStore) addBulkIndexRequestAndWait(
 ) error {
 	bulkIndexRequest := &client.BulkableRequest{
 		Index:       s.index,
-		ID:          getDocID(request.WorkflowID, request.RunID),
+		ID:          GetDocID(request.WorkflowID, request.RunID),
 		Version:     request.TaskID,
 		RequestType: client.BulkableRequestTypeIndex,
 		Doc:         esDoc,
 	}
 
-	return s.addBulkRequestAndWait(ctx, bulkIndexRequest, visibilityTaskKey)
+	return s.AddBulkRequestAndWait(ctx, bulkIndexRequest, visibilityTaskKey)
 }
 
-func (s *VisibilityStore) addBulkRequestAndWait(
+func (s *VisibilityStore) AddBulkRequestAndWait(
 	_ context.Context,
 	bulkRequest *client.BulkableRequest,
 	visibilityTaskKey string,
@@ -551,7 +551,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*store.InternalGetWorkflowExecutionResponse, error) {
-	docID := getDocID(request.WorkflowID, request.RunID)
+	docID := GetDocID(request.WorkflowID, request.RunID)
 	result, err := s.esClient.Get(ctx, s.index, docID)
 	if err != nil {
 		return nil, convertElasticsearchClientError("GetWorkflowExecution failed", err)
@@ -882,7 +882,7 @@ func (s *VisibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 	return data, nil
 }
 
-func (s *VisibilityStore) generateESDoc(
+func (s *VisibilityStore) GenerateESDoc(
 	request *store.InternalVisibilityRequestBase,
 	visibilityTaskKey string,
 ) (map[string]interface{}, error) {
