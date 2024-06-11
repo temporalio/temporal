@@ -60,6 +60,21 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// CatIndices mocks base method.
+func (m *MockClient) CatIndices(ctx context.Context, target string) (v7.CatIndicesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CatIndices", ctx, target)
+	ret0, _ := ret[0].(v7.CatIndicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CatIndices indicates an expected call of CatIndices.
+func (mr *MockClientMockRecorder) CatIndices(ctx, target interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CatIndices", reflect.TypeOf((*MockClient)(nil).CatIndices), ctx, target)
+}
+
 // ClosePointInTime mocks base method.
 func (m *MockClient) ClosePointInTime(ctx context.Context, id string) (bool, error) {
 	m.ctrl.T.Helper()
@@ -334,6 +349,21 @@ func NewMockCLIClient(ctrl *gomock.Controller) *MockCLIClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockCLIClient) EXPECT() *MockCLIClientMockRecorder {
 	return m.recorder
+}
+
+// CatIndices mocks base method.
+func (m *MockCLIClient) CatIndices(ctx context.Context, target string) (v7.CatIndicesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CatIndices", ctx, target)
+	ret0, _ := ret[0].(v7.CatIndicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CatIndices indicates an expected call of CatIndices.
+func (mr *MockCLIClientMockRecorder) CatIndices(ctx, target interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CatIndices", reflect.TypeOf((*MockCLIClient)(nil).CatIndices), ctx, target)
 }
 
 // ClosePointInTime mocks base method.

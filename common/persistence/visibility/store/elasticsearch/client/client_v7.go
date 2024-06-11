@@ -348,8 +348,8 @@ func (c *clientImpl) IsNotFoundError(err error) bool {
 	return elastic.IsNotFound(err)
 }
 
-func (c *clientImpl) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
-	return c.esClient.CatIndices().Do(ctx)
+func (c *clientImpl) CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error) {
+	return c.esClient.CatIndices().Index(target).Do(ctx)
 }
 
 func (c *clientImpl) Bulk() BulkService {
