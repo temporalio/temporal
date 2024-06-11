@@ -336,8 +336,8 @@ func (c *clientImpl) GetDateFieldType() string {
 	return "date_nanos"
 }
 
-func (c *clientImpl) CreateIndex(ctx context.Context, index string) (bool, error) {
-	resp, err := c.esClient.CreateIndex(index).Do(ctx)
+func (c *clientImpl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
+	resp, err := c.esClient.CreateIndex(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err
 	}

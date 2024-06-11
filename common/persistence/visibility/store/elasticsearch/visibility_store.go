@@ -64,7 +64,7 @@ const (
 )
 
 type (
-	visibilityStore struct {
+	VisibilityStore struct {
 		esClient                       client.Client
 		index                          string
 		searchAttributesProvider       searchattribute.Provider
@@ -93,7 +93,7 @@ type (
 	}
 )
 
-var _ store.VisibilityStore = (*visibilityStore)(nil)
+var _ store.VisibilityStore = (*VisibilityStore)(nil)
 
 var (
 	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
@@ -140,7 +140,7 @@ func NewVisibilityStore(
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) (*visibilityStore, error) {
+) (*VisibilityStore, error) {
 	esHttpClient := cfg.GetHttpClient()
 	if esHttpClient == nil {
 		var err error
@@ -163,7 +163,7 @@ func NewVisibilityStore(
 		processor.Start()
 		processorAckTimeout = processorConfig.ESProcessorAckTimeout
 	}
-	return &visibilityStore{
+	return &VisibilityStore{
 		esClient:                       esClient,
 		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
@@ -176,21 +176,21 @@ func NewVisibilityStore(
 	}, nil
 }
 
-func (s *visibilityStore) Close() {
+func (s *VisibilityStore) Close() {
 	if s.processor != nil {
 		s.processor.Stop()
 	}
 }
 
-func (s *visibilityStore) GetName() string {
+func (s *VisibilityStore) GetName() string {
 	return PersistenceName
 }
 
-func (s *visibilityStore) GetIndexName() string {
+func (s *VisibilityStore) GetIndexName() string {
 	return s.index
 }
 
-func (s *visibilityStore) ValidateCustomSearchAttributes(
+func (s *VisibilityStore) ValidateCustomSearchAttributes(
 	searchAttributes map[string]any,
 ) (map[string]any, error) {
 	validatedSearchAttributes := make(map[string]any, len(searchAttributes))
@@ -228,7 +228,7 @@ func (s *visibilityStore) ValidateCustomSearchAttributes(
 	return validatedSearchAttributes, retError
 }
 
-func (s *visibilityStore) RecordWorkflowExecutionStarted(
+func (s *VisibilityStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,
 ) error {
@@ -241,7 +241,7 @@ func (s *visibilityStore) RecordWorkflowExecutionStarted(
 	return s.addBulkIndexRequestAndWait(ctx, request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-func (s *visibilityStore) RecordWorkflowExecutionClosed(
+func (s *VisibilityStore) RecordWorkflowExecutionClosed(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionClosedRequest,
 ) error {
@@ -260,7 +260,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(
 	return s.addBulkIndexRequestAndWait(ctx, request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-func (s *visibilityStore) UpsertWorkflowExecution(
+func (s *VisibilityStore) UpsertWorkflowExecution(
 	ctx context.Context,
 	request *store.InternalUpsertWorkflowExecutionRequest,
 ) error {
@@ -273,7 +273,7 @@ func (s *visibilityStore) UpsertWorkflowExecution(
 	return s.addBulkIndexRequestAndWait(ctx, request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-func (s *visibilityStore) DeleteWorkflowExecution(
+func (s *VisibilityStore) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
@@ -311,7 +311,7 @@ func getVisibilityTaskKey(shardID int32, taskID int64) string {
 	return strconv.FormatInt(int64(shardID), 10) + delimiter + strconv.FormatInt(taskID, 10)
 }
 
-func (s *visibilityStore) addBulkIndexRequestAndWait(
+func (s *VisibilityStore) addBulkIndexRequestAndWait(
 	ctx context.Context,
 	request *store.InternalVisibilityRequestBase,
 	esDoc map[string]interface{},
@@ -328,7 +328,7 @@ func (s *visibilityStore) addBulkIndexRequestAndWait(
 	return s.addBulkRequestAndWait(ctx, bulkIndexRequest, visibilityTaskKey)
 }
 
-func (s *visibilityStore) addBulkRequestAndWait(
+func (s *VisibilityStore) addBulkRequestAndWait(
 	_ context.Context,
 	bulkRequest *client.BulkableRequest,
 	visibilityTaskKey string,
@@ -365,7 +365,7 @@ func (s *visibilityStore) addBulkRequestAndWait(
 	return nil
 }
 
-func (s *visibilityStore) checkProcessor() {
+func (s *VisibilityStore) checkProcessor() {
 	if s.processor == nil {
 		// must be bug, check history setup
 		panic("Elasticsearch processor is nil")
@@ -376,7 +376,7 @@ func (s *visibilityStore) checkProcessor() {
 	}
 }
 
-func (s *visibilityStore) ListWorkflowExecutions(
+func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
@@ -393,7 +393,7 @@ func (s *visibilityStore) ListWorkflowExecutions(
 	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
 }
 
-func (s *visibilityStore) ScanWorkflowExecutions(
+func (s *VisibilityStore) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
@@ -404,7 +404,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 	return s.scanWorkflowExecutionsWithScroll(ctx, request)
 }
 
-func (s *visibilityStore) scanWorkflowExecutionsWithScroll(
+func (s *VisibilityStore) scanWorkflowExecutionsWithScroll(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
@@ -442,7 +442,7 @@ func (s *visibilityStore) scanWorkflowExecutionsWithScroll(
 	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
 }
 
-func (s *visibilityStore) scanWorkflowExecutionsWithPit(
+func (s *VisibilityStore) scanWorkflowExecutionsWithPit(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
@@ -478,7 +478,7 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(
 	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
 }
 
-func (s *visibilityStore) CountWorkflowExecutions(
+func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
@@ -500,7 +500,7 @@ func (s *visibilityStore) CountWorkflowExecutions(
 	return response, nil
 }
 
-func (s *visibilityStore) countGroupByWorkflowExecutions(
+func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
 	queryParams *query.QueryParams,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
@@ -543,7 +543,7 @@ func (s *visibilityStore) countGroupByWorkflowExecutions(
 	return s.parseCountGroupByResponse(esResponse, groupByFields)
 }
 
-func (s *visibilityStore) GetWorkflowExecution(
+func (s *VisibilityStore) GetWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*store.InternalGetWorkflowExecutionResponse, error) {
@@ -576,7 +576,7 @@ func (s *visibilityStore) GetWorkflowExecution(
 	}, nil
 }
 
-func (s *visibilityStore) buildSearchParameters(
+func (s *VisibilityStore) buildSearchParameters(
 	request *manager.ListWorkflowExecutionsRequest,
 	boolQuery *elastic.BoolQuery,
 	overStartTime bool,
@@ -627,7 +627,7 @@ func (s *visibilityStore) buildSearchParameters(
 	return params, nil
 }
 
-func (s *visibilityStore) buildSearchParametersV2(
+func (s *VisibilityStore) buildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 ) (*client.SearchParameters, error) {
@@ -682,7 +682,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 	return searchParams, nil
 }
 
-func (s *visibilityStore) processPageToken(
+func (s *VisibilityStore) processPageToken(
 	params *client.SearchParameters,
 	pageToken *visibilityPageToken,
 	namespaceName namespace.Name,
@@ -743,7 +743,7 @@ func (s *visibilityStore) processPageToken(
 	return nil
 }
 
-func (s *visibilityStore) convertQuery(
+func (s *VisibilityStore) convertQuery(
 	namespace namespace.Name,
 	namespaceID namespace.ID,
 	requestQueryStr string,
@@ -785,7 +785,7 @@ func (s *visibilityStore) convertQuery(
 	return queryParams, nil
 }
 
-func (s *visibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
+func (s *VisibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	// custom order is not supported by Scan API
 	if len(fieldSorts) > 0 {
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
@@ -794,7 +794,7 @@ func (s *visibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]ela
 	return docSorter, nil
 }
 
-func (s *visibilityStore) getListFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
+func (s *VisibilityStore) getListFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	if len(fieldSorts) == 0 {
 		return defaultSorter, nil
 	}
@@ -808,7 +808,7 @@ func (s *visibilityStore) getListFieldSorter(fieldSorts []elastic.Sorter) ([]ela
 	return res, nil
 }
 
-func (s *visibilityStore) getListWorkflowExecutionsResponse(
+func (s *VisibilityStore) getListWorkflowExecutionsResponse(
 	searchResult *elastic.SearchResult,
 	namespace namespace.Name,
 	pageSize int,
@@ -850,7 +850,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	return response, nil
 }
 
-func (s *visibilityStore) deserializePageToken(data []byte) (*visibilityPageToken, error) {
+func (s *VisibilityStore) deserializePageToken(data []byte) (*visibilityPageToken, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -866,7 +866,7 @@ func (s *visibilityStore) deserializePageToken(data []byte) (*visibilityPageToke
 	return token, nil
 }
 
-func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte, error) {
+func (s *VisibilityStore) serializePageToken(token *visibilityPageToken) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -878,7 +878,7 @@ func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 	return data, nil
 }
 
-func (s *visibilityStore) generateESDoc(
+func (s *VisibilityStore) generateESDoc(
 	request *store.InternalVisibilityRequestBase,
 	visibilityTaskKey string,
 ) (map[string]interface{}, error) {
@@ -940,7 +940,7 @@ func (s *visibilityStore) generateESDoc(
 }
 
 //nolint:revive // cyclomatic complexity
-func (s *visibilityStore) parseESDoc(
+func (s *VisibilityStore) parseESDoc(
 	docID string,
 	docSource json.RawMessage,
 	saTypeMap searchattribute.NameTypeMap,
@@ -1098,7 +1098,7 @@ func (s *visibilityStore) parseESDoc(
 // This function flattens the response into rows.
 //
 //nolint:revive // cognitive complexity 27 (> max enabled 25)
-func (s *visibilityStore) parseCountGroupByResponse(
+func (s *VisibilityStore) parseCountGroupByResponse(
 	searchResult *elastic.SearchResult,
 	groupByFields []string,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
