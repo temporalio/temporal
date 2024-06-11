@@ -528,17 +528,6 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_not_found"})
 
-	// Request fails if the request ID is invalid.
-	invalidToken := common.CloneProto(completionToken)
-	invalidToken.RequestId = "invalid"
-	callbackToken, err = gen.Tokenize(invalidToken)
-	s.NoError(err)
-
-	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
-	s.Equal(http.StatusNotFound, res.StatusCode)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_not_found"})
-
 	// Send a valid - successful completion request.
 	completion, err = nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: commonnexus.PayloadSerializer,

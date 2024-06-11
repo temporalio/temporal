@@ -173,8 +173,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,
 		Ref:         smRef,
-		// TODO(bergundy): Don't put request ID on the token once we support versioned transition.
-		RequestId: args.requestID,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
