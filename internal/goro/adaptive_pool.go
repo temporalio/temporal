@@ -71,12 +71,15 @@ func NewAdaptivePool(
 }
 
 // Stops workers. Note that this does not wait for workers to exit.
+// When Stop is called, concurrent calls to Do may or may not call their function, and future
+// calls definitely won't.
 func (p *AdaptivePool) Stop() {
 	close(p.stopCh)
 }
 
-// Do calls f() on a worker. If the call can't be started within targetDelay, it adds another
-// worker.
+// Do calls f() on a worker goroutine. If the call can't be started within targetDelay, it adds
+// another worker. If Stop is called concurrently, Do may or may not call f. If Stop has been
+// called already, Do does nothing.
 func (p *AdaptivePool) Do(f func()) {
 	have := p.workers.Load()
 	if have < int64(p.maxWorkers) {
@@ -84,6 +87,7 @@ func (p *AdaptivePool) Do(f func()) {
 		timech, timer := p.ts.NewTimer(p.targetDelay)
 		select {
 		case <-p.stopCh:
+			timer.Stop()
 			return
 		case p.ch <- f:
 			timer.Stop()
@@ -112,6 +116,7 @@ func (p *AdaptivePool) work() {
 			timech, timer := p.ts.NewTimer(time.Duration(float64(p.targetDelay) * p.shrinkFactor * rand.Float64()))
 			select {
 			case <-p.stopCh:
+				timer.Stop()
 				return
 			case f := <-p.ch:
 				timer.Stop()
