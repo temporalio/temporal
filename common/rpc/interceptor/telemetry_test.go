@@ -186,7 +186,7 @@ func TestHandleError(t *testing.T) {
 				times = 1
 			}
 			metricsHandler.EXPECT().Counter(metrics.ServiceFailures.Name()).Return(metrics.NoopCounterMetricFunc).Times(times)
-			telemetry.handleError(nil, metricsHandler, []tag.Tag{}, tt.err)
+			telemetry.HandleError(nil, metricsHandler, []tag.Tag{}, tt.err)
 		})
 	}
 }

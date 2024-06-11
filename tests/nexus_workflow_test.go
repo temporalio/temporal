@@ -467,7 +467,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	})
 	s.Greater(startedEventIdx, 0)
 
-	// Completion request fails if the result payload is too large
+	// Completion request fails if the result payload is too large.
 	largeCompletion, err := nexus.NewOperationCompletionSuccessful(
 		// Use -10 to avoid hitting MaxNexusAPIRequestBodyBytes. Actual payload will still exceed limit because of
 		// additional Content headers. See common/rpc/grpc.go:66
@@ -475,7 +475,6 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		nexus.OperationCompletionSuccesfulOptions{Serializer: commonnexus.PayloadSerializer},
 	)
 	s.NoError(err)
-
 	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, largeCompletion, callbackToken)
 	s.Equal(http.StatusBadRequest, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
@@ -490,6 +489,16 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	s.Equal(http.StatusOK, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "success"})
+
+	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
+	s.Condition(func() bool {
+		for _, m := range snap["service_requests"] {
+			if opTag, ok := m.Tags["operation"]; ok && opTag == "CompleteNexusOperation" {
+				return true
+			}
+		}
+		return false
+	})
 
 	// Resend the request and verify we get a not found error since the operation has already completed.
 	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
@@ -748,6 +757,27 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionErrors() {
 		require.Equal(t, 0, len(snap["nexus_completion_request_preprocess_errors"]))
 		require.Equal(t, 1, len(snap["nexus_completion_requests"]))
 		require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_bad_request"})
+	})
+
+	s.T().Run("InvalidClientVersion", func(t *testing.T) {
+		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
+		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
+		req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
+		require.NoError(t, err)
+		req.Header.Set("User-Agent", "Nexus-go-sdk/v99.0.0")
+
+		res, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_, err = io.ReadAll(res.Body)
+		require.NoError(t, err)
+		defer res.Body.Close()
+
+		snap := capture.Snapshot()
+		require.Equal(t, http.StatusBadRequest, res.StatusCode)
+		require.Equal(t, 1, len(snap["nexus_completion_requests"]))
+		require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "unsupported_client"})
 	})
 }
 

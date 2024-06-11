@@ -107,8 +107,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				require.NoError(t, retErr)
 				require.Equal(t, "input", result.Successful)
-				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartOperation", "sync_success")
-				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartOperation", "request_forwarded")
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "sync_success")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "request_forwarded")
 			},
 		},
 		{
@@ -139,8 +139,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				err := json.Unmarshal(operationError.Failure.Details, &details)
 				require.NoError(t, err)
 				require.Equal(t, "details", details)
-				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartOperation", "operation_error")
-				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartOperation", "forwarded_request_error")
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "operation_error")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
 			},
 		},
 		{
@@ -158,8 +158,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				require.ErrorAs(t, retErr, &unexpectedError)
 				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
-				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartOperation", "handler_error")
-				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartOperation", "forwarded_request_error")
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
 			},
 		},
 		{
@@ -178,7 +178,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				require.ErrorAs(t, retErr, &unexpectedError)
 				require.Equal(t, http.StatusServiceUnavailable, unexpectedError.Response.StatusCode)
 				require.Equal(t, "cluster inactive", unexpectedError.Failure.Message)
-				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartOperation", "namespace_inactive_forwarding_disabled")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
 	}
@@ -240,8 +240,8 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			},
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				require.NoError(t, retErr)
-				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelOperation", "success")
-				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelOperation", "request_forwarded")
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "success")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "request_forwarded")
 			},
 		},
 		{
@@ -259,8 +259,8 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				require.ErrorAs(t, retErr, &unexpectedError)
 				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
-				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelOperation", "handler_error")
-				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelOperation", "forwarded_request_error")
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
 			},
 		},
 		{
@@ -279,7 +279,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				require.ErrorAs(t, retErr, &unexpectedError)
 				require.Equal(t, http.StatusServiceUnavailable, unexpectedError.Response.StatusCode)
 				require.Equal(t, "cluster inactive", unexpectedError.Failure.Message)
-				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelOperation", "namespace_inactive_forwarding_disabled")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
 	}

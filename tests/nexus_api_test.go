@@ -214,15 +214,25 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
 		require.Equal(t, 1, len(snap["nexus_latency"]))
-		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
 		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+
+		// Ensure that StartOperation request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "StartNexusOperation" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	for _, tc := range testCases {
@@ -256,7 +266,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	snap := capture.Snapshot()
 
 	s.Equal(1, len(snap["nexus_requests"]))
-	s.Equal(map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, snap["nexus_requests"][0].Tags)
+	s.Equal(map[string]string{"namespace": namespace, "method": "StartNexusOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, snap["nexus_requests"][0].Tags)
 	s.Equal(int64(1), snap["nexus_requests"][0].Value)
 }
 
@@ -369,7 +379,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": "unauthorized"})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": "unauthorized"})
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 	}
 
@@ -642,15 +652,25 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
 		require.Equal(t, 1, len(snap["nexus_latency"]))
-		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
 		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+
+		// Ensure that CancelOperation request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "CancelNexusOperation" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	for _, tc := range testCases {
