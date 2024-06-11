@@ -37,6 +37,23 @@ import (
 )
 
 var (
+	// keys for dynamic config itself
+	DynamicConfigSubscriptionCallback = NewGlobalTypedSetting(
+		"dynamicconfig.subscriptionCallback",
+		subscriptionCallbackSettings{
+			MinWorkers:   10,
+			MaxWorkers:   100,
+			TargetDelay:  10 * time.Millisecond,
+			ShrinkFactor: 1000, // 10 seconds
+		},
+		`Settings for dynamic config subscription dispatch. Requires server restart.`,
+	)
+	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
+		"dynamicconfig.subscriptionPollInterval",
+		time.Minute,
+		`Poll interval for emulating subscriptions on non-subscribable Client.`,
+	)
+
 	// keys for admin
 
 	AdminEnableListHistoryTasks = NewGlobalBoolSetting(

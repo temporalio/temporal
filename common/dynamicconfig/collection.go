@@ -39,6 +39,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -56,19 +57,26 @@ type (
 		errCount int64
 
 		cancelClientSubscription func()
-		poller                   goro.Group
 
 		subscriptionLock sync.Mutex
 		subscriptions    map[GenericSetting]map[int]any // final "any" is *subscription[T]
 		subscriptionIdx  int
 
-		callbackCh chan func()
+		poller       goro.Group
+		callbackPool *goro.AdaptivePool
 	}
 
 	subscription[T any] struct {
 		prec []Constraints // constant
 		f    func(T)       // constant
 		prev T             // protected by subscriptionLock in Collection
+	}
+
+	subscriptionCallbackSettings struct {
+		MinWorkers   int
+		MaxWorkers   int
+		TargetDelay  time.Duration
+		ShrinkFactor float64
 	}
 
 	// These function types follow a similar pattern:
@@ -91,9 +99,6 @@ type (
 
 const (
 	errCountLogThreshold = 1000
-
-	// interval to poll for changes when client does not support subscriptions
-	pollInterval = time.Minute
 )
 
 var (
@@ -108,16 +113,13 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 		logger:        logger,
 		errCount:      -1,
 		subscriptions: make(map[GenericSetting]map[int]any),
-		callbackCh:    make(chan func()),
 	}
+	s := DynamicConfigSubscriptionCallback.Get(c)()
+	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
 	if subcli, ok := client.(SubscribableClient); ok {
 		c.cancelClientSubscription = subcli.Subscribe(c.keysChanged)
 	} else {
 		c.poller.Go(c.pollForChanges)
-	}
-	// FIXME: 10?
-	for i := 0; i < 10; i++ {
-		go c.callCallbacks()
 	}
 	return c
 }
@@ -130,18 +132,12 @@ func (c *Collection) Stop() {
 	}
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	close(c.callbackCh)
-}
-
-func (c *Collection) callCallbacks() {
-	for f := range c.callbackCh {
-		f()
-	}
+	c.callbackPool.Stop()
 }
 
 func (c *Collection) pollForChanges(ctx context.Context) error {
 	for ctx.Err() == nil {
-		util.InterruptibleSleep(ctx, pollInterval)
+		util.InterruptibleSleep(ctx, DynamicConfigSubscriptionPollInterval.Get(c)())
 		c.pollOnce(ctx)
 	}
 	return ctx.Err()
@@ -297,7 +293,7 @@ func dispatchUpdate[T any](
 	// non-comparable, but it's not worth it.
 	if !reflect.DeepEqual(sub.prev, newVal) {
 		sub.prev = newVal
-		c.callbackCh <- func() { sub.f(newVal) }
+		c.callbackPool.Do(func() { sub.f(newVal) })
 	}
 }
 
