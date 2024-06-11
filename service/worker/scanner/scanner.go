@@ -68,7 +68,7 @@ type (
 		Persistence *config.Persistence
 		// TaskQueueScannerEnabled indicates if taskQueue scanner should be started as part of scanner
 		TaskQueueScannerEnabled dynamicconfig.BoolPropertyFn
-		// BuildIdScavengerEnabled indicates if the build id scavenger should be started as part of scanner
+		// BuildIdScavengerEnabled indicates if the build ID scavenger should be started as part of scanner
 		BuildIdScavengerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
@@ -90,10 +90,10 @@ type (
 		// ExecutionScannerHistoryEventIdValidator indicates if the execution scavenger to validate history event id.
 		ExecutionScannerHistoryEventIdValidator dynamicconfig.BoolPropertyFn
 
-		// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its
+		// RemovableBuildIdDurationSinceDefault is the minimum duration since a build ID was last default in its
 		// containing set for it to be considered for removal.
 		RemovableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
-		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
+		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
 		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
 	}
 

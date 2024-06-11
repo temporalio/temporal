@@ -30,6 +30,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"text/template"
 	_ "time/tzdata" // embed tzdata as a fallback
 
 	"github.com/urfave/cli/v2"
@@ -98,6 +99,33 @@ func buildCLI() *cli.App {
 	}
 
 	app.Commands = []*cli.Command{
+		{
+			Name:      "validate-dynamic-config",
+			Usage:     "Validate a dynamic config file[s] with known keys and types",
+			ArgsUsage: "<file> ...",
+			Action: func(c *cli.Context) error {
+				total := 0
+				for _, fileName := range c.Args().Slice() {
+					contents, err := os.ReadFile(fileName)
+					if err != nil {
+						return err
+					}
+					result := dynamicconfig.ValidateFile(contents)
+					total += len(result.Errors)
+					fmt.Println(fileName)
+					t := template.Must(template.New("").Parse(
+						"{{range .Errors}}  error: {{.}}\n" +
+							"{{end}}{{range .Warnings}}  warning: {{.}}\n" +
+							"{{end}}",
+					))
+					_ = t.Execute(os.Stdout, result)
+				}
+				if total > 0 {
+					return fmt.Errorf("%d total errors", total)
+				}
+				return nil
+			},
+		},
 		{
 			Name:      "start",
 			Usage:     "Start Temporal server",

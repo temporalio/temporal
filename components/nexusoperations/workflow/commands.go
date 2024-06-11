@@ -23,6 +23,7 @@
 package workflow
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -31,26 +32,29 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 type commandHandler struct {
-	config *nexusoperations.Config
+	config          *nexusoperations.Config
+	endpointChecker nexusoperations.EndpointChecker
 }
 
 func (ch *commandHandler) HandleScheduleCommand(
+	ctx context.Context,
 	ms workflow.MutableState,
 	validator workflow.CommandValidator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
 ) error {
 	nsName := ms.GetNamespaceEntry().Name().String()
-	if !ch.config.Enabled(nsName) {
+	if !ch.config.Enabled() {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
-			Message: "Nexus operations disabled for this workflow's namespace",
+			Message: "Nexus operations disabled",
 		}
 	}
 
@@ -62,7 +66,25 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
-	// TODO: validate service is in outgoing service registry when we have this information in the namespace entry.
+	if err := ch.endpointChecker(ctx, nsName, attrs.Endpoint); err != nil {
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			return workflow.FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
+			}
+		}
+		return err
+	}
+
+	if len(attrs.Service) > ch.config.MaxServiceNameLength(nsName) {
+		return workflow.FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.Service exceeds length limit of %d",
+				ch.config.MaxServiceNameLength(nsName),
+			),
+		}
+	}
 
 	if len(attrs.Operation) > ch.config.MaxOperationNameLength(nsName) {
 		return workflow.FailWorkflowTaskError{
@@ -102,6 +124,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:                     attrs.Endpoint,
 				Service:                      attrs.Service,
 				Operation:                    attrs.Operation,
 				Input:                        attrs.Input,
@@ -111,6 +134,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			},
 		}
+		he.UserMetadata = command.UserMetadata
 	})
 	token, err := hsm.GenerateEventLoadToken(event)
 	if err != nil {
@@ -121,16 +145,16 @@ func (ch *commandHandler) HandleScheduleCommand(
 }
 
 func (ch *commandHandler) HandleCancelCommand(
+	ctx context.Context,
 	ms workflow.MutableState,
 	validator workflow.CommandValidator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
 ) error {
-	nsName := ms.GetNamespaceEntry().Name().String()
-	if !ch.config.Enabled(nsName) {
+	if !ch.config.Enabled() {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
-			Message: "Nexus operations disabled for this workflow's namespace",
+			Message: "Nexus operations disabled",
 		}
 	}
 
@@ -175,6 +199,7 @@ func (ch *commandHandler) HandleCancelCommand(
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			},
 		}
+		he.UserMetadata = command.UserMetadata
 	})
 	return coll.Transition(nodeID, func(o nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		output, err := o.Cancel(node, event.EventTime.AsTime())
@@ -189,8 +214,8 @@ func (ch *commandHandler) HandleCancelCommand(
 	})
 }
 
-func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, config *nexusoperations.Config) error {
-	h := commandHandler{config: config}
+func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointChecker nexusoperations.EndpointChecker, config *nexusoperations.Config) error {
+	h := commandHandler{config: config, endpointChecker: endpointChecker}
 	if err := reg.Register(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, h.HandleScheduleCommand); err != nil {
 		return err
 	}

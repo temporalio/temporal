@@ -34,6 +34,8 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -50,7 +52,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -106,6 +107,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
+	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -124,11 +126,10 @@ var Module = fx.Options(
 	fx.Invoke(RegisterOpenAPIHTTPHandler),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
-	fx.Provide(IncomingServiceClientProvider),
-	fx.Provide(IncomingServiceRegistryProvider),
-	fx.Provide(OutgoingServiceRegistryProvider),
+	fx.Provide(NexusEndpointClientProvider),
+	fx.Provide(NexusEndpointRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Invoke(IncomingServiceRegistryLifetimeHooks),
+	fx.Invoke(EndpointRegistryLifetimeHooks),
 	nexusfrontend.Module,
 )
 
@@ -145,7 +146,6 @@ func NewServiceProvider(
 	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 	membershipMonitor membership.Monitor,
 ) *Service {
 	return NewService(
@@ -161,7 +161,6 @@ func NewServiceProvider(
 		logger,
 		grpcListener,
 		metricsHandler,
-		faultInjectionDataStoreFactory,
 		membershipMonitor,
 	)
 }
@@ -217,7 +216,7 @@ func GrpcServerOptionsProvider(
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
-	redirectionInterceptor *RedirectionInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
@@ -226,6 +225,7 @@ func GrpcServerOptionsProvider(
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
+	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	utf8Validator *utf8validator.Validator,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
@@ -255,8 +255,12 @@ func GrpcServerOptionsProvider(
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
-		// Service Error Interceptor should be the most outer interceptor on error handling
-		rpc.NewServiceErrorInterceptor(logger),
+		// Order or interceptors is important
+		// Mask error interceptor should be the most outer interceptor since it handle the errors format
+		// Service Error Interceptor should be the next most outer interceptor on error handling
+		maskInternalErrorDetailsInterceptor.Intercept,
+		rpc.ServiceErrorInterceptor,
+		rpc.NewFrontendServiceErrorInterceptor(logger),
 		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
@@ -333,9 +337,9 @@ func RedirectionInterceptorProvider(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	clusterMetadata cluster.Metadata,
-) *RedirectionInterceptor {
-	return NewRedirectionInterceptor(
-		configuration,
+) *interceptor.Redirection {
+	return interceptor.NewRedirection(
+		configuration.EnableNamespaceNotActiveAutoForwarding,
 		namespaceCache,
 		policy,
 		logger,
@@ -393,7 +397,18 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},
+		map[string]int{
+			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+		},
+	)
+}
+
+func MaskInternalErrorDetailsInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+) *interceptor.MaskInternalErrorDetailsInterceptor {
+	return interceptor.NewMaskInternalErrorDetailsInterceptor(
+		serviceConfig.MaskInternalErrorDetails, namespaceRegistry,
 	)
 }
 
@@ -519,7 +534,6 @@ func VisibilityManagerProvider(
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -528,7 +542,6 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esClient,
 		nil, // frontend visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
@@ -536,6 +549,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
+		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
@@ -569,9 +583,9 @@ func AdminHandlerProvider(
 	esClient esclient.Client,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
-	persistenceExecutionManager persistence.ExecutionManager,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	taskManager persistence.TaskManager,
+	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	clientFactory client.Factory,
@@ -599,6 +613,7 @@ func AdminHandlerProvider(
 		visibilityMgr,
 		logger,
 		taskManager,
+		persistenceExecutionManager,
 		clusterMetadataManager,
 		persistenceMetadataManager,
 		clientFactory,
@@ -615,7 +630,6 @@ func AdminHandlerProvider(
 		healthServer,
 		eventSerializer,
 		timeSource,
-		persistenceExecutionManager,
 		taskCategoryRegistry,
 	}
 	return NewAdminHandler(args)
@@ -634,8 +648,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
-	incomingServiceClient *NexusIncomingServiceClient,
-	outgoingServiceRegistry *nexus.OutgoingServiceRegistry,
+	nexusEndpointClient *NexusEndpointClient,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -650,8 +663,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
-		incomingServiceClient,
-		outgoingServiceRegistry,
+		nexusEndpointClient,
 	}
 	return NewOperatorHandlerImpl(args)
 }
@@ -690,7 +702,7 @@ func HandlerProvider(
 		visibilityMgr,
 		logger,
 		throttledLogger,
-		persistenceExecutionManager,
+		persistenceExecutionManager.GetName(),
 		clusterMetadataManager,
 		persistenceMetadataManager,
 		historyClient,
@@ -716,9 +728,13 @@ func RegisterNexusHTTPHandler(
 	serviceName primitives.ServiceName,
 	matchingClient resource.MatchingClient,
 	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
+	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
-	incomingServiceRegistry *nexus.IncomingServiceRegistry,
+	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
@@ -730,9 +746,13 @@ func RegisterNexusHTTPHandler(
 		serviceConfig,
 		matchingClient,
 		metricsHandler,
+		clusterMetadata,
+		clientCache,
 		namespaceRegistry,
-		incomingServiceRegistry,
+		endpointRegistry,
 		authInterceptor,
+		telemetryInterceptor,
+		redirectionInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceRateLimiterInterceptor,
 		namespaceCountLimiterInterceptor,
@@ -800,51 +820,40 @@ func HTTPAPIServerProvider(
 	)
 }
 
-func IncomingServiceClientProvider(
+func NexusEndpointClientProvider(
 	dc *dynamicconfig.Collection,
 	namespaceRegistry namespace.Registry,
 	matchingClient resource.MatchingClient,
-	incomingServiceManager persistence.NexusIncomingServiceManager,
+	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
-) *NexusIncomingServiceClient {
-	clientConfig := newNexusIncomingServiceClientConfig(dc)
-	return newNexusIncomingServiceClient(
+) *NexusEndpointClient {
+	clientConfig := newNexusEndpointClientConfig(dc)
+	return newNexusEndpointClient(
 		clientConfig,
 		namespaceRegistry,
 		matchingClient,
-		incomingServiceManager,
+		nexusEndpointManager,
 		logger,
 	)
 }
 
-func IncomingServiceRegistryProvider(
+func NexusEndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
-	incomingServiceManager persistence.NexusIncomingServiceManager,
+	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
-) *nexus.IncomingServiceRegistry {
-	registryConfig := nexus.NewIncomingServiceRegistryConfig(dc)
-	return nexus.NewIncomingServiceRegistry(
+) nexus.EndpointRegistry {
+	registryConfig := nexus.NewEndpointRegistryConfig(dc)
+	return nexus.NewEndpointRegistry(
 		registryConfig,
 		matchingClient,
-		incomingServiceManager,
+		nexusEndpointManager,
 		logger,
 	)
 }
 
-func IncomingServiceRegistryLifetimeHooks(lc fx.Lifecycle, registry *nexus.IncomingServiceRegistry) {
+func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegistry) {
 	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
-}
-
-func OutgoingServiceRegistryProvider(
-	metadataManager persistence.MetadataManager,
-	logger log.Logger,
-	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	dc *dynamicconfig.Collection,
-) *nexus.OutgoingServiceRegistry {
-	registryConfig := nexus.NewOutgoingServiceRegistryConfig(dc)
-	namespaceReplicator := namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger)
-	return nexus.NewOutgoingServiceRegistry(metadataManager, namespaceReplicator, registryConfig)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

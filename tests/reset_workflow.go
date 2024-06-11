@@ -42,6 +42,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -83,9 +84,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	isFirstTaskProcessed := false
 	isSecondTaskProcessed := false
 	var firstActivityCompletionEvent *historypb.HistoryEvent
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !isFirstTaskProcessed {
 			// Schedule 3 activities on first workflow task
 			isFirstTaskProcessed = true
@@ -113,7 +112,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 		} else if !isSecondTaskProcessed {
 			// Confirm one activity completion on second workflow task
 			isSecondTaskProcessed = true
-			for _, event := range history.Events[previousStartedEventID:] {
+			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
 					firstActivityCompletionEvent = event
 					return []*commandpb.Command{}, nil
@@ -133,8 +132,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	}
 
 	// activity handler
-	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -209,7 +207,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 	}
@@ -219,7 +217,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	}
@@ -229,7 +227,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_NONE,
 	}
@@ -239,7 +237,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 	}
@@ -249,7 +247,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	}
@@ -259,7 +257,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyNone() {
 	t := resetTest{
 		FunctionalSuite:     s,
-		tv:                  testvars.New(s.T().Name()),
+		tv:                  testvars.New(s.T()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:         enumspb.RESET_REAPPLY_TYPE_NONE,
 	}
@@ -337,8 +335,7 @@ func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueRespo
 
 }
 
-func (t *resetTest) wftHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
-
+func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	commands := []*commandpb.Command{}
 
 	// There's an initial empty WFT; then come `totalSignals` signals, followed by `totalUpdates` updates, each in
@@ -568,9 +565,7 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 	// workflow logic
 	resetRunID := ""
 	workflowComplete := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if len(resetRunID) == 0 {
 			signalRequest.RequestId = uuid.New()
 			_, err := s.engine.SignalWorkflowExecution(NewContext(), signalRequest)
@@ -716,9 +711,7 @@ func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 	// workflow logic
 	workflowComplete := false
 	isWorkflowTaskProcessed := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !isWorkflowTaskProcessed {
 			isWorkflowTaskProcessed = true
 			return []*commandpb.Command{}, nil

@@ -32,6 +32,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -62,12 +63,13 @@ import (
 // HTTPAPIServer is an HTTP API server that forwards requests to gRPC via the
 // gRPC interceptors.
 type HTTPAPIServer struct {
-	server                 http.Server
-	listener               net.Listener
-	logger                 log.Logger
-	serveMux               *runtime.ServeMux
-	stopped                chan struct{}
-	matchAdditionalHeaders map[string]bool
+	server                        http.Server
+	listener                      net.Listener
+	logger                        log.Logger
+	serveMux                      *runtime.ServeMux
+	stopped                       chan struct{}
+	matchAdditionalHeaders        map[string]bool
+	matchAdditionalHeaderPrefixes []string
 }
 
 var defaultForwardedHeaders = []string{
@@ -152,8 +154,13 @@ func NewHTTPAPIServer(
 		h.matchAdditionalHeaders[v] = true
 	}
 	for _, v := range rpcConfig.HTTPAdditionalForwardedHeaders {
-		h.matchAdditionalHeaders[http.CanonicalHeaderKey(v)] = true
+		if strings.HasSuffix(v, "*") {
+			h.matchAdditionalHeaderPrefixes = append(h.matchAdditionalHeaderPrefixes, http.CanonicalHeaderKey(strings.TrimSuffix(v, "*")))
+		} else {
+			h.matchAdditionalHeaders[http.CanonicalHeaderKey(v)] = true
+		}
 	}
+
 	opts = append(opts, runtime.WithIncomingHeaderMatcher(h.incomingHeaderMatcher))
 
 	// Create inline client connection
@@ -326,6 +333,11 @@ func (h *HTTPAPIServer) incomingHeaderMatcher(headerName string) (string, bool) 
 	// Try ours before falling back to default
 	if h.matchAdditionalHeaders[headerName] {
 		return headerName, true
+	}
+	for _, prefix := range h.matchAdditionalHeaderPrefixes {
+		if strings.HasPrefix(headerName, prefix) {
+			return headerName, true
+		}
 	}
 	return runtime.DefaultHeaderMatcher(headerName)
 }

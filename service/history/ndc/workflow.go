@@ -52,7 +52,6 @@ type (
 		GetMutableState() workflow.MutableState
 		GetReleaseFn() wcache.ReleaseCacheFunc
 		GetVectorClock() (int64, int64, error)
-		LastWriteByLocalCluster() (bool, error)
 
 		HappensAfter(that Workflow) (bool, error)
 		Revive() error
@@ -99,23 +98,22 @@ func (r *WorkflowImpl) GetReleaseFn() wcache.ReleaseCacheFunc {
 
 func (r *WorkflowImpl) GetVectorClock() (int64, int64, error) {
 
-	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
-	if err != nil {
-		return 0, 0, err
+	var version int64
+	var err error
+	if r.mutableState.IsWorkflowExecutionRunning() {
+		version, err = r.mutableState.GetLastWriteVersion()
+		if err != nil {
+			return 0, 0, err
+		}
+	} else {
+		version, err = r.mutableState.GetCloseVersion()
+		if err != nil {
+			return 0, 0, err
+		}
 	}
 
 	lastEventTaskID := r.mutableState.GetExecutionInfo().LastEventTaskId
-	return lastWriteVersion, lastEventTaskID, nil
-}
-
-func (r *WorkflowImpl) LastWriteByLocalCluster() (bool, error) {
-	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
-	if err != nil {
-		return false, err
-	}
-	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
-	currentCluster := r.clusterMetadata.GetCurrentClusterName()
-	return lastWriteCluster == currentCluster, nil
+	return version, lastEventTaskID, nil
 }
 
 func (r *WorkflowImpl) HappensAfter(
@@ -216,7 +214,11 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 		return nil
 	}
 
-	lastWriteVersion, _, err := r.GetVectorClock()
+	// TODO: Same as the reasoning in mutableState.startTransactionHandleWorkflowTaskFailover()
+	// LastWriteVersion is only correct when replication task processing logic flush buffered
+	// events for state only changes as well.
+	// Transition history is not enabled today so LastWriteVersion == LastEventVersion
+	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
 	if err != nil {
 		return err
 	}

@@ -61,8 +61,6 @@ func Invoke(
 	mutableState := workflowLease.GetMutableState()
 	mutableStateTaskRefresher := workflow.NewTaskRefresher(
 		shard,
-		shard.GetConfig(),
-		shard.GetNamespaceRegistry(),
 		shard.GetLogger(),
 	)
 

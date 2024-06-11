@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
@@ -46,7 +47,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -127,6 +127,7 @@ func (s *executableTaskSuite) SetupTest() {
 		creationTime,
 		receivedTime,
 		s.sourceCluster,
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 	)
 }
 
@@ -328,7 +329,6 @@ func (s *executableTaskSuite) TestResend_NotFound() {
 			WorkflowId: resendErr.WorkflowId,
 			RunId:      resendErr.RunId,
 		},
-		WorkflowVersion:    common.EmptyVersion,
 		ClosedWorkflowOnly: false,
 	}).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 

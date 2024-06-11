@@ -25,6 +25,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"path"
@@ -32,14 +33,16 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -55,23 +58,28 @@ import (
 type NexusHTTPHandler struct {
 	logger                               log.Logger
 	nexusHandler                         http.Handler
-	incomingServiceRegistry              *commonnexus.IncomingServiceRegistry
+	enpointRegistry                      commonnexus.EndpointRegistry
+	namespaceRegistry                    namespace.Registry
 	preprocessErrorCounter               metrics.CounterFunc
 	auth                                 *authorization.Interceptor
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
-	enabled                              func() bool
+	enabled                              dynamicconfig.BoolPropertyFn
 }
 
 func NewNexusHTTPHandler(
 	serviceConfig *Config,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
+	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
-	incomingServiceRegistry *commonnexus.IncomingServiceRegistry,
+	endpointRegistry commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceConcurrencyLimitIntercptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -80,7 +88,8 @@ func NewNexusHTTPHandler(
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
 		logger:                               logger,
-		incomingServiceRegistry:              incomingServiceRegistry,
+		enpointRegistry:                      endpointRegistry,
+		namespaceRegistry:                    namespaceRegistry,
 		auth:                                 authInterceptor,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
@@ -90,11 +99,17 @@ func NewNexusHTTPHandler(
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
 			Handler: &nexusHandler{
-				logger:            logger,
-				metricsHandler:    metricsHandler,
-				namespaceRegistry: namespaceRegistry,
-				matchingClient:    matchingClient,
-				auth:              authInterceptor,
+				logger:                        logger,
+				metricsHandler:                metricsHandler,
+				clusterMetadata:               clusterMetadata,
+				namespaceRegistry:             namespaceRegistry,
+				matchingClient:                matchingClient,
+				auth:                          authInterceptor,
+				telemetryInterceptor:          telemetryInterceptor,
+				redirectionInterceptor:        redirectionInterceptor,
+				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
+				forwardingClients:             clientCache,
+				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),
@@ -106,8 +121,8 @@ func NewNexusHTTPHandler(
 func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByService.Representation() + "/").
-		HandlerFunc(h.dispatchNexusTaskByService)
+	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
+		HandlerFunc(h.dispatchNexusTaskByEndpoint)
 }
 
 func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusCode int, failure *nexus.Failure) {
@@ -176,31 +191,31 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	h.serveResolvedURL(w, r, u)
 }
 
-// Handler for [nexushttp.RouteSet.DispatchNexusTaskByService].
-func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *http.Request) {
+// Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
+func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
 	if !h.enabled() {
 		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
 		return
 	}
 
-	service := prepareRequest(commonnexus.RouteDispatchNexusTaskByService, w, r)
+	endpointIDEscaped := prepareRequest(commonnexus.RouteDispatchNexusTaskByEndpoint, w, r)
 
-	serviceID, err := url.PathUnescape(service)
+	endpointID, err := url.PathUnescape(endpointIDEscaped)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
-	serviceInfo, err := h.incomingServiceRegistry.Get(r.Context(), serviceID)
+	endpointEntry, err := h.enpointRegistry.GetByID(r.Context(), endpointID)
 	if err != nil {
-		h.logger.Error("invalid Nexus incoming service ID", tag.Error(err))
+		h.logger.Error("invalid Nexus endpoint ID", tag.Error(err))
 		s, ok := status.FromError(err)
 		if !ok {
 			s = serviceerror.ToStatus(err)
 		}
 		switch s.Code() {
 		case codes.NotFound:
-			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus service not found"})
+			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoint not found"})
 		case codes.DeadlineExceeded:
 			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out"})
 		default:
@@ -209,7 +224,11 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		return
 	}
 
-	nc := h.nexusContextFromService(serviceInfo)
+	nc, ok := h.nexusContextFromEndpoint(endpointEntry, w)
+	if !ok {
+		// nexusContextFromEndpoint already writes the failure response.
+		return
+	}
 
 	r, err = h.parseTlsAndAuthInfo(r, &nc)
 	if err != nil {
@@ -218,7 +237,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		return
 	}
 
-	u, err := mux.CurrentRoute(r).URL("service", service)
+	u, err := mux.CurrentRoute(r).URL("endpoint", endpointIDEscaped)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
@@ -239,12 +258,33 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
 	}
 }
 
-func (h *NexusHTTPHandler) nexusContextFromService(service *nexuspb.IncomingService) nexusContext {
-	nc := h.baseNexusContext(configs.DispatchNexusTaskByServiceAPIName)
-	nc.namespaceName = service.Spec.Namespace
-	nc.taskQueue = service.Spec.TaskQueue
-	nc.serviceName = service.Spec.Name
-	return nc
+// nexusContextFromEndpoint returns the nexus context for the given request and a boolean indicating whether the
+// endpoint is valid for dispatching.
+// For security reasons, at the moment only worker target endpoints are considered valid, in the future external
+// endpoints may also be supported.
+func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter) (nexusContext, bool) {
+	switch v := entry.Endpoint.Spec.GetTarget().GetVariant().(type) {
+	case *persistencespb.NexusEndpointTarget_Worker_:
+		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
+		if err != nil {
+			h.logger.Error("failed to get namespace name by ID", tag.Error(err))
+			var notFoundErr *serviceerror.NotFound
+			if errors.As(err, &notFoundErr) {
+				h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
+			} else {
+				h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+			}
+			return nexusContext{}, false
+		}
+		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName)
+		nc.namespaceName = nsName.String()
+		nc.taskQueue = v.Worker.GetTaskQueue()
+		nc.endpointName = entry.Endpoint.Spec.Name
+		return nc, true
+	default:
+		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
+		return nexusContext{}, false
+	}
 }
 
 func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *http.Request) T {
@@ -284,7 +324,7 @@ func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext
 }
 
 func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL) {
-	// This whole mess is required to support escaped path vars for service.
+	// This whole mess is required to support escaped path vars.
 	prefix, err := url.PathUnescape(u.Path)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))

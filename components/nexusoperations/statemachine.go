@@ -72,6 +72,7 @@ func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventTok
 
 	node, err := node.AddChild(hsm.Key{Type: OperationMachineType.ID, ID: id}, Operation{
 		&persistencespb.NexusOperationInfo{
+			Endpoint:               attrs.Endpoint,
 			Service:                attrs.Service,
 			Operation:              attrs.Operation,
 			ScheduledTime:          event.EventTime,
@@ -148,7 +149,7 @@ func (o Operation) transitionTasks(node *hsm.Node) ([]hsm.Task, error) {
 	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
 		return []hsm.Task{BackoffTask{Deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
-		return []hsm.Task{InvocationTask{Destination: o.Service}}, nil
+		return []hsm.Task{InvocationTask{Destination: o.Endpoint}}, nil
 	default:
 		return nil, nil
 	}
@@ -248,7 +249,8 @@ var TransitionRescheduled = hsm.NewTransition(
 // EventAttemptFailed is triggered when an invocation attempt is failed with a retryable error.
 type EventAttemptFailed struct {
 	AttemptFailure
-	Node *hsm.Node
+	Node        *hsm.Node
+	RetryPolicy backoff.RetryPolicy
 }
 
 var TransitionAttemptFailed = hsm.NewTransition(
@@ -257,8 +259,7 @@ var TransitionAttemptFailed = hsm.NewTransition(
 	func(op Operation, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		// TODO: Make the retry policy initial interval configurable.
-		nextDelay := backoff.NewExponentialRetryPolicy(time.Second).ComputeNextDelay(0, int(op.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(op.Attempt))
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		op.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
 		op.LastAttemptFailure = &failurepb.Failure{
@@ -466,7 +467,7 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	}
 	switch c.State() { // nolint:exhaustive
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
-		return []hsm.Task{CancelationTask{Destination: op.Service}}, nil
+		return []hsm.Task{CancelationTask{Destination: op.Endpoint}}, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
 		return []hsm.Task{CancelationBackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	default:
@@ -515,9 +516,10 @@ var TransitionCancelationRescheduled = hsm.NewTransition(
 
 // EventCancelationAttemptFailed is triggered when a cancelation attempt is failed with a retryable error.
 type EventCancelationAttemptFailed struct {
-	Time time.Time
-	Err  error
-	Node *hsm.Node
+	Time        time.Time
+	Err         error
+	Node        *hsm.Node
+	RetryPolicy backoff.RetryPolicy
 }
 
 var TransitionCancelationAttemptFailed = hsm.NewTransition(
@@ -526,8 +528,7 @@ var TransitionCancelationAttemptFailed = hsm.NewTransition(
 	func(c Cancelation, event EventCancelationAttemptFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		// TODO: Make the retry policy initial interval configurable.
-		nextDelay := backoff.NewExponentialRetryPolicy(time.Second).ComputeNextDelay(0, int(c.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt))
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		c.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
 		c.LastAttemptFailure = &failurepb.Failure{

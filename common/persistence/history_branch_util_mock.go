@@ -90,16 +90,16 @@ func (mr *MockHistoryBranchUtilMockRecorder) ParseHistoryBranchInfo(branchToken 
 }
 
 // UpdateHistoryBranchInfo mocks base method.
-func (m *MockHistoryBranchUtil) UpdateHistoryBranchInfo(branchToken []byte, branchInfo *persistence.HistoryBranch) ([]byte, error) {
+func (m *MockHistoryBranchUtil) UpdateHistoryBranchInfo(branchToken []byte, branchInfo *persistence.HistoryBranch, runID string) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateHistoryBranchInfo", branchToken, branchInfo)
+	ret := m.ctrl.Call(m, "UpdateHistoryBranchInfo", branchToken, branchInfo, runID)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateHistoryBranchInfo indicates an expected call of UpdateHistoryBranchInfo.
-func (mr *MockHistoryBranchUtilMockRecorder) UpdateHistoryBranchInfo(branchToken, branchInfo interface{}) *gomock.Call {
+func (mr *MockHistoryBranchUtilMockRecorder) UpdateHistoryBranchInfo(branchToken, branchInfo, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHistoryBranchInfo", reflect.TypeOf((*MockHistoryBranchUtil)(nil).UpdateHistoryBranchInfo), branchToken, branchInfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHistoryBranchInfo", reflect.TypeOf((*MockHistoryBranchUtil)(nil).UpdateHistoryBranchInfo), branchToken, branchInfo, runID)
 }

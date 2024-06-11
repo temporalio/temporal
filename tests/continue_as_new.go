@@ -95,14 +95,9 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
-	wtHandler := func(
-		execution *commonpb.WorkflowExecution,
-		wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64,
-		history *historypb.History,
-	) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
-			previousRunID = execution.GetRunId()
+			previousRunID = task.WorkflowExecution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
@@ -124,7 +119,7 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 			}}, nil
 		}
 
-		lastRunStartedEvent = history.Events[0]
+		lastRunStartedEvent = task.History.Events[0]
 		workflowComplete = true
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -205,12 +200,7 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 	workflowComplete := false
 	continueAsNewCount := int32(1)
 	continueAsNewCounter := int32(0)
-	wtHandler := func(
-		execution *commonpb.WorkflowExecution,
-		wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64,
-		history *historypb.History,
-	) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
@@ -312,13 +302,8 @@ func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 	var executions []*commonpb.WorkflowExecution
 
 	continueAsNewed := false
-	wtHandler := func(
-		execution *commonpb.WorkflowExecution,
-		wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64,
-		history *historypb.History,
-	) ([]*commandpb.Command, error) {
-		executions = append(executions, execution)
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		executions = append(executions, task.WorkflowExecution)
 
 		if !continueAsNewed {
 			continueAsNewed = true
@@ -428,22 +413,16 @@ func newParentWithChildContinueAsNew(
 	return workflow
 }
 
-func (w *ParentWithChildContinueAsNew) workflow(
-	execution *commonpb.WorkflowExecution,
-	wt *commonpb.WorkflowType,
-	previousStartedEventID,
-	startedEventID int64,
-	history *historypb.History,
-) ([]*commandpb.Command, error) {
+func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	w.suite.Logger.Info(
 		"Processing workflow task for WorkflowId:",
-		tag.WorkflowID(execution.GetWorkflowId()),
+		tag.WorkflowID(task.WorkflowExecution.GetWorkflowId()),
 	)
 
 	// Child workflow logic
-	if execution.GetWorkflowId() == w.childID {
-		if previousStartedEventID <= 0 {
-			w.childStartedEvents = append(w.childStartedEvents, history.Events[0])
+	if task.WorkflowExecution.GetWorkflowId() == w.childID {
+		if task.PreviousStartedEventId <= 0 {
+			w.childStartedEvents = append(w.childStartedEvents, task.History.Events[0])
 		}
 
 		if w.continueAsNewCounter < w.continueAsNewCount {
@@ -473,7 +452,7 @@ func (w *ParentWithChildContinueAsNew) workflow(
 	}
 
 	// Parent workflow logic
-	if execution.GetWorkflowId() == w.parentID {
+	if task.WorkflowExecution.GetWorkflowId() == w.parentID {
 		if !w.childExecutionStarted {
 			w.suite.Logger.Info("Starting child execution")
 			w.childExecutionStarted = true
@@ -492,8 +471,8 @@ func (w *ParentWithChildContinueAsNew) workflow(
 					},
 				},
 			}}, nil
-		} else if previousStartedEventID > 0 {
-			for _, event := range history.Events[previousStartedEventID:] {
+		} else if task.PreviousStartedEventId > 0 {
+			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
 					w.startedEvent = event
 					return []*commandpb.Command{}, nil

@@ -76,17 +76,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(eventID, vis
 }
 
 // GenerateActivityTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityTasks(event *v1.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateActivityTasks(activityScheduledEventID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityTasks", event)
+	ret := m.ctrl.Call(m, "GenerateActivityTasks", activityScheduledEventID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateActivityTasks indicates an expected call of GenerateActivityTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateActivityTasks(event interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityTasks(activityScheduledEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityTasks), event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityTasks), activityScheduledEventID)
 }
 
 // GenerateActivityTimerTasks mocks base method.

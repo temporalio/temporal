@@ -27,6 +27,8 @@ package matching
 import (
 	"go.uber.org/fx"
 
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -38,7 +40,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -102,7 +103,9 @@ func RateLimitInterceptorProvider(
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
-		map[string]int{},
+		map[string]int{
+			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+		},
 	)
 }
 
@@ -154,7 +157,6 @@ func VisibilityManagerProvider(
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -163,7 +165,6 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esClient,
 		nil, // matching visibility never writes
 		saProvider,
 		searchAttributesMapperProvider,
@@ -171,6 +172,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
+		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,

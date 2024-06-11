@@ -98,21 +98,19 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 	s.maxPendingActivities = limit
 	s.maxPendingCancelRequests = limit
 	s.maxPendingSignals = limit
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.NumPendingChildExecutionsLimitError:             s.maxPendingChildExecutions,
-		dynamicconfig.NumPendingActivitiesLimitError:                  s.maxPendingActivities,
-		dynamicconfig.NumPendingCancelRequestsLimitError:              s.maxPendingCancelRequests,
-		dynamicconfig.NumPendingSignalsLimitError:                     s.maxPendingSignals,
-		dynamicconfig.FrontendEnableNexusAPIs:                         true,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:          true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:      true,
-		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace: limit,
-		nexusoperations.Enabled:                                       true,
-		dynamicconfig.OutboundProcessorEnabled:                        true,
-		dynamicconfig.EnableMutableStateTransitionHistory:             true,
-		dynamicconfig.FrontendRefreshNexusIncomingServicesMinWait:     1 * time.Millisecond,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             s.maxPendingChildExecutions,
+		dynamicconfig.NumPendingActivitiesLimitError.Key():                  s.maxPendingActivities,
+		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              s.maxPendingCancelRequests,
+		dynamicconfig.NumPendingSignalsLimitError.Key():                     s.maxPendingSignals,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
+		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): limit,
+		dynamicconfig.EnableNexus.Key():                                     true,
+		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
+
 }
 
 func (s *ClientFunctionalSuite) TearDownSuite() {
@@ -123,6 +121,12 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
+	s.testCluster.host.dcClient.OverrideValue(
+		s.T(),
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -612,7 +616,7 @@ func (s *ClientFunctionalSuite) TestTooManyPendingActivities() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED,
 	)
 
-	// mark one of the pending activities as complete and verify that the worfklow can now complete
+	// mark one of the pending activities as complete and verify that the workflow can now complete
 	s.NoError(s.sdkClient.CompleteActivity(ctx, activityInfo.TaskToken, nil, nil))
 	s.eventuallySucceeds(ctx, func(ctx context.Context) error {
 		return workflowRun.Get(ctx, nil)
@@ -1220,7 +1224,7 @@ func (s *ClientFunctionalSuite) Test_ActivityTimeouts() {
 func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue)
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue)
 
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
@@ -1312,7 +1316,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue)
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue)
 
 	readyToSendUpdate := make(chan bool, 1)
 	updateHasBeenAdmitted := make(chan bool)
@@ -1891,7 +1895,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 		return err == nil && len(resp.Executions) == 1
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// reset it using v2 as the bad build id
+	// reset it using v2 as the bad build ID
 	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace:       s.namespace,
 		VisibilityQuery: query,

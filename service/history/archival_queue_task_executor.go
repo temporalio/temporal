@@ -225,7 +225,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		RunID:                task.RunID,
 		BranchToken:          branchToken,
 		NextEventID:          nextEventID,
-		CloseFailoverVersion: mutableState.LastWriteVersion,
+		CloseFailoverVersion: mutableState.CloseVersion,
 		HistoryURI:           historyURI,
 		VisibilityURI:        visibilityURI,
 		WorkflowTypeName:     executionInfo.GetWorkflowTypeName(),
@@ -283,9 +283,9 @@ type lockedMutableState struct {
 	// MutableState is the mutable state that is being wrapped. You may call any method on this object safely since
 	// the state is locked.
 	workflow.MutableState
-	// LastWriteVersion is the last write version of the mutable state. We store this here so that we don't have to
-	// call GetLastWriteVersion() on the mutable state object again.
-	LastWriteVersion int64
+	// CloseVersion is the namespace failover when the workflow is closed. We store this here so that we don't have to
+	// call GetCloseVersion() on the mutable state object again.
+	CloseVersion int64
 	// Release is a function that releases the context of the mutable state. This function should be called when
 	// you are done with the mutable state.
 	Release cache.ReleaseCacheFunc
@@ -295,13 +295,13 @@ type lockedMutableState struct {
 // last write version and release function
 func newLockedMutableState(
 	mutableState workflow.MutableState,
-	version int64,
+	closeVersion int64,
 	releaseFunc cache.ReleaseCacheFunc,
 ) *lockedMutableState {
 	return &lockedMutableState{
-		MutableState:     mutableState,
-		LastWriteVersion: version,
-		Release:          releaseFunc,
+		MutableState: mutableState,
+		CloseVersion: closeVersion,
+		Release:      releaseFunc,
 	}
 }
 
@@ -318,7 +318,7 @@ var (
 func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 	ctx context.Context,
 	logger log.Logger,
-	task tasks.Task,
+	task *tasks.ArchiveExecutionTask,
 ) (lockedMutableState *lockedMutableState, err error) {
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.workflowCache, task)
 	if err != nil {
@@ -344,7 +344,7 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 		logger.Warn("Dropping archival task because workflow is still running.")
 		return nil, ErrWorkflowExecutionIsStillRunning
 	}
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	closeVersion, err := mutableState.GetCloseVersion()
 	if err != nil {
 		return nil, err
 	}
@@ -353,12 +353,12 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 		e.shardContext,
 		logger,
 		namespaceEntry,
-		lastWriteVersion,
+		closeVersion,
 		task.GetVersion(),
 		task,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return newLockedMutableState(mutableState, lastWriteVersion, release), nil
+	return newLockedMutableState(mutableState, closeVersion, release), nil
 }

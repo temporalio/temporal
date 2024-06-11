@@ -40,14 +40,6 @@ type StateMachineTask struct {
 
 var _ HasStateMachineTaskType = &StateMachineTask{}
 
-func (t *StateMachineTask) GetVersion() int64 {
-	return t.Info.Ref.MutableStateNamespaceFailoverVersion
-}
-
-func (t *StateMachineTask) SetVersion(version int64) {
-	t.Info.Ref.MutableStateNamespaceFailoverVersion = version
-}
-
 func (t *StateMachineTask) GetTaskID() int64 {
 	return t.TaskID
 }
@@ -96,7 +88,11 @@ var _ HasDestination = &StateMachineOutboundTask{}
 
 // StateMachineCallbackTask is a generic timer task that can be emitted by any hierarchical state machine.
 type StateMachineTimerTask struct {
-	StateMachineTask
+	definition.WorkflowKey
+	VisibilityTimestamp         time.Time
+	TaskID                      int64
+	Version                     int64
+	MutableStateTransitionCount int64
 }
 
 func (*StateMachineTimerTask) GetCategory() Category {
@@ -109,6 +105,22 @@ func (*StateMachineTimerTask) GetType() enums.TaskType {
 
 func (t *StateMachineTimerTask) GetKey() Key {
 	return NewKey(t.VisibilityTimestamp, t.TaskID)
+}
+
+func (t *StateMachineTimerTask) GetTaskID() int64 {
+	return t.TaskID
+}
+
+func (t *StateMachineTimerTask) SetTaskID(id int64) {
+	t.TaskID = id
+}
+
+func (t *StateMachineTimerTask) GetVisibilityTime() time.Time {
+	return t.VisibilityTimestamp
+}
+
+func (t *StateMachineTimerTask) SetVisibilityTime(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
 }
 
 var _ Task = &StateMachineTimerTask{}

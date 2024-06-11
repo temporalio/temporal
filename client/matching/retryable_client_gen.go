@@ -95,30 +95,30 @@ func (c *retryableClient) CancelOutstandingPoll(
 	return resp, err
 }
 
-func (c *retryableClient) CreateNexusIncomingService(
+func (c *retryableClient) CreateNexusEndpoint(
 	ctx context.Context,
-	request *matchingservice.CreateNexusIncomingServiceRequest,
+	request *matchingservice.CreateNexusEndpointRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
-	var resp *matchingservice.CreateNexusIncomingServiceResponse
+) (*matchingservice.CreateNexusEndpointResponse, error) {
+	var resp *matchingservice.CreateNexusEndpointResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.CreateNexusIncomingService(ctx, request, opts...)
+		resp, err = c.client.CreateNexusEndpoint(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
-func (c *retryableClient) DeleteNexusIncomingService(
+func (c *retryableClient) DeleteNexusEndpoint(
 	ctx context.Context,
-	request *matchingservice.DeleteNexusIncomingServiceRequest,
+	request *matchingservice.DeleteNexusEndpointRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
-	var resp *matchingservice.DeleteNexusIncomingServiceResponse
+) (*matchingservice.DeleteNexusEndpointResponse, error) {
+	var resp *matchingservice.DeleteNexusEndpointResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.DeleteNexusIncomingService(ctx, request, opts...)
+		resp, err = c.client.DeleteNexusEndpoint(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -245,15 +245,15 @@ func (c *retryableClient) GetWorkerVersioningRules(
 	return resp, err
 }
 
-func (c *retryableClient) ListNexusIncomingServices(
+func (c *retryableClient) ListNexusEndpoints(
 	ctx context.Context,
-	request *matchingservice.ListNexusIncomingServicesRequest,
+	request *matchingservice.ListNexusEndpointsRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.ListNexusIncomingServicesResponse, error) {
-	var resp *matchingservice.ListNexusIncomingServicesResponse
+) (*matchingservice.ListNexusEndpointsResponse, error) {
+	var resp *matchingservice.ListNexusEndpointsResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.ListNexusIncomingServices(ctx, request, opts...)
+		resp, err = c.client.ListNexusEndpoints(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -395,15 +395,15 @@ func (c *retryableClient) RespondQueryTaskCompleted(
 	return resp, err
 }
 
-func (c *retryableClient) UpdateNexusIncomingService(
+func (c *retryableClient) UpdateNexusEndpoint(
 	ctx context.Context,
-	request *matchingservice.UpdateNexusIncomingServiceRequest,
+	request *matchingservice.UpdateNexusEndpointRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
-	var resp *matchingservice.UpdateNexusIncomingServiceResponse
+) (*matchingservice.UpdateNexusEndpointResponse, error) {
+	var resp *matchingservice.UpdateNexusEndpointResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.UpdateNexusIncomingService(ctx, request, opts...)
+		resp, err = c.client.UpdateNexusEndpoint(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

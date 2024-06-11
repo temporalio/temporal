@@ -1893,7 +1893,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), s.createChildWorkflowExecutionRequest(
-		s.namespace,
 		s.childNamespace,
 		transferTask,
 		mutableState,
@@ -2008,7 +2007,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), s.createChildWorkflowExecutionRequest(
-		s.namespace,
 		s.childNamespace,
 		transferTask,
 		mutableState,
@@ -2493,7 +2491,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 				},
 			}).AnyTimes()
 			mockShard.EXPECT().GetClusterMetadata().Return(mockClusterMetadata).AnyTimes()
-			mockMutableState.EXPECT().GetLastWriteVersion().Return(tests.Version, nil).AnyTimes()
+			mockMutableState.EXPECT().GetCloseVersion().Return(tests.Version, nil).AnyTimes()
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 			mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil)
 			mockShard.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
@@ -2531,7 +2529,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			task := &tasks.DeleteExecutionTask{
 				WorkflowKey: workflowKey,
 				TaskID:      deleteExecutionTaskId,
-				Version:     tests.Version,
 			}
 			executable := queues.NewMockExecutable(ctrl)
 			executable.EXPECT().GetTask().Return(task)
@@ -2642,7 +2639,6 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionRequest(
-	namespace namespace.Name,
 	childNamespace namespace.Name,
 	task *tasks.StartChildExecutionTask,
 	mutableState workflow.MutableState,

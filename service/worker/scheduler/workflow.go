@@ -26,6 +26,7 @@ package scheduler
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"time"
@@ -81,6 +82,8 @@ const (
 	UpdateFromPrevious = 6
 	// do continue-as-new after pending signals
 	CANAfterSignals = 7
+	// set LastProcessedTime to last action instead of now
+	UseLastAction = 8
 )
 
 const (
@@ -217,7 +220,7 @@ var (
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
-		Version:                           UpdateFromPrevious,
+		Version:                           UseLastAction,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -295,19 +298,23 @@ func (s *scheduler) run() error {
 			s.logger.Warn("Time went backwards", "from", t1, "to", t2)
 			t2 = t1
 		}
-		nextWakeup := s.processTimeRange(
+		nextWakeup, lastAction := s.processTimeRange(
 			t1, t2,
 			// resolve this to the schedule's policy as late as possible
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
 			false,
 			nil,
 		)
-		s.State.LastProcessedTime = timestamppb.New(t2)
+		if s.hasMinVersion(UseLastAction) {
+			s.State.LastProcessedTime = timestamppb.New(lastAction)
+		} else {
+			s.State.LastProcessedTime = timestamppb.New(t2)
+		}
 		// handle signals after processing time range that just elapsed
 		scheduleChanged := s.processSignals()
 		if scheduleChanged {
-			// need to calculate sleep again. note that processSignals may move LastProcessedTime backwards.
-			nextWakeup = s.processTimeRange(
+			// need to calculate sleep again
+			nextWakeup, _ = s.processTimeRange(
 				s.State.LastProcessedTime.AsTime(),
 				t2,
 				enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
@@ -330,8 +337,8 @@ func (s *scheduler) run() error {
 		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil && s.hasMinVersion(CANAfterSignals) {
 			// If suggestContinueAsNew was true but we had a pending update or patch, we would
 			// not break above, but process the update/patch. Now that we're done, we should
-			// break here to do CAN. (pendingUpdate and pendingPatch should always nil here,
-			// the check check above is just being defensive.)
+			// break here to do CAN. (pendingUpdate and pendingPatch should always be nil here,
+			// the check above is just being defensive.)
 			break
 		}
 
@@ -617,11 +624,11 @@ func (s *scheduler) processTimeRange(
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
 	limit *int,
-) time.Time {
+) (time.Time, time.Time) {
 	s.logger.Debug("processTimeRange", "start", start, "end", end, "overlap-policy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
-		return time.Time{}
+		return time.Time{}, end
 	}
 
 	catchupWindow := s.getCatchupWindow()
@@ -634,10 +641,12 @@ func (s *scheduler) processTimeRange(
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			return s.getNextTime(end).Next
+			// use end as last action time so that we don't reprocess time spent paused
+			return s.getNextTime(end).Next, end
 		}
 	}
 
+	lastAction := start
 	var next getNextTimeResult
 	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
@@ -656,6 +665,7 @@ func (s *scheduler) processTimeRange(
 			continue
 		}
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
+		lastAction = next.Next
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
@@ -663,7 +673,7 @@ func (s *scheduler) processTimeRange(
 			}
 		}
 	}
-	return next.Next
+	return next.Next, lastAction
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
@@ -769,7 +779,7 @@ func (s *scheduler) processBackfills() {
 		bfr := s.State.OngoingBackfills[0]
 		startTime := timestamp.TimeValue(bfr.GetStartTime())
 		endTime := timestamp.TimeValue(bfr.GetEndTime())
-		next := s.processTimeRange(
+		next, _ := s.processTimeRange(
 			startTime,
 			endTime,
 			bfr.GetOverlapPolicy(),
@@ -795,20 +805,22 @@ func (s *scheduler) wfWatcherReturned(f workflow.Future) {
 	id := s.watchingWorkflowId
 	s.watchingWorkflowId = ""
 	s.watchingFuture = nil
-	s.processWatcherResult(id, f)
+	s.processWatcherResult(id, f, true)
 }
 
-func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
+func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool) {
 	var res schedspb.WatchWorkflowResponse
 	err := f.Get(s.ctx, &res)
 	if err != nil {
-		s.logger.Error("error from workflow watcher future", "workflow", id, "error", err)
+		s.logger.Error("error from workflow watcher future", "workflow", id, "error", err, "long", long)
 		return
 	}
 
 	if res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		// this should only happen for a refresh, not a long-poll
-		s.logger.Debug("watcher returned for running workflow")
+		if long {
+			s.logger.Warn("watcher returned for running workflow", "workflow", id)
+		}
 		return
 	}
 
@@ -817,7 +829,10 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 	if idx := slices.IndexFunc(s.Info.RunningWorkflows, match); idx >= 0 {
 		s.Info.RunningWorkflows = slices.Delete(s.Info.RunningWorkflows, idx, idx+1)
 	} else {
-		s.logger.Error("closed workflow not found in running list", "workflow", id)
+		// This could happen if the watcher activity gets interrupted and is retried after the
+		// heartbeat timeout, but in the meantime we have done a refresh through a local activity.
+		// This often happens when the worker is restarted.
+		s.logger.Warn("just-closed workflow not found in running list", "workflow", id, "long", long)
 	}
 
 	// handle pause-on-failure
@@ -847,7 +862,12 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 		s.State.ContinuedFailure = res.GetFailure()
 	}
 
-	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure)
+	// Update desired time of next start if it's buffered. This is used for metrics only.
+	if long && len(s.State.BufferedStarts) > 0 {
+		s.State.BufferedStarts[0].DesiredTime = res.CloseTime
+	}
+
+	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure, "long", long)
 }
 
 func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
@@ -869,11 +889,13 @@ func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 
 	s.updateCustomSearchAttributes(req.SearchAttributes)
 
-	if s.hasMinVersion(UpdateFromPrevious) {
+	if s.hasMinVersion(UpdateFromPrevious) && !s.hasMinVersion(UseLastAction) {
 		// We need to start re-processing from the last event, so that we catch actions whose
 		// nominal time is before now but actual time (with jitter) is after now. Logic in
 		// processTimeRange will discard actions before the UpdateTime.
 		// Note: get last event time before updating s.Info.UpdateTime, otherwise it'll always be now.
+		// After version UseLastAction, this is effectively done in the main loop for all
+		// wakeups, not just updates, so we don't need to do it here.
 		s.State.LastProcessedTime = timestamppb.New(s.getLastEvent())
 	}
 
@@ -1320,7 +1342,8 @@ func (s *scheduler) startWorkflow(
 
 		if !start.Manual {
 			// record metric only for _scheduled_ actions, not trigger/backfill, otherwise it's not meaningful
-			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(start.ActualTime.AsTime()))
+			desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
+			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(desiredTime.AsTime()))
 		}
 
 		return &schedpb.ScheduleActionResult{
@@ -1374,7 +1397,7 @@ func (s *scheduler) refreshWorkflows(executions []*commonpb.WorkflowExecution) {
 		futures[i] = workflow.ExecuteLocalActivity(ctx, s.a.WatchWorkflow, req)
 	}
 	for i, ex := range executions {
-		s.processWatcherResult(ex.WorkflowId, futures[i])
+		s.processWatcherResult(ex.WorkflowId, futures[i], false)
 	}
 }
 

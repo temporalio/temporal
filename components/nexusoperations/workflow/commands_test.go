@@ -23,6 +23,7 @@
 package workflow_test
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -33,6 +34,8 @@ import (
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/components/nexusoperations"
@@ -60,14 +63,20 @@ type testContext struct {
 }
 
 var defaultConfig = &nexusoperations.Config{
-	Enabled:                 dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-	MaxOperationNameLength:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(5),
+	Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
+	MaxServiceNameLength:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
+	MaxOperationNameLength:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperations: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
 }
 
 func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	chReg := workflow.NewCommandHandlerRegistry()
-	require.NoError(t, opsworkflow.RegisterCommandHandlers(chReg, cfg))
+	require.NoError(t, opsworkflow.RegisterCommandHandlers(chReg, func(ctx context.Context, namespaceName, endpointName string) error {
+		if endpointName != "endpoint" {
+			return serviceerror.NewNotFound("endpoint not found")
+		}
+		return nil
+	}, cfg))
 	smReg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
@@ -107,9 +116,9 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 func TestHandleScheduleCommand(t *testing.T) {
 	t.Run("feature disabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperations.Config{
-			Enabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			Enabled: dynamicconfig.GetBoolPropertyFn(false),
 		})
-		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.FailWorkflow)
@@ -119,7 +128,43 @@ func TestHandleScheduleCommand(t *testing.T) {
 
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.FailWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Equal(t, 0, len(tcx.history.Events))
+	})
+
+	t.Run("endpoint not found", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "not found",
+					Service:   "service",
+					Operation: "op",
+				},
+			},
+		})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.FailWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Equal(t, 0, len(tcx.history.Events))
+	})
+
+	t.Run("exceeds max service length", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
+					Service:   "too long",
+					Operation: "op",
+				},
+			},
+		})
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.FailWorkflow)
@@ -129,9 +174,10 @@ func TestHandleScheduleCommand(t *testing.T) {
 
 	t.Run("exceeds max operation length", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
 					Service:   "service",
 					Operation: "too long",
 				},
@@ -146,9 +192,10 @@ func TestHandleScheduleCommand(t *testing.T) {
 
 	t.Run("exceeds max payload size", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
 					Service:   "service",
 					Operation: "op",
 					Input: &common.Payload{
@@ -167,9 +214,10 @@ func TestHandleScheduleCommand(t *testing.T) {
 	t.Run("exceeds max concurrent operations", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		for i := 0; i < 2; i++ {
-			err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  "endpoint",
 						Service:   "service",
 						Operation: "op",
 					},
@@ -177,9 +225,10 @@ func TestHandleScheduleCommand(t *testing.T) {
 			})
 			require.NoError(t, err)
 		}
-		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
 					Service:   "service",
 					Operation: "op",
 				},
@@ -224,14 +273,14 @@ func TestHandleScheduleCommand(t *testing.T) {
 		},
 	}
 	for _, tc := range timeoutCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			tcx := newTestContext(t, defaultConfig)
 
 			tcx.ms.GetExecutionInfo().WorkflowRunTimeout = tc.workflowRunTimeout
-			err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:               "endpoint",
 						Service:                "service",
 						Operation:              "op",
 						ScheduleToCloseTimeout: tc.commandTimeout,
@@ -244,9 +293,10 @@ func TestHandleScheduleCommand(t *testing.T) {
 		})
 	}
 
-	t.Run("sets event attributes and spawns a child operation machine", func(t *testing.T) {
+	t.Run("sets event attributes with UserMetadata and spawns a child operation machine", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		cAttrs := &commandpb.ScheduleNexusOperationCommandAttributes{
+			Endpoint:  "endpoint",
 			Service:   "service",
 			Operation: "op",
 			Input:     &common.Payload{},
@@ -255,10 +305,21 @@ func TestHandleScheduleCommand(t *testing.T) {
 			},
 			ScheduleToCloseTimeout: durationpb.New(time.Hour),
 		}
-		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		userMetadata := &sdkpb.UserMetadata{
+			Summary: &common.Payload{
+				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+				Data:     []byte(`Test summary Data`),
+			},
+			Details: &common.Payload{
+				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+				Data:     []byte(`Test Details Data`),
+			},
+		}
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 				ScheduleNexusOperationCommandAttributes: cAttrs,
 			},
+			UserMetadata: userMetadata,
 		})
 		require.NoError(t, err)
 		require.Equal(t, 1, len(tcx.history.Events))
@@ -273,6 +334,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType.ID, ID: strconv.FormatInt(event.EventId, 10)}})
 		require.NoError(t, err)
 		require.NotNil(t, child)
+		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
 	})
 
 }
@@ -280,9 +342,9 @@ func TestHandleScheduleCommand(t *testing.T) {
 func TestHandleCancelCommand(t *testing.T) {
 	t.Run("feature disabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperations.Config{
-			Enabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			Enabled: dynamicconfig.GetBoolPropertyFn(false),
 		})
-		err := tcx.cancelHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
+		err := tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.FailWorkflow)
@@ -292,7 +354,7 @@ func TestHandleCancelCommand(t *testing.T) {
 
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.cancelHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
+		err := tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.FailWorkflow)
@@ -302,7 +364,7 @@ func TestHandleCancelCommand(t *testing.T) {
 
 	t.Run("operation not found", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.cancelHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		err := tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
 					ScheduledEventId: 5,
@@ -318,9 +380,10 @@ func TestHandleCancelCommand(t *testing.T) {
 
 	t.Run("operation already completed", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
 					Service:   "service",
 					Operation: "op",
 				},
@@ -340,7 +403,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		err = tcx.cancelHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
 					ScheduledEventId: event.EventId,
@@ -354,26 +417,38 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Equal(t, 1, len(tcx.history.Events)) // Only scheduled event should be recorded.
 	})
 
-	t.Run("sets event attributes and spawns cancelation child machine", func(t *testing.T) {
+	t.Run("sets event attributes with UserMetadata and spawns cancelation child machine", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
 					Service:   "service",
 					Operation: "op",
 				},
 			},
 		})
+		userMetadata := &sdkpb.UserMetadata{
+			Summary: &common.Payload{
+				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+				Data:     []byte(`Test summary Data`),
+			},
+			Details: &common.Payload{
+				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+				Data:     []byte(`Test Details Data`),
+			},
+		}
 		require.NoError(t, err)
 		require.Equal(t, 1, len(tcx.history.Events))
 		event := tcx.history.Events[0]
 
-		err = tcx.cancelHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
 					ScheduledEventId: event.EventId,
 				},
 			},
+			UserMetadata: userMetadata,
 		})
 		require.NoError(t, err)
 
@@ -385,6 +460,8 @@ func TestHandleCancelCommand(t *testing.T) {
 		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
 		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
 		require.Equal(t, int64(1), crAttrs.WorkflowTaskCompletedEventId)
+		savedUserMetadata := tcx.history.Events[1].GetUserMetadata()
+		require.EqualExportedValues(t, userMetadata, savedUserMetadata)
 
 		cAttrs := tcx.history.Events[2].GetNexusOperationCanceledEventAttributes()
 		require.Equal(t, event.EventId, cAttrs.ScheduledEventId)
@@ -394,5 +471,6 @@ func TestHandleCancelCommand(t *testing.T) {
 		child, err = child.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 		require.NoError(t, err)
 		require.NotNil(t, child)
+		userMetadata = nil
 	})
 }

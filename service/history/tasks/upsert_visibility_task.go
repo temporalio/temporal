@@ -38,22 +38,11 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		// this version is not used by task processing for validation,
-		// instead, the version is used by Elasticsearch
-		Version int64
 	}
 )
 
 func (t *UpsertExecutionVisibilityTask) GetKey() Key {
 	return NewImmediateKey(t.TaskID)
-}
-
-func (t *UpsertExecutionVisibilityTask) GetVersion() int64 {
-	return t.Version
-}
-
-func (t *UpsertExecutionVisibilityTask) SetVersion(version int64) {
-	t.Version = version
 }
 
 func (t *UpsertExecutionVisibilityTask) GetTaskID() int64 {

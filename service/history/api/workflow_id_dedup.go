@@ -27,6 +27,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -34,6 +35,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -49,6 +51,7 @@ var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
 //
 // An action (ie "mitigate and allow"), an error (ie "deny") or neither (ie "allow") is returned.
 func ResolveDuplicateWorkflowID(
+	shardContext shard.Context,
 	workflowID,
 	newRunID,
 	currentRunID string,
@@ -57,6 +60,7 @@ func ResolveDuplicateWorkflowID(
 	currentStartRequestID string,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	wfIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
+	currentWorkflowStartTime time.Time,
 ) (UpdateWorkflowActionFunc, error) {
 
 	switch currentState {
@@ -69,7 +73,7 @@ func ResolveDuplicateWorkflowID(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			return nil, ErrUseCurrentExecution
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return terminateWorkflowAction(newRunID)
+			return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, newRunID, workflowID)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
 		}
@@ -98,6 +102,37 @@ func ResolveDuplicateWorkflowID(
 
 	// ie "allow"
 	return nil, nil
+}
+
+// A minimal interval between workflow starts is used to prevent multiple starts with the same ID too rapidly.
+// If the new workflow is started before the interval elapsed, the workflow start is aborted.
+func resolveDuplicateWorkflowStart(
+	shardContext shard.Context,
+	currentWorkflowStartTime time.Time,
+	newRunID string,
+	workflowID string,
+) (UpdateWorkflowActionFunc, error) {
+
+	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval()
+	now := shardContext.GetTimeSource().Now().UTC()
+	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
+
+	if minimalReuseInterval == 0 || minimalReuseInterval < timeSinceStart {
+		return terminateWorkflowAction(newRunID)
+	}
+
+	// Since there is a grace period, and the current workflow's start time is within that period,
+	// abort the entire request.
+	msg := fmt.Sprintf(
+		"Too many restarts for workflow %s. Time since last start: %d ms",
+		workflowID,
+		timeSinceStart.Milliseconds(),
+	)
+	return nil, &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: msg,
+	}
 }
 
 func terminateWorkflowAction(

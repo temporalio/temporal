@@ -35,6 +35,11 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.uber.org/fx"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -46,16 +51,15 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/frontend/configs"
-	"go.uber.org/fx"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/status"
 )
 
 var apiName = configs.CompleteNexusOperation
 
+const methodNameForMetrics = "CompleteNexusOperation"
+
 type Config struct {
-	Enabled dynamicconfig.BoolPropertyFn
+	Enabled          dynamicconfig.BoolPropertyFn
+	PayloadSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 type HandlerOptions struct {
@@ -67,6 +71,7 @@ type HandlerOptions struct {
 	Config                               *Config
 	CallbackTokenGenerator               *commonnexus.CallbackTokenGenerator
 	HistoryClient                        resource.HistoryClient
+	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
 	NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	NamespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
 	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
@@ -110,12 +115,13 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		logger:            log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
 		metricsHandler:    h.MetricsHandler.WithTags(metrics.NamespaceTag(nsName)),
 		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
-			metrics.OperationTag(apiName),
+			metrics.OperationTag(methodNameForMetrics),
 			metrics.NamespaceTag(nsName),
 		),
 		requestStartTime: startTime,
 	}
-	defer rCtx.capturePanicAndRecordMetrics(&retErr)
+	ctx = rCtx.augmentContext(ctx)
+	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
 		return err
@@ -163,10 +169,13 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
+		if result.Size() > h.Config.PayloadSizeLimit(ns.Name().String()) {
+			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(ns.Name().String()))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
+		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
 			Success: result,
 		}
-		// TODO(bergundy): Limit payload size.
 	default:
 		// The Nexus SDK ensures this never happens but just in case...
 		logger.Error("invalid operation state in completion request", tag.NewStringTag("state", string(r.State)), tag.Error(err))
@@ -189,12 +198,17 @@ type requestContext struct {
 	metricsHandler                metrics.Handler
 	metricsHandlerForInterceptors metrics.Handler
 	namespace                     *namespace.Namespace
-	cleanupFunctions              []func()
+	cleanupFunctions              []func(error)
 	requestStartTime              time.Time
 	outcomeTag                    metrics.Tag
 }
 
-func (c *requestContext) capturePanicAndRecordMetrics(errPtr *error) {
+func (c *requestContext) augmentContext(ctx context.Context) context.Context {
+	ctx = metrics.AddMetricsContext(ctx)
+	return interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+}
+
+func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
 	recovered := recover() //nolint:revive
 	if recovered != nil {
 		err, ok := recovered.(error)
@@ -220,11 +234,16 @@ func (c *requestContext) capturePanicAndRecordMetrics(errPtr *error) {
 		}
 	}
 
+	// Record Nexus-specific metrics
 	c.metricsHandler.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
 	c.metricsHandler.Histogram(metrics.NexusCompletionLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
 
+	// Record general telemetry metrics
+	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
+	c.TelemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors)
+
 	for _, fn := range c.cleanupFunctions {
-		fn()
+		fn(*errPtr)
 	}
 }
 
@@ -268,9 +287,19 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 	}
 	// TODO: Redirect if current cluster is passive for this namespace.
 
+	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
+		if retErr != nil {
+			c.TelemetryInterceptor.HandleError(
+				request,
+				c.metricsHandlerForInterceptors,
+				[]tag.Tag{tag.Operation(methodNameForMetrics), tag.WorkflowNamespace(c.namespace.Name().String())},
+				retErr,
+			)
+		}
+	})
+
 	cleanup, err := c.NamespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), apiName, c.metricsHandlerForInterceptors, request)
-	_ = cleanup
-	c.cleanupFunctions = append(c.cleanupFunctions, cleanup)
+	c.cleanupFunctions = append(c.cleanupFunctions, func(error) { cleanup() })
 	if err != nil {
 		c.outcomeTag = metrics.NexusOutcomeTag("namespace_concurrency_limited")
 		return commonnexus.ConvertGRPCError(err, false)

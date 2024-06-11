@@ -45,7 +45,8 @@ var Module = fx.Module(
 
 func ConfigProvider(coll *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled: coll.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
+		Enabled:          dynamicconfig.EnableNexus.Get(coll),
+		PayloadSizeLimit: dynamicconfig.BlobSizeLimitError.Get(coll),
 	}
 }
 

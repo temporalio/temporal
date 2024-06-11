@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,8 +37,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -63,18 +64,25 @@ const (
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
+
+	// The duration of each mini-bucket in the circularTaskBuffer
+	intervalSize = 5
+	// The total duration which is used to calculate the rate of tasks added/dispatched
+	totalIntervalSize = 30
 )
 
 type (
+	taskQueueManagerOpt func(*physicalTaskQueueManagerImpl)
+
 	addTaskParams struct {
-		taskInfo      *persistencespb.TaskInfo
-		source        enumsspb.TaskSource
-		forwardedFrom string
+		taskInfo    *persistencespb.TaskInfo
+		directive   *taskqueuespb.TaskVersionDirective
+		forwardInfo *taskqueuespb.TaskForwardInfo
 	}
 
 	physicalTaskQueueManager interface {
 		Start()
-		Stop()
+		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
@@ -83,9 +91,9 @@ type (
 		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()
 		// TrySyncMatch tries to match task to a local or remote poller. If not possible, returns false.
-		TrySyncMatch(ctx context.Context, params addTaskParams) (bool, error)
+		TrySyncMatch(ctx context.Context, task *internalTask) (bool, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
-		SpoolTask(params addTaskParams) error
+		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		ProcessSpooledTask(ctx context.Context, task *internalTask) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
@@ -101,9 +109,8 @@ type (
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		// Describe returns information about the physical task queue
-		Describe() *taskqueuespb.PhysicalTaskQueueInfo
-		UnloadFromPartitionManager()
+		GetStats() *taskqueuepb.TaskQueueStats
+		UnloadFromPartitionManager(unloadCause)
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
 	}
@@ -125,11 +132,108 @@ type (
 		clusterMeta          cluster.Metadata
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory *pollerHistory
-		currentPolls  atomic.Int64
-		taskValidator taskValidator
+		pollerHistory              *pollerHistory
+		currentPolls               atomic.Int64
+		taskValidator              taskValidator
+		tasksAddedInIntervals      *taskTracker
+		tasksDispatchedInIntervals *taskTracker
 	}
 )
+
+// a circular array of a fixed size for tracking tasks
+type circularTaskBuffer struct {
+	buffer     []int
+	currentPos int
+}
+
+func newCircularTaskBuffer(size int) circularTaskBuffer {
+	return circularTaskBuffer{
+		buffer: make([]int, size),
+	}
+}
+
+func (cb *circularTaskBuffer) incrementTaskCount() {
+	cb.buffer[cb.currentPos]++
+}
+
+func (cb *circularTaskBuffer) advance() {
+	cb.currentPos = (cb.currentPos + 1) % len(cb.buffer)
+	cb.buffer[cb.currentPos] = 0 // Reset the task count for the new interval
+}
+
+// returns the total number of tasks in the buffer
+func (cb *circularTaskBuffer) totalTasks() int {
+	totalTasks := 0
+	for _, count := range cb.buffer {
+		totalTasks += count
+	}
+	return totalTasks
+}
+
+type taskTracker struct {
+	lock              sync.Mutex
+	clock             clock.TimeSource
+	startTime         time.Time     // time when taskTracker was initialized
+	bucketStartTime   time.Time     // the starting time of a bucket in the buffer
+	bucketSize        time.Duration // the duration of each bucket in the buffer
+	numberOfBuckets   int           // the total number of buckets in the buffer
+	totalIntervalSize time.Duration // the number of seconds over which rate of tasks are added/dispatched
+	tasksInInterval   circularTaskBuffer
+}
+
+func newTaskTracker(timeSource clock.TimeSource) *taskTracker {
+	return &taskTracker{
+		clock:             timeSource,
+		startTime:         timeSource.Now(),
+		bucketStartTime:   timeSource.Now(),
+		bucketSize:        time.Duration(intervalSize) * time.Second,
+		numberOfBuckets:   (totalIntervalSize / intervalSize) + 1,
+		totalIntervalSize: time.Duration(totalIntervalSize) * time.Second,
+		tasksInInterval:   newCircularTaskBuffer((totalIntervalSize / intervalSize) + 1),
+	}
+}
+
+// advanceAndResetTracker advances the trackers position and clears out any expired intervals
+// This method must be called with taskTracker's lock held.
+func (s *taskTracker) advanceAndResetTracker(elapsed time.Duration) {
+	// Calculate the number of intervals elapsed since the start interval time
+	intervalsElapsed := int(elapsed / s.bucketSize)
+
+	for i := 0; i < min(intervalsElapsed, s.numberOfBuckets); i++ {
+		s.tasksInInterval.advance() // advancing our circular buffer's position until we land on the right interval
+	}
+	s.bucketStartTime = s.bucketStartTime.Add(time.Duration(intervalsElapsed) * s.bucketSize)
+}
+
+// incrementTaskCount adds/removes tasks from the current time that falls in the appropriate interval
+func (s *taskTracker) incrementTaskCount() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	currentTime := s.clock.Now()
+
+	// Calculate elapsed time from the latest start interval time
+	elapsed := currentTime.Sub(s.bucketStartTime)
+	s.advanceAndResetTracker(elapsed)
+	s.tasksInInterval.incrementTaskCount()
+}
+
+// rate returns the rate of tasks added/dispatched in a given interval
+func (s *taskTracker) rate() float32 {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	currentTime := s.clock.Now()
+
+	// Calculate elapsed time from the latest start interval time
+	elapsed := currentTime.Sub(s.bucketStartTime)
+	s.advanceAndResetTracker(elapsed)
+	totalTasks := s.tasksInInterval.totalTasks()
+
+	elapsedTime := min(currentTime.Sub(s.bucketStartTime)+s.totalIntervalSize,
+		currentTime.Sub(s.startTime))
+
+	// rate per second
+	return float32(totalTasks) / float32(elapsedTime.Seconds())
+}
 
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
@@ -147,28 +251,34 @@ func newPhysicalTaskQueueManager(
 	config := partitionMgr.config
 	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(queue.VersionSet()))
 	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(queue.VersionSet()))
+	buildIdTagValue := queue.VersionSet()
+	if buildIdTagValue == "" {
+		buildIdTagValue = queue.BuildId()
+	}
 	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(queue.VersionSet()))
+		metrics.WorkerBuildIdTag(buildIdTagValue))
 	pqMgr := &physicalTaskQueueManagerImpl{
-		status:               common.DaemonStatusInitialized,
-		partitionMgr:         partitionMgr,
-		namespaceRegistry:    e.namespaceRegistry,
-		matchingClient:       e.matchingRawClient,
-		metricsHandler:       e.metricsHandler,
-		clusterMeta:          e.clusterMeta,
-		queue:                queue,
-		logger:               logger,
-		throttledLogger:      throttledLogger,
-		config:               config,
-		taggedMetricsHandler: taggedMetricsHandler,
+		status:                     common.DaemonStatusInitialized,
+		partitionMgr:               partitionMgr,
+		namespaceRegistry:          e.namespaceRegistry,
+		matchingClient:             e.matchingRawClient,
+		metricsHandler:             e.metricsHandler,
+		clusterMeta:                e.clusterMeta,
+		queue:                      queue,
+		logger:                     logger,
+		throttledLogger:            throttledLogger,
+		config:                     config,
+		taggedMetricsHandler:       taggedMetricsHandler,
+		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
+		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
 	}
 	pqMgr.pollerHistory = newPollerHistory()
 
 	pqMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
 		config.MaxTaskQueueIdleTime,
-		pqMgr.UnloadFromPartitionManager,
+		func() { pqMgr.UnloadFromPartitionManager(unloadCauseIdle) },
 	)
 
 	pqMgr.taskValidator = newTaskValidator(pqMgr.newIOContext, pqMgr.clusterMeta, pqMgr.namespaceRegistry, pqMgr.partitionMgr.engine.historyClient)
@@ -209,14 +319,14 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	}
 	c.liveness.Start()
 	c.backlogMgr.Start()
-	c.logger.Info("", tag.LifeCycleStarted)
+	c.logger.Info("", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
 }
 
 // Stop does not unload the queue from its partition. It is intended to be called by the partition manager when
-// unloading a queues. For stopping and unloading a queue call unloadFromPartitionManager instead.
-func (c *physicalTaskQueueManagerImpl) Stop() {
+// unloading a queues. For stopping and unloading a queue call UnloadFromPartitionManager instead.
+func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusStarted,
@@ -225,8 +335,9 @@ func (c *physicalTaskQueueManagerImpl) Stop() {
 		return
 	}
 	c.backlogMgr.Stop()
+	c.matcher.Stop()
 	c.liveness.Stop()
-	c.logger.Info("", tag.LifeCycleStopped)
+	c.logger.Info("", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
 }
@@ -235,12 +346,9 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 	return c.backlogMgr.WaitUntilInitialized(ctx)
 }
 
-func (c *physicalTaskQueueManagerImpl) SpoolTask(params addTaskParams) error {
-	if params.forwardedFrom == "" {
-		// request sent by history service
-		c.liveness.markAlive()
-	}
-	return c.backlogMgr.SpoolTask(params.taskInfo)
+func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
+	c.liveness.markAlive()
+	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
 // PollTask blocks waiting for a task.
@@ -292,6 +400,11 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 		task.namespace = c.partitionMgr.ns.Name()
 		task.backlogCountHint = c.backlogMgr.BacklogCountHint
+
+		if task.redirectInfo == nil && (!task.isStarted() || !task.started.hasEmptyResponse()) {
+			// only track the original polls, not forwarded ones.
+			c.tasksDispatchedInIntervals.incrementTaskCount()
+		}
 		return task, nil
 	}
 }
@@ -332,6 +445,9 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
+	if !task.isForwarded() {
+		c.tasksAddedInIntervals.incrementTaskCount()
+	}
 	return c.matcher.OfferQuery(ctx, task)
 }
 
@@ -340,7 +456,11 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
-	task := newInternalNexusTask(taskId, request)
+	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
+	task := newInternalNexusTask(taskId, deadline, request)
+	if !task.isForwarded() {
+		c.tasksAddedInIntervals.incrementTaskCount()
+	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
 
@@ -383,9 +503,14 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
-	return &taskqueuespb.PhysicalTaskQueueInfo{
-		Pollers: c.GetAllPollerInfo(),
+func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
+	return &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
+		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.taskReader.getBacklogHeadAge()), // using this and not matcher's
+		// because it reports only the age of the current physical queue backlog (not including the redirected backlogs) which is consistent
+		// with the ApproximateBacklogCount metric.
+		TasksAddRate:      c.tasksAddedInIntervals.rate(),
+		TasksDispatchRate: c.tasksDispatchedInIntervals.rate(),
 	}
 }
 
@@ -401,10 +526,11 @@ func (c *physicalTaskQueueManagerImpl) String() string {
 	return buf.String()
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
-	if params.forwardedFrom == "" {
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
+	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
+		c.tasksAddedInIntervals.incrementTaskCount()
 		if c.config.TestDisableSyncMatch() {
 			return false, nil
 		}
@@ -412,13 +538,6 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, params 
 	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
-	// Use fake TaskId for sync match as it hasn't been allocated yet
-	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
-		Data:   params.taskInfo,
-		TaskId: syncMatchTaskId,
-	}
-
-	task := newInternalTask(fakeTaskIdWrapper, nil, params.source, params.forwardedFrom, true)
 	return c.matcher.Offer(childCtx, task)
 }
 
@@ -456,6 +575,6 @@ func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.
 	return c.partitionMgr.callerInfoContext(ctx), cancel
 }
 
-func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager() {
-	c.partitionMgr.unloadPhysicalQueue(c)
+func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
+	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
 }

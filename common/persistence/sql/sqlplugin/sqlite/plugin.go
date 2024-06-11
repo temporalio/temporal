@@ -37,6 +37,8 @@ import (
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
@@ -77,6 +79,8 @@ func (p *plugin) CreateDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	_ log.Logger,
+	_ metrics.Handler,
 ) (sqlplugin.DB, error) {
 	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
 	if err != nil {
@@ -94,6 +98,8 @@ func (p *plugin) CreateAdminDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	_ log.Logger,
+	_ metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
 	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
 	if err != nil {

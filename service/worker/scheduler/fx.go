@@ -26,6 +26,7 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -69,6 +70,7 @@ type (
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.FloatPropertyFnWithNamespaceFilter
 		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
+		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -91,20 +93,18 @@ var Module = fx.Options(
 )
 
 func NewResult(
-	dcCollection *dynamicconfig.Collection,
+	dc *dynamicconfig.Collection,
 	specBuilder *SpecBuilder,
 	params activityDeps,
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			specBuilder:  specBuilder,
-			activityDeps: params,
-			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
-				dynamicconfig.WorkerEnableScheduler, true),
-			globalNSStartWorkflowRPS: dcCollection.GetFloatPropertyFilteredByNamespace(
-				dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 30.0),
-			maxBlobSize: dcCollection.GetIntPropertyFilteredByNamespace(
-				dynamicconfig.BlobSizeLimitError, eventStorageSize),
+			specBuilder:              specBuilder,
+			activityDeps:             params,
+			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
+			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Get(dc),
+			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
+			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
 		},
 	}
 }
@@ -128,10 +128,11 @@ func (s *workerComponent) activities(name namespace.Name, id namespace.ID, detai
 		return float64(details.Multiplicity) * s.globalNSStartWorkflowRPS(name.String()) / float64(details.TotalWorkers)
 	}
 	return &activities{
-		activityDeps:                 s.activityDeps,
-		namespace:                    name,
-		namespaceID:                  id,
-		startWorkflowRateLimiter:     quotas.NewDefaultOutgoingRateLimiter(localRPS),
-		singleResultStorageSizePerNs: s.maxBlobSize,
+		activityDeps:             s.activityDeps,
+		namespace:                name,
+		namespaceID:              id,
+		startWorkflowRateLimiter: quotas.NewDefaultOutgoingRateLimiter(localRPS),
+		maxBlobSize:              func() int { return s.maxBlobSize(name.String()) },
+		localActivitySleepLimit:  func() time.Duration { return s.localActivitySleepLimit(name.String()) },
 	}
 }

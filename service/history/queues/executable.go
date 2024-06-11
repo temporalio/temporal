@@ -36,12 +36,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sony/gobreaker"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -497,11 +497,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if len(e.dlqErrorPattern()) > 0 {
 		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
 		if mErr != nil {
-			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern))
+			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
 		} else if match {
 			e.logger.Error(
 				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
-					dynamicconfig.HistoryTaskDLQErrorPattern),
+					dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
 				tag.Error(err),
 				tag.ErrorType(err))
 			e.terminalFailureCause = err
@@ -518,8 +518,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return rewrittenErr
 	}
 	// Unexpected errors handled below
+	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
+	e.logger.Warn("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.isUnexpectedNonRetryableError(err) {
 		// Terminal errors are likely due to data corruption.
@@ -538,10 +539,6 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	// Unexpected but retryable error
-	e.unexpectedErrorAttempts++
-	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
-
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
@@ -803,12 +800,12 @@ func EstimateTaskMetricTag(
 // of failure, and return the inner error.
 type CircuitBreakerExecutable struct {
 	Executable
-	cb *gobreaker.TwoStepCircuitBreaker
+	cb circuitbreaker.TwoStepCircuitBreaker
 }
 
 func NewCircuitBreakerExecutable(
 	e Executable,
-	cb *gobreaker.TwoStepCircuitBreaker,
+	cb circuitbreaker.TwoStepCircuitBreaker,
 ) *CircuitBreakerExecutable {
 	return &CircuitBreakerExecutable{
 		Executable: e,

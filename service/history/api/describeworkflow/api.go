@@ -101,6 +101,11 @@ func Invoke(
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 
+	// fetch the start event to get the associated user metadata.
+	startEvent, err := mutableState.GetStartEvent(ctx)
+	if err != nil {
+		return nil, err
+	}
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -110,6 +115,7 @@ func Invoke(
 			WorkflowExecutionTimeout:   executionInfo.WorkflowExecutionTimeout,
 			WorkflowRunTimeout:         executionInfo.WorkflowRunTimeout,
 			DefaultWorkflowTaskTimeout: executionInfo.DefaultWorkflowTaskTimeout,
+			UserMetadata:               startEvent.UserMetadata,
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{
@@ -331,6 +337,7 @@ func Invoke(
 			}
 		}
 		result.PendingNexusOperations = append(result.PendingNexusOperations, &workflowpb.PendingNexusOperationInfo{
+			Endpoint:                op.Endpoint,
 			Service:                 op.Service,
 			Operation:               op.Operation,
 			OperationId:             op.OperationId,

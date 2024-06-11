@@ -29,17 +29,21 @@
 package xdc
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	replicationpb "go.temporal.io/api/replication/v1"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"gopkg.in/yaml.v3"
 
+	"go.temporal.io/server/common/testing/historyrequire"
+
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -65,6 +69,8 @@ type (
 		cluster2               *tests.TestCluster
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
+
+		startTime time.Time
 	}
 )
 
@@ -116,9 +122,10 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 			Enabled:                true,
 			InitialFailoverVersion: int64(i + 1),
 			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
-			HTTPAddress:            fmt.Sprintf("http://127.0.0.1:%d144", 7+i),
+			HTTPAddress:            fmt.Sprintf("127.0.0.1:%d144", 7+i),
 		}
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
+		clusterConfigs[i].EnableMetricsCapture = true
 	}
 
 	c, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
@@ -128,6 +135,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	c, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
+
+	s.startTime = time.Now()
 
 	cluster1Info := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName]
 	cluster2Info := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName]
@@ -152,6 +161,36 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	time.Sleep(time.Millisecond * 200)
 }
 
+func (s *xdcBaseSuite) waitForClusterConnected() {
+	s.logger.Debug("wait for cluster to be connected")
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		s.logger.Debug("check if stream is established")
+		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		if !(assert.NoError(c, err) &&
+			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
+			return
+		}
+		shard := resp.Shards[0]
+		if !(assert.NotNil(c, shard) &&
+			assert.True(c, shard.MaxReplicationTaskId > 0) &&
+			assert.NotNil(c, shard.ShardLocalTime) &&
+			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
+			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
+			assert.NotNil(c, shard.RemoteClusters)) {
+			return
+		}
+		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
+		if !(assert.True(c, ok) &&
+			assert.NotNil(c, standbyAckInfo) &&
+			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
+			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
+			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
+			return
+		}
+		s.logger.Debug("cluster connected")
+	}, 60*time.Second, 1*time.Second)
+}
+
 func (s *xdcBaseSuite) tearDownSuite() {
 	s.NoError(s.cluster1.TearDownCluster())
 	s.NoError(s.cluster2.TearDownCluster())
@@ -162,4 +201,6 @@ func (s *xdcBaseSuite) setupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	s.waitForClusterConnected()
 }

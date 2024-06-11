@@ -36,31 +36,78 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type (
+	WaitOptions struct {
+		CheckInterval time.Duration
+		MaxDuration   time.Duration
+		NumGoRoutines int
+	}
+)
+
+var (
+	defaultWaitOptions = WaitOptions{
+		CheckInterval: 1 * time.Millisecond,
+		MaxDuration:   1 * time.Second,
+		NumGoRoutines: 1,
+	}
+)
+
+func WithCheckInterval(checkInterval time.Duration) func(*WaitOptions) {
+	return func(wo *WaitOptions) {
+		wo.CheckInterval = checkInterval
+	}
+}
+
+func WithMaxDuration(maxDuration time.Duration) func(*WaitOptions) {
+	return func(wo *WaitOptions) {
+		wo.MaxDuration = maxDuration
+	}
+}
+
+func WithNumGoRoutines(numGoRoutines int) func(*WaitOptions) {
+	return func(wo *WaitOptions) {
+		wo.NumGoRoutines = numGoRoutines
+	}
+}
+
 // WaitGoRoutineWithFn waits for a go routine with the given function to appear within the duration.
-func WaitGoRoutineWithFn(t testing.TB, fn any, maxDuration time.Duration) {
+func WaitGoRoutineWithFn(t testing.TB, fn any, opts ...func(*WaitOptions)) {
 	t.Helper()
 
-	targetFnName, ok := functionNameForPC(reflect.ValueOf(fn).Pointer())
-	if !ok {
-		t.Errorf("Invalid function %#v", fn)
+	wo := defaultWaitOptions
+	for _, opt := range opts {
+		opt(&wo)
+	}
+
+	targetFnName, isString := fn.(string)
+	if !isString {
+		var isFunc bool
+		if targetFnName, isFunc = functionNameForPC(reflect.ValueOf(fn).Pointer()); !isFunc {
+			t.Errorf("Invalid function %#v", fn)
+		}
 	}
 
 	attempt := 1
 	require.Eventually(t,
 		func() bool {
-			stackRecords := make([]runtime.StackRecord, runtime.NumGoroutine()+10)
+			// 20 is a buffer for go routines that might be created between next 2 lines. 10 is not enough!
+			stackRecords := make([]runtime.StackRecord, runtime.NumGoroutine()+20)
 			stackRecordsLen, ok := runtime.GoroutineProfile(stackRecords)
 			if !ok {
 				t.Errorf("Size %d is too small for stack records. Need %d", len(stackRecords), stackRecordsLen)
 			}
 
+			numFound := 0
 			for _, stackRecord := range stackRecords {
 				frames := runtime.CallersFrames(stackRecord.Stack())
 				for {
 					frame, more := frames.Next()
 					if strings.Contains(frame.Function, targetFnName) {
-						t.Logf("Found %s function on %d attempt\n", frame.Function, attempt)
-						return true
+						numFound++
+						if numFound == wo.NumGoRoutines {
+							t.Logf("Found %s function %d times on %d attempt\n", frame.Function, numFound, attempt)
+							return true
+						}
 					}
 					if !more {
 						break
@@ -70,9 +117,9 @@ func WaitGoRoutineWithFn(t testing.TB, fn any, maxDuration time.Duration) {
 			attempt++
 			return false
 		},
-		maxDuration,
-		1*time.Millisecond,
-		"Function %s didn't appear in any go routine call stack after %s", targetFnName, maxDuration.String())
+		wo.MaxDuration,
+		wo.CheckInterval,
+		"Function %s didn't appear in any go routine call stack after %s", targetFnName, wo.MaxDuration.String())
 }
 
 // PrintGoRoutines prints all go routines.

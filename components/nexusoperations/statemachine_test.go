@@ -32,6 +32,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -64,7 +65,6 @@ func TestAddChild(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			root := newRoot(t, &nodeBackend{})
 			schedTime := timestamppb.Now()
@@ -72,6 +72,7 @@ func TestAddChild(t *testing.T) {
 				EventTime: schedTime,
 				Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 					NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+						Endpoint:               "endpoint",
 						Service:                "service",
 						Operation:              "operation",
 						RequestId:              "request-id",
@@ -88,6 +89,7 @@ func TestAddChild(t *testing.T) {
 			op, err := hsm.MachineData[nexusoperations.Operation](child)
 			require.NoError(t, err)
 			require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
+			require.Equal(t, "endpoint", op.Endpoint)
 			require.Equal(t, "service", op.Service)
 			require.Equal(t, "operation", op.Operation)
 			require.Equal(t, schedTime, op.ScheduledTime)
@@ -113,6 +115,7 @@ func TestRegenerateTasks(t *testing.T) {
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
+				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).Destination, "endpoint")
 				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
 			},
 		},
@@ -147,7 +150,6 @@ func TestRegenerateTasks(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			node := newOperationNode(t, &nodeBackend{}, time.Now(), tc.timeout)
 
@@ -158,7 +160,8 @@ func TestRegenerateTasks(t *testing.T) {
 							Time: time.Now(),
 							Err:  fmt.Errorf("test"), // nolint:goerr113
 						},
-						Node: node,
+						Node:        node,
+						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))
 			}
@@ -183,6 +186,7 @@ func TestRetry(t *testing.T) {
 				Time: time.Now(),
 				Err:  fmt.Errorf("test"), // nolint:goerr113
 			},
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	}))
 	oap := node.Outputs()
@@ -208,7 +212,7 @@ func TestRetry(t *testing.T) {
 	require.Equal(t, 1, len(oap[0].Outputs))
 	require.Equal(t, 1, len(oap[0].Outputs[0].Tasks))
 	invocationTask := oap[0].Outputs[0].Tasks[0].(nexusoperations.InvocationTask) // nolint:revive
-	require.Equal(t, "service", invocationTask.Destination)
+	require.Equal(t, "endpoint", invocationTask.Destination)
 	op, err = hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
@@ -301,7 +305,6 @@ func TestCompleteFromAttempt(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			node := newOperationNode(t, &nodeBackend{}, time.Now(), time.Minute)
 			// Reset any outputs generated from nexusoperations.AddChild, we tested those already.
@@ -342,6 +345,7 @@ func TestCompleteExternally(t *testing.T) {
 							Time: time.Now(),
 							Err:  fmt.Errorf("test"), // nolint:goerr113
 						},
+						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))
 				return node
@@ -417,7 +421,6 @@ func TestCompleteExternally(t *testing.T) {
 	for _, setup := range setups {
 		setup := setup
 		for _, tc := range cases {
-			tc := tc
 			t.Run(setup.name+"-"+tc.name, func(t *testing.T) {
 				node := setup.fn(t)
 				node.ClearTransactionState()
@@ -500,9 +503,10 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// AttemptFailed
 	out, err := nexusoperations.TransitionCancelationAttemptFailed.Apply(cancelation, nexusoperations.EventCancelationAttemptFailed{
-		Time: currentTime,
-		Err:  fmt.Errorf("test"),
-		Node: node,
+		Time:        currentTime,
+		Err:         fmt.Errorf("test"),
+		Node:        node,
+		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 	})
 	require.NoError(t, err)
 
@@ -537,7 +541,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert cancelation task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	cbTask := out.Tasks[0].(nexusoperations.CancelationTask) // nolint:revive
-	require.Equal(t, "service", cbTask.Destination)
+	require.Equal(t, "endpoint", cbTask.Destination)
 
 	// Store the pre-succeeded state to test Failed later
 	dup := nexusoperations.Cancelation{common.CloneProto(cancelation.NexusOperationCancellationInfo)}

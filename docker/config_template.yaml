@@ -263,13 +263,14 @@ global:
         claimMapper: {{ default .Env.TEMPORAL_AUTH_CLAIM_MAPPER "" }}
 
 {{- $temporalGrpcPort := default .Env.FRONTEND_GRPC_PORT "7233" }}
+{{- $temporalHTTPPort := default .Env.FRONTEND_HTTP_PORT "7243" }}
 services:
     frontend:
         rpc:
             grpcPort: {{ $temporalGrpcPort }}
             membershipPort: {{ default .Env.FRONTEND_MEMBERSHIP_PORT "6933" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
-            httpPort: {{ default .Env.FRONTEND_HTTP_PORT "7243" }}
+            httpPort: {{ $temporalHTTPPort }}
 
     {{- if .Env.USE_INTERNAL_FRONTEND }}
     internal-frontend:
@@ -308,6 +309,7 @@ clusterMetadata:
             initialFailoverVersion: 1
             rpcName: "frontend"
             rpcAddress: {{ (print "127.0.0.1:" $temporalGrpcPort) }}
+            httpAddress: {{ (print "127.0.0.1:" $temporalHTTPPort) }}
 
 dcRedirectionPolicy:
     policy: "noop"

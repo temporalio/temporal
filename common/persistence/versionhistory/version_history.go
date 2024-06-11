@@ -228,7 +228,7 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 		return 0, err
 	}
 	if eventID < common.FirstEventID || eventID > lastItem.GetEventId() {
-		return 0, serviceerror.NewInternal("input event ID is not in range.")
+		return 0, serviceerror.NewInternal(fmt.Sprintf("input event ID is not in range, eventID: %v", eventID))
 	}
 
 	// items are sorted by eventID & version
@@ -239,7 +239,7 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 			return currentItem.GetVersion(), nil
 		}
 	}
-	return 0, serviceerror.NewInternal("input event ID is not in range.")
+	return 0, serviceerror.NewInternal(fmt.Sprintf("input event ID is not in range, eventID: %v", eventID))
 }
 
 // IsEmptyVersionHistory indicate whether version history is empty

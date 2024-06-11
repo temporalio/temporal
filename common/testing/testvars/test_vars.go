@@ -35,10 +35,11 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -48,9 +49,16 @@ type (
 		an       Any
 		kv       sync.Map
 	}
+	testNamer interface {
+		Name() string
+	}
 )
 
-func New(testName string) *TestVars {
+func New(testNamer testNamer) *TestVars {
+	return newFromName(testNamer.Name())
+}
+
+func newFromName(testName string) *TestVars {
 	th := hash(testName)
 	return &TestVars{
 		testName: testName,
@@ -88,7 +96,7 @@ func (tv *TestVars) set(typ string, key []string, val any) {
 }
 
 func (tv *TestVars) clone() *TestVars {
-	tv2 := New(tv.testName)
+	tv2 := newFromName(tv.testName)
 	tv.kv.Range(func(key, value any) bool {
 		tv2.kv.Store(key, value)
 		return true
@@ -244,6 +252,15 @@ func (tv *TestVars) HandlerName(key ...string) string {
 
 func (tv *TestVars) WithHandlerName(handlerName string, key ...string) *TestVars {
 	return tv.cloneSet("handler_name", key, handlerName)
+}
+
+//revive:disable:unchecked-type-assertion
+func (tv *TestVars) ClientIdentity(key ...string) string {
+	return tv.getOrCreate("client_identity", key).(string)
+}
+
+func (tv *TestVars) WithClientIdentity(identity string, key ...string) *TestVars {
+	return tv.cloneSet("client_identity", key, identity)
 }
 
 func (tv *TestVars) WorkerIdentity(key ...string) string {

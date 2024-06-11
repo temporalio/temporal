@@ -39,6 +39,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
@@ -142,12 +143,24 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 		// remove this "if" case when that is done.
 		if operation == metrics.FrontendGetWorkflowExecutionHistoryScope {
-			request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
-			if request.GetWaitNewEvent() {
-				return metrics.FrontendPollWorkflowExecutionHistoryScope
+			if request, ok := req.(*workflowservice.GetWorkflowExecutionHistoryRequest); ok {
+				if request.GetWaitNewEvent() {
+					return metrics.FrontendPollWorkflowExecutionHistoryScope
+				}
 			}
 		}
 		return operation
+	} else if strings.HasPrefix(fullName, api.HistoryServicePrefix) {
+		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
+		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
+		// remove this "if" case when that is done.
+		if operation == metrics.HistoryGetWorkflowExecutionHistoryScope {
+			if request, ok := req.(*historyservice.GetWorkflowExecutionHistoryRequest); ok {
+				if r := request.GetRequest(); r != nil && r.GetWaitNewEvent() {
+					return metrics.HistoryPollWorkflowExecutionHistoryScope
+				}
+			}
+		}
 	}
 	return ti.overrideOperationTag(fullName, operation)
 }
@@ -175,38 +188,41 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	methodName := api.MethodName(info.FullMethod)
 	metricsHandler, logTags := ti.unaryMetricsHandlerLogTags(req, info.FullMethod, methodName)
 
-	ctx = context.WithValue(ctx, metricsCtxKey, metricsHandler)
+	ctx = AddTelemetryContext(ctx, metricsHandler)
 	metrics.ServiceRequests.With(metricsHandler).Record(1)
 
 	startTime := time.Now().UTC()
-	userLatencyDuration := time.Duration(0)
 	defer func() {
-		latency := time.Since(startTime)
-		metrics.ServiceLatency.With(metricsHandler).Record(latency)
-		noUserLatency := latency - userLatencyDuration
-		if noUserLatency < 0 {
-			noUserLatency = 0
-		}
-		metrics.ServiceLatencyNoUserLatency.With(metricsHandler).Record(noUserLatency)
+		ti.RecordLatencyMetrics(ctx, startTime, metricsHandler)
 	}()
 
 	resp, err := handler(ctx, req)
 
+	if err != nil {
+		ti.HandleError(req, metricsHandler, logTags, err)
+	} else {
+		// emit action metrics only after successful calls
+		ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
+	}
+
+	return resp, err
+}
+
+func AddTelemetryContext(ctx context.Context, metricsHandler metrics.Handler) context.Context {
+	return context.WithValue(ctx, metricsCtxKey, metricsHandler)
+}
+
+func (ti *TelemetryInterceptor) RecordLatencyMetrics(ctx context.Context, startTime time.Time, metricsHandler metrics.Handler) {
+	userLatencyDuration := time.Duration(0)
 	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name()); ok {
 		userLatencyDuration = time.Duration(val)
-		startTime.Add(userLatencyDuration)
 		metrics.ServiceLatencyUserLatency.With(metricsHandler).Record(userLatencyDuration)
 	}
 
-	if err != nil {
-		ti.handleError(req, metricsHandler, logTags, err)
-		return nil, err
-	}
-
-	// emit action metrics only after successful calls
-	ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
-
-	return resp, nil
+	latency := time.Since(startTime)
+	metrics.ServiceLatency.With(metricsHandler).Record(latency)
+	noUserLatency := max(0, latency-userLatencyDuration)
+	metrics.ServiceLatencyNoUserLatency.With(metricsHandler).Record(noUserLatency)
 }
 
 func (ti *TelemetryInterceptor) StreamIntercept(
@@ -221,7 +237,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 
 	err := handler(service, serverStream)
 	if err != nil {
-		ti.handleError(nil, metricsHandler, logTags, err)
+		ti.HandleError(nil, metricsHandler, logTags, err)
 		return err
 	}
 	return nil
@@ -345,7 +361,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	), []tag.Tag{tag.Operation(overridedMethodName)}
 }
 
-func (ti *TelemetryInterceptor) handleError(
+func (ti *TelemetryInterceptor) HandleError(
 	req interface{},
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
@@ -394,6 +410,7 @@ func (ti *TelemetryInterceptor) handleError(
 	default:
 		// Also skip emitting ServiceFailures for non serviceerrors returned from handlers for certain error
 		// codes.
+
 		if st, ok := status.FromError(err); ok {
 			switch st.Code() {
 			case codes.InvalidArgument,
@@ -404,8 +421,13 @@ func (ti *TelemetryInterceptor) handleError(
 				codes.Unauthenticated,
 				codes.NotFound:
 				return
+			case codes.Internal,
+				codes.Unknown:
+				errorHash := common.ErrorHash(err)
+				logTags = append(logTags, tag.NewStringTag("hash", errorHash))
 			}
 		}
+
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
 		logTags = append(logTags, ti.getWorkflowTags(req)...)
 		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)

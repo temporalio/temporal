@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/auth"
@@ -104,7 +105,8 @@ type (
 		// disabled. This setting only applies to the frontend service.
 		HTTPPort int `yaml:"httpPort"`
 		// HTTPAdditionalForwardedHeaders adds additional headers to the default set
-		// forwarded from HTTP to gRPC.
+		// forwarded from HTTP to gRPC. Any value with a trailing * will match the prefix before
+		// the asterisk (eg. `x-internal-*`)
 		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`
 	}
 
@@ -243,9 +245,6 @@ type (
 		VisibilityStore string `yaml:"visibilityStore"`
 		// SecondaryVisibilityStore is the name of the secondary datastore to be used for visibility records
 		SecondaryVisibilityStore string `yaml:"secondaryVisibilityStore"`
-		// DEPRECATED: use VisibilityStore key instead of AdvancedVisibilityStore
-		// AdvancedVisibilityStore is the name of the datastore to be used for visibility records
-		AdvancedVisibilityStore string `yaml:"advancedVisibilityStore"`
 		// NumHistoryShards is the desired number of history shards. This config doesn't
 		// belong here, needs refactoring
 		NumHistoryShards int32 `yaml:"numHistoryShards" validate:"nonzero"`
@@ -270,15 +269,7 @@ type (
 	}
 
 	FaultInjection struct {
-		// Rate is the probability that we will return an error from any call to any datastore.
-		// The value should be between 0.0 and 1.0.
-		// The fault injector will inject different errors depending on the data store and method. See the
-		// implementation for details.
-		// This field is ignored if Targets is non-empty.
-		Rate float64 `yaml:"rate"`
-
 		// Targets is a mapping of data store name to a targeted fault injection config for that data store.
-		// If Targets is non-empty, then Rate is ignored.
 		// Here is an example config for targeted fault injection. This config will inject errors into the
 		// UpdateShard method of the ShardStore at a rate of 100%. No other methods will be affected.
 		/*
@@ -292,6 +283,7 @@ type (
 						ShardOwnershipLostError: 1.0 # all UpdateShard calls will fail with ShardOwnershipLostError
 		*/
 		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
+		// See config/development-cass-es-fi.yaml for a more detailed example.
 		Targets FaultInjectionTargets `yaml:"targets"`
 	}
 
@@ -392,6 +384,8 @@ type (
 
 	// SQL is the configuration for connecting to a SQL backed datastore
 	SQL struct {
+		// Connect is a function that returns a sql db connection. String based configuration is ignored if this is provided.
+		Connect func(sqlConfig *SQL) (*sqlx.DB, error) `yaml:"-" json:"-"`
 		// User is the username to be used for the conn
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
@@ -584,14 +578,14 @@ type (
 )
 
 const (
-	ShardStoreName                DataStoreName = "ShardStore"
-	TaskStoreName                 DataStoreName = "TaskStore"
-	MetadataStoreName             DataStoreName = "MetadataStore"
-	ExecutionStoreName            DataStoreName = "ExecutionStore"
-	QueueName                     DataStoreName = "Queue"
-	QueueV2Name                   DataStoreName = "QueueV2"
-	ClusterMDStoreName            DataStoreName = "ClusterMDStore"
-	NexusIncomingServiceStoreName DataStoreName = "NexusIncomingServiceStore"
+	ShardStoreName         DataStoreName = "ShardStore"
+	TaskStoreName          DataStoreName = "TaskStore"
+	MetadataStoreName      DataStoreName = "MetadataStore"
+	ExecutionStoreName     DataStoreName = "ExecutionStore"
+	QueueName              DataStoreName = "Queue"
+	QueueV2Name            DataStoreName = "QueueV2"
+	ClusterMDStoreName     DataStoreName = "ClusterMDStore"
+	NexusEndpointStoreName DataStoreName = "NexusEndpointStore"
 )
 
 const (

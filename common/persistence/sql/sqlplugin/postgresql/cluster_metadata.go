@@ -87,7 +87,7 @@ func (pdb *db) SaveClusterMetadata(
 	row *sqlplugin.ClusterMetadataRow,
 ) (sql.Result, error) {
 	if row.Version == 0 {
-		return pdb.conn.ExecContext(ctx,
+		return pdb.ExecContext(ctx,
 			insertClusterMetadataQry,
 			constMetadataPartition,
 			row.ClusterName,
@@ -96,7 +96,7 @@ func (pdb *db) SaveClusterMetadata(
 			1,
 		)
 	}
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		updateClusterMetadataQry,
 		row.Data,
 		row.DataEncoding,
@@ -114,7 +114,7 @@ func (pdb *db) ListClusterMetadata(
 	var rows []sqlplugin.ClusterMetadataRow
 	switch {
 	case len(filter.ClusterName) != 0:
-		err = pdb.conn.SelectContext(ctx,
+		err = pdb.SelectContext(ctx,
 			&rows,
 			listClusterMetadataRangeQry,
 			constMetadataPartition,
@@ -122,7 +122,7 @@ func (pdb *db) ListClusterMetadata(
 			filter.PageSize,
 		)
 	default:
-		err = pdb.conn.SelectContext(ctx,
+		err = pdb.SelectContext(ctx,
 			&rows,
 			listClusterMetadataQry,
 			constMetadataPartition,
@@ -137,7 +137,7 @@ func (pdb *db) GetClusterMetadata(
 	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&row,
 		getClusterMetadataQry,
 		constMetadataPartition,
@@ -154,7 +154,7 @@ func (pdb *db) WriteLockGetClusterMetadata(
 	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&row,
 		writeLockGetClusterMetadataQry,
 		constMetadataPartition,
@@ -171,7 +171,7 @@ func (pdb *db) DeleteClusterMetadata(
 	filter *sqlplugin.ClusterMetadataFilter,
 ) (sql.Result, error) {
 
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		deleteClusterMetadataQry,
 		constMetadataPartition,
 		filter.ClusterName,
@@ -182,7 +182,7 @@ func (pdb *db) UpsertClusterMembership(
 	ctx context.Context,
 	row *sqlplugin.ClusterMembershipRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		templateUpsertActiveClusterMembership,
 		constMembershipPartition,
 		row.HostID,
@@ -257,7 +257,7 @@ func (pdb *db) GetClusterMembers(
 	compiledQryString := queryString.String()
 
 	var rows []sqlplugin.ClusterMembershipRow
-	err := pdb.conn.SelectContext(ctx, &rows,
+	err := pdb.SelectContext(ctx, &rows,
 		compiledQryString,
 		operands...)
 	if err != nil {
@@ -275,7 +275,7 @@ func (pdb *db) PruneClusterMembership(
 	ctx context.Context,
 	filter *sqlplugin.PruneClusterMembershipFilter,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		templatePruneStaleClusterMembership,
 		constMembershipPartition,
 		filter.PruneRecordsBefore,

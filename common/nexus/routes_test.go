@@ -28,19 +28,19 @@ import (
 	"go.temporal.io/server/common/nexus"
 )
 
-func ExampleRouteSet_DispatchNexusTaskByNamespaceAndTaskQueue() {
+func ExampleRouteDispatchNexusTaskByNamespaceAndTaskQueue() {
 	path := nexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
 		Path(nexus.NamespaceAndTaskQueue{
 			Namespace: "TEST-NAMESPACE",
 			TaskQueue: "TEST-TASK-QUEUE",
 		})
 	fmt.Println(path)
-	// Output: api/v1/namespaces/TEST-NAMESPACE/task-queues/TEST-TASK-QUEUE/nexus-operations
+	// Output: namespaces/TEST-NAMESPACE/task-queues/TEST-TASK-QUEUE/nexus-services
 }
 
-func ExampleRouteSet_DispatchNexusTaskByService() {
-	path := nexus.RouteDispatchNexusTaskByService.
-		Path("TEST-SERVICE")
+func ExampleRouteDispatchNexusTaskByEndpoint() {
+	path := nexus.RouteDispatchNexusTaskByEndpoint.
+		Path("TEST-ENDPOINT")
 	fmt.Println(path)
-	// Output: api/v1/nexus/services/TEST-SERVICE/operations
+	// Output: nexus/endpoints/TEST-ENDPOINT/services
 }

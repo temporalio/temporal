@@ -109,6 +109,7 @@ func startAndSignalWorkflow(
 	}
 
 	workflowMutationFn, err := createWorkflowMutationFunction(
+		shard,
 		currentWorkflowLease,
 		runID,
 		signalWithStartRequest.GetWorkflowIdReusePolicy(),
@@ -143,6 +144,7 @@ func startAndSignalWorkflow(
 }
 
 func createWorkflowMutationFunction(
+	shardContext shard.Context,
 	currentWorkflowLease api.WorkflowLease,
 	newRunID string,
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
@@ -151,8 +153,11 @@ func createWorkflowMutationFunction(
 	if currentWorkflowLease == nil {
 		return nil, nil
 	}
-	currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
+	currentMutableState := currentWorkflowLease.GetMutableState()
+	currentExecutionState := currentMutableState.GetExecutionState()
+	currentWorkflowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
 	workflowMutationFunc, err := api.ResolveDuplicateWorkflowID(
+		shardContext,
 		currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
 		newRunID,
 		currentExecutionState.RunId,
@@ -161,6 +166,7 @@ func createWorkflowMutationFunction(
 		currentExecutionState.CreateRequestId,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
+		currentWorkflowStartTime,
 	)
 	return workflowMutationFunc, err
 }
@@ -170,13 +176,15 @@ func createVersionedRunID(currentWorkflowLease api.WorkflowLease) (*api.Versione
 		return nil, nil
 	}
 	currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
-	currentLastWriteVersion, err := currentWorkflowLease.GetMutableState().GetLastWriteVersion()
+	currentCloseVersion, err := currentWorkflowLease.GetMutableState().GetCloseVersion()
 	if err != nil {
 		return nil, err
 	}
 	id := api.VersionedRunID{
-		RunID:            currentExecutionState.RunId,
-		LastWriteVersion: currentLastWriteVersion,
+		RunID: currentExecutionState.RunId,
+		// we stop updating last write version in the current record after workflow is closed
+		// so workflow close version is the last write version for the current record
+		LastWriteVersion: currentCloseVersion,
 	}
 	return &id, nil
 }

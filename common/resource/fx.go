@@ -122,6 +122,7 @@ var Module = fx.Options(
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
 	membership.GRPCResolverModule,
+	fx.Provide(FrontendHTTPClientCacheProvider),
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
@@ -189,7 +190,7 @@ func SearchAttributeProviderProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
 func SearchAttributeManagerProvider(
@@ -200,7 +201,7 @@ func SearchAttributeManagerProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
 func NamespaceRegistryProvider(
@@ -213,8 +214,8 @@ func NamespaceRegistryProvider(
 	return namespace.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
-		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false),
+		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
 		logger,
 	)
@@ -338,7 +339,7 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 }
 
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
-	persistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, primitives.DefaultTransactionSizeLimit)
+	persistenceConfig.TransactionSizeLimit = dynamicconfig.TransactionSizeLimit.Get(dc)
 	return &persistenceConfig
 }
 
@@ -374,7 +375,7 @@ func SdkClientFactoryProvider(
 		frontendTLSConfig,
 		metricsHandler,
 		logger,
-		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
+		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	), nil
 }
 
@@ -406,6 +407,13 @@ func RPCFactoryProvider(
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},
 	), nil
+}
+
+func FrontendHTTPClientCacheProvider(
+	metadata cluster.Metadata,
+	tlsConfigProvider encryption.TLSConfigProvider,
+) *cluster.FrontendHTTPClientCache {
+	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
 }
 
 func getFrontendConnectionDetails(

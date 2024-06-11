@@ -31,7 +31,6 @@ import "google/protobuf/timestamp.proto";
 import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 
@@ -87,6 +86,7 @@ message SyncReplicationState {
 message ReplicationState {
     int64 inclusive_low_watermark = 1;
     google.protobuf.Timestamp inclusive_low_watermark_time = 2;
+    temporal.server.api.enums.v1.ReplicationFlowControlCommand flow_control_command = 3;
 }
 
 message ReplicationMessages {
@@ -103,6 +103,7 @@ message WorkflowReplicationMessages {
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
     int64 exclusive_high_watermark = 2;
     google.protobuf.Timestamp  exclusive_high_watermark_time = 3;
+    temporal.server.api.enums.v1.TaskPriority priority = 4;
 }
 
 message ReplicationTaskInfo {
@@ -127,7 +128,6 @@ message NamespaceTaskAttributes {
     int64 config_version = 6;
     int64 failover_version = 7;
     repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
-    repeated temporal.server.api.persistence.v1.NexusOutgoingService nexus_outgoing_services = 9;
 }
 
 message SyncShardStatusTaskAttributes {
@@ -152,6 +152,10 @@ message SyncActivityTaskAttributes {
     string last_worker_identity = 13;
     temporal.server.api.history.v1.VersionHistory version_history = 14;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 15;
+    // build ID of the worker who received this activity last time
+    string last_started_build_id = 16;
+    // workflows redirect_counter value when this activity started last time
+    int64 last_started_redirect_counter = 17;
 }
 
 message HistoryTaskAttributes {

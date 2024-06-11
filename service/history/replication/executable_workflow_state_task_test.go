@@ -34,6 +34,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -47,7 +48,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -66,6 +69,7 @@ type (
 		executableTask          *MockExecutableTask
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 		mockExecutionManager    *persistence.MockExecutionManager
+		config                  *configs.Config
 
 		replicationTask   *replicationspb.SyncWorkflowStateTaskAttributes
 		sourceClusterName string
@@ -112,6 +116,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
+	s.config = tests.NewDynamicConfig()
 
 	s.taskID = rand.Int63()
 	s.task = NewExecutableWorkflowStateTask(
@@ -125,11 +130,13 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 			DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:                  s.config,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		enumsspb.TASK_PRIORITY_HIGH,
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -257,5 +264,32 @@ func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill() {
 	}).Return(nil)
 
 	err := s.task.MarkPoisonPill()
+	s.NoError(err)
+}
+
+func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
+	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
+	shardID := rand.Int31()
+	shardContext := shard.NewMockContext(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.task.NamespaceID),
+		s.task.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.sourceClusterName,
+		TaskInfo: &persistencepb.ReplicationTaskInfo{
+			NamespaceId: s.task.NamespaceID,
+			WorkflowId:  s.task.WorkflowID,
+			RunId:       s.task.RunID,
+			TaskId:      s.task.ExecutableTask.TaskID(),
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		},
+	}).Return(serviceerror.NewInternal("failed"))
+
+	err := s.task.MarkPoisonPill()
+	s.Error(err)
+	err = s.task.MarkPoisonPill()
 	s.NoError(err)
 }

@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -77,15 +76,13 @@ type (
 		) error
 	}
 
-	stateRebuilderProvider func() StateRebuilder
-
 	workflowResetterImpl struct {
 		shardContext      shard.Context
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		workflowCache     wcache.Cache
-		newStateRebuilder stateRebuilderProvider
+		stateRebuilder    StateRebuilder
 		transaction       workflow.Transaction
 		logger            log.Logger
 	}
@@ -104,11 +101,9 @@ func NewWorkflowResetter(
 		clusterMetadata:   shardContext.GetClusterMetadata(),
 		executionMgr:      shardContext.GetExecutionManager(),
 		workflowCache:     workflowCache,
-		newStateRebuilder: func() StateRebuilder {
-			return NewStateRebuilder(shardContext, logger)
-		},
-		transaction: workflow.NewTransaction(shardContext),
-		logger:      logger,
+		stateRebuilder:    NewStateRebuilder(shardContext, logger),
+		transaction:       workflow.NewTransaction(shardContext),
+		logger:            logger,
 	}
 }
 
@@ -276,11 +271,13 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	// Reset expiration time
 	resetMutableState := resetWorkflow.GetMutableState()
-	executionInfo := resetMutableState.GetExecutionInfo()
 
-	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
-	if weTimeout > 0 {
-		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
+	// if workflow was reset after it was expired - at this point expiration task will
+	// already be fired since it is (re)created from the event, and event has old expiration time
+	// generate workflow execution task. again. this time with proper expiration time
+
+	if err := resetMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
+		return nil, err
 	}
 
 	if resetMutableState.GetCurrentVersion() > resetWorkflowVersion {
@@ -352,7 +349,7 @@ func (r *workflowResetterImpl) persistToDB(
 
 	currentMutableState := currentWorkflow.GetMutableState()
 	currentRunID := currentMutableState.GetExecutionState().GetRunId()
-	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
+	currentCloseVersion, err := currentMutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
@@ -362,7 +359,7 @@ func (r *workflowResetterImpl) persistToDB(
 		r.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
-		currentLastWriteVersion,
+		currentCloseVersion,
 		resetWorkflow.GetMutableState(),
 		resetWorkflowSnapshot,
 		resetWorkflowEventsSeq,
@@ -404,7 +401,8 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.shardContext.GetLogger(),
 		r.shardContext.GetMetricsHandler(),
 	)
-	resetMutableState, resetHistorySize, err := r.newStateRebuilder().Rebuild(
+
+	resetMutableState, resetHistorySize, err := r.stateRebuilder.Rebuild(
 		ctx,
 		r.shardContext.GetTimeSource().Now(),
 		definition.NewWorkflowKey(
@@ -471,6 +469,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			consts.IdentityHistoryService,
 			// Passing nil versioning stamp means we want to skip versioning considerations because this task
 			// is not actually dispatched but will fail immediately.
+			nil,
 			nil,
 		)
 		if err != nil {
@@ -545,6 +544,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, resetRunID),
 		ShardID:         shardID,
 		NamespaceID:     namespaceID.String(),
+		NewRunID:        resetRunID,
 	})
 	if err != nil {
 		return nil, err

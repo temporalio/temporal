@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -155,7 +154,6 @@ func VisibilityManagerProvider(
 	persistenceConfig *config.Persistence,
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	serviceConfig *Config,
-	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -164,7 +162,6 @@ func VisibilityManagerProvider(
 		*persistenceConfig,
 		persistenceServiceResolver,
 		customVisibilityStoreFactory,
-		esClient,
 		nil, // worker visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
@@ -172,6 +169,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
+		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // worker visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,

@@ -134,8 +134,6 @@ func (s *engine3Suite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
-	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
-
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -179,7 +177,6 @@ func (s *engine3Suite) SetupTest() {
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
 	}
 	s.mockShard.SetEngineForTesting(h)
-	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	s.historyEngine = h
 }
@@ -273,8 +270,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
-	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
+	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
 	}
 	expectedResponse.ScheduledEventId = wt.ScheduledEventID
 	expectedResponse.ScheduledTime = timestamppb.New(wt.ScheduledTime)

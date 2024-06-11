@@ -26,8 +26,8 @@ CREATE TABLE executions_visibility (
   search_attributes       JSONB         NULL,
   parent_workflow_id      VARCHAR(255)  NULL,
   parent_run_id           VARCHAR(255)  NULL,
-  root_workflow_id        VARCHAR(255)  NULL,
-  root_run_id             VARCHAR(255)  NULL,
+  root_workflow_id        VARCHAR(255)  NOT NULL DEFAULT '',
+  root_run_id             VARCHAR(255)  NOT NULL DEFAULT '',
 
   -- Each search attribute has its own generated column.
   -- Since PostgreSQL doesn't support virtual columns, all columns are stored.

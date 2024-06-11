@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -80,6 +81,8 @@ type cachedMachine struct {
 	data any
 	// Cached children.
 	children map[Key]*Node
+	// A flag that indicates the cached machine is dirty.
+	dirty bool
 	// Outputs of all transitions in the current transaction.
 	outputs []TransitionOutput
 }
@@ -147,7 +150,7 @@ func NewRoot(registry *Registry, t int32, data any, children map[int32]*persiste
 
 // Dirty returns true if any of the tree's state machines have transitioned.
 func (n *Node) Dirty() bool {
-	if len(n.cache.outputs) > 0 {
+	if n.cache.dirty {
 		return true
 	}
 	for _, child := range n.cache.children {
@@ -186,10 +189,34 @@ func (n *Node) Outputs() []PathAndOutputs {
 // This should be called at the end of every transaction where the transitions are performed to avoid emitting duplicate
 // transition outputs.
 func (n *Node) ClearTransactionState() {
+	n.cache.dirty = false
 	n.cache.outputs = nil
 	for _, child := range n.cache.children {
 		child.ClearTransactionState()
 	}
+}
+
+// Walk applies the given function to all nodes rooted at the current node.
+// Returns after successfully applying the function to all nodes or first error.
+func (n *Node) Walk(fn func(*Node) error) error {
+	if n == nil {
+		return nil
+	}
+
+	if err := fn(n); err != nil {
+		return err
+	}
+
+	for childType := range n.persistence.Children {
+		childNodes := NewCollection[any](n, childType).List()
+		for _, child := range childNodes {
+			if err := child.Walk(fn); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // Child recursively gets a child for the given path.
@@ -260,6 +287,7 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		cache: &cachedMachine{
 			dataLoaded: true,
 			data:       data,
+			dirty:      true,
 			children:   make(map[Key]*Node),
 		},
 		backend: n.backend,
@@ -268,6 +296,10 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	children, ok := n.persistence.Children[key.Type]
 	if !ok {
 		children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
+		// Children may be nil if the map was empty and the proto message we serialized and deserialized.
+		if n.persistence.Children == nil {
+			n.persistence.Children = make(map[int32]*persistencespb.StateMachineMap, 1)
+		}
 		n.persistence.Children[key.Type] = children
 	}
 	children.MachinesById[key.ID] = node.persistence
@@ -314,6 +346,32 @@ func (n *Node) TransitionCount() int64 {
 	return n.persistence.TransitionCount
 }
 
+// CheckRunning has two modes of operation:
+// 1. If the node is **not** attached to a workflow (not yet supported), it returns nil.
+// 2. If the node is attached to a workflow, it verifies that the workflow execution is running, and returns
+// ErrWorkflowCompleted or nil.
+//
+// May return other errors returned from [MachineData].
+func (n *Node) CheckRunning() error {
+	root := n
+	for root.Parent != nil {
+		root = root.Parent
+	}
+
+	execution, err := MachineData[interface{ IsWorkflowExecutionRunning() bool }](root)
+	if err != nil {
+		if errors.Is(err, ErrIncompatibleType) {
+			// The machine is not attached to a workflow. It is currently assumed to be running.
+			return nil
+		}
+		return err
+	}
+	if !execution.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+	return nil
+}
+
 // MachineTransition runs the given transitionFn on a machine's data for the given key.
 // It updates the state machine's metadata and marks the entry as dirty in the node's cache.
 // If the transition fails, the changes are rolled back and no state is mutated.
@@ -340,6 +398,7 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 		return err
 	}
 	n.persistence.Data = serialized
+	n.cache.dirty = true
 	n.cache.outputs = append(n.cache.outputs, output)
 	return nil
 }

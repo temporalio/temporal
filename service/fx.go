@@ -92,9 +92,9 @@ func initPersistenceLazyLoadedServiceResolver(
 	logger.Info("Initialized service resolver for persistence rate limiting", tag.Service(serviceName))
 }
 
-func (p PersistenceLazyLoadedServiceResolver) MemberCount() int {
+func (p PersistenceLazyLoadedServiceResolver) AvailableMemberCount() int {
 	if value := p.Load(); value != nil {
-		return value.(membership.ServiceResolver).MemberCount()
+		return value.(membership.ServiceResolver).AvailableMemberCount()
 	}
 	return 0
 }
@@ -107,7 +107,7 @@ func NewPersistenceRateLimitingParams(
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	burstRatio dynamicconfig.FloatPropertyFn,
-	dynamicRateLimitingParams dynamicconfig.MapPropertyFn,
+	dynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams],
 	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
 	logger log.Logger,
 ) PersistenceRateLimitingParams {
@@ -159,7 +159,7 @@ func GrpcServerOptionsProvider(
 
 func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInterceptor {
 	interceptors := []grpc.UnaryServerInterceptor{
-		rpc.NewServiceErrorInterceptor(params.Logger),
+		rpc.ServiceErrorInterceptor,
 		grpc.UnaryServerInterceptor(params.TracingInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		metrics.NewServerMetricsTrailerPropagatorInterceptor(params.Logger),

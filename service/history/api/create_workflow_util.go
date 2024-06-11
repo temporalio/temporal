@@ -26,6 +26,11 @@ package api
 
 import (
 	"context"
+	"go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/sdk"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
+	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/worker/scheduler"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -86,6 +91,29 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
+	// This workflow is created for the hsm attached to it and will not generate actual workflow tasks.
+	// This is a bit of a hacky way to distinguish between a "real" workflow and a top level state machine.
+	// This code will change as the scheduler HSM project progresses.
+	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId)
+	if hsmOnlyWorkflow {
+		args := schedule.StartScheduleArgs{}
+		if err := sdk.PreferProtoDataConverter.FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
+			return nil, err
+		}
+
+		// Key ID is left empty as the scheduler machine is a singleton.
+		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType.ID}, schedulerhsm.NewScheduler(&args))
+		if err != nil {
+			return nil, err
+		}
+		err = hsm.MachineTransition(node, func(scheduler schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
+			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if signalWithStartRequest != nil {
 		if signalWithStartRequest.GetRequestId() != "" {
 			newMutableState.AddSignalRequested(signalWithStartRequest.GetRequestId())
@@ -101,25 +129,30 @@ func NewWorkflowWithSignal(
 		}
 	}
 	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
-	// Generate first workflow task event if not child WF and no first workflow task backoff
-	scheduledEventID, err := GenerateFirstWorkflowTask(
-		newMutableState,
-		startRequest.ParentExecutionInfo,
-		startEvent,
-		requestEagerExecution,
-	)
-	if err != nil {
-		return nil, err
+
+	var scheduledEventID int64
+	if !hsmOnlyWorkflow {
+		// Generate first workflow task event if not child WF and no first workflow task backoff
+		scheduledEventID, err = GenerateFirstWorkflowTask(
+			newMutableState,
+			startRequest.ParentExecutionInfo,
+			startEvent,
+			requestEagerExecution,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.
 	if requestEagerExecution && newMutableState.HasPendingWorkflowTask() {
-		// TODO: get build id from Starter so eager workflows can be versioned
+		// TODO: get build ID from Starter so eager workflows can be versioned
 		_, _, err = newMutableState.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
 			startRequest.StartRequest.RequestId,
 			startRequest.StartRequest.TaskQueue,
 			startRequest.StartRequest.Identity,
+			nil,
 			nil,
 		)
 		if err != nil {

@@ -234,6 +234,7 @@ func syncOfferTask[T any](
 	task *internalTask,
 	taskChan chan *internalTask,
 	forwardFunc func(context.Context, *internalTask) (T, error),
+	returnNoPollerErr bool,
 ) (T, error) {
 	var t T
 	select {
@@ -246,13 +247,15 @@ func syncOfferTask[T any](
 	fwdrTokenC := tm.fwdrAddReqTokenC()
 	var noPollerCtxC <-chan struct{}
 
-	if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
-		// Reserving 1sec to customize the timeout error if user is querying a workflow
-		// without having started the workers.
-		noPollerTimeout := time.Until(deadline) - time.Second
-		noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
-		noPollerCtxC = noPollerCtx.Done()
-		defer cancel()
+	if returnNoPollerErr {
+		if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
+			// Reserving 1sec to customize the timeout error if user is querying a workflow
+			// without having started the workers.
+			noPollerTimeout := time.Until(deadline) - time.Second
+			noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
+			noPollerCtxC = noPollerCtx.Done()
+			defer cancel()
+		}
 	}
 
 	for {
@@ -276,7 +279,6 @@ func syncOfferTask[T any](
 		case <-noPollerCtxC:
 			// only error if there has not been a recent poller. Otherwise, let it wait for the remaining time
 			// hopping for a match, or ultimately returning the default CDE error.
-			// TODO: rename this to clarify it applies to nexus tasks and queries.
 			if tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {
 				return t, errNoRecentPoller
 			}
@@ -291,14 +293,14 @@ func syncOfferTask[T any](
 // Local match is always attempted before forwarding is attempted. If local match occurs
 // response and error are both nil, if forwarding occurs then response or error is returned.
 func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error) {
-	return syncOfferTask(ctx, tm, task, tm.queryTaskC, tm.fwdr.ForwardQueryTask)
+	return syncOfferTask(ctx, tm, task, tm.queryTaskC, tm.fwdr.ForwardQueryTask, true)
 }
 
 // OfferNexusTask either matchs a task to a local poller or forwards it if no local pollers available.
 // Local match is always attempted before forwarding. If local match occurs response and error are both nil, if
 // forwarding occurs then response or error is returned.
 func (tm *TaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	return syncOfferTask(ctx, tm, task, tm.taskC, tm.fwdr.ForwardNexusTask)
+	return syncOfferTask(ctx, tm, task, tm.taskC, tm.fwdr.ForwardNexusTask, false)
 }
 
 // MustOffer blocks until a consumer is found to handle this task
@@ -410,15 +412,9 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 		return // should not happen but for safety
 	}
 
-	source := task.source
-	if source == enumsspb.TASK_SOURCE_UNSPECIFIED {
-		// history may not specify the source
-		source = enumsspb.TASK_SOURCE_HISTORY
-	}
-
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
-		metrics.StringTag("source", source.String()),
+		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 	)
 }
@@ -635,6 +631,8 @@ func (tm *TaskMatcher) unregisterBacklogTask(task *internalTask) {
 	}
 }
 
+// getBacklogAge is the latest age across all backlogs re-directing to this matcher; may momentarily
+// be 0 cause of race conditions when no reader pushes a task into the matcher at this moment
 func (tm *TaskMatcher) getBacklogAge() time.Duration {
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()

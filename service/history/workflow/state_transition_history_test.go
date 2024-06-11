@@ -34,21 +34,29 @@ import (
 
 func TestUpdatedTranstionHistory(t *testing.T) {
 	var hist []*persistencespb.VersionedTransition
-	hist = workflow.UpdatedTransitionHistory(hist, 1, 4)
+	hist = workflow.UpdatedTransitionHistory(hist, 1)
 	protorequire.ProtoSliceEqual(t,
-		[]*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 1, MaxTransitionCount: 4}},
+		[]*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 1, MaxTransitionCount: 1}},
 		hist,
 	)
-	hist = workflow.UpdatedTransitionHistory(hist, 1, 5)
+	hist = workflow.UpdatedTransitionHistory(hist, 1)
 	protorequire.ProtoSliceEqual(t,
-		[]*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 1, MaxTransitionCount: 5}},
+		[]*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 1, MaxTransitionCount: 2}},
 		hist,
 	)
-	hist = workflow.UpdatedTransitionHistory(hist, 2, 6)
+	hist = workflow.UpdatedTransitionHistory(hist, 2)
 	protorequire.ProtoSliceEqual(t,
 		[]*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, MaxTransitionCount: 5},
-			{NamespaceFailoverVersion: 2, MaxTransitionCount: 6},
+			{NamespaceFailoverVersion: 1, MaxTransitionCount: 2},
+			{NamespaceFailoverVersion: 2, MaxTransitionCount: 3},
+		},
+		hist,
+	)
+	hist = workflow.UpdatedTransitionHistory(hist, 2)
+	protorequire.ProtoSliceEqual(t,
+		[]*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 1, MaxTransitionCount: 2},
+			{NamespaceFailoverVersion: 2, MaxTransitionCount: 4},
 		},
 		hist,
 	)

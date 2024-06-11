@@ -35,13 +35,26 @@ import (
 // If the given version is the version of the last history item, that item will be replaced in the returned slice with
 // an item containing the modified transition count.
 // Does not modify the history slice in place.
-func UpdatedTransitionHistory(history []*persistencespb.VersionedTransition, namespaceFailoverVersion, stateTransitionCount int64) []*persistencespb.VersionedTransition {
-	if len(history) > 0 && history[len(history)-1].NamespaceFailoverVersion == namespaceFailoverVersion {
-		history = history[1:]
+func UpdatedTransitionHistory(
+	history []*persistencespb.VersionedTransition,
+	namespaceFailoverVersion int64,
+) []*persistencespb.VersionedTransition {
+	if len(history) == 0 {
+		return []*persistencespb.VersionedTransition{
+			{
+				NamespaceFailoverVersion: namespaceFailoverVersion,
+				MaxTransitionCount:       1,
+			},
+		}
+	}
+
+	lastTransitionCount := history[len(history)-1].MaxTransitionCount
+	if history[len(history)-1].NamespaceFailoverVersion == namespaceFailoverVersion {
+		history = history[:len(history)-1]
 	}
 	return append(history, &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: namespaceFailoverVersion,
-		MaxTransitionCount:       stateTransitionCount,
+		MaxTransitionCount:       lastTransitionCount + 1,
 	})
 }
 

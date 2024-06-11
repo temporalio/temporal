@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - release/**
+      - cloud/**
 
   workflow_dispatch:
     inputs:
@@ -21,6 +22,7 @@ env:
   COMMIT: ${{ github.event.inputs.commit || github.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
 
 jobs:
   misc-checks:
@@ -28,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-latest]
+        runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-latest]
+        runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
@@ -73,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-latest]
+        runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +90,7 @@ jobs:
 
       - name: Run unit test
         timeout-minutes: 15
-        run: make unit-test-coverage
+        run: make unit-test-coverage upload-test-results
 
   integration-test:
     name: Integration test
@@ -96,7 +98,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-latest]
+        runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
@@ -119,7 +121,7 @@ jobs:
 
       - name: Run integration test
         timeout-minutes: 15
-        run: make integration-test-coverage
+        run: make integration-test-coverage upload-test-results
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -132,7 +134,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-latest]
+        runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
         shard_index: [0, 1, 2]
         include:
@@ -188,7 +190,7 @@ jobs:
 
       - name: Run functional test
         timeout-minutes: 25
-        run: make functional-test-coverage
+        run: make functional-test-coverage upload-test-results
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -201,7 +203,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-latest]
+        runs-on: [ubuntu-20.04]
         name: [cass_es]
 #        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
@@ -251,7 +253,7 @@ jobs:
 
       - name: Run functional test xdc
         timeout-minutes: 15
-        run: make functional-test-xdc-coverage
+        run: make functional-test-xdc-coverage upload-test-results
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -264,7 +266,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-latest]
+        runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
@@ -328,7 +330,7 @@ jobs:
       - functional-test
       - functional-test-xdc
       - functional-test-ndc
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: always()
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}

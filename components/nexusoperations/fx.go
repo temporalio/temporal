@@ -23,15 +23,22 @@
 package nexusoperations
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
 
-	nexuspb "go.temporal.io/api/nexus/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/queues"
 )
 
@@ -41,11 +48,40 @@ var Module = fx.Module(
 	fx.Provide(ClientProviderFactory),
 	fx.Provide(DefaultNexusTransportProvider),
 	fx.Provide(CallbackTokenGeneratorProvider),
+	fx.Provide(EndpointRegistryProvider),
+	fx.Invoke(EndpointRegistryLifetimeHooks),
+	fx.Provide(EndpointCheckerProvider),
 	fx.Invoke(RegisterStateMachines),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterEventDefinitions),
 	fx.Invoke(RegisterExecutor),
 )
+
+func EndpointRegistryProvider(
+	matchingClient resource.MatchingClient,
+	endpointManager persistence.NexusEndpointManager,
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) commonnexus.EndpointRegistry {
+	registryConfig := commonnexus.NewEndpointRegistryConfig(dc)
+	return commonnexus.NewEndpointRegistry(
+		registryConfig,
+		matchingClient,
+		endpointManager,
+		logger,
+	)
+}
+
+func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry commonnexus.EndpointRegistry) {
+	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
+}
+
+func EndpointCheckerProvider(reg commonnexus.EndpointRegistry) EndpointChecker {
+	return func(ctx context.Context, namespaceName, endpointName string) error {
+		_, err := reg.GetByName(ctx, endpointName)
+		return err
+	}
+}
 
 // NexusTransportProvider type alias allows a provider to customize the default implementation specifically for Nexus.
 type NexusTransportProvider func(namespaceID, serviceName string) http.RoundTripper
@@ -65,21 +101,50 @@ type clientProviderCacheKey struct {
 	url string
 }
 
-func ClientProviderFactory(namespaceRegistry namespace.Registry, httpTransportProvider NexusTransportProvider) ClientProvider {
+func ClientProviderFactory(
+	namespaceRegistry namespace.Registry,
+	endpointRegistry commonnexus.EndpointRegistry,
+	httpTransportProvider NexusTransportProvider,
+	clusterMetadata cluster.Metadata,
+	httpClientCache *cluster.FrontendHTTPClientCache,
+) ClientProvider {
 	// TODO(bergundy): This should use an LRU or other form of cache that supports eviction.
-	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*nexus.Client, error) {
+	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.NamespaceID, key.Destination)
-		httpClient := &http.Client{
+		return &http.Client{
 			Transport: ResponseSizeLimiter{transport},
+		}, nil
+	})
+	return func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
+		entry, err := endpointRegistry.GetByName(ctx, key.Destination)
+		if err != nil {
+			return nil, err
+		}
+		var url string
+		var httpClient *http.Client
+		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
+		case *persistencespb.NexusEndpointTarget_External_:
+			url = variant.External.GetUrl()
+			httpClient, err = m.Get(clientProviderCacheKey{key, url})
+			if err != nil {
+				return nil, err
+			}
+		case *persistencespb.NexusEndpointTarget_Worker_:
+			cl, err := httpClientCache.Get(clusterMetadata.GetCurrentClusterName())
+			if err != nil {
+				return nil, err
+			}
+			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
+			httpClient = &cl.Client
+		default:
+			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
 		return nexus.NewClient(nexus.ClientOptions{
-			ServiceBaseURL: key.url,
-			HTTPCaller:     httpClient.Do,
-			Serializer:     commonnexus.PayloadSerializer,
+			BaseURL:    url,
+			Service:    service,
+			HTTPCaller: httpClient.Do,
+			Serializer: commonnexus.PayloadSerializer,
 		})
-	})
-	return func(key queues.NamespaceIDAndDestination, spec *nexuspb.OutgoingServiceSpec) (*nexus.Client, error) {
-		return m.Get(clientProviderCacheKey{key, spec.Url})
 	}
 }
 

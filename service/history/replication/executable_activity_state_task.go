@@ -51,8 +51,9 @@ type (
 		req *historyservice.SyncActivityRequest
 
 		// following fields are used only for batching functionality
-		batchable     bool
-		activityInfos []*historyservice.ActivitySyncInfo
+		batchable              bool
+		activityInfos          []*historyservice.ActivitySyncInfo
+		markPoisonPillAttempts int
 	}
 )
 
@@ -66,6 +67,7 @@ func NewExecutableActivityStateTask(
 	taskCreationTime time.Time,
 	task *replicationspb.SyncActivityTaskAttributes,
 	sourceClusterName string,
+	priority enumsspb.TaskPriority,
 ) *ExecutableActivityStateTask {
 	return &ExecutableActivityStateTask{
 		ProcessToolBox: processToolBox,
@@ -78,39 +80,45 @@ func NewExecutableActivityStateTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			priority,
 		),
 		req: &historyservice.SyncActivityRequest{
-			NamespaceId:        task.NamespaceId,
-			WorkflowId:         task.WorkflowId,
-			RunId:              task.RunId,
-			Version:            task.Version,
-			ScheduledEventId:   task.ScheduledEventId,
-			ScheduledTime:      task.ScheduledTime,
-			StartedEventId:     task.StartedEventId,
-			StartedTime:        task.StartedTime,
-			LastHeartbeatTime:  task.LastHeartbeatTime,
-			Details:            task.Details,
-			Attempt:            task.Attempt,
-			LastFailure:        task.LastFailure,
-			LastWorkerIdentity: task.LastWorkerIdentity,
-			BaseExecutionInfo:  task.BaseExecutionInfo,
-			VersionHistory:     task.VersionHistory,
+			NamespaceId:                task.NamespaceId,
+			WorkflowId:                 task.WorkflowId,
+			RunId:                      task.RunId,
+			Version:                    task.Version,
+			ScheduledEventId:           task.ScheduledEventId,
+			ScheduledTime:              task.ScheduledTime,
+			StartedEventId:             task.StartedEventId,
+			StartedTime:                task.StartedTime,
+			LastHeartbeatTime:          task.LastHeartbeatTime,
+			Details:                    task.Details,
+			Attempt:                    task.Attempt,
+			LastFailure:                task.LastFailure,
+			LastWorkerIdentity:         task.LastWorkerIdentity,
+			LastStartedBuildId:         task.LastStartedBuildId,
+			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
+			BaseExecutionInfo:          task.BaseExecutionInfo,
+			VersionHistory:             task.VersionHistory,
 		},
 
 		batchable: true,
 		activityInfos: append(make([]*historyservice.ActivitySyncInfo, 0, 1), &historyservice.ActivitySyncInfo{
-			Version:            task.Version,
-			ScheduledEventId:   task.ScheduledEventId,
-			ScheduledTime:      task.ScheduledTime,
-			StartedEventId:     task.StartedEventId,
-			StartedTime:        task.StartedTime,
-			LastHeartbeatTime:  task.LastHeartbeatTime,
-			Details:            task.Details,
-			Attempt:            task.Attempt,
-			LastFailure:        task.LastFailure,
-			LastWorkerIdentity: task.LastWorkerIdentity,
-			VersionHistory:     task.VersionHistory,
+			Version:                    task.Version,
+			ScheduledEventId:           task.ScheduledEventId,
+			ScheduledTime:              task.ScheduledTime,
+			StartedEventId:             task.StartedEventId,
+			StartedTime:                task.StartedTime,
+			LastHeartbeatTime:          task.LastHeartbeatTime,
+			Details:                    task.Details,
+			Attempt:                    task.Attempt,
+			LastFailure:                task.LastFailure,
+			LastWorkerIdentity:         task.LastWorkerIdentity,
+			VersionHistory:             task.VersionHistory,
+			LastStartedBuildId:         task.LastStartedBuildId,
+			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
 		}),
+		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -143,7 +151,7 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		)
 		return nil
 	}
-	ctx, cancel := newTaskContext(namespaceName)
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
@@ -181,7 +189,7 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName)
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 		defer cancel()
 
 		if doContinue, resendErr := e.Resend(
@@ -206,6 +214,25 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
+	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
+		replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
+			NamespaceId:      e.NamespaceID,
+			WorkflowId:       e.WorkflowID,
+			RunId:            e.RunID,
+			TaskId:           e.ExecutableTask.TaskID(),
+			TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+			ScheduledEventId: e.req.ScheduledEventId,
+			Version:          e.req.Version,
+		}
+		e.Logger.Error("MarkPoisonPill reached max attempts",
+			tag.SourceCluster(e.SourceClusterName()),
+			tag.ReplicationTask(replicationTaskInfo),
+			tag.ActivityInfo(e.req),
+		)
+		return nil
+	}
+	e.markPoisonPillAttempts++
+
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
@@ -233,7 +260,7 @@ func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
 		tag.TaskID(e.ExecutableTask.TaskID()),
 	)
 
-	ctx, cancel := newTaskContext(e.NamespaceID)
+	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
 	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), replicationTaskInfo)

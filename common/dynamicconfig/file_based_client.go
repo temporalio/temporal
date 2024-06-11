@@ -77,23 +77,24 @@ type (
 
 	osReader struct {
 	}
+
+	// Results of processing and loading dynamic config file contents.
+	// Warnings should be reported but not block using the new values.
+	// Errors should abort the loading process.
+	LoadResult struct {
+		Warnings []error
+		Errors   []error
+	}
 )
+
+func ValidateFile(contents []byte) *LoadResult {
+	_, lr := loadFile(contents)
+	return lr
+}
 
 // NewFileBasedClient creates a file based client.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
-	client := &fileBasedClient{
-		logger: logger,
-		reader: &osReader{},
-		config: config,
-		doneCh: doneCh,
-	}
-
-	err := client.init()
-	if err != nil {
-		return nil, err
-	}
-
-	return client, nil
+	return NewFileBasedClientWithReader(&osReader{}, config, logger, doneCh)
 }
 
 func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
@@ -118,11 +119,11 @@ func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
 }
 
 func (fc *fileBasedClient) init() error {
-	if err := fc.validateConfig(fc.config); err != nil {
+	if err := fc.validateStaticConfig(fc.config); err != nil {
 		return fmt.Errorf("unable to validate dynamic config: %w", err)
 	}
 
-	if err := fc.update(); err != nil {
+	if err := fc.Update(); err != nil {
 		return fmt.Errorf("unable to read dynamic config: %w", err)
 	}
 
@@ -131,7 +132,7 @@ func (fc *fileBasedClient) init() error {
 		for {
 			select {
 			case <-ticker.C:
-				err := fc.update()
+				err := fc.Update()
 				if err != nil {
 					fc.logger.Error("Unable to update dynamic config.", tag.Error(err))
 				}
@@ -145,11 +146,9 @@ func (fc *fileBasedClient) init() error {
 	return nil
 }
 
-func (fc *fileBasedClient) update() error {
-	defer func() {
-		fc.lastUpdatedTime = time.Now().UTC()
-	}()
-
+// This is public mainly for testing. The update loop will call this periodically, you don't
+// have to call it explicitly.
+func (fc *fileBasedClient) Update() error {
 	info, err := fc.reader.Stat(fc.config.Filepath)
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
@@ -157,36 +156,23 @@ func (fc *fileBasedClient) update() error {
 	if !info.ModTime().After(fc.lastUpdatedTime) {
 		return nil
 	}
+	fc.lastUpdatedTime = info.ModTime()
 
-	confContent, err := fc.reader.ReadFile(fc.config.Filepath)
+	contents, err := fc.reader.ReadFile(fc.config.Filepath)
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
 
-	var yamlValues map[string][]struct {
-		Constraints map[string]any
-		Value       any
+	newValues, lr := loadFile(contents)
+	for _, e := range lr.Errors {
+		fc.logger.Warn("dynamic config error", tag.Error(e))
 	}
-	if err = yaml.Unmarshal(confContent, &yamlValues); err != nil {
-		return fmt.Errorf("unable to decode dynamic config: %w", err)
+	for _, w := range lr.Warnings {
+		fc.logger.Warn("dynamic config warning", tag.Error(w))
 	}
-
-	newValues := make(configValueMap, len(yamlValues))
-	for key, yamlCV := range yamlValues {
-		cvs := make([]ConstrainedValue, len(yamlCV))
-		for i, cv := range yamlCV {
-			// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}
-			// manually convert key type to string for all values here
-			cvs[i].Value, err = convertKeyTypeToString(cv.Value)
-			if err != nil {
-				return err
-			}
-			cvs[i].Constraints, err = convertYamlConstraints(cv.Constraints)
-			if err != nil {
-				return err
-			}
-		}
-		newValues[strings.ToLower(key)] = cvs
+	if len(lr.Errors) > 0 {
+		return fmt.Errorf("loading dynamic config failed: %d errors, %d warnings",
+			len(lr.Errors), len(lr.Warnings))
 	}
 
 	prev := fc.values.Swap(newValues)
@@ -197,7 +183,55 @@ func (fc *fileBasedClient) update() error {
 	return nil
 }
 
-func (fc *fileBasedClient) validateConfig(config *FileBasedClientConfig) error {
+func loadFile(contents []byte) (configValueMap, *LoadResult) {
+	lr := &LoadResult{}
+
+	var yamlValues map[string][]struct {
+		Constraints map[string]any
+		Value       any
+	}
+	if err := yaml.Unmarshal(contents, &yamlValues); err != nil {
+		return nil, lr.errorf("decode error: %w", err)
+	}
+
+	newValues := make(configValueMap, len(yamlValues))
+	for key, yamlCV := range yamlValues {
+		precedence := PrecedenceUnknown
+		setting := queryRegistry(Key(key))
+		if setting == nil {
+			lr.warnf("unregistered key %q", key)
+		} else {
+			precedence = setting.Precedence()
+		}
+
+		cvs := make([]ConstrainedValue, len(yamlCV))
+		for i, cv := range yamlCV {
+			// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}
+			// manually convert key type to string for all values here
+			val, err := convertKeyTypeToString(cv.Value)
+			if err != nil {
+				lr.error(err)
+				continue
+			}
+
+			// try validating if known setting
+			if setting != nil {
+				if valErr := setting.Validate(val); valErr != nil {
+					// TODO: raise this to error level
+					lr.warnf("validation failed: key %q value %v: %w", key, cv.Value, valErr)
+				}
+			}
+
+			cvs[i].Value = val
+			cvs[i].Constraints = convertYamlConstraints(key, cv.Constraints, precedence, lr)
+		}
+		newValues[strings.ToLower(key)] = cvs
+	}
+
+	return newValues, lr
+}
+
+func (fc *fileBasedClient) validateStaticConfig(config *FileBasedClientConfig) error {
 	if config == nil {
 		return errors.New("configuration for dynamic config client is nil")
 	}
@@ -344,79 +378,94 @@ func convertKeyTypeToStringSlice(s []interface{}) ([]interface{}, error) {
 	return stringKeySlice, nil
 }
 
-func convertYamlConstraints(m map[string]any) (Constraints, error) {
+func convertYamlConstraints(key string, m map[string]any, precedence Precedence, lr *LoadResult) Constraints {
 	var cs Constraints
 	for k, v := range m {
+		validConstraint := true
 		switch strings.ToLower(k) {
 		case "namespace":
 			if v, ok := v.(string); ok {
 				cs.Namespace = v
 			} else {
-				return cs, fmt.Errorf("namespace constraint must be string")
+				lr.errorf("namespace constraint must be string")
 			}
+			validConstraint = precedence == PrecedenceNamespace || precedence == PrecedenceTaskQueue || precedence == PrecedenceDestination
 		case "namespaceid":
 			if v, ok := v.(string); ok {
 				cs.NamespaceID = v
 			} else {
-				return cs, fmt.Errorf("namespaceID constraint must be string")
+				lr.errorf("namespaceID constraint must be string")
 			}
+			validConstraint = precedence == PrecedenceNamespaceID
 		case "taskqueuename":
 			if v, ok := v.(string); ok {
 				cs.TaskQueueName = v
 			} else {
-				return cs, fmt.Errorf("taskQueueName constraint must be string")
+				lr.errorf("taskQueueName constraint must be string")
 			}
+			validConstraint = precedence == PrecedenceTaskQueue
 		case "tasktype":
 			switch v := v.(type) {
 			case string:
 				i, err := enumspb.TaskQueueTypeFromString(v)
 				if err != nil {
-					return cs, fmt.Errorf("invalid value for taskType: %w", err)
+					lr.errorf("invalid value for taskType: %w", err)
 				} else if i <= enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
+					lr.errorf("taskType constraint must be Workflow/Activity")
 				}
 				cs.TaskQueueType = i
 			case int:
 				if v > int(enumspb.TASK_QUEUE_TYPE_UNSPECIFIED) {
 					cs.TaskQueueType = enumspb.TaskQueueType(v)
 				} else {
-					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
+					lr.errorf("taskType constraint must be Workflow/Activity")
 				}
 			default:
-				return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
+				lr.errorf("taskType constraint must be Workflow/Activity")
 			}
+			validConstraint = precedence == PrecedenceTaskQueue
 		case "historytasktype":
 			switch v := v.(type) {
 			case string:
 				tt, err := enumsspb.TaskTypeFromString(v)
 				if err != nil {
-					return cs, fmt.Errorf("invalid value for historytasktype constraint: %w", err)
+					lr.errorf("invalid value for historytasktype constraint: %w", err)
 				} else if tt <= enumsspb.TASK_TYPE_UNSPECIFIED {
-					return cs, fmt.Errorf("historytasktype %s constraint is not supported", v)
+					lr.errorf("historytasktype %s constraint is not supported", v)
 				}
 				cs.TaskType = tt
 			case int:
 				cs.TaskType = enumsspb.TaskType(v)
 			default:
-				return cs, fmt.Errorf("historytasktype %T constraint is not supported", v)
+				lr.errorf("historytasktype %T constraint is not supported", v)
 			}
+			validConstraint = precedence == PrecedenceTaskType
 		case "shardid":
 			if v, ok := v.(int); ok {
 				cs.ShardID = int32(v)
 			} else {
-				return cs, fmt.Errorf("shardID constraint must be integer")
+				lr.errorf("shardID constraint must be integer")
 			}
+			validConstraint = precedence == PrecedenceShardID
 		case "destination":
 			if v, ok := v.(string); ok {
 				cs.Destination = v
 			} else {
-				return cs, fmt.Errorf("destination constraint must be string")
+				lr.errorf("destination constraint must be string")
 			}
+			validConstraint = precedence == PrecedenceDestination
 		default:
-			return cs, fmt.Errorf("unknown constraint type %q", k)
+			lr.errorf("unknown constraint type %q", k)
+		}
+
+		// don't log error for PrecedenceUnknown, we would already have logged for an
+		// unregistered key above
+		// TODO: raise this to error level
+		if !validConstraint && precedence != PrecedenceUnknown {
+			lr.warnf("constraint %q isn't valid for dynamic config key %q", k, key)
 		}
 	}
-	return cs, nil
+	return cs
 }
 
 func (r *osReader) ReadFile(src string) ([]byte, error) {
@@ -425,4 +474,22 @@ func (r *osReader) ReadFile(src string) ([]byte, error) {
 
 func (r *osReader) Stat(src string) (os.FileInfo, error) {
 	return os.Stat(src)
+}
+
+func (lr *LoadResult) warn(err error) *LoadResult {
+	lr.Warnings = append(lr.Warnings, err)
+	return lr
+}
+
+func (lr *LoadResult) warnf(format string, args ...any) *LoadResult {
+	return lr.warn(fmt.Errorf(format, args...))
+}
+
+func (lr *LoadResult) error(err error) *LoadResult {
+	lr.Errors = append(lr.Errors, err)
+	return lr
+}
+
+func (lr *LoadResult) errorf(format string, args ...any) *LoadResult {
+	return lr.error(fmt.Errorf(format, args...))
 }

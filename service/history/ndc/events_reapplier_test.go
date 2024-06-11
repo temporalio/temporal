@@ -102,7 +102,6 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
-	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
 	msCurrent.EXPECT().AddWorkflowExecutionSignaled(
 		attr.GetSignalName(),
@@ -152,7 +151,6 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 		msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 		updateRegistry := update.NewRegistry(msCurrent)
 		msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
-		msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 		msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
 		switch event.EventType {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
@@ -242,7 +240,6 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
-	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
 	msCurrent.EXPECT().AddWorkflowExecutionSignaled(
 		attr1.GetSignalName(),
@@ -289,7 +286,6 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
-	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
 	msCurrent.EXPECT().AddWorkflowExecutionSignaled(
 		attr.GetSignalName(),

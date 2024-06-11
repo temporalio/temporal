@@ -28,14 +28,12 @@ package namespace
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"golang.org/x/exp/maps"
 
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -149,7 +147,6 @@ type (
 		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
 		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
 		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
-		NexusOutgoingService(namespaceID ID, serviceName string) (*nexuspb.OutgoingServiceSpec, error)
 		Start()
 		Stop()
 	}
@@ -211,11 +208,11 @@ func NewRegistry(
 		clock:                    clock.NewRealTimeSource(),
 		metricsHandler:           metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceCacheScope)),
 		logger:                   logger,
-		cacheNameToID:            cache.New(cacheMaxSize, &cacheOpts, metrics.NoopMetricsHandler),
-		cacheByID:                cache.New(cacheMaxSize, &cacheOpts, metrics.NoopMetricsHandler),
+		cacheNameToID:            cache.New(cacheMaxSize, &cacheOpts),
+		cacheByID:                cache.New(cacheMaxSize, &cacheOpts),
 		refreshInterval:          refreshInterval,
 		stateChangeCallbacks:     make(map[any]StateChangeCallbackFn),
-		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughNotFoundCacheOpts, metrics.NoopMetricsHandler),
+		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughNotFoundCacheOpts),
 
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
 	}
@@ -397,20 +394,6 @@ func (r *registry) GetCustomSearchAttributesMapper(name Name) (CustomSearchAttri
 	return ns.CustomSearchAttributesMapper(), nil
 }
 
-func (r *registry) NexusOutgoingService(namespaceID ID, serviceName string) (*nexuspb.OutgoingServiceSpec, error) {
-	ns, err := r.getOrReadthroughNamespaceByID(namespaceID)
-	if err != nil {
-		return nil, err
-	}
-	spec, ok := ns.NexusOutgoingService(serviceName)
-	if !ok {
-		// TODO(bergundy): This should readthrough to persistence (with throttling) to try and refresh the namespace to
-		// allow for propagation delay.
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("service %q not found in namespace %q", serviceName, ns.Name()))
-	}
-	return spec, nil
-}
-
 func (r *registry) refreshLoop(ctx context.Context) error {
 	// Put timer events on our channel so we can select on just one below.
 	go func() {
@@ -482,8 +465,8 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	}
 
 	// Make a copy of the existing namespace cache (excluding deleted), so we can calculate diff and do "compare and swap".
-	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts, metrics.NoopMetricsHandler)
-	newCacheByID := cache.New(cacheMaxSize, &cacheOpts, metrics.NoopMetricsHandler)
+	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts)
+	newCacheByID := cache.New(cacheMaxSize, &cacheOpts)
 	var deletedEntries []*Namespace
 	for _, namespace := range r.getAllNamespace() {
 		if _, namespaceExistsDb := namespaceIDsDb[namespace.ID()]; !namespaceExistsDb {

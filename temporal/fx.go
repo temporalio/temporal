@@ -252,12 +252,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
 		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
-	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
-		esConfig = persistenceConfig.DataStores[persistenceConfig.AdvancedVisibilityStore].Elasticsearch
 	}
 
 	if esConfig != nil {
 		esHttpClient := so.elasticsearchHttpClient
+		esConfig.SetHttpClient(esHttpClient)
 		if esHttpClient == nil {
 			var err error
 			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
@@ -472,7 +471,7 @@ func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata, dc
 	}
 	// Can't use history service configs.Config because this provider is applied to all services (see docstring for this
 	// function for more info).
-	if dc.GetBoolProperty(dynamicconfig.OutboundProcessorEnabled, false)() {
+	if dynamicconfig.EnableNexus.Get(dc)() {
 		registry.AddCategory(tasks.CategoryOutbound)
 	}
 	return registry
@@ -610,7 +609,7 @@ func ApplyClusterMetadataConfigProvider(
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
 	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
-	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
 		&svc.Persistence,

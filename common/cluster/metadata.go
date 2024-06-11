@@ -111,8 +111,8 @@ type (
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// RPCAddress indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
-		// HTTPAddress indicates the address of the [go.temporal.io/server/service/frontend.HTTPAPIServer]. Optional.
-		// This should include the scheme, whether it be HTTP or HTTPS, e.g. "http://localhost:8088".
+		// HTTPAddress indicates the address of the [go.temporal.io/server/service/frontend.HTTPAPIServer].
+		// E.g. "localhost:7243".
 		HTTPAddress string `yaml:"httpAddress"`
 		// ClusterID allows to explicitly set the ID of the cluster. Optional.
 		ClusterID  string            `yaml:"-"`
@@ -219,7 +219,7 @@ func NewMetadataFromConfig(
 		config.CurrentClusterName,
 		config.ClusterInformation,
 		clusterMetadataStore,
-		dynamicCollection.GetDurationProperty(dynamicconfig.ClusterMetadataRefreshInterval, refreshInterval),
+		dynamicconfig.ClusterMetadataRefreshInterval.Get(dynamicCollection),
 		logger,
 	)
 }

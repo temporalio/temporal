@@ -25,37 +25,87 @@ package nexusoperations
 import (
 	"time"
 
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-// Enabled toggles accepting of API requests and workflow commands that create or modify Nexus operations.
-const Enabled = dynamicconfig.Key("component.nexusoperations.enabled")
+var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
+	"component.nexusoperations.request.timeout",
+	time.Second*10,
+	`RequestTimeout is the timeout for making a single nexus start or cancel request.`,
+)
 
-// RequestTimeout is the timeout for making a single nexus start or cancel request.
-const RequestTimeout = dynamicconfig.Key("component.nexusoperations.request.timeout")
+var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
+	"component.nexusoperations.limit.operation.concurrency",
+	1000,
+	`MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
+Once the limit is reached, ScheduleNexusOperation commands will be rejected.`,
+)
 
-// MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
-// Once the limit is reached, ScheduleNexusOperation commands will be rejected.
-const MaxConcurrentOperations = dynamicconfig.Key("component.nexusoperations.limit.operation.concurrency")
+var MaxServiceNameLength = dynamicconfig.NewNamespaceIntSetting(
+	"component.nexusoperations.limit.service.name.length",
+	1000,
+	`MaxServiceNameLength limits the maximum allowed length for a Nexus Service name.
+ScheduleNexusOperation commands with a service name that exceeds this limit will be rejected.
+Uses Go's len() function to determine the length.`,
+)
 
-// MaxOperationNameLength limits the maximum allowed length for a Nexus Operation name.
-// ScheduleNexusOperation commands with an operation name that exceeds this limit will be rejected.
-// Uses Go's len() function to determine the length.
-const MaxOperationNameLength = dynamicconfig.Key("component.nexusoperations.limit.operation.name.length")
+var MaxOperationNameLength = dynamicconfig.NewNamespaceIntSetting(
+	"component.nexusoperations.limit.operation.name.length",
+	1000,
+	`MaxOperationNameLength limits the maximum allowed length for a Nexus Operation name.
+ScheduleNexusOperation commands with an operation name that exceeds this limit will be rejected.
+Uses Go's len() function to determine the length.`,
+)
+
+var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
+	"component.nexusoperations.callback.endpoint.template",
+	"unset",
+	`Controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver asynchronous completion.
+The template can be used to interpolate the {{.NamepaceName}} and {{.NamespaceID}} parameters to construct a publicly accessible URL.
+Must be set in order to use Nexus Operations.`,
+)
+
+var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
+	"component.nexusoperations.retryPolicy.initialInterval",
+	time.Second,
+	`The initial backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
+)
+
+var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
+	"component.nexusoperations.retryPolicy.maxInterval",
+	time.Second,
+	`The maximum backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
+)
 
 type Config struct {
-	Enabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	RequestTimeout          dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	Enabled                 dynamicconfig.BoolPropertyFn
+	RequestTimeout          dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MaxConcurrentOperations dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxServiceNameLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PayloadSizeLimit        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackURLTemplate     dynamicconfig.StringPropertyFn
+	RetryPolicy             func() backoff.RetryPolicy
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled: dc.GetBoolPropertyFnWithNamespaceFilter(Enabled, false),
-		// TODO(bergundy): This should be controllable per namespace + destination.
-		RequestTimeout:          dc.GetDurationPropertyFilteredByNamespace(RequestTimeout, time.Second*10),
-		MaxConcurrentOperations: dc.GetIntPropertyFilteredByNamespace(MaxConcurrentOperations, 1000),
-		MaxOperationNameLength:  dc.GetIntPropertyFilteredByNamespace(MaxOperationNameLength, 1000),
+		Enabled:                 dynamicconfig.EnableNexus.Get(dc),
+		RequestTimeout:          RequestTimeout.Get(dc),
+		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
+		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:  MaxOperationNameLength.Get(dc),
+		PayloadSizeLimit:        dynamicconfig.BlobSizeLimitError.Get(dc),
+		CallbackURLTemplate:     CallbackURLTemplate.Get(dc),
+		RetryPolicy: func() backoff.RetryPolicy {
+			return backoff.NewExponentialRetryPolicy(
+				RetryPolicyInitialInterval.Get(dc)(),
+			).WithMaximumInterval(
+				RetryPolicyMaximumInterval.Get(dc)(),
+			).WithExpirationInterval(
+				backoff.NoInterval,
+			)
+		},
 	}
 }

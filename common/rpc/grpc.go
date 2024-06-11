@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
@@ -41,6 +40,7 @@ import (
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/rpc/interceptor"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -59,7 +59,7 @@ const (
 	// can have. This is currently set to the max gRPC request size.
 	MaxHTTPAPIRequestBytes = 4 * 1024 * 1024
 
-	// MaxHTTPAPIRequestBytes is the maximum number of bytes a Nexus HTTP API request can have. Because the body is
+	// MaxNexusAPIRequestBodyBytes is the maximum number of bytes a Nexus HTTP API request can have. Because the body is
 	// read into a Payload object, this is currently set to the max Payload size. Content headers are transformed to
 	// Payload metadata and contribute to the Payload size as well. A separate limit is enforced on top of this.
 	MaxNexusAPIRequestBodyBytes = 2 * 1024 * 1024
@@ -77,6 +77,8 @@ const (
 	// ResourceExhaustedScopeHeader will be added to rpc response if request returns ResourceExhausted error.
 	// Value of this header will be the scope of exhausted resource.
 	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
+
+	shardUnavailableErrorMessage = "shard unavailable, please backoff and retry"
 )
 
 // Dial creates a client connection to the given target with default options.
@@ -152,20 +154,18 @@ func headersInterceptor(
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
-func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
-	var reErr *serviceerror.ResourceExhausted
-	if errors.As(err, &reErr) {
-		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
-			ResourceExhaustedCauseHeader, reErr.Cause.String(),
-			ResourceExhaustedScopeHeader, reErr.Scope.String(),
-		))
-		if headerErr != nil {
-			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))
-		}
-	}
+func ServiceErrorInterceptor(
+	ctx context.Context,
+	req interface{},
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+
+	resp, err := handler(ctx, req)
+	return resp, serviceerror.ToStatus(err).Err()
 }
 
-func NewServiceErrorInterceptor(
+func NewFrontendServiceErrorInterceptor(
 	logger log.Logger,
 ) grpc.UnaryServerInterceptor {
 	return func(
@@ -176,25 +176,34 @@ func NewServiceErrorInterceptor(
 	) (interface{}, error) {
 
 		resp, err := handler(ctx, req)
-		if err != nil {
-			addHeadersForResourceExhausted(ctx, logger, err)
-		}
-		return resp, serviceerror.ToStatus(err).Err()
-	}
 
+		if err == nil {
+			return resp, err
+		}
+
+		// mask some internal service errors at frontend
+		switch err.(type) {
+		case *serviceerrors.ShardOwnershipLost:
+			err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+		case *serviceerror.DataLoss:
+			err = serviceerror.NewUnavailable("internal history service error")
+		}
+
+		addHeadersForResourceExhausted(ctx, logger, err)
+
+		return resp, err
+	}
 }
 
-func FrontendErrorInterceptor(
-	ctx context.Context,
-	req interface{},
-	_ *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	resp, err := handler(ctx, req)
-
-	// mask some internal errors at frontend
-	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
-		err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
+	var reErr *serviceerror.ResourceExhausted
+	if errors.As(err, &reErr) {
+		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
+			ResourceExhaustedCauseHeader, reErr.Cause.String(),
+			ResourceExhaustedScopeHeader, reErr.Scope.String(),
+		))
+		if headerErr != nil {
+			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(headerErr))
+		}
 	}
-	return resp, serviceerror.ToStatus(err).Err()
 }

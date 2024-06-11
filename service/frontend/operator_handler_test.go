@@ -44,9 +44,6 @@ import (
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 
-	"go.temporal.io/server/common/namespace"
-	cnexus "go.temporal.io/server/common/nexus"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -93,17 +90,12 @@ func (s *operatorHandlerSuite) SetupTest() {
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 
-	incomingServiceClient := newNexusIncomingServiceClient(
-		newNexusIncomingServiceClientConfig(dynamicconfig.NewNoopCollection()),
+	endpointClient := newNexusEndpointClient(
+		newNexusEndpointClientConfig(dynamicconfig.NewNoopCollection()),
 		s.mockResource.NamespaceCache,
 		s.mockResource.MatchingClient,
-		persistence.NewMockNexusIncomingServiceManager(s.controller),
+		persistence.NewMockNexusEndpointManager(s.controller),
 		s.mockResource.Logger,
-	)
-	outgoingServiceRegistry := cnexus.NewOutgoingServiceRegistry(
-		s.mockResource.MetadataMgr,
-		namespace.NewNamespaceReplicator(s.mockResource.NamespaceReplicationQueue, s.mockResource.Logger),
-		cnexus.NewOutgoingServiceRegistryConfig(dynamicconfig.NewNoopCollection()),
 	)
 
 	args := NewOperatorHandlerImplArgs{
@@ -119,8 +111,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
-		incomingServiceClient,
-		outgoingServiceRegistry,
+		endpointClient,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()
@@ -248,6 +239,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 		mockVisManager1,
 		mockVisManager2,
 		mockManagerSelector,
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 	s.handler.visibilityMgr = mockDualVisManager
 

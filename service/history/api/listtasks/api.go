@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
@@ -98,15 +99,20 @@ func Invoke(
 
 func toAdminTask(historyTasks []tasks.Task) []*adminservice.Task {
 	var adminTasks []*adminservice.Task
-	for _, task := range historyTasks {
+	for _, historyTask := range historyTasks {
+		historyTaskVersion := common.EmptyVersion
+		if taskWithVersion, ok := historyTask.(tasks.HasVersion); ok {
+			historyTaskVersion = taskWithVersion.GetVersion()
+		}
+
 		adminTasks = append(adminTasks, &adminservice.Task{
-			NamespaceId: task.GetNamespaceID(),
-			WorkflowId:  task.GetWorkflowID(),
-			RunId:       task.GetRunID(),
-			TaskId:      task.GetTaskID(),
-			TaskType:    task.GetType(),
-			FireTime:    timestamppb.New(task.GetKey().FireTime),
-			Version:     task.GetVersion(),
+			NamespaceId: historyTask.GetNamespaceID(),
+			WorkflowId:  historyTask.GetWorkflowID(),
+			RunId:       historyTask.GetRunID(),
+			TaskId:      historyTask.GetTaskID(),
+			TaskType:    historyTask.GetType(),
+			FireTime:    timestamppb.New(historyTask.GetKey().FireTime),
+			Version:     historyTaskVersion,
 		})
 	}
 	return adminTasks

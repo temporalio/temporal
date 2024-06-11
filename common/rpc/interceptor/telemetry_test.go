@@ -27,12 +27,18 @@ package interceptor
 import (
 	"testing"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+
 	commonpb "go.temporal.io/api/common/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
@@ -40,8 +46,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -182,7 +186,7 @@ func TestHandleError(t *testing.T) {
 				times = 1
 			}
 			metricsHandler.EXPECT().Counter(metrics.ServiceFailures.Name()).Return(metrics.NoopCounterMetricFunc).Times(times)
-			telemetry.handleError(nil, metricsHandler, []tag.Tag{}, tt.err)
+			telemetry.HandleError(nil, metricsHandler, []tag.Tag{}, tt.err)
 		})
 	}
 }
@@ -301,6 +305,83 @@ func TestGetWorkflowTags(t *testing.T) {
 			if len(tt.runID) > 0 {
 				assert.Contains(t, tags, tag.WorkflowRunID(tt.runID))
 			}
+		})
+	}
+}
+
+func TestOperationOverride(t *testing.T) {
+	controller := gomock.NewController(t)
+	register := namespace.NewMockRegistry(controller)
+	metricsHandler := metrics.NewMockHandler(controller)
+	telemetry := NewTelemetryInterceptor(register, metricsHandler, log.NewNoopLogger())
+
+	wid := "test_workflow_id"
+	rid := "test_run_id"
+
+	testCases := []struct {
+		methodName        string
+		fullName          string
+		req               interface{}
+		expectedOperation string
+	}{
+		{
+			"GetWorkflowExecutionHistory",
+			api.WorkflowServicePrefix + "GetWorkflowExecutionHistory",
+			&workflowservice.GetWorkflowExecutionHistoryRequest{
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: wid,
+					RunId:      rid,
+				},
+				WaitNewEvent: false,
+			},
+			"GetWorkflowExecutionHistory",
+		},
+		{
+			"GetWorkflowExecutionHistory",
+			api.WorkflowServicePrefix + "GetWorkflowExecutionHistory",
+			&workflowservice.GetWorkflowExecutionHistoryRequest{
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: wid,
+					RunId:      rid,
+				},
+				WaitNewEvent: true,
+			},
+			"PollWorkflowExecutionHistory",
+		},
+		{
+			"GetWorkflowExecutionHistory",
+			api.HistoryServicePrefix + "GetWorkflowExecutionHistory",
+			&historyservice.GetWorkflowExecutionHistoryRequest{
+				Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: wid,
+						RunId:      rid,
+					},
+					WaitNewEvent: false,
+				},
+			},
+			"GetWorkflowExecutionHistory",
+		},
+		{
+			"GetWorkflowExecutionHistory",
+			api.HistoryServicePrefix + "GetWorkflowExecutionHistory",
+			&historyservice.GetWorkflowExecutionHistoryRequest{
+				Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: wid,
+						RunId:      rid,
+					},
+					WaitNewEvent: true,
+				},
+			},
+			"PollWorkflowExecutionHistory",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.methodName, func(t *testing.T) {
+			operation := telemetry.unaryOverrideOperationTag(tt.fullName, tt.methodName, tt.req)
+			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}
 }

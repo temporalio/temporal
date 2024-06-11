@@ -25,8 +25,6 @@ syntax = "proto3";
 package temporal.server.api.matchingservice.v1;
 option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
 
-import "google/api/annotations.proto";
-
 import "temporal/server/api/matchingservice/v1/request_response.proto";
 
 // MatchingService API is exposed to provide support for polling from long running applications.
@@ -124,9 +122,6 @@ service MatchingService {
     // (-- api-linter: core::0131::http-uri-name=disabled
     //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
     rpc GetWorkerVersioningRules (GetWorkerVersioningRulesRequest) returns (GetWorkerVersioningRulesResponse) {
-        option (google.api.http) = {
-            get: "/api/v1/namespaces/{namespace}/task-queues/{task_queue}/worker-versioning-rules"
-        };
     }
 
     // Apply a user data replication event.
@@ -150,26 +145,26 @@ service MatchingService {
     // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
     rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {}
 
-    // Optimistically create or update a Nexus incoming service based on provided version.
-    // Set version to 0 to create a new service.
+    // Create a Nexus endpoint.
+    // (-- api-linter: core::0133::method-signature=disabled
+    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::response-message-name=disabled
+    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::http-uri-parent=disabled
+    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+    rpc	CreateNexusEndpoint(CreateNexusEndpointRequest) returns (CreateNexusEndpointResponse) {}
+    // Optimistically update a Nexus endpoint based on provided version.
     // If this request is accepted, the input is considered the "current" state of this service at the time it was
     // persisted and the updated version is returned.
-    // (-- api-linter: core::0133::method-signature=disabled
-    //     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0133::response-message-name=disabled
-    //     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0133::http-uri-parent=disabled
-    //     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
-    rpc	CreateNexusIncomingService(CreateNexusIncomingServiceRequest) returns (CreateNexusIncomingServiceResponse) {}
     // (-- api-linter: core::0134::method-signature=disabled
-    //     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0134::response-message-name=disabled
-    //     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0134::request-resource-required=disabled
-    //     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
-    rpc	UpdateNexusIncomingService(UpdateNexusIncomingServiceRequest) returns (UpdateNexusIncomingServiceResponse) {}
+    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+    rpc	UpdateNexusEndpoint(UpdateNexusEndpointRequest) returns (UpdateNexusEndpointResponse) {}
     // Delete a service by its name.
-    rpc	DeleteNexusIncomingService(DeleteNexusIncomingServiceRequest) returns (DeleteNexusIncomingServiceResponse) {}
+    rpc	DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {}
     // List all registered services.
-    rpc	ListNexusIncomingServices(ListNexusIncomingServicesRequest) returns (ListNexusIncomingServicesResponse) {}
+    rpc	ListNexusEndpoints(ListNexusEndpointsRequest) returns (ListNexusEndpointsResponse) {}
 }

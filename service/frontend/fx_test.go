@@ -207,14 +207,13 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
 				serviceResolver := membership.NewMockServiceResolver(gomock.NewController(tc.t))
-				serviceResolver.EXPECT().MemberCount().Return(0).AnyTimes()
+				serviceResolver.EXPECT().AvailableMemberCount().Return(0).AnyTimes()
 				tc.serviceResolver = serviceResolver
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -225,7 +224,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				// This may be overridden by the test case.
 				ctrl := gomock.NewController(t)
 				serviceResolver := membership.NewMockServiceResolver(ctrl)
-				serviceResolver.EXPECT().MemberCount().Return(numHosts).AnyTimes()
+				serviceResolver.EXPECT().AvailableMemberCount().Return(numHosts).AnyTimes()
 				tc.serviceResolver = serviceResolver
 			}
 			tc.configure(&tc)
@@ -249,7 +248,11 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
-			server := grpc.NewServer(grpc.ChainUnaryInterceptor(rpc.NewServiceErrorInterceptor(log.NewTestLogger()), rateLimitInterceptor.Intercept))
+			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
+				rpc.ServiceErrorInterceptor,
+				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				rateLimitInterceptor.Intercept,
+			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
 			pipe := nettest.NewPipe()
@@ -579,14 +582,14 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			namespaceName := "test-namespace"
 			mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
-			mockRegistry.EXPECT().GetNamespace(namespace.Name("")).Return(&namespace.Namespace{}, nil).AnyTimes()
+			mockRegistry.EXPECT().GetNamespace(namespace.Name(namespaceName)).Return(&namespace.Namespace{}, nil).AnyTimes()
 			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(t))
-			serviceResolver.EXPECT().MemberCount().Return(tc.frontendServiceCount).AnyTimes()
+			serviceResolver.EXPECT().AvailableMemberCount().Return(tc.frontendServiceCount).AnyTimes()
 
 			config := getTestConfig(tc)
 
@@ -601,7 +604,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
-			server := grpc.NewServer(grpc.ChainUnaryInterceptor(rpc.NewServiceErrorInterceptor(log.NewTestLogger()), rateLimitInterceptor.Intercept))
+			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
+				rpc.ServiceErrorInterceptor,
+				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				rateLimitInterceptor.Intercept,
+			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
 			pipe := nettest.NewPipe()
@@ -653,7 +660,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numRequests; i++ {
 				_, err = client.StartWorkflowExecution(
 					context.Background(),
-					&workflowservice.StartWorkflowExecutionRequest{},
+					&workflowservice.StartWorkflowExecutionRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -664,7 +673,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numVisibilityRequests; i++ {
 				_, err = client.ListWorkflowExecutions(
 					context.Background(),
-					&workflowservice.ListWorkflowExecutionsRequest{},
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -675,7 +686,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numReplicationInducingRequests; i++ {
 				_, err = client.RegisterNamespace(
 					context.Background(),
-					&workflowservice.RegisterNamespaceRequest{},
+					&workflowservice.RegisterNamespaceRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -746,7 +759,6 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -754,7 +766,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
 			mockRegistry.EXPECT().GetNamespace(namespace.Name(testNS)).Return(&namespace.Namespace{}, nil).AnyTimes()
 			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(t))
-			serviceResolver.EXPECT().MemberCount().Return(tc.frontendServiceCount).AnyTimes()
+			serviceResolver.EXPECT().AvailableMemberCount().Return(tc.frontendServiceCount).AnyTimes()
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 
@@ -779,12 +791,11 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
-			server := grpc.NewServer(
-				grpc.ChainUnaryInterceptor(
-					rpc.NewServiceErrorInterceptor(log.NewTestLogger()),
-					rateLimitInterceptor.Intercept,
-				),
-			)
+			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
+				rpc.ServiceErrorInterceptor,
+				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				rateLimitInterceptor.Intercept,
+			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
 			pipe := nettest.NewPipe()

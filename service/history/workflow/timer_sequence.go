@@ -113,7 +113,7 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 
 	timerInfo, ok := t.mutableState.GetUserTimerInfoByEventID(firstTimerTask.EventID)
 	if !ok {
-		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.EventID))
+		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load timer info %v", firstTimerTask.EventID))
 	}
 	// mark timer task mask as indication that timer task is generated
 	// here TaskID is misleading attr, should be called timer created flag or something
@@ -126,7 +126,6 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 		WorkflowKey:         t.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: firstTimerTask.Timestamp,
 		EventID:             firstTimerTask.EventID,
-		Version:             t.mutableState.GetCurrentVersion(),
 	})
 	return true, nil
 }
@@ -175,7 +174,6 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 		TimeoutType:         firstTimerTask.TimerType,
 		EventID:             firstTimerTask.EventID,
 		Attempt:             firstTimerTask.Attempt,
-		Version:             t.mutableState.GetCurrentVersion(),
 	})
 	return true, nil
 }

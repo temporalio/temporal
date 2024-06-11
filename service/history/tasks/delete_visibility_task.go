@@ -38,21 +38,12 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp            time.Time
 		TaskID                         int64
-		Version                        int64
 		CloseExecutionVisibilityTaskID int64
 	}
 )
 
 func (t *DeleteExecutionVisibilityTask) GetKey() Key {
 	return NewImmediateKey(t.TaskID)
-}
-
-func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {
-	return t.Version
-}
-
-func (t *DeleteExecutionVisibilityTask) SetVersion(version int64) {
-	t.Version = version
 }
 
 func (t *DeleteExecutionVisibilityTask) GetTaskID() int64 {
