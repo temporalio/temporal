@@ -123,7 +123,11 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 
 func (c *operationContext) augmentContext(ctx context.Context) context.Context {
 	ctx = metrics.AddMetricsContext(ctx)
-	return interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	return interceptor.PopulateCallerInfo(
+		ctx,
+		func() string { return c.namespaceName },
+		func() string { return c.method })
 }
 
 func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {

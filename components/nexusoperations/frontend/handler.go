@@ -205,7 +205,11 @@ type requestContext struct {
 
 func (c *requestContext) augmentContext(ctx context.Context) context.Context {
 	ctx = metrics.AddMetricsContext(ctx)
-	return interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	return interceptor.PopulateCallerInfo(
+		ctx,
+		func() string { return c.namespace.Name().String() },
+		func() string { return methodNameForMetrics })
 }
 
 func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
