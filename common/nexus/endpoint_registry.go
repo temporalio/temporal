@@ -33,13 +33,13 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -178,7 +178,7 @@ func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context) error {
 				r.dataReady = make(chan struct{})
 			}
 			hasLoadedEndpointData = false
-			common.InterruptibleSleep(ctx, r.config.refreshMinWait())
+			util.InterruptibleSleep(ctx, r.config.refreshMinWait())
 			continue
 		}
 
@@ -204,7 +204,7 @@ func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		if elapsed < minWaitTime {
-			common.InterruptibleSleep(ctx, minWaitTime-elapsed)
+			util.InterruptibleSleep(ctx, minWaitTime-elapsed)
 			// Don't let this get near our call timeout, otherwise we can't tell the difference
 			// between a fast reply and a timeout.
 			minWaitTime = min(minWaitTime*2, r.config.refreshLongPollTimeout()/2)
