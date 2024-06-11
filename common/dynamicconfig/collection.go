@@ -25,6 +25,7 @@
 package dynamicconfig
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -41,6 +42,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
 )
 
 type (
@@ -53,6 +56,7 @@ type (
 		errCount int64
 
 		cancelClientSubscription func()
+		poller                   goro.Group
 
 		subscriptionLock sync.Mutex
 		subscriptions    map[GenericSetting]map[int]any // final "any" is *subscription[T]
@@ -87,6 +91,9 @@ type (
 
 const (
 	errCountLogThreshold = 1000
+
+	// interval to poll for changes when client does not support subscriptions
+	pollInterval = time.Minute
 )
 
 var (
@@ -106,7 +113,7 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	if subcli, ok := client.(SubscribableClient); ok {
 		c.cancelClientSubscription = subcli.Subscribe(c.keysChanged)
 	} else {
-		// FIXME: start goroutine to fake subscriptions
+		c.poller.Go(c.pollForChanges)
 	}
 	// FIXME: 10?
 	for i := 0; i < 10; i++ {
@@ -116,6 +123,8 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 }
 
 func (c *Collection) Stop() {
+	c.poller.Cancel()
+	c.poller.Wait()
 	if c.cancelClientSubscription != nil {
 		c.cancelClientSubscription()
 	}
@@ -127,6 +136,26 @@ func (c *Collection) Stop() {
 func (c *Collection) callCallbacks() {
 	for f := range c.callbackCh {
 		f()
+	}
+}
+
+func (c *Collection) pollForChanges(ctx context.Context) error {
+	for ctx.Err() == nil {
+		util.InterruptibleSleep(ctx, pollInterval)
+		c.pollOnce(ctx)
+	}
+	return ctx.Err()
+}
+
+func (c *Collection) pollOnce(ctx context.Context) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+
+	for setting, subs := range c.subscriptions {
+		for _, sub := range subs {
+			cvs := c.client.GetValue(setting.Key())
+			setting.dispatchUpdate(c, sub, cvs)
+		}
 	}
 }
 
