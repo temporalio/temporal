@@ -62,7 +62,7 @@ type (
 		*require.Assertions
 		protorequire.ProtoAssertions
 		controller                         *gomock.Controller
-		visibilityStore                    *visibilityStore
+		visibilityStore                    *VisibilityStore
 		mockESClient                       *client.MockClient
 		mockProcessor                      *MockProcessor
 		mockMetricsHandler                 *metrics.MockHandler
@@ -141,7 +141,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
-	s.visibilityStore = &visibilityStore{
+	s.visibilityStore = &VisibilityStore{
 		esClient:                       s.mockESClient,
 		index:                          testIndex,
 		searchAttributesProvider:       searchattribute.NewTestProvider(),
@@ -1783,7 +1783,7 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			visibilityStore := &visibilityStore{
+			visibilityStore := &VisibilityStore{
 				esClient:                       s.mockESClient,
 				index:                          testIndex,
 				searchAttributesProvider:       searchattribute.NewTestProvider(),

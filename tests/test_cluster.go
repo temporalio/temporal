@@ -374,7 +374,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	logger.Info("Index template created.")
 
 	logger.Info("Creating index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	_, err = esClient.CreateIndex(context.Background(), esConfig.GetVisibilityIndex())
+	_, err = esClient.CreateIndex(context.Background(), esConfig.GetVisibilityIndex(), nil)
 	if err != nil {
 		return err
 	}
