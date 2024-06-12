@@ -65,7 +65,7 @@ func GetAndUpdateWorkflowWithConsistancyCheck(
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistancyCheck(
@@ -80,7 +80,7 @@ func GetAndUpdateWorkflowWithConsistancyCheck(
 	}
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
+	return UpdateWorkflowWithNew(shardContext, ctx, workflowLease, action, newWorkflowFn)
 }
 
 func UpdateWorkflowWithNew(
