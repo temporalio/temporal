@@ -112,11 +112,10 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	if err != nil {
 		return nil, err
 	}
-	// must generate the activity timer / user timer at the very end
+	// TODO: There doesn't seem to be a good reason to generate tasks here since they'll be generated eventually when we
+	// close the transaction.
+	// Previously this comment was here: must generate the activity timer / user timer at the very end
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
-	if err := taskGenerator.GenerateDirtySubStateMachineTasks(b.shard.StateMachineRegistry()); err != nil {
-		return nil, err
-	}
 	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
 		return nil, err
 	}

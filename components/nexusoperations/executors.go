@@ -285,7 +285,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
 				// to allow it to complete via callback.
 				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-					// nolint:revive
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
 					e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 						NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 							ScheduledEventId: eventID,
@@ -352,7 +352,7 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 		ScheduledEventId: eventID,
 	}
 	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
-		// nolint:revive
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 			NexusOperationFailedEventAttributes: attrs,
 		}
@@ -390,7 +390,7 @@ func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, ta
 			return hsm.TransitionOutput{}, err
 		}
 		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
-			// nolint:revive
+			// nolint:revive // We must mutate here even if the linter doesn't like it.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
 					Failure: nexusOperationFailure(

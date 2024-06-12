@@ -219,14 +219,14 @@ type CompletionSource int
 const (
 	// CompletionSourceUnspecified indicates that the source is unspecified (e.g. when reapplying a history event that
 	// doesn't record this information).
-	CompletionSourceUnspecified CompletionSource = iota
+	CompletionSourceUnspecified = CompletionSource(iota)
 	// CompletionSourceResponse indicates that a completion came synchronously from a response to a StartOperation
 	// request.
-	CompletionSourceResponse CompletionSource = iota
+	CompletionSourceResponse
 	// CompletionSourceResponse indicates that a completion came asynchronously from a callback.
-	CompletionSourceCallback CompletionSource = iota
+	CompletionSourceCallback
 	// CompletionSourceCancelRequested indicates that the operation was canceled due to workflow cancelation request.
-	CompletionSourceCancelRequested CompletionSource = iota
+	CompletionSourceCancelRequested
 )
 
 // EventScheduled is triggered when the operation is meant to be scheduled - immediately after initialization.
