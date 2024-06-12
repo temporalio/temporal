@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/vclock"
@@ -56,6 +55,13 @@ type (
 			lockPriority workflow.LockPriority,
 		) (string, error)
 		GetWorkflowLease(
+			ctx context.Context,
+			reqClock *clockspb.VectorClock,
+			workflowKey definition.WorkflowKey,
+			lockPriority workflow.LockPriority,
+		) (WorkflowLease, error)
+
+		GetWorkflowLeaseWithConsistancyCheck(
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
@@ -103,6 +109,125 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
+	workflowKey definition.WorkflowKey,
+	lockPriority workflow.LockPriority,
+) (WorkflowLease, error) {
+	if err := c.clockConsistencyCheck(reqClock); err != nil {
+		return nil, err
+	}
+
+	if len(workflowKey.RunID) != 0 {
+		return c.getWorkflowLease(ctx, workflowKey, lockPriority)
+	}
+
+	return c.getCurrentWorkflowContext(
+		ctx,
+		workflowKey.NamespaceID,
+		workflowKey.WorkflowID,
+		lockPriority,
+	)
+}
+
+func (c *WorkflowConsistencyCheckerImpl) clockConsistencyCheck(
+	reqClock *clockspb.VectorClock,
+) error {
+	if reqClock == nil {
+		return nil
+	}
+	currentClock := c.shardContext.CurrentVectorClock()
+	if !vclock.Comparable(reqClock, currentClock) {
+		// request vector clock cannot is not comparable with current shard vector clock
+		return nil
+	}
+
+	cmpResult, err := vclock.Compare(reqClock, currentClock)
+	if err != nil {
+		return err
+	}
+	if cmpResult <= 0 {
+		return nil
+	}
+	shardID := c.shardContext.GetShardID()
+	c.shardContext.UnloadForOwnershipLost()
+	return &persistence.ShardOwnershipLostError{
+		ShardID: shardID,
+		Msg:     fmt.Sprintf("Shard: %v consistency check failed, reloading", shardID),
+	}
+}
+
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	lockPriority workflow.LockPriority,
+) (WorkflowLease, error) {
+	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		c.shardContext,
+		namespace.ID(workflowKey.NamespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
+		},
+		lockPriority,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
+	if err != nil {
+		release(err)
+		return nil, err
+	}
+
+	return NewWorkflowLease(wfContext, release, mutableState), nil
+}
+
+func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
+	ctx context.Context,
+	namespaceID string,
+	workflowID string,
+	lockPriority workflow.LockPriority,
+) (WorkflowLease, error) {
+	runID, err := c.GetCurrentRunID(
+		ctx,
+		namespaceID,
+		workflowID,
+		lockPriority,
+	)
+	if err != nil {
+		return nil, err
+	}
+	workflowLease, err := c.getWorkflowLease(
+		ctx, definition.NewWorkflowKey(namespaceID, workflowID, runID), lockPriority,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
+		return workflowLease, nil
+	}
+
+	currentRunID, err := c.GetCurrentRunID(ctx, namespaceID, workflowID, lockPriority)
+
+	if err != nil {
+		workflowLease.GetReleaseFn()(err)
+		return nil, err
+	}
+	if currentRunID == workflowLease.GetContext().GetWorkflowKey().RunID {
+		return workflowLease, nil
+	}
+
+	workflowLease.GetReleaseFn()(nil)
+	return nil, consts.ErrLocateCurrentWorkflowExecution
+}
+
+// The code below is an old implementation of GetWorkflowLease
+// It should be avoided. We should revisit the logic
+
+func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLeaseWithConsistancyCheck(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	lockPriority workflow.LockPriority,
@@ -130,55 +255,13 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 			lockPriority,
 		)
 	}
-	return c.getCurrentWorkflowContext(
+	return c.getCurrentWorkflowContextWithConsistencyCheck(
 		ctx,
 		consistencyPredicate,
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
 		lockPriority,
 	)
-}
-
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByClock(
-	ctx context.Context,
-	reqClock *clockspb.VectorClock,
-	currentClock *clockspb.VectorClock,
-	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
-) (WorkflowLease, error) {
-	cmpResult, err := vclock.Compare(reqClock, currentClock)
-	if err != nil {
-		return nil, err
-	}
-	if cmpResult > 0 {
-		shardID := c.shardContext.GetShardID()
-		c.shardContext.UnloadForOwnershipLost()
-		return nil, &persistence.ShardOwnershipLostError{
-			ShardID: shardID,
-			Msg:     fmt.Sprintf("Shard: %v consistency check failed, reloading", shardID),
-		}
-	}
-
-	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		c.shardContext,
-		namespace.ID(workflowKey.NamespaceID),
-		&commonpb.WorkflowExecution{
-			WorkflowId: workflowKey.WorkflowID,
-			RunId:      workflowKey.RunID,
-		},
-		lockPriority,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
-	if err != nil {
-		release(err)
-		return nil, err
-	}
-	return NewWorkflowLease(wfContext, release, mutableState), nil
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByCheck(
@@ -226,7 +309,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByCheck(
 	return NewWorkflowLease(wfContext, release, mutableState), nil
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
+func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContextWithConsistencyCheck(
 	ctx context.Context,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
@@ -273,33 +356,44 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	return nil, consts.ErrLocateCurrentWorkflowExecution
 }
 
-func BypassMutableStateConsistencyPredicate(
-	mutableState workflow.MutableState,
-) bool {
-	return true
-}
-
-func FailMutableStateConsistencyPredicate(
-	mutableState workflow.MutableState,
-) bool {
-	return false
-}
-
-func HistoryEventConsistencyPredicate(
-	eventID int64,
-	eventVersion int64,
-) MutableStateConsistencyPredicate {
-	return func(mutableState workflow.MutableState) bool {
-		if eventVersion != 0 {
-			_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-				mutableState.GetExecutionInfo().GetVersionHistories(),
-				versionhistory.NewVersionHistoryItem(eventID, eventVersion),
-			)
-			return err == nil
-		}
-		// if initiated version is 0, it means the namespace is local or
-		// the caller has old version and does not sent the info.
-		// in either case, fallback to comparing next eventID
-		return eventID < mutableState.GetNextEventID()
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByClock(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	currentClock *clockspb.VectorClock,
+	workflowKey definition.WorkflowKey,
+	lockPriority workflow.LockPriority,
+) (WorkflowLease, error) {
+	cmpResult, err := vclock.Compare(reqClock, currentClock)
+	if err != nil {
+		return nil, err
 	}
+	if cmpResult > 0 {
+		shardID := c.shardContext.GetShardID()
+		c.shardContext.UnloadForOwnershipLost()
+		return nil, &persistence.ShardOwnershipLostError{
+			ShardID: shardID,
+			Msg:     fmt.Sprintf("Shard: %v consistency check failed, reloading", shardID),
+		}
+	}
+
+	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		c.shardContext,
+		namespace.ID(workflowKey.NamespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
+		},
+		lockPriority,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
+	if err != nil {
+		release(err)
+		return nil, err
+	}
+	return NewWorkflowLease(wfContext, release, mutableState), nil
 }

@@ -219,7 +219,6 @@ func GetMutableState(
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
 		workflowKey,
 		workflow.LockPriorityHigh,
 	)

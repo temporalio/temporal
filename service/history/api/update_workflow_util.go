@@ -38,7 +38,6 @@ import (
 func GetAndUpdateWorkflowWithNew(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
-	consistencyCheckFn MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
@@ -46,6 +45,30 @@ func GetAndUpdateWorkflowWithNew(
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+		ctx,
+		reqClock,
+		workflowKey,
+		workflow.LockPriorityHigh,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
+
+	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
+}
+
+func GetAndUpdateWorkflowWithConsistancyCheck(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	consistencyCheckFn MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	action UpdateWorkflowActionFunc,
+	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
+	shard shard.Context,
+	workflowConsistencyChecker WorkflowConsistencyChecker,
+) (retError error) {
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistancyCheck(
 		ctx,
 		reqClock,
 		consistencyCheckFn,
