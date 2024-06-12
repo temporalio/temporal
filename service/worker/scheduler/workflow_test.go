@@ -107,7 +107,7 @@ func (s *workflowSuite) defaultAction(id string) *schedpb.ScheduleAction {
 func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
 	// test workflows will run until "completion", in our case that means until
 	// continue-as-new. we only need a small number of iterations to test, though.
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = iterations
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = iterations
 
 	// fixed start time
 	s.env.SetStartTime(baseStartTime)
@@ -292,7 +292,7 @@ func (s *workflowSuite) runAcrossContinue(
 				ConflictToken: InitialConflictToken,
 			},
 		}
-		currentTweakablePolicies.IterationsBeforeContinueAsNew = every
+		CurrentTweakablePolicies.IterationsBeforeContinueAsNew = every
 		state := runAcrossContinueState{
 			started: make(map[string]time.Time),
 		}
@@ -304,7 +304,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.setupDelayedCallbacks(startTime, cbs, &state)
 
 			s.T().Logf("starting workflow with CAN every %d iterations, start time %s",
-				currentTweakablePolicies.IterationsBeforeContinueAsNew, startTime)
+				CurrentTweakablePolicies.IterationsBeforeContinueAsNew, startTime)
 			s.env.ExecuteWorkflow(SchedulerWorkflow, startArgs)
 			s.T().Logf("finished workflow, time is now %s, finished is %v", s.now(), state.finished)
 
@@ -383,7 +383,7 @@ func (s *workflowSuite) TestInitialPatch() {
 		return nil, nil
 	})
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 2
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -433,7 +433,7 @@ func (s *workflowSuite) TestCatchupWindow() {
 		s.Equal(int64(5), s.describe().Info.MissedCatchupWindow)
 	}, 18*time.Minute)
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 2
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -476,7 +476,7 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 		return nil, nil
 	})
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -701,9 +701,9 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 }
 
 func (s *workflowSuite) TestBufferLimit() {
-	originalMaxBufferSize := currentTweakablePolicies.MaxBufferSize
-	currentTweakablePolicies.MaxBufferSize = 2
-	defer func() { currentTweakablePolicies.MaxBufferSize = originalMaxBufferSize }()
+	originalMaxBufferSize := CurrentTweakablePolicies.MaxBufferSize
+	CurrentTweakablePolicies.MaxBufferSize = 2
+	defer func() { CurrentTweakablePolicies.MaxBufferSize = originalMaxBufferSize }()
 
 	s.runAcrossContinue(
 		[]workflowRun{
@@ -1321,9 +1321,9 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 }
 
 func (s *workflowSuite) TestHugeBackfillAllowAll() {
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
-	defer func() { currentTweakablePolicies = prevTweakables }()
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
 	// This has been run for up to 5000, but it takes a very long time. Run only 100 normally.
 	const backfillRuns = 100
@@ -1331,7 +1331,7 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 	// The number that we process per iteration, with a 1s sleep per iteration, makes an
 	// effective "rate limit" for processing allow-all backfills. This is different from the
 	// explicit rate limit.
-	rateLimit := currentTweakablePolicies.BackfillsPerIteration
+	rateLimit := CurrentTweakablePolicies.BackfillsPerIteration
 
 	base := time.Date(2001, 8, 6, 0, 0, 0, 0, time.UTC)
 	runs := make([]workflowRun, backfillRuns)
@@ -1384,9 +1384,9 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 }
 
 func (s *workflowSuite) TestHugeBackfillBuffer() {
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
-	defer func() { currentTweakablePolicies = prevTweakables }()
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
 	// This has been run for up to 3000, but it takes a very long time. Run only 100 normally.
 	const backfillRuns = 100
@@ -1907,7 +1907,7 @@ func (s *workflowSuite) TestLimitedActions() {
 }
 
 func (s *workflowSuite) TestLotsOfIterations() {
-	// This is mostly testing getNextTime caching logic.
+	// This is mostly testing GetNextTime caching logic.
 	const runIterations = 30
 	const backfillIterations = 3
 
@@ -1999,7 +1999,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 		return nil, nil
 	})
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 5
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -2023,7 +2023,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
@@ -2034,7 +2034,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 		return nil, nil
 	})
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -2059,13 +2059,13 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 	scheduleId := "myschedule"
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -2081,7 +2081,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(baseStartTime) == currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(baseStartTime) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestCANByIterations() {

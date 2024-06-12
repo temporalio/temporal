@@ -24,7 +24,18 @@ package scheduler
 
 import (
 	"context"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	sdklog "go.temporal.io/sdk/log"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/fx"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
 )
 
 func RegisterExecutor(
@@ -47,6 +58,12 @@ func RegisterExecutor(
 
 type (
 	ActiveExecutorOptions struct {
+		fx.In
+
+		logger         sdklog.Logger
+		metrics        sdkclient.MetricsHandler
+		frontendClient workflowservice.WorkflowServiceClient
+		historyClient  resource.HistoryClient
 	}
 
 	activeExecutor struct {
@@ -63,7 +80,7 @@ func (e activeExecutor) executeSchedulerWaitTask(
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
-	return hsm.MachineTransition(node, func(scheduler Scheduler) (hsm.TransitionOutput, error) {
+	return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
 		return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
 	})
 }
@@ -78,12 +95,47 @@ func (e activeExecutor) executeSchedulerRunTask(
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		//scheduler, err := hsm.MachineData[Scheduler](node)
-		//if err != nil {
-		//	return err
-		//}
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		s.populateTransientFieldsIfAbsent(e.options.logger, e.options.metrics, e.options.frontendClient, e.options.historyClient)
 
-		return hsm.MachineTransition(node, func(scheduler Scheduler) (hsm.TransitionOutput, error) {
+		if s.Args.State.LastProcessedTime == nil {
+			// log these as json since it's more readable than the Go representation
+			specJson, _ := protojson.Marshal(s.Args.Schedule.Spec)
+			policiesJson, _ := protojson.Marshal(s.Args.Schedule.Policies)
+			s.logger.Info("Starting schedule", "spec", string(specJson), "policies", string(policiesJson))
+
+			s.Args.State.LastProcessedTime = timestamppb.Now()
+			s.Args.State.ConflictToken = scheduler.InitialConflictToken
+			s.Args.Info.CreateTime = s.Args.State.LastProcessedTime
+		}
+
+		t1 := timestamp.TimeValue(s.Args.State.LastProcessedTime)
+		t2 := time.Now()
+		if t2.Before(t1) {
+			// Time went backwards. Currently this can only happen across a continue-as-new boundary.
+			s.logger.Warn("Time went backwards", "from", t1, "to", t2)
+			t2 = t1
+		}
+		nextWakeup := s.processTimeRange(
+			t1, t2,
+			// resolve this to the schedule's policy as late as possible
+			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+			false,
+			nil,
+		)
+		s.Args.State.LastProcessedTime = timestamppb.New(t2)
+		// process backfills if we have any too
+		s.processBackfills()
+		// try starting workflows in the buffer
+		//nolint:revive
+		for s.processBuffer() {
+		}
+		s.nextInvokeTime = nextWakeup
+
+		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
 			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
 		})
 	})
