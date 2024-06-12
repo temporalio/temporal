@@ -40,24 +40,20 @@ import (
 
 func RegisterExecutor(
 	registry *hsm.Registry,
-	activeExecutorOptions ActiveExecutorOptions,
-	standbyExecutorOptions StandbyExecutorOptions,
+	executorOptions TaskExecutorOptions,
 	config *Config,
 ) error {
-	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
-	standbyExec := standbyExecutor{options: standbyExecutorOptions}
-	if err := hsm.RegisterTimerExecutors(
+	exec := taskExecutor{options: executorOptions, config: config}
+	if err := hsm.RegisterTimerExecutor(
 		registry,
-		activeExec.executeSchedulerWaitTask,
-		standbyExec.executeSchedulerWaitTask,
-	); err != nil {
+		exec.executeSchedulerWaitTask); err != nil {
 		return err
 	}
-	return hsm.RegisterImmediateExecutor(registry, activeExec.executeSchedulerRunTask)
+	return hsm.RegisterImmediateExecutor(registry, exec.executeSchedulerRunTask)
 }
 
 type (
-	ActiveExecutorOptions struct {
+	TaskExecutorOptions struct {
 		fx.In
 
 		logger         sdklog.Logger
@@ -66,13 +62,13 @@ type (
 		historyClient  resource.HistoryClient
 	}
 
-	activeExecutor struct {
-		options ActiveExecutorOptions
+	taskExecutor struct {
+		options TaskExecutorOptions
 		config  *Config
 	}
 )
 
-func (e activeExecutor) executeSchedulerWaitTask(
+func (e taskExecutor) executeSchedulerWaitTask(
 	env hsm.Environment,
 	node *hsm.Node,
 	task SchedulerWaitTask,
@@ -85,7 +81,7 @@ func (e activeExecutor) executeSchedulerWaitTask(
 	})
 }
 
-func (e activeExecutor) executeSchedulerRunTask(
+func (e taskExecutor) executeSchedulerRunTask(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
@@ -139,29 +135,4 @@ func (e activeExecutor) executeSchedulerRunTask(
 			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
 		})
 	})
-}
-
-type (
-	StandbyExecutorOptions struct{}
-
-	standbyExecutor struct {
-		options StandbyExecutorOptions
-	}
-)
-
-func (e standbyExecutor) executeSchedulerWaitTask(
-	env hsm.Environment,
-	node *hsm.Node,
-	task SchedulerWaitTask,
-) error {
-	panic("unimplemented")
-}
-
-func (e standbyExecutor) executeSchedulerRunTask(
-	ctx context.Context,
-	env hsm.Environment,
-	ref hsm.Ref,
-	task SchedulerRunTask,
-) error {
-	panic("unimplemented")
 }

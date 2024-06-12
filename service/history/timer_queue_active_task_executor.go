@@ -135,9 +135,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	case *tasks.StateMachineTimerTask:
-		err = t.executeStateMachineTimerTask(ctx, task, func(node *hsm.Node, task hsm.Task) error {
-			return t.shardContext.StateMachineRegistry().ExecuteActiveTimerTask(t, node, task)
-		})
+		err = t.executeStateMachineTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -612,7 +610,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState := workflow.NewMutableStateInChain(
+	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
 		t.shardContext.GetLogger(),
@@ -622,6 +620,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		t.shardContext.GetTimeSource().Now(),
 		mutableState,
 	)
+	if err != nil {
+		return err
+	}
+
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		mutableState,
@@ -709,6 +711,51 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 
 	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
 	return nil
+}
+
+func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
+	ctx context.Context,
+	task *tasks.StateMachineTimerTask,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return nil
+	}
+
+	processedTimers, err := t.executeStateMachineTimers(
+		ctx,
+		ms,
+		func(node *hsm.Node, task hsm.Task) error {
+			return t.shardContext.StateMachineRegistry().ExecuteTimerTask(t, node, task)
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// We haven't done any work, return without committing.
+	if processedTimers == 0 {
+		return nil
+	}
+
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
+		// closed workflow.
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
+	}
+	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
 
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(

@@ -33,6 +33,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,9 +43,10 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/internal/temporalite"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type completionHandler struct {
@@ -169,100 +171,140 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 	}
 }
 
-func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOverContinueAsNew() {
+func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.EnableNexus, true)
 	defer dc.RemoveOverride(dynamicconfig.EnableNexus)
 
-	ctx := NewContext()
-	sdkClient, err := client.Dial(client.Options{
-		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
-		Namespace: s.namespace,
-	})
-	s.NoError(err)
-	pp := temporalite.NewPortProvider()
-
-	taskQueue := s.randomizeStr(s.T().Name())
-	workflowType := "test"
-
-	w := worker.New(sdkClient, taskQueue, worker.Options{})
-	wf := func(ctx workflow.Context) (int, error) {
-		// Verify that the callback is carried over the CAN boundary.
-		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
-			return 0, workflow.NewContinueAsNewError(ctx, workflowType)
-		}
-		return 666, nil
-	}
-	ch := &completionHandler{
-		requestCh:         make(chan *nexus.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-	s.NoError(pp.Close())
-	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-	defer func() {
-		err := shutdownServer()
-		if err != nil {
-			panic(err)
-		}
-	}()
-	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
-	s.NoError(w.Start())
-	defer w.Stop()
-
-	// TODO: use sdkClient instead of directly calling the history engine when callbacks are exposed
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
-		Namespace:          s.namespace,
-		WorkflowId:         s.randomizeStr(s.T().Name()),
-		WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:              nil,
-		WorkflowRunTimeout: durationpb.New(100 * time.Second),
-		Identity:           s.T().Name(),
-		CompletionCallbacks: []*commonpb.Callback{
-			{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: "http://" + callbackAddress,
-					},
-				},
+	cases := []struct {
+		name       string
+		wf         func(workflow.Context) (int, error)
+		runTimeout time.Duration
+	}{
+		{
+			name: "ContinueAsNew",
+			wf: func(ctx workflow.Context) (int, error) {
+				if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+					return 0, workflow.NewContinueAsNewError(ctx, "test")
+				}
+				return 666, nil
 			},
+			runTimeout: 100 * time.Second,
+		},
+		{
+			name: "WorkflowRunTimeout",
+			wf: func(ctx workflow.Context) (int, error) {
+				info := workflow.GetInfo(ctx)
+				if info.FirstRunID == info.WorkflowExecution.RunID {
+					return 0, workflow.Sleep(ctx, 1*time.Second)
+				}
+				s.Greater(info.Attempt, int32(1))
+				return 666, nil
+			},
+			runTimeout: 100 * time.Millisecond,
+		},
+		{
+			name: "WorkflowFailureRetry",
+			wf: func(ctx workflow.Context) (int, error) {
+				info := workflow.GetInfo(ctx)
+				if info.FirstRunID == info.WorkflowExecution.RunID {
+					return 0, errors.New("intentional workflow failure")
+				}
+				s.Greater(info.Attempt, int32(1))
+				return 666, nil
+			},
+			runTimeout: 100 * time.Second,
 		},
 	}
 
-	_, err = s.engine.StartWorkflowExecution(ctx, request)
-	s.NoError(err)
+	for _, tc := range cases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			ctx := NewContext()
+			sdkClient, err := client.Dial(client.Options{
+				HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
+				Namespace: s.namespace,
+			})
+			s.NoError(err)
+			pp := temporalite.NewPortProvider()
 
-	run := sdkClient.GetWorkflow(ctx, request.WorkflowId, "")
-	s.NoError(run.Get(ctx, nil))
+			taskQueue := s.randomizeStr(s.T().Name())
+			workflowType := "test"
 
-	numAttempts := 2
-	for attempt := 1; attempt <= numAttempts; attempt++ {
-		completion := <-ch.requestCh
-		s.Equal(nexus.OperationStateSucceeded, completion.State)
-		var result int
-		s.NoError(completion.Result.Consume(&result))
-		s.Equal(666, result)
-		var err error
-		if attempt < numAttempts {
-			// force retry
-			err = nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
-		}
-		ch.requestCompleteCh <- err
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
-		s.NoError(err)
-		s.Equal(1, len(description.Callbacks))
-		callbackInfo := description.Callbacks[0]
-		s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
-		s.ProtoEqual(&workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
-		s.Equal(int32(attempt), callbackInfo.Attempt)
-		if attempt < numAttempts {
-			s.Equal(enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
-			s.Equal("request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
-		} else {
-			s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-			s.Nil(callbackInfo.LastAttemptFailure)
-		}
+			ch := &completionHandler{
+				requestCh:         make(chan *nexus.CompletionRequest, 1),
+				requestCompleteCh: make(chan error, 1),
+			}
+			callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
+			s.NoError(pp.Close())
+			shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
+			t.Cleanup(func() {
+				require.NoError(t, shutdownServer())
+			})
+
+			w := worker.New(sdkClient, taskQueue, worker.Options{})
+			w.RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
+			s.NoError(w.Start())
+			defer w.Stop()
+
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:          uuid.New(),
+				Namespace:          s.namespace,
+				WorkflowId:         s.randomizeStr(s.T().Name()),
+				WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:              nil,
+				WorkflowRunTimeout: durationpb.New(tc.runTimeout),
+				Identity:           s.T().Name(),
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval:    durationpb.New(1 * time.Second),
+					MaximumInterval:    durationpb.New(1 * time.Second),
+					BackoffCoefficient: 1,
+				},
+				CompletionCallbacks: []*commonpb.Callback{
+					{
+						Variant: &commonpb.Callback_Nexus_{
+							Nexus: &commonpb.Callback_Nexus{
+								Url: "http://" + callbackAddress,
+							},
+						},
+					},
+				},
+			}
+
+			_, err = s.engine.StartWorkflowExecution(ctx, request)
+			s.NoError(err)
+
+			run := sdkClient.GetWorkflow(ctx, request.WorkflowId, "")
+			s.NoError(run.Get(ctx, nil))
+
+			numAttempts := 2
+			for attempt := 1; attempt <= numAttempts; attempt++ {
+				completion := <-ch.requestCh
+				s.Equal(nexus.OperationStateSucceeded, completion.State)
+				var result int
+				s.NoError(completion.Result.Consume(&result))
+				s.Equal(666, result)
+				var err error
+				if attempt < numAttempts {
+					// force retry
+					err = nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
+				}
+				ch.requestCompleteCh <- err
+				description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
+				s.NoError(err)
+				s.Equal(1, len(description.Callbacks))
+				callbackInfo := description.Callbacks[0]
+				s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
+				s.ProtoEqual(&workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
+				s.Equal(int32(attempt), callbackInfo.Attempt)
+				if attempt < numAttempts {
+					s.Equal(enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
+					s.Equal("request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
+				} else {
+					s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+					s.Nil(callbackInfo.LastAttemptFailure)
+				}
+			}
+		})
 	}
 }

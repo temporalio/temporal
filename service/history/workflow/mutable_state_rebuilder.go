@@ -716,9 +716,10 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 		sameWorkflowChain = newRunFirstRunID == b.mutableState.GetExecutionInfo().FirstExecutionRunId
 	}
 
+	var err error
 	var newRunMutableState MutableState
 	if sameWorkflowChain {
-		newRunMutableState = NewMutableStateInChain(
+		newRunMutableState, err = NewMutableStateInChain(
 			b.shard,
 			b.shard.GetEventsCache(),
 			b.logger,
@@ -728,6 +729,9 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
 			b.mutableState,
 		)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		newRunMutableState = NewMutableState(
 			b.shard,
@@ -742,7 +746,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 
 	newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
 
-	_, err := newRunStateBuilder.ApplyEvents(
+	_, err = newRunStateBuilder.ApplyEvents(
 		ctx,
 		namespaceID,
 		uuid.New(),

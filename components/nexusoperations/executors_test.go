@@ -310,7 +310,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				return nil
 			}
 
-			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
+			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
 					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
@@ -333,7 +333,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				},
 			}))
 
-			err := reg.ExecuteActiveImmediateTask(
+			err := reg.ExecuteImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -356,7 +356,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	node := newOperationNode(t, backend, time.Now(), time.Hour)
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
 	err := hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 			Node: node,
@@ -369,7 +369,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = reg.ExecuteActiveTimerTask(
+	err = reg.ExecuteTimerTask(
 		env,
 		node,
 		nexusoperations.BackoffTask{},
@@ -387,9 +387,9 @@ func TestProcessTimeoutTask(t *testing.T) {
 	node := newOperationNode(t, backend, time.Now(), time.Hour)
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
 
-	err := reg.ExecuteActiveTimerTask(
+	err := reg.ExecuteTimerTask(
 		env,
 		node,
 		nexusoperations.TimeoutTask{},
@@ -553,7 +553,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				return nil
 			}
 
-			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
+			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
 					Enabled:        dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
@@ -573,7 +573,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				},
 			}))
 
-			err = reg.ExecuteActiveImmediateTask(
+			err = reg.ExecuteImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -621,7 +621,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 		namespace.NewNamespaceForTest(&persistence.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 		Config: &nexusoperations.Config{
 			Enabled:        dynamicconfig.GetBoolPropertyFn(true),
 			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
@@ -638,7 +638,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		},
 	}))
 
-	err = reg.ExecuteActiveImmediateTask(
+	err = reg.ExecuteImmediateTask(
 		context.Background(),
 		env,
 		hsm.Ref{
@@ -682,9 +682,9 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.ActiveExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
 
-	err = reg.ExecuteActiveTimerTask(
+	err = reg.ExecuteTimerTask(
 		env,
 		node,
 		nexusoperations.CancelationBackoffTask{},
