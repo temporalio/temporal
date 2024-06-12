@@ -46,5 +46,5 @@ check_against_commit() {
 check_against_commit HEAD^ "parent"
 
 # Next check against main:
-git -C "$tmp" fetch https://github.com/temporalio/temporal.git main
+git -C "$tmp" fetch --depth=1 https://github.com/temporalio/temporal.git main
 check_against_commit FETCH_HEAD "main"
