@@ -303,13 +303,14 @@ func TestProcessInvocationTask(t *testing.T) {
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
 			}
 
-			endpointChecker := func(ctx context.Context, namespaceName, endpointName string) error {
-				if tc.endpointNotFound {
-					return serviceerror.NewNotFound("endpoint not found")
-				}
-				return nil
+			endpointReg := nexustest.FakeEndpointRegistry{
+				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+					if tc.endpointNotFound {
+						return nil, serviceerror.NewNotFound("endpoint not found")
+					}
+					return nil, nil // The endpoint isn't used here, it's okay to return nil.
+				},
 			}
-
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
 					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
@@ -323,7 +324,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
 				MetricsHandler:         metricsHandler,
-				EndpointChecker:        endpointChecker,
+				EndpointRegistry:       endpointReg,
 				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
 						BaseURL:    "http://" + listenAddr,
@@ -546,11 +547,13 @@ func TestProcessCancelationTask(t *testing.T) {
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
 			}
-			endpointChecker := func(ctx context.Context, namespaceName, endpointName string) error {
-				if tc.endpointNotFound {
-					return serviceerror.NewNotFound("endpoint not found")
-				}
-				return nil
+			endpointReg := nexustest.FakeEndpointRegistry{
+				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+					if tc.endpointNotFound {
+						return nil, serviceerror.NewNotFound("endpoint not found")
+					}
+					return nil, nil // The endpoint isn't used here, it's okay to return nil.
+				},
 			}
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
@@ -563,7 +566,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				},
 				NamespaceRegistry: namespaceRegistry,
 				MetricsHandler:    metricsHandler,
-				EndpointChecker:   endpointChecker,
+				EndpointRegistry:  endpointReg,
 				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
 						BaseURL:    "http://" + listenAddr,
@@ -630,8 +633,10 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 			},
 		},
 		NamespaceRegistry: namespaceRegistry,
-		EndpointChecker: func(ctx context.Context, namespaceName, endpointName string) error {
-			return nil
+		EndpointRegistry: nexustest.FakeEndpointRegistry{
+			OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+				return nil, nil
+			},
 		},
 		ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
