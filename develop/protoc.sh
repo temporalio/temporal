@@ -39,6 +39,7 @@ go run ./cmd/tools/copyright/licensegen.go --scanDir "$new"
 
 color "Moving proto files into place..."
 old=$api.old
-[[ -d "$api" ]] && mv -f "$api" "$old" && mkdir -p "$api"
+[[ -d "$api" ]] && mv -f "$api" "$old"
+mkdir -p "$api"
 mv -f "$new"/temporal/server/api/* "$api"/
 rm -rf "$new" "$old"
