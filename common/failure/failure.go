@@ -28,6 +28,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -69,19 +71,28 @@ func NewTimeoutFailure(message string, timeoutType enumspb.TimeoutType) *failure
 }
 
 func Truncate(f *failurepb.Failure, maxSize int) *failurepb.Failure {
+	return TruncateWithDepth(f, maxSize, 20)
+}
+
+func TruncateWithDepth(f *failurepb.Failure, maxSize, maxDepth int) *failurepb.Failure {
 	if f == nil {
 		return nil
 	}
 
-	newFailure := &failurepb.Failure{
-		Source: f.Source,
+	// note that bytes are given to earlier calls first, so call in order of importance
+	trunc := func(s string) string {
+		s = util.TruncateUTF8(s, maxSize)
+		maxSize -= len(s)
+		return s
 	}
+
+	newFailure := &failurepb.Failure{}
 
 	// Keep failure info for ApplicationFailureInfo and for ServerFailureInfo to persist NonRetryable flag.
 	if f.GetApplicationFailureInfo() != nil {
 		newFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 			NonRetryable: f.GetApplicationFailureInfo().GetNonRetryable(),
-			Type:         f.GetApplicationFailureInfo().GetType(),
+			Type:         trunc(f.GetApplicationFailureInfo().GetType()),
 		}}
 	}
 
@@ -91,21 +102,12 @@ func Truncate(f *failurepb.Failure, maxSize int) *failurepb.Failure {
 		}}
 	}
 
-	if len(f.Message) > maxSize {
-		newFailure.Message = f.Message[:maxSize]
-		return newFailure
+	newFailure.Source = trunc(f.Source)
+	newFailure.Message = trunc(f.Message)
+	newFailure.StackTrace = trunc(f.StackTrace)
+	if f.Cause != nil && maxSize > 0 && maxDepth > 0 {
+		newFailure.Cause = TruncateWithDepth(f.Cause, maxSize, maxDepth-1)
 	}
-	newFailure.Message = f.Message
-	maxSize -= len(newFailure.Message)
-
-	if len(f.StackTrace) > maxSize {
-		newFailure.StackTrace = f.StackTrace[:maxSize]
-		return newFailure
-	}
-	newFailure.StackTrace = f.StackTrace
-	maxSize -= len(newFailure.StackTrace)
-
-	newFailure.Cause = Truncate(f.Cause, maxSize)
 
 	return newFailure
 }
