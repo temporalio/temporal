@@ -76,6 +76,7 @@ type (
 		systemRateLimiter    quotas.RequestRateLimiter
 		namespaceRateLimiter quotas.RequestRateLimiter
 		healthSignals        persistence.HealthSignalAggregator
+		dlqMetricsEmitter    *persistence.DLQMetricsEmitter
 	}
 )
 
@@ -97,6 +98,7 @@ func NewFactory(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	healthSignals persistence.HealthSignalAggregator,
+	dlqMetricsEmitter *persistence.DLQMetricsEmitter,
 ) Factory {
 	factory := &factoryImpl{
 		dataStoreFactory:     dataStoreFactory,
@@ -109,6 +111,7 @@ func NewFactory(
 		systemRateLimiter:    systemRateLimiter,
 		namespaceRateLimiter: namespaceRateLimiter,
 		healthSignals:        healthSignals,
+		dlqMetricsEmitter:    dlqMetricsEmitter,
 	}
 	factory.initDependencies()
 	return factory
@@ -251,6 +254,9 @@ func (f *factoryImpl) Close() {
 	if f.healthSignals != nil {
 		f.healthSignals.Stop()
 	}
+	if f.dlqMetricsEmitter != nil {
+		f.dlqMetricsEmitter.Stop()
+	}
 }
 
 func IsPersistenceTransientError(err error) bool {
@@ -272,6 +278,9 @@ func (f *factoryImpl) initDependencies() {
 	}
 	if f.healthSignals == nil {
 		f.healthSignals = persistence.NoopHealthSignalAggregator
+	}
+	if f.dlqMetricsEmitter != nil {
+		f.dlqMetricsEmitter.Start()
 	}
 	f.healthSignals.Start()
 }

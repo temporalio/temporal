@@ -72,6 +72,7 @@ type (
 		Logger                             log.Logger
 		HealthSignals                      persistence.HealthSignalAggregator
 		DynamicRateLimitingParams          DynamicRateLimitingParams
+		DLQMetricsEmitter                  *persistence.DLQMetricsEmitter
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -91,6 +92,7 @@ var Module = fx.Options(
 
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
+	fx.Provide(DLQMetricsEmitterProvider),
 	fx.Provide(EventBlobCacheProvider),
 )
 
@@ -143,6 +145,7 @@ func FactoryProvider(
 		params.MetricsHandler,
 		params.Logger,
 		params.HealthSignals,
+		params.DLQMetricsEmitter,
 	)
 }
 
@@ -164,6 +167,14 @@ func HealthSignalAggregatorProvider(
 	}
 
 	return persistence.NoopHealthSignalAggregator
+}
+
+func DLQMetricsEmitterProvider(
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	manager persistence.HistoryTaskQueueManager,
+) *persistence.DLQMetricsEmitter {
+	return persistence.NewDLQMetricsEmitter(metricsHandler, logger, manager)
 }
 
 func DataStoreFactoryProvider(

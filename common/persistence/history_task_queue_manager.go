@@ -30,6 +30,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
@@ -265,4 +267,16 @@ func GetHistoryTaskQueueName(
 ) string {
 	hash := combineUnique(sourceCluster, targetCluster)[:clusterNamesHashSuffixLength]
 	return fmt.Sprintf("%d_%s_%s_%s", categoryID, sourceCluster, targetCluster, hash)
+}
+
+func GetHistoryTaskQueueCategoryID(queueName string) (int, error) {
+	fields := strings.Split(queueName, "_")
+	if len(fields) != 4 {
+		return 0, fmt.Errorf("failed to parse fields from queue name %v", queueName)
+	}
+	category, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse category id from queue name %v: %w", queueName, err)
+	}
+	return category, nil
 }

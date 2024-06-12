@@ -56,57 +56,59 @@ const (
 	CategoryTypeScheduled
 )
 
-const (
-	categoryNameTransfer    = "transfer"
-	categoryNameTimer       = "timer"
-	categoryNameReplication = "replication"
-	categoryNameVisibility  = "visibility"
-	categoryNameArchival    = "archival"
-	categoryNameMemoryTimer = "memory-timer"
-	categoryNameOutbound    = "outbound"
+var (
+	CategoryIDToName = map[int]string{
+		CategoryIDTransfer:    "transfer",
+		CategoryIDTimer:       "timer",
+		CategoryIDReplication: "replication",
+		CategoryIDVisibility:  "visibility",
+		CategoryIDArchival:    "archival",
+		CategoryIDMemoryTimer: "memory-timer",
+		CategoryIDOutbound:    "outbound",
+	}
 )
 
 var (
 	CategoryTransfer = Category{
 		id:    CategoryIDTransfer,
 		cType: CategoryTypeImmediate,
-		name:  categoryNameTransfer,
+		name:  CategoryIDToName[CategoryIDTransfer],
 	}
 
 	CategoryTimer = Category{
 		id:    CategoryIDTimer,
 		cType: CategoryTypeScheduled,
-		name:  categoryNameTimer,
+		name:  CategoryIDToName[CategoryIDTimer],
 	}
 
 	CategoryReplication = Category{
 		id:    CategoryIDReplication,
 		cType: CategoryTypeImmediate,
-		name:  categoryNameReplication,
+		name:  CategoryIDToName[CategoryIDReplication],
 	}
 
 	CategoryVisibility = Category{
 		id:    CategoryIDVisibility,
 		cType: CategoryTypeImmediate,
-		name:  categoryNameVisibility,
+		name:  CategoryIDToName[CategoryIDVisibility],
 	}
 
 	CategoryArchival = Category{
 		id:    CategoryIDArchival,
 		cType: CategoryTypeScheduled,
-		name:  categoryNameArchival,
+		name:  CategoryIDToName[CategoryIDArchival],
 	}
 
 	CategoryMemoryTimer = Category{
 		id:    CategoryIDMemoryTimer,
 		cType: CategoryTypeScheduled,
-		name:  categoryNameMemoryTimer,
+		name:  CategoryIDToName[CategoryIDMemoryTimer],
 	}
 
 	CategoryOutbound = Category{
 		id:    CategoryIDOutbound,
 		cType: CategoryTypeImmediate,
-		name:  categoryNameOutbound,
+		name:  CategoryIDToName[CategoryIDOutbound],
 	}
 )
 
