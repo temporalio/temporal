@@ -80,7 +80,7 @@ func TestAddChild(t *testing.T) {
 					},
 				},
 			}
-			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"), false)
+			child, err := nexusoperations.AddChild(root, "test-id", event, "endpoint-id", []byte("token"), false)
 			require.NoError(t, err)
 			oap := root.Outputs()
 			require.Equal(t, 1, len(oap))
@@ -90,6 +90,7 @@ func TestAddChild(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
 			require.Equal(t, "endpoint", op.Endpoint)
+			require.Equal(t, "endpoint-id", op.EndpointId)
 			require.Equal(t, "service", op.Service)
 			require.Equal(t, "operation", op.Operation)
 			require.Equal(t, schedTime, op.ScheduledTime)
@@ -115,7 +116,7 @@ func TestRegenerateTasks(t *testing.T) {
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
-				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).Destination, "endpoint")
+				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).Destination, "endpoint-id")
 				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
 			},
 		},
@@ -212,7 +213,7 @@ func TestRetry(t *testing.T) {
 	require.Equal(t, 1, len(oap[0].Outputs))
 	require.Equal(t, 1, len(oap[0].Outputs[0].Tasks))
 	invocationTask := oap[0].Outputs[0].Tasks[0].(nexusoperations.InvocationTask) // nolint:revive
-	require.Equal(t, "endpoint", invocationTask.Destination)
+	require.Equal(t, "endpoint-id", invocationTask.Destination)
 	op, err = hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
@@ -541,7 +542,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert cancelation task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	cbTask := out.Tasks[0].(nexusoperations.CancelationTask) // nolint:revive
-	require.Equal(t, "endpoint", cbTask.Destination)
+	require.Equal(t, "endpoint-id", cbTask.Destination)
 
 	// Store the pre-succeeded state to test Failed later
 	dup := nexusoperations.Cancelation{common.CloneProto(cancelation.NexusOperationCancellationInfo)}

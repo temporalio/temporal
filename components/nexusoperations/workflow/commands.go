@@ -33,14 +33,15 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 type commandHandler struct {
-	config          *nexusoperations.Config
-	endpointChecker nexusoperations.EndpointChecker
+	config           *nexusoperations.Config
+	endpointRegistry commonnexus.EndpointRegistry
 }
 
 func (ch *commandHandler) HandleScheduleCommand(
@@ -50,7 +51,9 @@ func (ch *commandHandler) HandleScheduleCommand(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
 ) error {
+	ns := ms.GetNamespaceEntry()
 	nsName := ms.GetNamespaceEntry().Name().String()
+
 	if !ch.config.Enabled() {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
@@ -66,7 +69,8 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
-	if err := ch.endpointChecker(ctx, nsName, attrs.Endpoint); err != nil {
+	endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
+	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
@@ -140,7 +144,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 	if err != nil {
 		return err
 	}
-	_, err = nexusoperations.AddChild(root, strconv.FormatInt(event.EventId, 10), event, token, true)
+	_, err = nexusoperations.AddChild(root, strconv.FormatInt(event.EventId, 10), event, endpoint.Id, token, true)
 	return err
 }
 
@@ -214,8 +218,8 @@ func (ch *commandHandler) HandleCancelCommand(
 	})
 }
 
-func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointChecker nexusoperations.EndpointChecker, config *nexusoperations.Config) error {
-	h := commandHandler{config: config, endpointChecker: endpointChecker}
+func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointRegistry commonnexus.EndpointRegistry, config *nexusoperations.Config) error {
+	h := commandHandler{config: config, endpointRegistry: endpointRegistry}
 	if err := reg.Register(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, h.HandleScheduleCommand); err != nil {
 		return err
 	}

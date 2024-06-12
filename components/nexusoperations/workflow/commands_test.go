@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/nexusoperations"
 	opsworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service/history/hsm"
@@ -70,13 +72,17 @@ var defaultConfig = &nexusoperations.Config{
 }
 
 func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
+	endpointReg := nexustest.FakeEndpointRegistry{
+		OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
+			if endpointName != "endpoint" {
+				return nil, serviceerror.NewNotFound("endpoint not found")
+			}
+			// Only the ID is taken here.
+			return &persistencespb.NexusEndpointEntry{Id: "endpoint-id"}, nil
+		},
+	}
 	chReg := workflow.NewCommandHandlerRegistry()
-	require.NoError(t, opsworkflow.RegisterCommandHandlers(chReg, func(ctx context.Context, namespaceName, endpointName string) error {
-		if endpointName != "endpoint" {
-			return serviceerror.NewNotFound("endpoint not found")
-		}
-		return nil
-	}, cfg))
+	require.NoError(t, opsworkflow.RegisterCommandHandlers(chReg, endpointReg, cfg))
 	smReg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
