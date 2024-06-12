@@ -55,6 +55,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"go.temporal.io/api/serviceerror"
 )
 
 type (
@@ -75,6 +77,10 @@ const (
 	PriorityHigh Priority = iota
 	PriorityLow
 	NumPriorities
+)
+
+var (
+	ErrRequestTooLarge = serviceerror.NewInternal("request is larger than the size of semaphore")
 )
 
 var _ PrioritySemaphore = (*PrioritySemaphoreImpl)(nil)
@@ -126,10 +132,8 @@ func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, 
 	}
 
 	if n > s.size {
-		// Don't make other Acquire calls block on one that's doomed to fail.
 		s.mu.Unlock()
-		<-ctx.Done()
-		return ctx.Err()
+		return ErrRequestTooLarge
 	}
 
 	ready := make(chan struct{})

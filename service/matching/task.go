@@ -150,7 +150,7 @@ func newInternalNexusTask(
 			request:  request,
 		},
 		forwardInfo: request.GetForwardInfo(),
-		responseC:     make(chan error, 1),
+		responseC:   make(chan error, 1),
 		source:      enumsspb.TASK_SOURCE_HISTORY,
 	}
 }

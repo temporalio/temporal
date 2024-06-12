@@ -116,10 +116,10 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 
 func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {
 	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
-		APIName:   c.apiName,
-		Namespace: c.namespaceName,
+		APIName:           c.apiName,
+		Namespace:         c.namespaceName,
 		NexusEndpointName: c.endpointName,
-		Request:   request,
+		Request:           request,
 	})
 	if err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unauthorized"))

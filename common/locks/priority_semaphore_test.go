@@ -23,10 +23,9 @@
 package locks
 
 import (
-	"bytes"
 	"context"
+	"regexp"
 	"runtime"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -217,25 +216,18 @@ func (s *prioritySemaphoreSuite) Test_TimedOutWaitingForLock() {
 
 func (s *prioritySemaphoreSuite) Test_AcquireMoreThanAvailable() {
 	semaphore := NewPrioritySemaphore(1)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	s.ErrorIs(semaphore.Acquire(ctx, PriorityHigh, 2), ctx.Err())
+	s.ErrorIs(semaphore.Acquire(context.Background(), PriorityHigh, 2), ErrRequestTooLarge)
 }
 
 // Checks if n number of threads are blocked in semaphore.
 func (s *prioritySemaphoreSuite) waitUntilBlockedInSemaphore(n int) {
+	pattern := `\[select\]\:\n\S*\(\*PrioritySemaphoreImpl\)\.Acquire`
+	re := regexp.MustCompile(pattern)
 	s.Eventually(
 		func() bool {
-			buf := make([]byte, 10000)
-			runtime.Stack(buf, true)
-			goroutines := bytes.Split(buf, []byte("\n\n"))
-			threads := 0
-			for _, goroutine := range goroutines {
-				stackTrace := string(goroutine)
-				if strings.Contains(stackTrace, "(*PrioritySemaphoreImpl).Acquire") && strings.Contains(stackTrace, "[select]") {
-					threads++
-				}
-			}
+			buf := make([]byte, 100000)
+			size := runtime.Stack(buf, true)
+			threads := len(re.FindAllIndex(buf[:size], -1))
 			if threads == n {
 				return true
 			}
