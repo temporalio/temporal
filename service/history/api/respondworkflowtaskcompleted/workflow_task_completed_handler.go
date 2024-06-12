@@ -1315,7 +1315,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState := workflow.NewMutableStateInChain(
+	newMutableState, err := workflow.NewMutableStateInChain(
 		handler.shard,
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
@@ -1325,6 +1325,9 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		handler.shard.GetTimeSource().Now(),
 		handler.mutableState,
 	)
+	if err != nil {
+		return err
+	}
 
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
@@ -1371,7 +1374,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newMutableState := workflow.NewMutableStateInChain(
+	newMutableState, err := workflow.NewMutableStateInChain(
 		handler.shard,
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
@@ -1381,6 +1384,9 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		handler.shard.GetTimeSource().Now(),
 		handler.mutableState,
 	)
+	if err != nil {
+		return err
+	}
 
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,

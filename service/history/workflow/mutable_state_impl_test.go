@@ -542,7 +542,7 @@ func (s *mutableStateSuite) TestNewMutableStateInChain() {
 				)
 				currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus = taskStatus
 
-				newMutableState := NewMutableStateInChain(
+				newMutableState, err := NewMutableStateInChain(
 					s.mockShard,
 					s.mockEventsCache,
 					s.logger,
@@ -552,6 +552,7 @@ func (s *mutableStateSuite) TestNewMutableStateInChain() {
 					s.mockShard.GetTimeSource().Now(),
 					currentMutableState,
 				)
+				s.NoError(err)
 				s.Equal(taskStatus, newMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus)
 			},
 		)
