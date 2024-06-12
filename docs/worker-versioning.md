@@ -3,7 +3,7 @@ Worker Versioning
 
 **Note 1:** In this iteration of Worker Versioning we deprecated the Version Set concept 
 and APIs related to it. If you are using old Worker Versioning APIs please migrate
-to the new APIs using the process outlined in this document.
+to the new APIs using the process [outlined in a later section](#migrating-from-version-sets).
 
 **Note 2:** Worker Versioning is still considered experimental and not recommended 
 for production usage. Future breaking changes may be made in deemed necessary.
