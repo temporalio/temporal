@@ -69,7 +69,8 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
-	if _, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint); err != nil {
+	endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
+	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
@@ -143,7 +144,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 	if err != nil {
 		return err
 	}
-	_, err = nexusoperations.AddChild(root, strconv.FormatInt(event.EventId, 10), event, token, true)
+	_, err = nexusoperations.AddChild(root, strconv.FormatInt(event.EventId, 10), event, endpoint.Id, token, true)
 	return err
 }
 

@@ -108,7 +108,7 @@ func ClientProviderFactory(
 		}, nil
 	})
 	return func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
-		entry, err := endpointRegistry.GetByName(ctx, namespace.ID(key.NamespaceID), key.Destination)
+		entry, err := endpointRegistry.GetByID(ctx, key.Destination)
 		if err != nil {
 			return nil, err
 		}

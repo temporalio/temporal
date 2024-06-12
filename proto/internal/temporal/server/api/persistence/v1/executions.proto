@@ -475,7 +475,7 @@ message CallbackInfo {
 // NexusOperationInfo contains the state of a nexus operation.
 message NexusOperationInfo {
     // Endpoint name. 
-    // Resolved to a URL via the outgoing service registry for this workflow's namespace.
+    // Resolved the endpoint registry for this workflow's namespace.
     string endpoint = 1;
 
     // Service name.
@@ -516,6 +516,10 @@ message NexusOperationInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 13;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 14;
+
+    // Endpoint ID, the name is also stored here (field 1) but we use the ID internally to avoid failing operation
+    // requests when an endpoint is renamed.
+    string endpoint_id = 15;
 }
 
 // NexusOperationCancellationInfo contains the state of a nexus operation cancelation.

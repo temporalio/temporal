@@ -112,7 +112,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	if _, err := e.EndpointRegistry.GetByName(ctx, ns.ID(), task.Destination); err != nil {
+	if _, err := e.EndpointRegistry.GetByID(ctx, task.Destination); err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
@@ -424,7 +424,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	if _, err := e.EndpointRegistry.GetByName(ctx, ns.ID(), task.Destination); err != nil {
+	if _, err := e.EndpointRegistry.GetByID(ctx, task.Destination); err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveCancelationResult(ctx, env, ref, &nexus.UnexpectedResponseError{

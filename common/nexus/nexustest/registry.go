@@ -31,11 +31,12 @@ import (
 )
 
 type FakeEndpointRegistry struct {
+	OnGetByID   func(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error)
 	OnGetByName func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error)
 }
 
 func (f FakeEndpointRegistry) GetByID(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error) {
-	panic("unimplemented")
+	return f.OnGetByID(ctx, endpointID)
 }
 
 func (f FakeEndpointRegistry) GetByName(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {

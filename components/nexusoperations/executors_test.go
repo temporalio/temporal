@@ -269,6 +269,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
@@ -304,7 +305,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			}
 
 			endpointReg := nexustest.FakeEndpointRegistry{
-				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+				OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
@@ -548,7 +549,7 @@ func TestProcessCancelationTask(t *testing.T) {
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
 			}
 			endpointReg := nexustest.FakeEndpointRegistry{
-				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+				OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
@@ -634,8 +635,8 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		},
 		NamespaceRegistry: namespaceRegistry,
 		EndpointRegistry: nexustest.FakeEndpointRegistry{
-			OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
-				return nil, nil
+			OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+				return nil, nil // The endpoint isn't used here, it's okay to return nil.
 			},
 		},
 		ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {

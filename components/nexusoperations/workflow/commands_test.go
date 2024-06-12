@@ -77,8 +77,8 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 			if endpointName != "endpoint" {
 				return nil, serviceerror.NewNotFound("endpoint not found")
 			}
-			// The actual endpoint isn't used in the response, can just return nil here.
-			return nil, nil
+			// Only the ID is taken here.
+			return &persistencespb.NexusEndpointEntry{Id: "endpoint-id"}, nil
 		},
 	}
 	chReg := workflow.NewCommandHandlerRegistry()
