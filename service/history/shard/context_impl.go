@@ -283,10 +283,10 @@ func (s *ContextImpl) GetEngine(
 func (s *ContextImpl) AssertOwnership(
 	ctx context.Context,
 ) error {
-	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return err
 	}
-	defer s.ioSemaphoreRelease(locks.PriorityHigh)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -539,10 +539,10 @@ func (s *ContextImpl) AddTasks(
 		return err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return err
 	}
-	defer s.ioSemaphoreRelease(locks.PriorityHigh)
+	defer s.ioSemaphoreRelease()
 
 	err = s.addTasksSemaphoreAcquired(ctx, request)
 	if OperationPossiblySucceeded(err) {
@@ -581,10 +581,10 @@ func (s *ContextImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphoreRelease(locks.PriorityHigh)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -639,10 +639,10 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphoreRelease(locks.PriorityHigh)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -716,10 +716,10 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphoreRelease(locks.PriorityHigh)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -778,10 +778,10 @@ func (s *ContextImpl) SetWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphoreAcquire(ctx, locks.PriorityHigh); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphoreRelease(locks.PriorityHigh)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -944,7 +944,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	stage *tasks.DeleteWorkflowExecutionStage,
-	priority locks.Priority,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete,
@@ -1005,10 +1004,10 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		// Wrap stage 1, 2, and 3 with function to release io semaphore with defer after stage 3.
 		if err = func() error {
 
-			if err := s.ioSemaphoreAcquire(ctx, priority); err != nil {
+			if err := s.ioSemaphoreAcquire(ctx); err != nil {
 				return err
 			}
-			defer s.ioSemaphoreRelease(priority)
+			defer s.ioSemaphoreRelease()
 
 			// Stage 1. Delete visibility.
 			if deleteVisibilityRecord && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
@@ -1262,10 +1261,10 @@ func (s *ContextImpl) updateShardInfo(
 	}
 	s.wUnlock()
 
-	if err := s.ioSemaphoreAcquire(s.lifecycleCtx, locks.PriorityHigh); err != nil {
+	if err := s.ioSemaphoreAcquire(s.lifecycleCtx); err != nil {
 		return err
 	}
-	defer s.ioSemaphoreRelease(locks.PriorityHigh)
+	defer s.ioSemaphoreRelease()
 
 	ctx, cancel := s.newIOContext()
 	defer cancel()
@@ -1524,7 +1523,6 @@ func (s *ContextImpl) rUnlock() {
 
 func (s *ContextImpl) ioSemaphoreAcquire(
 	ctx context.Context,
-	priority locks.Priority,
 ) (retErr error) {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 	metrics.SemaphoreRequests.With(handler).Record(1)
@@ -1536,10 +1534,15 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
+	priority := locks.PriorityHigh
+	callerInfo := headers.GetCallerInfo(ctx)
+	if callerInfo.CallerType == headers.CallerTypePreemptable {
+		priority = locks.PriorityLow
+	}
 	return s.ioSemaphore.Acquire(ctx, priority, 1)
 }
 
-func (s *ContextImpl) ioSemaphoreRelease(priority locks.Priority) {
+func (s *ContextImpl) ioSemaphoreRelease() {
 	s.ioSemaphore.Release(1)
 }
 

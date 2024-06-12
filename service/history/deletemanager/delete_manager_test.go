@@ -33,8 +33,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/locks"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -130,7 +128,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		&stage,
-		locks.PriorityHigh,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
@@ -171,7 +168,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		&stage,
-		locks.PriorityHigh,
 	).Return(serviceerror.NewInternal("test error"))
 
 	err := s.deleteManager.DeleteWorkflowExecution(
@@ -211,7 +207,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		&stage,
-		locks.PriorityHigh,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 

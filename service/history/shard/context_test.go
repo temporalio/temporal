@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/locks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -222,7 +221,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 
 	s.NoError(err)
@@ -247,7 +245,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
@@ -261,7 +258,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
@@ -274,7 +270,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
@@ -298,7 +293,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility, stage)
@@ -311,7 +305,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageCurrent, stage)
@@ -324,7 +317,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility, stage)
@@ -336,7 +328,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory, stage)
@@ -359,7 +350,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageNone, stage)
@@ -374,7 +364,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		branchToken,
 		0,
 		&stage,
-		locks.PriorityHigh,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility, stage)

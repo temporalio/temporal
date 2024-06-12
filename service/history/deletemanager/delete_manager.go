@@ -30,8 +30,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/common/locks"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -140,7 +138,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, forceDeleteFromOpenVisibility, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)), locks.PriorityHigh)
+	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, forceDeleteFromOpenVisibility, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)))
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
@@ -152,7 +150,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, false, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)), locks.PriorityLow)
+	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, false, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)))
 }
 
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
@@ -164,7 +162,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	forceDeleteFromOpenVisibility bool, //revive:disable-line:flag-parameter
 	stage *tasks.DeleteWorkflowExecutionStage,
 	metricsHandler metrics.Handler,
-	priority locks.Priority,
 ) error {
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
@@ -182,7 +179,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		currentBranchToken,
 		ms.GetExecutionInfo().GetCloseVisibilityTaskId(),
 		stage,
-		priority,
 	); err != nil {
 		return err
 	}
