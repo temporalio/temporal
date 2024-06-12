@@ -28,6 +28,7 @@ import (
 	"errors"
 	"math"
 	"net"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -35,7 +36,6 @@ import (
 
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
-	"golang.org/x/exp/slices"
 
 	"github.com/dgryski/go-farm"
 	"github.com/temporalio/ringpop-go/events"
