@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,15 +214,25 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
 		require.Equal(t, 1, len(snap["nexus_latency"]))
-		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
 		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+
+		// Ensure that StartOperation request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "StartNexusOperation" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	for _, tc := range testCases {
@@ -255,7 +266,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	snap := capture.Snapshot()
 
 	s.Equal(1, len(snap["nexus_requests"]))
-	s.Equal(map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, snap["nexus_requests"][0].Tags)
+	s.Equal(map[string]string{"namespace": namespace, "method": "StartNexusOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, snap["nexus_requests"][0].Tags)
 	s.Equal(int64(1), snap["nexus_requests"][0].Value)
 }
 
@@ -368,7 +379,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": "unauthorized"})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": "unauthorized"})
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 	}
 
@@ -497,6 +508,50 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 	}
 }
 
+func (s *ClientFunctionalSuite) TestNexusStartOperation_PayloadSizeLimit() {
+	taskQueue := s.randomizeStr("task-queue")
+	testEndpoint := s.createNexusEndpoint(s.randomizeStr("test-endpoint"), taskQueue)
+
+	// Use -10 to avoid hitting MaxNexusAPIRequestBodyBytes. Actual payload will still exceed limit because of
+	// additional Content headers. See common/rpc/grpc.go:66
+	input := strings.Repeat("a", (2*1024*1024)-10)
+
+	testFn := func(t *testing.T, dispatchURL string) {
+		ctx, cancel := context.WithCancel(NewContext())
+		defer cancel()
+
+		client, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+		require.NoError(t, err)
+		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
+		var result *nexus.ClientStartOperationResult[string]
+
+		// Wait until the endpoint is loaded into the registry.
+		s.Eventually(func() bool {
+			result, err = nexus.StartOperation(ctx, client, op, input, nexus.StartOperationOptions{
+				CallbackURL: "http://localhost/callback",
+				RequestID:   "request-id",
+			})
+			var unexpectedResponseErr *nexus.UnexpectedResponseError
+			return err == nil || !(errors.As(err, &unexpectedResponseErr) && unexpectedResponseErr.Response.StatusCode == http.StatusNotFound)
+		}, 10*time.Second, 500*time.Millisecond)
+
+		require.Nil(t, result)
+		var unexpectedError *nexus.UnexpectedResponseError
+		require.ErrorAs(t, err, &unexpectedError)
+		require.Equal(t, http.StatusBadRequest, unexpectedError.Response.StatusCode)
+		require.Equal(t, "input exceeds size limit", unexpectedError.Failure.Message)
+	}
+
+	s.T().Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
+		testFn(t, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, taskQueue))
+	})
+	s.T().Run("ByEndpoint", func(t *testing.T) {
+		testFn(t, getDispatchByEndpointURL(s.httpAPIAddress, testEndpoint.Id))
+	})
+}
+
 func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 	type testcase struct {
 		outcome   string
@@ -597,15 +652,25 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
 		require.Equal(t, 1, len(snap["nexus_latency"]))
-		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
 		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+
+		// Ensure that CancelOperation request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "CancelNexusOperation" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	for _, tc := range testCases {

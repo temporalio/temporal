@@ -245,6 +245,20 @@ func (mr *MockBatchableTaskMockRecorder) RetryPolicy() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryPolicy", reflect.TypeOf((*MockBatchableTask)(nil).RetryPolicy))
 }
 
+// SourceClusterName mocks base method.
+func (m *MockBatchableTask) SourceClusterName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SourceClusterName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// SourceClusterName indicates an expected call of SourceClusterName.
+func (mr *MockBatchableTaskMockRecorder) SourceClusterName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SourceClusterName", reflect.TypeOf((*MockBatchableTask)(nil).SourceClusterName))
+}
+
 // State mocks base method.
 func (m *MockBatchableTask) State() tasks.State {
 	m.ctrl.T.Helper()

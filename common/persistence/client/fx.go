@@ -51,7 +51,7 @@ type (
 	OperatorRPSRatio                   dynamicconfig.FloatPropertyFn
 	PersistenceBurstRatio              dynamicconfig.FloatPropertyFn
 
-	DynamicRateLimitingParams dynamicconfig.MapPropertyFn
+	DynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 
 	ClusterName string
 

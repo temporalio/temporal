@@ -24,16 +24,25 @@ package history
 
 import (
 	"context"
+	"errors"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type outboundQueueStandbyTaskExecutor struct {
 	stateMachineEnvironment
+	config *configs.Config
+
+	clusterName string
 }
 
 var _ queues.Executor = &outboundQueueStandbyTaskExecutor{}
@@ -41,6 +50,7 @@ var _ queues.Executor = &outboundQueueStandbyTaskExecutor{}
 func newOutboundQueueStandbyTaskExecutor(
 	shardCtx shard.Context,
 	workflowCache wcache.Cache,
+	clusterName string,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *outboundQueueStandbyTaskExecutor {
@@ -53,6 +63,8 @@ func newOutboundQueueStandbyTaskExecutor(
 				metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
 			),
 		},
+		config:      shardCtx.GetConfig(),
+		clusterName: clusterName,
 	}
 }
 
@@ -75,14 +87,93 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		metrics.OperationTag(taskType),
 	}
 
-	if err == nil {
-		smRegistry := e.shardContext.StateMachineRegistry()
-		err = smRegistry.ExecuteStandbyImmediateTask(ctx, e, ref, smt)
+	if err != nil {
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    false,
+			ExecutionErr:        err,
+		}
 	}
+
+	actionFn := func(ctx context.Context) (any, error) {
+		err := e.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+			if smt.Concurrent() {
+				//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
+				concurrentSmt := smt.(hsm.ConcurrentTask)
+				return concurrentSmt.Validate(node)
+			}
+			return nil
+		})
+		if err != nil {
+			if errors.Is(err, consts.ErrStaleReference) {
+				// If the reference is stale, then the task was already executed in
+				// the active queue, and there is nothing to do here.
+				return nil, nil
+			}
+			return nil, err
+		}
+		// If there was no error from Access nor from the accessor function, then the task
+		// is still valid for processing based on the current state of the machine.
+		return nil, consts.ErrTaskRetry
+	}
+
+	err = e.processTask(
+		ctx,
+		task,
+		ref,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			e.Now,
+			e.config.StandbyTaskMissingEventsResendDelay(task.GetType()),
+			e.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			e.noopPostProcessAction,
+			standbyOutboundTaskPostActionTaskDiscarded,
+		),
+	)
 
 	return queues.ExecuteResponse{
 		ExecutionMetricTags: metricsTags,
 		ExecutedAsActive:    false,
 		ExecutionErr:        err,
 	}
+}
+
+func (e *outboundQueueStandbyTaskExecutor) processTask(
+	ctx context.Context,
+	task tasks.Task,
+	ref hsm.Ref,
+	actionFn func(context.Context) (any, error),
+	postActionFn standbyPostActionFn,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	nsRecord, err := e.shardContext.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(task.GetNamespaceID()),
+	)
+	if err != nil {
+		return err
+	}
+	if !nsRecord.IsOnCluster(e.clusterName) {
+		// namespace is not replicated to local cluster, ignore corresponding tasks
+		return nil
+	}
+
+	historyResendInfo, err := actionFn(ctx)
+	if err != nil {
+		return err
+	}
+
+	return postActionFn(ctx, task, historyResendInfo, e.logger)
+}
+
+func (e *outboundQueueStandbyTaskExecutor) noopPostProcessAction(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo interface{},
+	logger log.Logger,
+) error {
+	// Return retryable error, so task processing will retry.
+	return consts.ErrTaskRetry
 }

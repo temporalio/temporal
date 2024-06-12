@@ -27,6 +27,7 @@ package startworkflow
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -34,8 +35,9 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/enums"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/common/enums"
 
 	"go.temporal.io/server/api/historyservice/v1"
 
@@ -371,12 +373,12 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
-	currentMutableState, err := s.getMutableState(ctx, currentWorkflowConditionFailed.RunID)
+
+	currentWorkflowStartTime, err := s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
 	if err != nil {
 		return nil, err
 	}
 
-	currentWorkflowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
 		workflowID,
@@ -506,17 +508,35 @@ func (s *Starter) respondToRetriedRequest(
 	return s.generateResponse(runID, mutableStateInfo.workflowTask, events)
 }
 
-// getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
-// workflow cache and managing the cache lease.
-func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutableStateInfo, error) {
-	mutableState, err := s.getMutableState(ctx, runID)
+func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (_ time.Time, retErr error) {
+	var workflowStartTime time.Time
+
+	// We technically never want to create a new execution but in practice this should not happen.
+	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
+		ctx,
+		s.shardContext,
+		s.namespace.ID(),
+		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
+		workflow.LockPriorityHigh,
+	)
 	if err != nil {
-		return nil, err
+		return workflowStartTime, err
 	}
-	return extractMutableStateInfo(mutableState)
+
+	defer func() { releaseFn(retErr) }()
+
+	mutableState, err := workflowContext.LoadMutableState(ctx, s.shardContext)
+	if err != nil {
+		return workflowStartTime, err
+	}
+
+	workflowStartTime = mutableState.GetExecutionInfo().GetStartTime().AsTime()
+	return workflowStartTime, nil
 }
 
-func (s *Starter) getMutableState(ctx context.Context, runID string) (workflow.MutableState, error) {
+// getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
+// workflow cache and managing the cache lease.
+func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (_ *mutableStateInfo, retErr error) {
 	// We technically never want to create a new execution but in practice this should not happen.
 	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
 		ctx,
@@ -528,15 +548,14 @@ func (s *Starter) getMutableState(ctx context.Context, runID string) (workflow.M
 	if err != nil {
 		return nil, err
 	}
+	defer func() { releaseFn(retErr) }()
 
-	var releaseErr error
-	defer func() {
-		releaseFn(releaseErr)
-	}()
+	ms, err := workflowContext.LoadMutableState(ctx, s.shardContext)
+	if err != nil {
+		return nil, err
+	}
 
-	var mutableState workflow.MutableState
-	mutableState, releaseErr = workflowContext.LoadMutableState(ctx, s.shardContext)
-	return mutableState, nil
+	return extractMutableStateInfo(ms)
 }
 
 // extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task.

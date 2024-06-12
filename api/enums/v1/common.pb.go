@@ -157,6 +157,64 @@ func (ChecksumFlavor) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_enums_v1_common_proto_rawDescGZIP(), []int{1}
 }
 
+// State of a scheduler.
+type SchedulerState int32
+
+const (
+	// Default value, unspecified state.
+	SCHEDULER_STATE_UNSPECIFIED SchedulerState = 0
+	// Scheduler is waiting to be activated after the specified amount of time.
+	// TODO(Tianyu): Add more state in the future
+	SCHEDULER_STATE_WAITING SchedulerState = 1
+)
+
+// Enum value maps for SchedulerState.
+var (
+	SchedulerState_name = map[int32]string{
+		0: "SCHEDULER_STATE_UNSPECIFIED",
+		1: "SCHEDULER_STATE_WAITING",
+	}
+	SchedulerState_value = map[string]int32{
+		"SCHEDULER_STATE_UNSPECIFIED": 0,
+		"SCHEDULER_STATE_WAITING":     1,
+	}
+)
+
+func (x SchedulerState) Enum() *SchedulerState {
+	p := new(SchedulerState)
+	*p = x
+	return p
+}
+
+func (x SchedulerState) String() string {
+	switch x {
+	case SCHEDULER_STATE_UNSPECIFIED:
+		return "Unspecified"
+	case SCHEDULER_STATE_WAITING:
+		return "Waiting"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (SchedulerState) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_api_enums_v1_common_proto_enumTypes[2].Descriptor()
+}
+
+func (SchedulerState) Type() protoreflect.EnumType {
+	return &file_temporal_server_api_enums_v1_common_proto_enumTypes[2]
+}
+
+func (x SchedulerState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SchedulerState.Descriptor instead.
+func (SchedulerState) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_api_enums_v1_common_proto_rawDescGZIP(), []int{2}
+}
+
 var File_temporal_server_api_enums_v1_common_proto protoreflect.FileDescriptor
 
 var file_temporal_server_api_enums_v1_common_proto_rawDesc = []byte{
@@ -179,7 +237,12 @@ var file_temporal_server_api_enums_v1_common_proto_rawDesc = []byte{
 	0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x31, 0x0a, 0x2d, 0x43, 0x48,
 	0x45, 0x43, 0x4b, 0x53, 0x55, 0x4d, 0x5f, 0x46, 0x4c, 0x41, 0x56, 0x4f, 0x52, 0x5f, 0x49, 0x45,
 	0x45, 0x45, 0x5f, 0x43, 0x52, 0x43, 0x33, 0x32, 0x5f, 0x4f, 0x56, 0x45, 0x52, 0x5f, 0x50, 0x52,
-	0x4f, 0x54, 0x4f, 0x33, 0x5f, 0x42, 0x49, 0x4e, 0x41, 0x52, 0x59, 0x10, 0x01, 0x42, 0x2a, 0x5a,
+	0x4f, 0x54, 0x4f, 0x33, 0x5f, 0x42, 0x49, 0x4e, 0x41, 0x52, 0x59, 0x10, 0x01, 0x2a, 0x4e, 0x0a,
+	0x0e, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x72, 0x53, 0x74, 0x61, 0x74, 0x65, 0x12,
+	0x1f, 0x0a, 0x1b, 0x53, 0x43, 0x48, 0x45, 0x44, 0x55, 0x4c, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41,
+	0x54, 0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00,
+	0x12, 0x1b, 0x0a, 0x17, 0x53, 0x43, 0x48, 0x45, 0x44, 0x55, 0x4c, 0x45, 0x52, 0x5f, 0x53, 0x54,
+	0x41, 0x54, 0x45, 0x5f, 0x57, 0x41, 0x49, 0x54, 0x49, 0x4e, 0x47, 0x10, 0x01, 0x42, 0x2a, 0x5a,
 	0x28, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f,
 	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x65, 0x6e, 0x75, 0x6d, 0x73,
 	0x2f, 0x76, 0x31, 0x3b, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
@@ -198,10 +261,11 @@ func file_temporal_server_api_enums_v1_common_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_enums_v1_common_proto_rawDescData
 }
 
-var file_temporal_server_api_enums_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_temporal_server_api_enums_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_temporal_server_api_enums_v1_common_proto_goTypes = []interface{}{
 	(DeadLetterQueueType)(0), // 0: temporal.server.api.enums.v1.DeadLetterQueueType
 	(ChecksumFlavor)(0),      // 1: temporal.server.api.enums.v1.ChecksumFlavor
+	(SchedulerState)(0),      // 2: temporal.server.api.enums.v1.SchedulerState
 }
 var file_temporal_server_api_enums_v1_common_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -221,7 +285,7 @@ func file_temporal_server_api_enums_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_temporal_server_api_enums_v1_common_proto_rawDesc,
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   0,
 			NumExtensions: 0,
 			NumServices:   0,

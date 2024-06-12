@@ -117,7 +117,7 @@ func (c *FrontendHTTPClientCache) evictionCallback(oldClusterMetadata map[string
 		}
 
 		newClusterInfo, exists := newClusterMetadata[oldClusterName]
-		if !exists || oldClusterInfo.HTTPAddress != newClusterInfo.HTTPAddress {
+		if !exists || newClusterInfo == nil || oldClusterInfo.HTTPAddress != newClusterInfo.HTTPAddress {
 			// Cluster was removed or had its HTTP address changed, so invalidate the cached client for that cluster.
 			client, ok := c.clients.Pop(oldClusterName)
 			if ok {

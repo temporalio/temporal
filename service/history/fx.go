@@ -31,6 +31,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -51,6 +53,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/archival"
@@ -95,6 +98,7 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
+	schedulerhsm.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )
@@ -211,7 +215,9 @@ func RateLimitInterceptorProvider(
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
-		map[string]int{},
+		map[string]int{
+			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+		},
 	)
 }
 

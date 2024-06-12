@@ -28,6 +28,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/retrypolicy"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
 )
 
 // Config represents configuration for history service
@@ -45,7 +47,7 @@ type Config struct {
 	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
@@ -167,7 +169,7 @@ type Config struct {
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
-	OutboundQueueCircuitBreakerSettings                 dynamicconfig.MapPropertyFnWithDestinationFilter
+	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedPropertyFnWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -228,11 +230,11 @@ type Config struct {
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
-	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultActivityRetryPolicy dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 
 	// DefaultWorkflowRetryPolicy specifies the out-of-box retry policy for
 	// any unset fields on a RetryPolicy configured on a Workflow
-	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultWorkflowRetryPolicy dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 
 	// Workflow task settings
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
@@ -343,6 +345,8 @@ type Config struct {
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFn
+
+	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -625,6 +629,8 @@ func NewConfig(
 
 		SendRawWorkflowHistory:         dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+
+		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
 	}
 
 	return cfg

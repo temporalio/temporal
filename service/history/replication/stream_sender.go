@@ -483,8 +483,6 @@ func (s *StreamSenderImpl) sendTasks(
 	}
 
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
 		string(s.clientShardKey.ClusterID),
@@ -503,6 +501,7 @@ Loop:
 
 		item, err := iter.Next()
 		if err != nil {
+			s.logger.Error("ReplicationServiceError StreamSender unable to get next replication task", tag.Error(err))
 			return err
 		}
 

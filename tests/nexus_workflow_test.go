@@ -27,6 +27,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -50,7 +53,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/service/frontend/configs"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
@@ -277,6 +279,109 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 	s.Equal("result", result)
 }
 
+func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion_LargePayload() {
+	ctx := NewContext()
+	taskQueue := s.randomizeStr(s.T().Name())
+	endpointName := s.randomizeStr("test_endpoint")
+
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			// Use -10 to avoid hitting MaxNexusAPIRequestBodyBytes. Actual payload will still exceed limit because of
+			// additional Content headers. See common/rpc/grpc.go:66
+			return &nexus.HandlerStartOperationResultSync[any]{Value: strings.Repeat("a", (2*1024*1024)-10)}, nil
+		},
+	}
+	listenAddr := nexustest.AllocListenAddress(s.T())
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
+
+	_, err := s.operatorClient.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		pollResp, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.namespace,
+			TaskQueue: &taskqueue.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: "test",
+		})
+		require.NoError(t, err)
+		_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+					Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+						ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+							Endpoint:  endpointName,
+							Service:   "service",
+							Operation: "operation",
+							Input:     s.mustToPayload("input"),
+						},
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+	}, time.Second*20, time.Millisecond*200)
+
+	pollResp, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueue.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	failedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationFailedEventAttributes() != nil
+	})
+	s.Greater(failedEventIdx, 0)
+
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: &commonpb.Payloads{
+							Payloads: []*commonpb.Payload{
+								s.mustToPayload(pollResp.History.Events[failedEventIdx].GetNexusOperationFailedEventAttributes().Failure.Cause.Message),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("result of StartOperation exceeds size limit", result)
+}
+
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	ctx := NewContext()
 	taskQueue := s.randomizeStr(s.T().Name())
@@ -362,15 +467,38 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	})
 	s.Greater(startedEventIdx, 0)
 
+	// Completion request fails if the result payload is too large.
+	largeCompletion, err := nexus.NewOperationCompletionSuccessful(
+		// Use -10 to avoid hitting MaxNexusAPIRequestBodyBytes. Actual payload will still exceed limit because of
+		// additional Content headers. See common/rpc/grpc.go:66
+		s.mustToPayload(strings.Repeat("a", (2*1024*1024)-10)),
+		nexus.OperationCompletionSuccesfulOptions{Serializer: commonnexus.PayloadSerializer},
+	)
+	s.NoError(err)
+	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, largeCompletion, callbackToken)
+	s.Equal(http.StatusBadRequest, res.StatusCode)
+	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_bad_request"})
+
 	// Send a valid - successful completion request.
 	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
-	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
+	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusOK, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "success"})
+
+	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
+	s.Condition(func() bool {
+		for _, m := range snap["service_requests"] {
+			if opTag, ok := m.Tags["operation"]; ok && opTag == "CompleteNexusOperation" {
+				return true
+			}
+		}
+		return false
+	})
 
 	// Resend the request and verify we get a not found error since the operation has already completed.
 	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
@@ -629,6 +757,27 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionErrors() {
 		require.Equal(t, 0, len(snap["nexus_completion_request_preprocess_errors"]))
 		require.Equal(t, 1, len(snap["nexus_completion_requests"]))
 		require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_bad_request"})
+	})
+
+	s.T().Run("InvalidClientVersion", func(t *testing.T) {
+		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
+		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
+		req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
+		require.NoError(t, err)
+		req.Header.Set("User-Agent", "Nexus-go-sdk/v99.0.0")
+
+		res, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_, err = io.ReadAll(res.Body)
+		require.NoError(t, err)
+		defer res.Body.Close()
+
+		snap := capture.Snapshot()
+		require.Equal(t, http.StatusBadRequest, res.StatusCode)
+		require.Equal(t, 1, len(snap["nexus_completion_requests"]))
+		require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "unsupported_client"})
 	})
 }
 

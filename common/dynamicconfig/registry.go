@@ -22,26 +22,48 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package dynamicconfig
 
 import (
-	"encoding/json"
-
-	"go.temporal.io/server/common/dynamicconfig"
+	"fmt"
+	"strings"
+	"sync/atomic"
 )
 
-// NewActivityWorkerConcurrencyConfig constructs an ActivityWorkerLimitsConfig from the map of values identified
-// by key in the dynamic collection. Any errors are ignored and 0 values will be returned instead.
-func NewActivityWorkerConcurrencyConfig(
-	dc *dynamicconfig.Collection,
-	setting dynamicconfig.GlobalMapSetting,
-) ActivityWorkerLimitsConfig {
-	dcOptions := setting.Get(dc)()
-	var config ActivityWorkerLimitsConfig
-	b, err := json.Marshal(dcOptions)
-	if err != nil {
-		return config
+type (
+	registry struct {
+		settings map[string]GenericSetting
+		queried  atomic.Bool
 	}
-	_ = json.Unmarshal(b, &config) // ignore errors, just use the zero value anyway
-	return config
+)
+
+var (
+	globalRegistry registry
+)
+
+func register(s GenericSetting) {
+	if globalRegistry.queried.Load() {
+		panic("dynamicconfig.New*Setting must only be called from static initializers")
+	}
+	if globalRegistry.settings == nil {
+		globalRegistry.settings = make(map[string]GenericSetting)
+	}
+	keyStr := strings.ToLower(s.Key().String())
+	if globalRegistry.settings[keyStr] != nil {
+		panic(fmt.Sprintf("duplicate registration of dynamic config key: %q", keyStr))
+	}
+	globalRegistry.settings[keyStr] = s
+}
+
+func queryRegistry(k Key) GenericSetting {
+	if !globalRegistry.queried.Load() {
+		globalRegistry.queried.Store(true)
+	}
+	return globalRegistry.settings[strings.ToLower(k.String())]
+}
+
+// For testing only; do not call from regular code!
+func ResetRegistryForTest() {
+	globalRegistry.settings = nil
+	globalRegistry.queried.Store(false)
 }

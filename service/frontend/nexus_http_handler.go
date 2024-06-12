@@ -42,6 +42,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -65,7 +66,7 @@ type NexusHTTPHandler struct {
 	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
-	enabled                              func() bool
+	enabled                              dynamicconfig.BoolPropertyFn
 }
 
 func NewNexusHTTPHandler(
@@ -77,6 +78,7 @@ func NewNexusHTTPHandler(
 	namespaceRegistry namespace.Registry,
 	endpointRegistry commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptor,
@@ -103,9 +105,11 @@ func NewNexusHTTPHandler(
 				namespaceRegistry:             namespaceRegistry,
 				matchingClient:                matchingClient,
 				auth:                          authInterceptor,
+				telemetryInterceptor:          telemetryInterceptor,
 				redirectionInterceptor:        redirectionInterceptor,
 				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
 				forwardingClients:             clientCache,
+				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

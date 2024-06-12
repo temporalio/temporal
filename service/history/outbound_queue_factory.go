@@ -134,7 +134,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 					key.NamespaceID,
 					key.Destination,
 				),
-				SettingsFn: func() map[string]any {
+				SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
 					nsName, err := params.NamespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
 					if err != nil {
 						// This is intentionally not failing the function in case of error. The circuit
@@ -241,6 +241,7 @@ func (f *outboundQueueFactory) CreateQueue(
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
 		shardContext,
 		workflowCache,
+		currentClusterName,
 		logger,
 		metricsHandler,
 	)

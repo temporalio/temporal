@@ -240,7 +240,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 
-	taskRefresh := workflow.NewTaskRefresher(r.shardContext, r.shardContext.GetConfig(), r.namespaceRegistry, r.logger)
+	taskRefresh := workflow.NewTaskRefresher(r.shardContext, r.logger)
 	err = taskRefresh.RefreshTasks(ctx, mutableState)
 	if err != nil {
 		return err
@@ -265,7 +265,26 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
-) (int64, error) {
+) (taskID int64, retError error) {
+
+	// Get the current run lock to make sure no concurrent backfill history across multiple runs.
+	currentRunReleaseFn, err := r.workflowCache.GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		r.shardContext,
+		namespaceID,
+		workflowID,
+		workflow.LockPriorityLow,
+	)
+	if err != nil {
+		return common.EmptyEventTaskID, err
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			currentRunReleaseFn(errPanic)
+			panic(rec)
+		}
+		currentRunReleaseFn(retError)
+	}()
 
 	// Get the last batch node id to check if the history data is already in DB.
 	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(

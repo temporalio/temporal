@@ -128,7 +128,8 @@ make stop-dependencies
 See the [developer documentation on testing](./docs/development/testing.md) to learn more about writing tests.
 
 ## Working with merged API changes
-gRPC / protobuf changes merged to the [api](https://github.com/temporalio/api) repo automatically trigger a commit in [api-go](https://github.com/temporalio/api-go). To bring such changes into your feature branch, use `make update-go-api update-proto`.
+gRPC / protobuf changes merged to the [api](https://github.com/temporalio/api) repo automatically trigger a commit in [api-go](https://github.com/temporalio/api-go).
+To bring such changes into your feature branch, use `make update-go-api`.
 
 ## Working with local API changes
 If you need to make changes to the gRPC / protobuf definitions while also working on code in this repo, do the following:
@@ -144,7 +145,7 @@ If you need to make changes to the gRPC / protobuf definitions while also workin
       git submodule update --remote proto/api
       ```
    3. Compile protos: `make proto`
-4. In your copy of `sdk-go`:
+4. (Optional, if SDK changes are required:) In your copy of `sdk-go`:
     1. Point `go.mod` at local `api-go`:
        ```
        replace (
@@ -153,22 +154,14 @@ If you need to make changes to the gRPC / protobuf definitions while also workin
         ```
     2. Compile & fix errors: `make bins`
 5. In this repo:
-    1. Initialize submodules: `git submodule update --init --recursive`
-    2. Point api submodule at your branch. If you make more commits to the api repo, run the last command again.
-       ```bash
-       git submodule set-url proto/api ../api
-       git submodule set-branch --branch mystuff proto/api
-       git submodule update --remote proto/api
-       ```
-    3. Stage the change: `git add -u` (otherwise makefile will blow it away)
-    4. Point `go.mod` at local `api-go` and `sdk-go`:
+    1. Point `go.mod` at local `api-go` and `sdk-go`:
        ```
        replace (
            go.temporal.io/api => ../api-go
            go.temporal.io/sdk => ../sdk-go
        )
         ```
-    5. Build & fix errors: `make proto && make bins`
+    2. Build & fix errors: `make proto && make bins`
 
 ## Licence headers
 This project is Open Source Software, and requires a header at the beginning of

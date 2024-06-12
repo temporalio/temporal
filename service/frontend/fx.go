@@ -34,6 +34,8 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -395,7 +397,9 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},
+		map[string]int{
+			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+		},
 	)
 }
 
@@ -729,6 +733,7 @@ func RegisterNexusHTTPHandler(
 	namespaceRegistry namespace.Registry,
 	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -746,6 +751,7 @@ func RegisterNexusHTTPHandler(
 		namespaceRegistry,
 		endpointRegistry,
 		authInterceptor,
+		telemetryInterceptor,
 		redirectionInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceRateLimiterInterceptor,

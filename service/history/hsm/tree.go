@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -343,6 +344,32 @@ func MachineData[T any](n *Node) (T, error) {
 // TransitionCount returns the transition count for the state machine contained in this node.
 func (n *Node) TransitionCount() int64 {
 	return n.persistence.TransitionCount
+}
+
+// CheckRunning has two modes of operation:
+// 1. If the node is **not** attached to a workflow (not yet supported), it returns nil.
+// 2. If the node is attached to a workflow, it verifies that the workflow execution is running, and returns
+// ErrWorkflowCompleted or nil.
+//
+// May return other errors returned from [MachineData].
+func (n *Node) CheckRunning() error {
+	root := n
+	for root.Parent != nil {
+		root = root.Parent
+	}
+
+	execution, err := MachineData[interface{ IsWorkflowExecutionRunning() bool }](root)
+	if err != nil {
+		if errors.Is(err, ErrIncompatibleType) {
+			// The machine is not attached to a workflow. It is currently assumed to be running.
+			return nil
+		}
+		return err
+	}
+	if !execution.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+	return nil
 }
 
 // MachineTransition runs the given transitionFn on a machine's data for the given key.
