@@ -1627,11 +1627,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	}
 
 	ms := workflow.NewMockMutableState(s.controller)
-	info := &persistencespb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 2, MaxTransitionCount: 2},
-		},
-	}
+	info := &persistencespb.WorkflowExecutionInfo{}
 
 	root, err := hsm.NewRoot(
 		reg,
@@ -1642,6 +1638,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	)
 	s.NoError(err)
 
+	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+	ms.EXPECT().TransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
 	ms.EXPECT().GetNextEventID().Return(int64(2))
 	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
@@ -1671,8 +1669,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	// Invalid reference, should be dropped.
 	invalidTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
-			MutableStateNamespaceFailoverVersion: 1,
-			MutableStateTransitionCount:          2,
+			MutableStateNamespaceFailoverVersion:   2,
+			MachineInitialNamespaceFailoverVersion: 1,
 		},
 		Type: dummy.TaskTypeTimer.ID,
 	}
@@ -1681,9 +1679,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 			Path: []*persistencespb.StateMachineKey{
 				{Type: dummy.StateMachineType.ID, Id: "dummy"},
 			},
-			MutableStateNamespaceFailoverVersion: 2,
-			MutableStateTransitionCount:          1,
-			MachineTransitionCount:               1,
+			MutableStateNamespaceFailoverVersion:   2,
+			MachineInitialNamespaceFailoverVersion: 2,
+			MachineTransitionCount:                 1,
 		},
 		Type: dummy.TaskTypeTimer.ID,
 	}

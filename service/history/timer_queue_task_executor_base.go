@@ -238,7 +238,6 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 // executeStateMachineTimers gets the state machine timers, processed the expired timers,
 // and return a slice of unprocessed timers.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
-	ctx context.Context,
 	ms workflow.MutableState,
 	execute func(node *hsm.Node, task hsm.Task) error,
 ) (int, error) {

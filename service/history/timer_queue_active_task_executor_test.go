@@ -1816,11 +1816,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	}
 
 	ms := workflow.NewMockMutableState(s.controller)
-	info := &persistencespb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 2, MaxTransitionCount: 1},
-		},
-	}
+	info := &persistencespb.WorkflowExecutionInfo{}
 	root, err := hsm.NewRoot(
 		reg,
 		workflow.StateMachineType.ID,
@@ -1829,7 +1825,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 		ms,
 	)
 	s.NoError(err)
-	ms.EXPECT().GetNextEventID().Return(int64(2))
+	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+	ms.EXPECT().TransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(
@@ -1845,8 +1843,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	// Invalid reference, should be dropped.
 	invalidTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
-			MutableStateNamespaceFailoverVersion: 1,
-			MutableStateTransitionCount:          1,
+			MutableStateNamespaceFailoverVersion:   1,
+			MachineInitialNamespaceFailoverVersion: 2,
 		},
 		Type: dummy.TaskTypeTimer.ID,
 	}
@@ -1855,8 +1853,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 			Path: []*persistencespb.StateMachineKey{
 				{Type: dummy.StateMachineType.ID, Id: "dummy"},
 			},
-			MutableStateNamespaceFailoverVersion: 2,
-			MutableStateTransitionCount:          1,
+			MutableStateNamespaceFailoverVersion:   2,
+			MachineInitialNamespaceFailoverVersion: 2,
 		},
 		Type: dummy.TaskTypeTimer.ID,
 	}
@@ -1879,9 +1877,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
-		WorkflowKey:                 tests.WorkflowKey,
-		Version:                     2,
-		MutableStateTransitionCount: 1,
+		WorkflowKey: tests.WorkflowKey,
+		Version:     2,
 	}
 
 	//nolint:revive // unchecked-type-assertion
