@@ -315,13 +315,14 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
-goimports: MERGE_BASE ?= $(shell test -d .git && git merge-base $(MAIN_BRANCH) HEAD)
-goimports: MODIFIED_FILES := $(shell test -d .git && git diff --name-status $(MERGE_BASE) -- | cut -f2)
 goimports:
 	@printf $(COLOR) "Run goimports for modified files..."
-	@printf "Merge base: $(MERGE_BASE)\n"
-	@printf "Modified files: $(MODIFIED_FILES)\n"
-	@$(GOIMPORTS_BIN) -w $(filter %.go, $(MODIFIED_FILES))
+	@test -d .git && \
+		MERGE_BASE=$$(git merge-base $(MAIN_BRANCH) HEAD) && \
+		MODIFIED_FILES=$$(git diff --name-status $$MERGE_BASE -- | cut -f2 | grep '.go$$' || true) && \
+		echo "Merge base: $$MERGE_BASE" && \
+		echo "Modified files: $$MODIFIED_FILES" && \
+		if [ -n "$$MODIFIED_FILES" ]; then $(GOIMPORTS) -w $$MODIFIED_FILES; fi
 
 lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
