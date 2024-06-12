@@ -184,7 +184,6 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 		{
 			name: "ContinueAsNew",
 			wf: func(ctx workflow.Context) (int, error) {
-				// Verify that the callback is carried over the CAN boundary.
 				if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
 					return 0, workflow.NewContinueAsNewError(ctx, "test")
 				}
@@ -195,7 +194,6 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 		{
 			name: "WorkflowRunTimeout",
 			wf: func(ctx workflow.Context) (int, error) {
-				// Verify that the callback is carried over the retry on run timeout boundary.
 				info := workflow.GetInfo(ctx)
 				if info.FirstRunID == info.WorkflowExecution.RunID {
 					return 0, workflow.Sleep(ctx, 1*time.Second)
@@ -208,7 +206,6 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 		{
 			name: "WorkflowFailureRetry",
 			wf: func(ctx workflow.Context) (int, error) {
-				// Verify that the callback is carried over the retry on failure boundary.
 				info := workflow.GetInfo(ctx)
 				if info.FirstRunID == info.WorkflowExecution.RunID {
 					return 0, errors.New("intentional workflow failure")
@@ -233,8 +230,6 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			taskQueue := s.randomizeStr(s.T().Name())
 			workflowType := "test"
 
-			w := worker.New(sdkClient, taskQueue, worker.Options{})
-
 			ch := &completionHandler{
 				requestCh:         make(chan *nexus.CompletionRequest, 1),
 				requestCompleteCh: make(chan error, 1),
@@ -242,14 +237,15 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
 			s.NoError(pp.Close())
 			shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-			defer func() {
+			t.Cleanup(func() {
 				require.NoError(t, shutdownServer())
-			}()
+			})
+
+			w := worker.New(sdkClient, taskQueue, worker.Options{})
 			w.RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
 			s.NoError(w.Start())
 			defer w.Stop()
 
-			// TODO: use sdkClient instead of directly calling the history engine when callbacks are exposed
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.New(),
 				Namespace:          s.namespace,
@@ -260,11 +256,9 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				WorkflowRunTimeout: durationpb.New(tc.runTimeout),
 				Identity:           s.T().Name(),
 				RetryPolicy: &commonpb.RetryPolicy{
-					InitialInterval:        durationpb.New(1 * time.Second),
-					MaximumAttempts:        3,
-					MaximumInterval:        durationpb.New(1 * time.Second),
-					NonRetryableErrorTypes: []string{"bad-bug"},
-					BackoffCoefficient:     1,
+					InitialInterval:    durationpb.New(1 * time.Second),
+					MaximumInterval:    durationpb.New(1 * time.Second),
+					BackoffCoefficient: 1,
 				},
 				CompletionCallbacks: []*commonpb.Callback{
 					{
