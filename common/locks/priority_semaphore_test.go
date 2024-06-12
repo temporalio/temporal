@@ -112,7 +112,7 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAfterWaiting() {
 		// Let the other thread start which will block on this semaphore.
 		cLock <- struct{}{}
 		// Wait for other thread to block on this semaphore.
-		waitUntilBlockedInSemaphore(1)
+		s.waitUntilBlockedInSemaphore(1)
 		// Release the semaphore so that blocking thread can resume.
 		semaphore.Release(1)
 	}()
@@ -129,7 +129,7 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_LowAfterWaiting() {
 		// Let the other thread start which will block on this semaphore.
 		cLock <- struct{}{}
 		// Wait for other thread to block on this semaphore.
-		waitUntilBlockedInSemaphore(1)
+		s.waitUntilBlockedInSemaphore(1)
 		// Release the semaphore so that blocking thread can resume.
 		semaphore.Release(1)
 	}()
@@ -143,7 +143,7 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAllowedBeforeLow() {
 	s.True(semaphore.TryAcquire(1))
 	wg.Add(1)
 	go func() {
-		waitUntilBlockedInSemaphore(2)
+		s.waitUntilBlockedInSemaphore(2)
 		semaphore.Release(1)
 		wg.Done()
 	}()
@@ -185,7 +185,7 @@ func (s *prioritySemaphoreSuite) Test_AllThreadsAreWokenUp() {
 	}
 
 	// Waiting for all above goroutines to block on semaphore.
-	waitUntilBlockedInSemaphore(10)
+	s.waitUntilBlockedInSemaphore(10)
 
 	semaphore.Release(6)
 	semaphore.Release(4)
@@ -223,20 +223,25 @@ func (s *prioritySemaphoreSuite) Test_AcquireMoreThanAvailable() {
 }
 
 // Checks if n number of threads are blocked in semaphore.
-func waitUntilBlockedInSemaphore(n int) {
-	for {
-		buf := make([]byte, 10000)
-		runtime.Stack(buf, true)
-		goroutines := bytes.Split(buf, []byte("\n\n"))
-		threads := 0
-		for _, goroutine := range goroutines {
-			stackTrace := string(goroutine)
-			if strings.Contains(stackTrace, "(*PrioritySemaphoreImpl).Acquire") && strings.Contains(stackTrace, "[select]") {
-				threads++
+func (s *prioritySemaphoreSuite) waitUntilBlockedInSemaphore(n int) {
+	s.Eventually(
+		func() bool {
+			buf := make([]byte, 10000)
+			runtime.Stack(buf, true)
+			goroutines := bytes.Split(buf, []byte("\n\n"))
+			threads := 0
+			for _, goroutine := range goroutines {
+				stackTrace := string(goroutine)
+				if strings.Contains(stackTrace, "(*PrioritySemaphoreImpl).Acquire") && strings.Contains(stackTrace, "[select]") {
+					threads++
+				}
 			}
 			if threads == n {
-				return
+				return true
 			}
-		}
-	}
+			return false
+		},
+		10*time.Second,
+		100*time.Millisecond,
+	)
 }
