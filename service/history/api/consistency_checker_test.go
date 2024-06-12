@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -183,4 +184,61 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 	s.IsType(&serviceerror.Unavailable{}, err)
 	s.Empty(runID)
 	s.True(released)
+}
+
+func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
+	err := s.checker.clockConsistencyCheck(nil)
+	s.NoError(err)
+
+	reqClock := &clock.VectorClock{
+		ShardId:   1,
+		Clock:     10,
+		ClusterId: 1,
+	}
+
+	// not compatible - different shard id
+	differentShardClock := &clock.VectorClock{
+		ShardId:   2,
+		Clock:     1,
+		ClusterId: 1,
+	}
+	s.shardContext.EXPECT().CurrentVectorClock().Return(differentShardClock)
+	err = s.checker.clockConsistencyCheck(reqClock)
+	s.NoError(err)
+
+	// not compatible - different cluster id
+	differentClusterClock := &clock.VectorClock{
+		ShardId:   1,
+		Clock:     1,
+		ClusterId: 2,
+	}
+	s.shardContext.EXPECT().CurrentVectorClock().Return(differentClusterClock)
+	err = s.checker.clockConsistencyCheck(reqClock)
+	s.NoError(err)
+
+	// not compatible - shard context clock is missing
+	s.shardContext.EXPECT().CurrentVectorClock().Return(nil)
+	err = s.checker.clockConsistencyCheck(reqClock)
+	s.NoError(err)
+
+	// shard clock ahead
+	shardClock := &clock.VectorClock{
+		ShardId:   1,
+		Clock:     20,
+		ClusterId: 1,
+	}
+	s.shardContext.EXPECT().CurrentVectorClock().Return(shardClock)
+	err = s.checker.clockConsistencyCheck(reqClock)
+	s.NoError(err)
+
+	// shard clock behind
+	shardClock = &clock.VectorClock{
+		ShardId:   1,
+		Clock:     1,
+		ClusterId: 1,
+	}
+	s.shardContext.EXPECT().CurrentVectorClock().Return(shardClock)
+	s.shardContext.EXPECT().UnloadForOwnershipLost()
+	err = s.checker.clockConsistencyCheck(reqClock)
+	s.Error(err)
 }
