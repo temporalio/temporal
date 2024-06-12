@@ -32,6 +32,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -50,6 +51,7 @@ type CanGetNexusCompletion interface {
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
+type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
 func RegisterExecutor(
 	registry *hsm.Registry,
@@ -71,9 +73,11 @@ func RegisterExecutor(
 
 type (
 	TaskExecutorOptions struct {
+		fx.In
+
 		NamespaceRegistry namespace.Registry
 		MetricsHandler    metrics.Handler
-		CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
+		CallerProvider    HTTPCallerProvider
 	}
 
 	taskExecutor struct {
