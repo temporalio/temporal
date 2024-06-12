@@ -231,37 +231,11 @@ $(API_BINPB): go.mod go.sum $(PROTO_FILES)
 	@printf $(COLOR) "Generate api.binpb..."
 	@./cmd/tools/getproto/run.sh --out $@
 
-protoc: $(PROTOGEN) $(MOCKGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
-	@printf $(COLOR) "Generating protos..."
-	@
-	@rm -rf $(PROTO_OUT).new && mkdir -p $(PROTO_OUT).new
-	@$(PROTOGEN) \
-		--descriptor_set_in=$(API_BINPB) \
-		--root=proto/internal \
-		--rewrite-enum=BuildId_State:BuildId \
-		--output=$(PROTO_OUT).new \
-		-p go-grpc_out=paths=source_relative:$(PROTO_OUT).new \
-		-p go-helpers_out=paths=source_relative:$(PROTO_OUT).new
-	@
-	@printf $(COLOR) "Run goimports for proto files..."
-	@$(GOIMPORTS) -w $(PROTO_OUT).new
-	@
-	@printf $(COLOR) "Generate proto mocks..."
-	@for f in $$(find $(PROTO_OUT).new -name "service.pb.go" -o -name "service_grpc.pb.go"); do \
-		dst=$$(echo $$f | sed -e 's,service/,servicemock/,' -e 's,[.]go$$,.mock.go,') ; \
-		pkg=$$(basename $$(dirname $$(dirname $$dst))) ; \
-		$(MOCKGEN) -copyright_file LICENSE -package $$pkg -source $$f -destination $$dst && \
-		sed -i.replaced 's,$(PROTO_OUT).new/temporal/server/,,' $$dst && \
-		rm -f $${dst}.replaced ; \
-	done
-	@
-	@printf $(COLOR) "Update license headers for proto files..."
-	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT).new
-	@
-	@printf $(COLOR) "Moving proto files into place..."
-	@mv -f $(PROTO_OUT) $(PROTO_OUT).old && mkdir -p $(PROTO_OUT)
-	@mv -f $(PROTO_OUT).new/temporal/server/api/* $(PROTO_OUT)/
-	@rm -rf $(PROTO_OUT).new $(PROTO_OUT).old
+protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
+	@env \
+		PROTOGEN=$(PROTOGEN) MOCKGEN=$(MOCKGEN) GOIMPORTS=$(GOIMPORTS) \
+		API_BINPB=$(API_BINPB) PROTO_OUT=$(PROTO_OUT) \
+		./develop/protoc.sh
 
 service-clients:
 	@printf $(COLOR) "Generate service clients..."
