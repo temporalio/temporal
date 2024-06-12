@@ -36,7 +36,7 @@ check_against_commit() {
   git -C "$tmp" checkout --detach "$commit"
   if grep -q INTERNAL_BINPB "$tmp/Makefile"; then
     $MAKE -C "$tmp" "$INTERNAL_BINPB"
-    $BUF breaking "$INTERNAL_BINPB" --against "$tmp/$INTERNAL_BINPB"
+    $BUF breaking "$INTERNAL_BINPB" --against "$tmp/$INTERNAL_BINPB" --config proto/internal/buf.yaml
   else
     yellow "$name commit is too old to support breaking check"
   fi
