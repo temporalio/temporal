@@ -55,7 +55,6 @@ func RegisterExecutor(
 type (
 	TaskExecutorOptions struct {
 		fx.In
-
 		logger         sdklog.Logger
 		metrics        sdkclient.MetricsHandler
 		frontendClient workflowservice.WorkflowServiceClient

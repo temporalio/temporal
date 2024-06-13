@@ -106,7 +106,7 @@ func NewWorkflowWithSignal(
 		if err != nil {
 			return nil, err
 		}
-		err = hsm.MachineTransition(node, func(scheduler schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
+		err = hsm.MachineTransition(node, func(scheduler *schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
 			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
 		})
 		if err != nil {
