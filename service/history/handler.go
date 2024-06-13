@@ -2204,6 +2204,13 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		request.Request.Execution.WorkflowId,
 		h.config.NumberOfShards,
 	)
+
+	workflowExecution := request.GetRequest().GetExecution()
+	h.logger.Info("ForceDeleteWorkflowExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(workflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(workflowExecution.GetRunId()))
+
 	return forcedeleteworkflowexecution.Invoke(
 		ctx,
 		request,
