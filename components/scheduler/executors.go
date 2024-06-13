@@ -26,11 +26,11 @@ import (
 	"context"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	sdklog "go.temporal.io/sdk/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -55,8 +55,6 @@ func RegisterExecutor(
 type (
 	TaskExecutorOptions struct {
 		fx.In
-		logger         sdklog.Logger
-		metrics        sdkclient.MetricsHandler
 		frontendClient workflowservice.WorkflowServiceClient
 		historyClient  resource.HistoryClient
 	}
@@ -94,14 +92,19 @@ func (e taskExecutor) executeSchedulerRunTask(
 		if err != nil {
 			return err
 		}
-		s.populateTransientFieldsIfAbsent(e.options.logger, e.options.metrics, e.options.frontendClient, e.options.historyClient)
+
+		mutableState, err := hsm.MachineData[*workflow.MutableStateImpl](node.Parent)
+		if err != nil {
+			return err
+		}
+
+		s.populateTransientFieldsIfAbsent(mutableState.GetLogger(), mutableState.GetMetricsHandler(), e.options.frontendClient, e.options.historyClient)
 
 		if s.Args.State.LastProcessedTime == nil {
 			// log these as json since it's more readable than the Go representation
 			specJson, _ := protojson.Marshal(s.Args.Schedule.Spec)
 			policiesJson, _ := protojson.Marshal(s.Args.Schedule.Policies)
-			s.logger.Info("Starting schedule", "spec", string(specJson), "policies", string(policiesJson))
-
+			s.logger.Info("Starting schedule", tag.NewStringTag("spec", string(specJson)), tag.NewStringTag("policies", string(policiesJson)))
 			s.Args.State.LastProcessedTime = timestamppb.Now()
 			s.Args.State.ConflictToken = scheduler.InitialConflictToken
 			s.Args.Info.CreateTime = s.Args.State.LastProcessedTime
@@ -111,7 +114,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 		t2 := time.Now()
 		if t2.Before(t1) {
 			// Time went backwards. Currently this can only happen across a continue-as-new boundary.
-			s.logger.Warn("Time went backwards", "from", t1, "to", t2)
+			s.logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
 			t2 = t1
 		}
 		nextWakeup := s.processTimeRange(

@@ -10,10 +10,10 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
@@ -26,8 +26,7 @@ import (
 
 type Scheduler struct {
 	*schedspb.HsmSchedulerState
-	logger         sdklog.Logger
-	metrics        sdkclient.MetricsHandler
+
 	tweakables     scheduler.TweakablePolicies
 	specBuilder    *scheduler.SpecBuilder
 	cspec          *scheduler.CompiledSpec
@@ -36,6 +35,9 @@ type Scheduler struct {
 	uuidBatch      []string
 	frontendClient workflowservice.WorkflowServiceClient
 	historyClient  resource.HistoryClient
+
+	logger  log.Logger
+	metrics metrics.Handler
 }
 
 func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
@@ -48,7 +50,7 @@ func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPo
 	return overlapPolicy
 }
 
-func (s *Scheduler) populateTransientFieldsIfAbsent(logger sdklog.Logger, handler sdkclient.MetricsHandler, frontendClient workflowservice.WorkflowServiceClient, historyClient resource.HistoryClient) {
+func (s *Scheduler) populateTransientFieldsIfAbsent(logger log.Logger, handler metrics.Handler, frontendClient workflowservice.WorkflowServiceClient, historyClient resource.HistoryClient) {
 	if s.logger == nil {
 		s.logger = logger
 	}
@@ -66,7 +68,7 @@ func (s *Scheduler) populateTransientFieldsIfAbsent(logger sdklog.Logger, handle
 		cspec, err := s.specBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
 		if err != nil {
 			if s.logger != nil {
-				s.logger.Error("Invalid schedule", "error", err)
+				s.logger.Error("Invalid schedule", tag.Error(err))
 			}
 			s.cspec = nil
 		} else {
@@ -198,15 +200,16 @@ func (s *Scheduler) getNextTime(after time.Time) scheduler.GetNextTimeResult {
 	}
 
 	// This should never happen unless there's a bug.
-	s.logger.Error("getNextTime: time not found in cache", "after", after)
+	s.logger.Error("getNextTime: time not found in cache", tag.NewTimeTag("after", after))
 	return scheduler.GetNextTimeResult{}
 }
 
 func (s *Scheduler) bufferWorkflowStart(nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
-	s.logger.Debug("bufferWorkflowStart", "start-time", nominalTime, "actual-start-time", actualTime, "overlap-policy", overlapPolicy, "manual", manual)
+	s.logger.Debug("bufferWorkflowStart", tag.NewTimeTag("start-time", nominalTime), tag.NewTimeTag("actual-start-time", actualTime),
+		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 	if s.tweakables.MaxBufferSize > 0 && len(s.Args.State.BufferedStarts) >= s.tweakables.MaxBufferSize {
-		s.logger.Warn("Buffer too large", "start-time", nominalTime, "overlap-policy", overlapPolicy, "manual", manual)
-		s.metrics.Counter(metrics.ScheduleBufferOverruns.Name()).Inc(1)
+		s.logger.Warn("Buffer too large", tag.NewTimeTag("start-time", nominalTime), tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
+		s.metrics.Counter(metrics.ScheduleBufferOverruns.Name()).Record(1)
 		s.Args.Info.BufferDropped += 1
 		return
 	}
@@ -224,7 +227,8 @@ func (s *Scheduler) processTimeRange(
 	manual bool,
 	limit *int,
 ) time.Time {
-	s.logger.Debug("processTimeRange", "start", start, "end", end, "overlap-policy", overlapPolicy, "manual", manual)
+	s.logger.Debug("processTimeRange", tag.NewTimeTag("start", start), tag.NewTimeTag("end", end),
+		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 
 	if s.cspec == nil {
 		return time.Time{}
@@ -239,8 +243,8 @@ func (s *Scheduler) processTimeRange(
 			continue
 		}
 		if !manual && end.Sub(next.Next) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
-			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
+			s.logger.Warn("Schedule missed catchup window", tag.NewTimeTag("now", end), tag.NewTimeTag("time", next.Next))
+			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 			s.Args.Info.MissedCatchupWindow++
 			continue
 		}
@@ -291,7 +295,7 @@ func (s *Scheduler) recordAction(result *schedpb.ScheduleActionResult, nonOverla
 }
 
 func (s *Scheduler) processBuffer() bool {
-	s.logger.Debug("processBuffer", "buffer", len(s.Args.State.BufferedStarts), "running", len(s.Args.Info.RunningWorkflows))
+	s.logger.Debug("processBuffer", tag.NewInt("buffer", len(s.Args.State.BufferedStarts)), tag.NewInt("running", len(s.Args.Info.RunningWorkflows)))
 
 	// Make sure we have something to start. If not, we can clear the buffer.
 	req := s.Args.Schedule.Action.GetStartWorkflow()
@@ -315,18 +319,17 @@ func (s *Scheduler) processBuffer() bool {
 	}
 	for _, start := range allStarts {
 		result, err := s.startWorkflow(start, req)
-		metricsWithTag := s.metrics.WithTags(map[string]string{
-			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
+		metricsWithTag := s.metrics.WithTags(metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 		if err != nil {
-			s.logger.Error("Failed to start workflow", "error", err)
-			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
+			s.logger.Error("Failed to start workflow", tag.NewErrorTag(err))
+			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Record(1)
 			// TODO: we could put this back in the buffer and retry (after a delay) up until
 			// the catchup window. of course, it's unlikely that this workflow would be making
 			// progress while we're unable to start a new one, so maybe it's not that valuable.
 			tryAgain = true
 			continue
 		}
-		metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Inc(1)
+		metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Record(1)
 		nonOverlapping := start == action.NonOverlappingStart
 		s.recordAction(result, nonOverlapping)
 	}
@@ -433,8 +436,8 @@ func (s *Scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 
 	// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 	if err != nil {
-		s.logger.Error("terminate workflow failed", "workflow", ex.WorkflowId, "error", err)
-		s.metrics.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Inc(1)
+		s.logger.Error("terminate workflow failed", tag.WorkflowID(ex.WorkflowId), tag.Error(err))
+		s.metrics.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 	}
 }
 

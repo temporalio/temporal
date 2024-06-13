@@ -2376,4 +2376,8 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		1*time.Second,
 		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
+	UseExperimentalHsmScheduler = NewNamespaceBoolSetting(
+		"scheduler.use-experimental-hsm-scheduler",
+		false,
+		"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
 )

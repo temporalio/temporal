@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -625,7 +624,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 
 	s.testCluster.host.dcClient.OverrideValue(
 		s.T(),
-		schedulerhsm.UseExperimentalHsmScheduler,
+		dynamicconfig.UseExperimentalHsmScheduler,
 		true)
 
 	type myData struct {
