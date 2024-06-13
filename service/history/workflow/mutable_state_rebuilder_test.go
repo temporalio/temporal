@@ -2151,6 +2151,7 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				EndpointId:                   "endpoint-id",
 				Endpoint:                     "endpoint",
 				Service:                      "service",
 				Operation:                    "operation",
@@ -2159,17 +2160,13 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 			},
 		},
 	}
-	root, err := hsm.NewRoot(s.stateMachineRegistry, StateMachineType.ID, nil, make(map[int32]*persistencespb.StateMachineMap), s.mockMutableState)
-	s.NoError(err)
-	s.mockMutableState.EXPECT().HSM().Return(root).AnyTimes()
-	s.mockMutableState.HSM()
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 	s.mockUpdateVersion(event)
 
-	_, err = s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
+	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
 	s.NoError(err)
 	// Verify the event was applied.
-	sm, err := nexusoperations.MachineCollection(root).Data("5")
+	sm, err := nexusoperations.MachineCollection(s.mockMutableState.HSM()).Data("5")
 	s.NoError(err)
 	s.Equal(enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, sm.State())
 }
