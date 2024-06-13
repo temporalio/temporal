@@ -51,7 +51,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.27.0
 	go.opentelemetry.io/otel/sdk/metric v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
-	go.temporal.io/api v1.34.1-0.20240605011145-301d2c22fe52
+	go.temporal.io/api v1.34.1-0.20240613170231-746fca2d9b5f
 	go.temporal.io/sdk v1.26.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0
@@ -66,7 +66,7 @@ require (
 	google.golang.org/api v0.182.0
 	google.golang.org/grpc v1.64.0
 	google.golang.org/grpc/examples v0.0.0-20240531231403-5d7bd7aacb0c
-	google.golang.org/protobuf v1.34.1
+	google.golang.org/protobuf v1.34.2
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -135,8 +135,8 @@ require (
 	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 	google.golang.org/genproto v0.0.0-20240528184218-531527333157 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240604185151-ef581f913117 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240604185151-ef581f913117 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240610135401-a8a62080eff3 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240610135401-a8a62080eff3 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	modernc.org/gc/v3 v3.0.0-20240304020402-f0dba7c97c2b // indirect
 	modernc.org/libc v1.50.9 // indirect
@@ -145,5 +145,3 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-replace go.temporal.io/api => ../api-go
