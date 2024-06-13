@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -286,8 +287,7 @@ func newRoot(t *testing.T) *hsm.Node {
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	mutableState := newMutableState(t)
 
-	// Backend is nil because we don't need to generate history events for this test.
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	return root
 }

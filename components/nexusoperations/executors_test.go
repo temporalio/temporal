@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/queues"
 )
 
@@ -269,6 +270,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
@@ -278,8 +280,8 @@ func TestProcessInvocationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			backend := &nodeBackend{}
-			node := newOperationNode(t, backend, time.Now(), time.Hour)
+			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{mustNewScheduledEvent(time.Now(), time.Hour)}}
+			node := newOperationNode(t, backend, backend.Events[0])
 			env := fakeEnv{node}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
@@ -303,13 +305,14 @@ func TestProcessInvocationTask(t *testing.T) {
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
 			}
 
-			endpointChecker := func(ctx context.Context, namespaceName, endpointName string) error {
-				if tc.endpointNotFound {
-					return serviceerror.NewNotFound("endpoint not found")
-				}
-				return nil
+			endpointReg := nexustest.FakeEndpointRegistry{
+				OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+					if tc.endpointNotFound {
+						return nil, serviceerror.NewNotFound("endpoint not found")
+					}
+					return nil, nil // The endpoint isn't used here, it's okay to return nil.
+				},
 			}
-
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
 					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
@@ -323,7 +326,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
 				MetricsHandler:         metricsHandler,
-				EndpointChecker:        endpointChecker,
+				EndpointRegistry:       endpointReg,
 				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
 						BaseURL:    "http://" + listenAddr,
@@ -345,15 +348,15 @@ func TestProcessInvocationTask(t *testing.T) {
 			require.NoError(t, err)
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
-			tc.checkOutcome(t, op, backend.events)
+			tc.checkOutcome(t, op, backend.Events[1:]) // Ignore the original scheduled event.
 		})
 	}
 }
 
 func TestProcessBackoffTask(t *testing.T) {
 	reg := newRegistry(t)
-	backend := &nodeBackend{}
-	node := newOperationNode(t, backend, time.Now(), time.Hour)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
 	env := fakeEnv{node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
@@ -378,13 +381,13 @@ func TestProcessBackoffTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
-	require.Equal(t, 0, len(backend.events))
+	require.Equal(t, 0, len(backend.Events))
 }
 
 func TestProcessTimeoutTask(t *testing.T) {
 	reg := newRegistry(t)
-	backend := &nodeBackend{}
-	node := newOperationNode(t, backend, time.Now(), time.Hour)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
 	env := fakeEnv{node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
@@ -398,8 +401,8 @@ func TestProcessTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
-	require.Equal(t, 1, len(backend.events))
-	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.events[0].EventType)
+	require.Equal(t, 1, len(backend.Events))
+	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
 		ScheduledEventId: 1,
 		Failure: &failurepb.Failure{
@@ -421,7 +424,7 @@ func TestProcessTimeoutTask(t *testing.T) {
 				},
 			},
 		},
-	}, backend.events[0].GetNexusOperationTimedOutEventAttributes())
+	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
 }
 
 func TestProcessCancelationTask(t *testing.T) {
@@ -498,6 +501,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
@@ -507,8 +511,8 @@ func TestProcessCancelationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			backend := &nodeBackend{}
-			node := newOperationNode(t, backend, time.Now(), time.Hour)
+			backend := &hsmtest.NodeBackend{}
+			node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -546,11 +550,13 @@ func TestProcessCancelationTask(t *testing.T) {
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
 			}
-			endpointChecker := func(ctx context.Context, namespaceName, endpointName string) error {
-				if tc.endpointNotFound {
-					return serviceerror.NewNotFound("endpoint not found")
-				}
-				return nil
+			endpointReg := nexustest.FakeEndpointRegistry{
+				OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+					if tc.endpointNotFound {
+						return nil, serviceerror.NewNotFound("endpoint not found")
+					}
+					return nil, nil // The endpoint isn't used here, it's okay to return nil.
+				},
 			}
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
@@ -563,7 +569,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				},
 				NamespaceRegistry: namespaceRegistry,
 				MetricsHandler:    metricsHandler,
-				EndpointChecker:   endpointChecker,
+				EndpointRegistry:  endpointReg,
 				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
 						BaseURL:    "http://" + listenAddr,
@@ -595,8 +601,8 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	reg := newRegistry(t)
-	backend := &nodeBackend{}
-	node := newOperationNode(t, backend, time.Now(), time.Hour)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -630,8 +636,10 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 			},
 		},
 		NamespaceRegistry: namespaceRegistry,
-		EndpointChecker: func(ctx context.Context, namespaceName, endpointName string) error {
-			return nil
+		EndpointRegistry: nexustest.FakeEndpointRegistry{
+			OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+				return nil, nil // The endpoint isn't used here, it's okay to return nil.
+			},
 		},
 		ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
@@ -652,8 +660,8 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 
 func TestProcessCancelationBackoffTask(t *testing.T) {
 	reg := newRegistry(t)
-	backend := &nodeBackend{}
-	node := newOperationNode(t, backend, time.Now(), time.Hour)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -693,5 +701,5 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 	c, err := hsm.MachineData[nexusoperations.Cancelation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, c.State())
-	require.Equal(t, 0, len(backend.events))
+	require.Equal(t, 0, len(backend.Events))
 }

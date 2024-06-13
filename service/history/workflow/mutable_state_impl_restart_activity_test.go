@@ -110,6 +110,7 @@ func (s *retryActivitySuite) SetupTest() {
 		s.mockConfig,
 	)
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
 	reg := hsm.NewRegistry()
 	err := RegisterStateMachine(reg)

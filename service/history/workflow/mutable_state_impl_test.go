@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -88,6 +89,8 @@ type (
 		mutableState *MutableStateImpl
 		logger       log.Logger
 		testScope    tally.TestScope
+
+		replicationMultipleBatches bool
 	}
 )
 
@@ -102,8 +105,26 @@ var (
 )
 
 func TestMutableStateSuite(t *testing.T) {
-	s := new(mutableStateSuite)
-	suite.Run(t, s)
+	for _, tc := range []struct {
+		name                       string
+		replicationMultipleBatches bool
+	}{
+		{
+			name:                       "ReplicationMultipleBatchesEnabled",
+			replicationMultipleBatches: true,
+		},
+		{
+			name:                       "ReplicationMultipleBatchesDisabled",
+			replicationMultipleBatches: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &mutableStateSuite{
+				replicationMultipleBatches: tc.replicationMultipleBatches,
+			}
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *mutableStateSuite) SetupSuite() {
@@ -121,6 +142,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockEventsCache = events.NewMockCache(s.controller)
 
 	s.mockConfig = tests.NewDynamicConfig()
+	s.mockConfig.ReplicationMultipleBatches = dynamicconfig.GetBoolPropertyFn(s.replicationMultipleBatches)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -137,12 +159,14 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
+	s.mockConfig.EnableTransitionHistory = func() bool { return true }
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
 	namespaceEntry := tests.GlobalNamespaceEntry
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
@@ -542,7 +566,7 @@ func (s *mutableStateSuite) TestNewMutableStateInChain() {
 				)
 				currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus = taskStatus
 
-				newMutableState := NewMutableStateInChain(
+				newMutableState, err := NewMutableStateInChain(
 					s.mockShard,
 					s.mockEventsCache,
 					s.logger,
@@ -552,6 +576,7 @@ func (s *mutableStateSuite) TestNewMutableStateInChain() {
 					s.mockShard.GetTimeSource().Now(),
 					currentMutableState,
 				)
+				s.NoError(err)
 				s.Equal(taskStatus, newMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus)
 			},
 		)
@@ -1566,7 +1591,6 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-
 			dbState := s.buildWorkflowMutableState()
 			if tc.dbStateMutationFn != nil {
 				tc.dbStateMutationFn(dbState)
@@ -1825,4 +1849,101 @@ func (s *mutableStateSuite) TestGetCloseVersion() {
 	closeVersion, err = s.mutableState.GetCloseVersion()
 	s.NoError(err)
 	s.Equal(expectedVersion, closeVersion)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks() {
+	version := int64(777)
+	firstEventID := int64(2)
+	lastEventID := int64(3)
+	now := time.Now().UTC()
+	taskqueue := "taskqueue for test"
+	workflowTaskTimeout := 11 * time.Second
+	workflowTaskAttempt := int32(1)
+	eventBatches := [][]*historypb.HistoryEvent{
+		{
+			&historypb.HistoryEvent{
+				Version:   version,
+				EventId:   firstEventID,
+				EventTime: timestamppb.New(now),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
+					StartToCloseTimeout: durationpb.New(workflowTaskTimeout),
+					Attempt:             workflowTaskAttempt,
+				}},
+			},
+		},
+		{
+			&historypb.HistoryEvent{
+				Version:   version,
+				EventId:   lastEventID,
+				EventTime: timestamppb.New(now),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+					ScheduledEventId: firstEventID,
+					RequestId:        uuid.New(),
+				}},
+			},
+		},
+	}
+
+	testCases := []struct {
+		name                       string
+		replicationMultipleBatches bool
+		tasks                      []tasks.Task
+	}{
+		{
+			name:                       "multiple event batches disabled",
+			replicationMultipleBatches: false,
+			tasks: []tasks.Task{
+				&tasks.HistoryReplicationTask{
+					WorkflowKey:  s.mutableState.GetWorkflowKey(),
+					FirstEventID: firstEventID,
+					NextEventID:  firstEventID + 1,
+					Version:      version,
+				},
+				&tasks.HistoryReplicationTask{
+					WorkflowKey:  s.mutableState.GetWorkflowKey(),
+					FirstEventID: lastEventID,
+					NextEventID:  lastEventID + 1,
+					Version:      version,
+				},
+			},
+		},
+		{
+			name:                       "multiple event batches enabled",
+			replicationMultipleBatches: true,
+			tasks: []tasks.Task{
+				&tasks.HistoryReplicationTask{
+					WorkflowKey:  s.mutableState.GetWorkflowKey(),
+					FirstEventID: firstEventID,
+					NextEventID:  lastEventID + 1,
+					Version:      version,
+				},
+			},
+		},
+	}
+
+	ms := s.mutableState
+
+	for _, tc := range testCases {
+		s.Run(
+			tc.name,
+			func() {
+				if s.replicationMultipleBatches != tc.replicationMultipleBatches {
+					return
+				}
+				ms.InsertTasks[tasks.CategoryReplication] = []tasks.Task{}
+				err := ms.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, eventBatches)
+				if err != nil {
+					s.Fail("closeTransactionPrepareReplicationTasks failed", err)
+				}
+				repicationTasks := ms.InsertTasks[tasks.CategoryReplication]
+				s.Equal(len(tc.tasks), len(repicationTasks))
+				for i, task := range tc.tasks {
+					s.Equal(task, repicationTasks[i])
+				}
+			},
+		)
+	}
 }

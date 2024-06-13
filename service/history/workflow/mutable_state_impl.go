@@ -44,12 +44,13 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/api/taskqueue/v1"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -288,10 +289,11 @@ func NewMutableState(
 
 		LastCompletedWorkflowTaskStartedEventId: common.EmptyEventID,
 
-		StartTime:              timestamppb.New(startTime),
-		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
-		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
-		SubStateMachinesByType: make(map[int32]*persistencespb.StateMachineMap),
+		StartTime:                         timestamppb.New(startTime),
+		VersionHistories:                  versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
+		ExecutionStats:                    &persistencespb.ExecutionStats{HistorySize: 0},
+		SubStateMachinesByType:            make(map[int32]*persistencespb.StateMachineMap),
+		TaskGenerationShardClockTimestamp: shard.CurrentVectorClock().GetClock(),
 	}
 	s.approximateSize += s.executionInfo.Size()
 	s.executionState = &persistencespb.WorkflowExecutionState{
@@ -463,6 +465,7 @@ func NewSanitizedMutableState(
 	}
 	// Timer tasks are generated locally, do not sync them.
 	mutableState.executionInfo.StateMachineTimers = nil
+	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 0
 
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
@@ -477,7 +480,7 @@ func NewMutableStateInChain(
 	runID string,
 	startTime time.Time,
 	currentMutableState MutableState,
-) MutableState {
+) (MutableState, error) {
 	newMutableState := NewMutableState(
 		shardContext,
 		eventsCache,
@@ -491,10 +494,25 @@ func NewMutableStateInChain(
 	// carry over necessary fields from current mutable state
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
 
+	// Copy completion callbacks to new run.
+	oldCallbacks := callbacks.MachineCollection(currentMutableState.HSM())
+	newCallbacks := callbacks.MachineCollection(newMutableState.HSM())
+	for _, node := range oldCallbacks.List() {
+		cb, err := oldCallbacks.Data(node.Key.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := cb.PublicInfo.GetTrigger().GetVariant().(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); ok {
+			if _, err := newCallbacks.Add(node.Key.ID, cb); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// TODO: Today other information like autoResetPoints, previousRunID, firstRunID, etc.
 	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
 	// should be carried over here since some information is not part of the startedEvent.
-	return newMutableState
+	return newMutableState, nil
 }
 
 func (ms *MutableStateImpl) mustInitHSM() {
@@ -691,7 +709,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if ms.config.EnableNexus() &&
+	if ms.config.EnableTransitionHistory() &&
 		len(ms.executionInfo.TransitionHistory) != 0 {
 
 		// this make sure current version >= last write version
@@ -730,7 +748,6 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 }
 
 func (ms *MutableStateImpl) GetCurrentVersion() int64 {
-
 	if ms.executionInfo.VersionHistories != nil {
 		return ms.currentVersion
 	}
@@ -738,8 +755,16 @@ func (ms *MutableStateImpl) GetCurrentVersion() int64 {
 	return common.EmptyVersion
 }
 
-func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
+// TransitionCount implements hsm.NodeBackend.
+func (ms *MutableStateImpl) TransitionCount() int64 {
+	hist := ms.executionInfo.TransitionHistory
+	if len(hist) == 0 {
+		return 0
+	}
+	return hist[len(hist)-1].MaxTransitionCount
+}
 
+func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
 	if ms.executionInfo.VersionHistories != nil {
 		versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 		if err != nil {
@@ -772,7 +797,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
-	if ms.config.EnableNexus() &&
+	if ms.config.EnableTransitionHistory() &&
 		len(ms.executionInfo.TransitionHistory) != 0 {
 
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
@@ -4290,7 +4315,6 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	// TODO: should this be in the "Apply" function? How does this work with replication?
-	// TODO: also copy over close callbacks if workflow completes unsuccessfully and its retry policy permits it.
 	oldCallbacks := callbacks.MachineCollection(ms.HSM())
 	newCallbacks := callbacks.MachineCollection(newMutableState.HSM())
 	for _, node := range oldCallbacks.List() {
@@ -5125,7 +5149,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -5139,7 +5163,7 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
-		workflowEventsSeq,
+		eventBatches,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -5249,7 +5273,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		return nil
 	}
 
-	if !ms.config.EnableNexus() {
+	if !ms.config.EnableTransitionHistory() {
 		return nil
 	}
 
@@ -5267,7 +5291,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 
 func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy TransactionPolicy,
-	workflowEventsSeq []*persistence.WorkflowEvents,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -5290,17 +5314,23 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 
-	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, workflowEventsSeq)
+	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches)
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	transactionPolicy TransactionPolicy,
-	workflowEventsSeq []*persistence.WorkflowEvents,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
 
-	for _, workflowEvents := range workflowEventsSeq {
-		if err := ms.eventsToReplicationTask(transactionPolicy, workflowEvents.Events); err != nil {
+	if ms.config.ReplicationMultipleBatches() {
+		if err := ms.eventsToReplicationTask(transactionPolicy, eventBatches); err != nil {
 			return err
+		}
+	} else {
+		for _, historyEvents := range eventBatches {
+			if err := ms.eventsToReplicationTask(transactionPolicy, [][]*historypb.HistoryEvent{historyEvents}); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -5364,16 +5394,16 @@ func (ms *MutableStateImpl) cleanupTransaction(
 
 func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	transactionPolicy TransactionPolicy,
-) ([]*persistence.WorkflowEvents, []*historypb.HistoryEvent, bool, error) {
+) ([]*persistence.WorkflowEvents, [][]*historypb.HistoryEvent, []*historypb.HistoryEvent, bool, error) {
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
 	historyMutation, err := ms.hBuilder.Finish(!ms.HasStartedWorkflowTask())
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
 	// TODO @wxing1292 need more refactoring to make the logic clean
@@ -5386,7 +5416,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
 	historyNodeTxnIDs, err := ms.shard.GenerateTaskIDs(len(newEventsBatches))
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 	for index, eventBatch := range newEventsBatches {
 		workflowEventsSeq[index] = &persistence.WorkflowEvents{
@@ -5406,20 +5436,20 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		transactionPolicy,
 		workflowEventsSeq,
 	); err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
-	return workflowEventsSeq, newBufferBatch, clearBuffer, nil
+	return workflowEventsSeq, newEventsBatches, newBufferBatch, clearBuffer, nil
 }
 
 func (ms *MutableStateImpl) eventsToReplicationTask(
 	transactionPolicy TransactionPolicy,
-	events []*historypb.HistoryEvent,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
 	switch transactionPolicy {
 	case TransactionPolicyActive:
 		if ms.generateReplicationTask() {
-			return ms.taskGenerator.GenerateHistoryReplicationTasks(events)
+			return ms.taskGenerator.GenerateHistoryReplicationTasks(eventBatches)
 		}
 		return nil
 	case TransactionPolicyPassive:

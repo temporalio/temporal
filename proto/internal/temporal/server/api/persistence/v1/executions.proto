@@ -210,9 +210,21 @@ message WorkflowExecutionInfo {
     // Timer tasks emitted from state machines are stored in this array, grouped and sorted by their deadline. Only the
     // next state machine timer task is generated at a time per mutable state. When that task is processed it iterates
     // this array and triggers timers that are ready.
-    // NOTE: Task status is clsuter specific information, so when replicating mutable state, this field need to be
+    // NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
     // sanitized.
     repeated StateMachineTimerGroup state_machine_timers = 90;
+
+    // The shard clock's timestamp at the time the first valid task was created for this mutable state (either for a new
+    // mutable state or when rebuilding from events). The field should be updated whenever we refresh tasks, marking
+    // older generation tasks obsolete.
+    // This field is used for task staleness checks when mutable state is rebuilt.
+    // NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
+    // sanitized.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: Ignoring api-linter rules for clarity --)
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: This is a vector clock, not a timestamp --)
+    int64 task_generation_shard_clock_timestamp = 91;
 }
 
 message ExecutionStats {
@@ -475,7 +487,7 @@ message CallbackInfo {
 // NexusOperationInfo contains the state of a nexus operation.
 message NexusOperationInfo {
     // Endpoint name. 
-    // Resolved to a URL via the outgoing service registry for this workflow's namespace.
+    // Resolved the endpoint registry for this workflow's namespace.
     string endpoint = 1;
 
     // Service name.
@@ -516,6 +528,10 @@ message NexusOperationInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 13;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 14;
+
+    // Endpoint ID, the name is also stored here (field 1) but we use the ID internally to avoid failing operation
+    // requests when an endpoint is renamed.
+    string endpoint_id = 15;
 }
 
 // NexusOperationCancellationInfo contains the state of a nexus operation cancelation.

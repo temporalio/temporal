@@ -83,6 +83,7 @@ func (s *taskRefresherSuite) SetupTest() {
 	s.mockNamespaceRegistry.EXPECT().GetNamespace(tests.Namespace).Return(s.namespaceEntry, nil).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,

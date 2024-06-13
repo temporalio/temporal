@@ -610,7 +610,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState := workflow.NewMutableStateInChain(
+	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
 		t.shardContext.GetLogger(),
@@ -620,6 +620,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		t.shardContext.GetTimeSource().Now(),
 		mutableState,
 	)
+	if err != nil {
+		return err
+	}
+
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		mutableState,
@@ -731,7 +735,6 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 	}
 
 	processedTimers, err := t.executeStateMachineTimers(
-		ctx,
 		ms,
 		func(node *hsm.Node, task hsm.Task) error {
 			return t.shardContext.StateMachineRegistry().ExecuteTimerTask(t, node, task)

@@ -121,10 +121,15 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
+	root, err := hsm.NewRoot(reg, StateMachineType.ID, s.mockMutableState, make(map[int32]*persistencespb.StateMachineMap), s.mockMutableState)
+	s.NoError(err)
+	s.mockMutableState.EXPECT().HSM().Return(root).AnyTimes()
+
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 

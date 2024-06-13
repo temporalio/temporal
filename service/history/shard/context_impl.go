@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/exp/maps"
-	"golang.org/x/sync/semaphore"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -59,6 +58,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -141,7 +141,7 @@ type (
 		// For cassandra, this basically means requests that use LWT.
 		// It's ok to use semaphore by its own or lock rwLock within the semaphore.
 		// But DO NOT try to acquire ioSemaphore while holding rwLock, as it may cause deadlock.
-		ioSemaphore *semaphore.Weighted
+		ioSemaphore locks.PrioritySemaphore
 
 		// state is protected by stateLock
 		stateLock  sync.Mutex
@@ -264,7 +264,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			// of 10 sec.
 			Timeout: 10 * time.Second,
 			Ping: func() []common.Pingable {
-				_ = s.ioSemaphore.Acquire(context.Background(), 1)
+				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
 				s.ioSemaphore.Release(1)
 				return nil
 			},
@@ -1533,7 +1533,12 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
-	return s.ioSemaphore.Acquire(ctx, 1)
+	priority := locks.PriorityHigh
+	callerInfo := headers.GetCallerInfo(ctx)
+	if callerInfo.CallerType == headers.CallerTypePreemptable {
+		priority = locks.PriorityLow
+	}
+	return s.ioSemaphore.Acquire(ctx, priority, 1)
 }
 
 func (s *ContextImpl) ioSemaphoreRelease() {
@@ -2097,7 +2102,7 @@ func newContext(
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
 		queueMetricEmitter:      sync.Once{},
-		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
+		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
