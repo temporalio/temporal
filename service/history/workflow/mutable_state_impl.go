@@ -4844,7 +4844,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	}
 
 	now := ms.timeSource.Now().In(time.UTC)
-	backoff, retryState := nextBackoffInterval(
+	retryBackoff, retryState := nextBackoffInterval(
 		ms.timeSource.Now().In(time.UTC),
 		ai.Attempt,
 		ai.RetryMaximumAttempts,
@@ -4858,7 +4858,7 @@ func (ms *MutableStateImpl) RetryActivity(
 		return retryState, nil
 	}
 
-	nextScheduledTime := now.Add(backoff)
+	nextScheduledTime := now.Add(retryBackoff)
 	nextAttempt := ai.Attempt + 1
 	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai.ScheduledEventId, nextScheduledTime, nextAttempt); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
