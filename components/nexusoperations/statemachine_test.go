@@ -74,6 +74,7 @@ func TestAddChild(t *testing.T) {
 				EventTime: schedTime,
 				Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 					NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+						EndpointId:             "endpoint-id",
 						Endpoint:               "endpoint",
 						Service:                "service",
 						Operation:              "operation",
@@ -82,7 +83,7 @@ func TestAddChild(t *testing.T) {
 					},
 				},
 			}
-			child, err := nexusoperations.AddChild(root, "test-id", event, "endpoint-id", []byte("token"), false)
+			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"), false)
 			require.NoError(t, err)
 			oap := root.Outputs()
 			require.Equal(t, 1, len(oap))

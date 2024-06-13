@@ -129,6 +129,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
 				Endpoint:                     attrs.Endpoint,
+				EndpointId:                   endpoint.Id,
 				Service:                      attrs.Service,
 				Operation:                    attrs.Operation,
 				Input:                        attrs.Input,
@@ -211,6 +212,10 @@ func (ch *commandHandler) HandleCancelCommand(
 			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID of %d", attrs.ScheduledEventId),
 		}
 	}
+
+	// TODO(bergundy): When we support machine deletion, this err may be an hsm.ErrStateMachineNotFound.
+	// We'll need to check buffered events and verify that there aren't any terminal events in there.
+	// Ideally the framework can abstract that for us though.
 	return err
 }
 

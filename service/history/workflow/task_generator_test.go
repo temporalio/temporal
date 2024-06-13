@@ -467,12 +467,14 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:               "endpoint",
+				EndpointId:             "endpoint-id",
 				Service:                "some-service",
 				Operation:              "some-op",
 				ScheduleToCloseTimeout: durationpb.New(time.Hour),
 			},
 		},
-	}, "endpoint-id", []byte("token"), false)
+	}, []byte("token"), false)
 	require.NoError(t, err)
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
