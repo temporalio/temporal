@@ -72,7 +72,6 @@ type (
 		Logger                             log.Logger
 		HealthSignals                      persistence.HealthSignalAggregator
 		DynamicRateLimitingParams          DynamicRateLimitingParams
-		DLQMetricsEmitter                  *persistence.DLQMetricsEmitter
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -145,7 +144,6 @@ func FactoryProvider(
 		params.MetricsHandler,
 		params.Logger,
 		params.HealthSignals,
-		params.DLQMetricsEmitter,
 	)
 }
 

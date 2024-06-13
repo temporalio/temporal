@@ -41,11 +41,6 @@ const (
 )
 
 type (
-	//DLQMetricsEmitter interface {
-	//	Start()
-	//	Stop()
-	//}
-
 	DLQMetricsEmitter struct {
 		status                  int32
 		shutdownCh              chan struct{}
@@ -92,7 +87,6 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 		case <-s.shutdownCh:
 			return
 		case <-s.emitMetricsTimer.C:
-			s.logger.Info("PPV Emitting Metrics")
 			messageCounts := make(map[int]int64)
 			queues, err := s.getDLQList()
 			if err != nil {
@@ -106,13 +100,8 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 				}
 				messageCounts[category] += q.MessageCount
 			}
-			for key, count := range messageCounts {
-				categoryName, ok := tasks.CategoryIDToName[key]
-				if !ok {
-					s.logger.Warn("Failed to get task category name", tag.TaskCategoryID(key))
-					categoryName = "unknown"
-				}
-				metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(categoryName))
+			for id, name := range tasks.CategoryIDToName {
+				metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(messageCounts[id]), metrics.TaskCategoryTag(name))
 			}
 		}
 	}
@@ -120,11 +109,10 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 
 func (s *DLQMetricsEmitter) getDLQList() ([]QueueInfo, error) {
 	var queues []QueueInfo
+	var nextPageToken []byte
 	for {
-		var nextPageToken []byte
 		resp, err := s.historyTaskQueueManager.ListQueues(context.Background(), &ListQueuesRequest{
 			QueueType:     QueueTypeHistoryDLQ,
-			PageSize:      100,
 			NextPageToken: nextPageToken,
 		})
 		if err != nil {
