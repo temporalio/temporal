@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	emitDLQMetricsInterval = 1 * time.Second
+	emitDLQMetricsInterval = 1 * time.Hour
 )
 
 type (
