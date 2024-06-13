@@ -598,5 +598,5 @@ func handlerErrorFromClientError(err error) (string, error) {
 	}
 
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
-	return failureSourceServer, err
+	return failureSourceClient, err
 }
