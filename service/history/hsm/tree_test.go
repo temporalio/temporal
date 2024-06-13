@@ -304,7 +304,7 @@ func TestMachineTransition(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), root.InternalRepr().TransitionCount)
-	// 3 = 2 - which is a constant returned by our test backend - and an increment of 1 to account for backend 
+	// 3 = 2 - which is a constant returned by our test backend - and an increment of 1 to account for backend
 	// incrementing its own transition count at the end of a transaction.
 	require.Equal(t, int64(3), root.InternalRepr().LastUpdateMutableStateTransitionCount)
 	d, err = hsm.MachineData[*hsmtest.Data](root)
