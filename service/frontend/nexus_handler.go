@@ -428,7 +428,7 @@ func (h *nexusHandler) forwardStartOperation(
 	if err != nil {
 		oc.logger.Error("received error from remote cluster for forwarded Nexus start operation request.", tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("forwarded_request_error"))
-		handlerErr, failureSource := handlerErrorFromClientError(err)
+		failureSource, handlerErr := handlerErrorFromClientError(err)
 		oc.responseHeaders[failureSourceHeaderName] = failureSource
 		return nil, handlerErr
 	}
@@ -523,7 +523,7 @@ func (h *nexusHandler) forwardCancelOperation(
 	if err != nil {
 		oc.logger.Error("received error from remote cluster for forwarded Nexus cancel operation request.", tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("forwarded_request_error"))
-		handlerErr, failureSource := handlerErrorFromClientError(err)
+		failureSource, handlerErr := handlerErrorFromClientError(err)
 		oc.responseHeaders[failureSourceHeaderName] = failureSource
 		return handlerErr
 	}
@@ -560,7 +560,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 	})
 }
 
-func handlerErrorFromClientError(err error) (error, string) {
+func handlerErrorFromClientError(err error) (string, error) {
 	var unexpectedRespErr *nexus.UnexpectedResponseError
 	if errors.As(err, &unexpectedRespErr) {
 		failure := unexpectedRespErr.Failure
@@ -594,9 +594,9 @@ func handlerErrorFromClientError(err error) (error, string) {
 			handlerErr.Type = nexus.HandlerErrorTypeDownstreamTimeout
 		}
 
-		return handlerErr, unexpectedRespErr.Response.Header.Get(failureSourceHeaderName)
+		return unexpectedRespErr.Response.Header.Get(failureSourceHeaderName), handlerErr
 	}
 
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
-	return err, failureSourceServer
+	return failureSourceServer, err
 }
