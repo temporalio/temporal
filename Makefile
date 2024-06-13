@@ -288,8 +288,7 @@ copyright:
 
 goimports:
 	@printf $(COLOR) "Run goimports for modified files..."
-	@test -d .git && \
-		MERGE_BASE=$$(git merge-base $(MAIN_BRANCH) HEAD) && \
+	@MERGE_BASE=$$(git merge-base $(MAIN_BRANCH) HEAD) && \
 		MODIFIED_FILES=$$(git diff --name-status $$MERGE_BASE -- | cut -f2 | grep '.go$$' || true) && \
 		echo "Merge base: $$MERGE_BASE" && \
 		echo "Modified files: $$MODIFIED_FILES" && \
@@ -316,7 +315,8 @@ lint-protos: $(BUF) $(INTERNAL_BINPB)
 
 buf-breaking: $(BUF) $(API_BINPB) $(INTERNAL_BINPB)
 	@printf $(COLOR) "Run buf breaking proto changes check..."
-	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) ./develop/buf-breaking.sh
+	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
+		./develop/buf-breaking.sh
 
 shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
