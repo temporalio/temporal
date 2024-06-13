@@ -30,15 +30,19 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -146,93 +150,66 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
-	testnameFail := "backoff_query_fail"
-	testnamePass := "backoff_query_pass"
-
-	workflowFnFail := func(ctx workflow.Context) (string, error) {
-		_ = workflow.SetQueryHandler(ctx, testnameFail, func() (string, error) {
-			return "should-reach-here", nil
+	tv := testvars.New(s.T())
+	workflowFn := func(ctx workflow.Context) error {
+		_ = workflow.SetQueryHandler(ctx, tv.QueryType(), func() (string, error) {
+			return tv.Any().String(), nil
 		})
-		return "", nil
+		return nil
 	}
-	workflowFnPass := func(ctx workflow.Context) (string, error) {
-		_ = workflow.SetQueryHandler(ctx, testnamePass, func() (string, error) {
-			return "should-reach-here", nil
-		})
-		return "", nil
-	}
+	s.worker.RegisterWorkflow(workflowFn)
 
 	testCases := []struct {
+		testName       string
 		contextTimeout time.Duration
 		startDelay     time.Duration
-		expectError    bool
-		workflowFn     any
-		testname       string
+		err            error
 	}{
 		{
+			testName:       "backoff query will fail",
 			contextTimeout: 10 * time.Second,
 			startDelay:     5 * time.Second,
-			expectError:    false,
-			workflowFn:     workflowFnFail,
-			testname:       testnameFail,
+			err:            nil,
 		},
 		{
-			contextTimeout: time.Duration(8) * time.Second,
-			startDelay:     time.Duration(10) * time.Second,
-			expectError:    true,
-			workflowFn:     workflowFnPass,
-			testname:       testnamePass,
+			testName:       "backoff query will pass",
+			contextTimeout: 8 * time.Second,
+			startDelay:     10 * time.Second,
+			err:            consts.ErrWorkflowTaskNotScheduled,
 		},
 	}
 
 	for _, tc := range testCases {
-		s.testQueryWorkflow_QueryWhileBackoff(
-			tc.contextTimeout,
-			tc.startDelay,
-			tc.expectError,
-			tc.workflowFn,
-			tc.testname,
-		)
+		s.T().Run(tc.testName, func(t *testing.T) {
+			workflowOptions := sdkclient.StartWorkflowOptions{
+				ID:         tv.WorkflowID(t.Name()),
+				TaskQueue:  s.taskQueue,
+				StartDelay: tc.startDelay,
+			}
+
+			// contextTimeout is not going to be the provided timeout.
+			// It is going to be timeout / 2. See newGRPCContext implementation.
+			ctx, cancel := context.WithTimeout(context.Background(), 2*tc.contextTimeout)
+			defer cancel()
+
+			t.Log(fmt.Sprintf("Start workflow with delay %v", tc.startDelay))
+			workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+			assert.NoError(t, err, "Start workflow failed")
+			assert.NotNil(t, workflowRun)
+			assert.NotEmpty(t, workflowRun.GetRunID())
+
+			queryResp, err := s.sdkClient.QueryWorkflow(ctx, tv.WorkflowID(t.Name()), workflowRun.GetRunID(), tv.QueryType())
+
+			if tc.err != nil {
+				assert.Error(t, err)
+				assert.ErrorContains(t, err, tc.err.Error())
+				assert.Nil(t, queryResp)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, queryResp)
+			}
+		})
 	}
-}
-
-func (s *ClientFunctionalSuite) testQueryWorkflow_QueryWhileBackoff(
-	contextTimeout time.Duration,
-	startDelay time.Duration,
-	expectError bool,
-	workflowFn any,
-	testname string,
-) {
-	s.worker.RegisterWorkflow(workflowFn)
-
-	id := fmt.Sprintf("test-query-before-backoff-%s", testname)
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:         id,
-		TaskQueue:  s.taskQueue,
-		StartDelay: startDelay,
-	}
-
-	//  context timeout is not going to be the provided timeout.
-	// It is going to be timeout / 2. See newGRPCContext implementation.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*contextTimeout)
-	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
-
-	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
-
-	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
-
-	if expectError {
-		s.Error(err)
-		s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
-	} else {
-		s.NoError(err)
-	}
-
 }
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {

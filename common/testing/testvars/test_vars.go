@@ -279,6 +279,14 @@ func (tv *TestVars) WithTimerID(timerID string, key ...string) *TestVars {
 	return tv.cloneSet("timer_id", key, timerID)
 }
 
+func (tv *TestVars) QueryType(key ...string) string {
+	return tv.getOrCreate("query_type", key).(string)
+}
+
+func (tv *TestVars) WithQueryType(queryTypeID string, key ...string) *TestVars {
+	return tv.cloneSet("query_type", key, queryTypeID)
+}
+
 // ----------- Generic methods ------------
 
 func (tv *TestVars) InfiniteTimeout() *durationpb.Duration {
