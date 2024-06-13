@@ -1136,11 +1136,6 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	h.logger.Debug("DeleteWorkflowExecution requested",
-		tag.WorkflowNamespaceID(request.GetNamespaceId()),
-		tag.WorkflowID(workflowExecution.GetWorkflowId()),
-		tag.WorkflowRunID(workflowExecution.GetRunId()))
-
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -1149,6 +1144,11 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	h.logger.Info("DeleteWorkflowExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(workflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(workflowExecution.GetRunId()))
 
 	resp, err := engine.DeleteWorkflowExecution(ctx, request)
 	if err != nil {
