@@ -118,6 +118,14 @@ func (ts *EventTimeSource) Advance(d time.Duration) {
 	ts.fireTimers()
 }
 
+// NumTimers returns the number of outstanding timers.
+func (ts *EventTimeSource) NumTimers() int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	return len(ts.timers)
+}
+
 // fireTimers fires all timers that are ready.
 func (ts *EventTimeSource) fireTimers() {
 	n := 0

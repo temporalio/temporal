@@ -81,9 +81,16 @@ func (p *AdaptivePool) Stop() {
 // another worker. If Stop is called concurrently, Do may or may not call f. If Stop has been
 // called already, Do does nothing.
 func (p *AdaptivePool) Do(f func()) {
+	// try send first
+	select {
+	case p.ch <- f:
+		return
+	default:
+	}
+
+	// we might want to add a worker, send with timeout
 	have := p.workers.Load()
 	if have < int64(p.maxWorkers) {
-		// we might want to add a worker, send with timeout
 		timech, timer := p.ts.NewTimer(p.targetDelay)
 		select {
 		case <-p.stopCh:
@@ -109,6 +116,14 @@ func (p *AdaptivePool) Do(f func()) {
 
 func (p *AdaptivePool) work() {
 	for {
+		// try receive first
+		select {
+		case f := <-p.ch:
+			f()
+			continue
+		default:
+		}
+
 		have := p.workers.Load()
 		if have > int64(p.minWorkers) {
 			// we might want to exit, receive with timeout
@@ -137,4 +152,9 @@ func (p *AdaptivePool) work() {
 			f()
 		}
 	}
+}
+
+// NumWorkers returns the current number of workers. Probably only useful for testing.
+func (p *AdaptivePool) NumWorkers() int {
+	return int(p.workers.Load())
 }

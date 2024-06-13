@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/internal/goro"
 )
@@ -69,7 +70,8 @@ func TestAdaptivePool_Grows(t *testing.T) {
 	}()
 
 	// wait for goroutine to block in Do
-	time.Sleep(10 * time.Millisecond)
+	// there should be one timer
+	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
 
 	select {
 	case <-doneCh:
@@ -78,8 +80,12 @@ func TestAdaptivePool_Grows(t *testing.T) {
 	default:
 	}
 
+	assert.Equal(t, 5, p.NumWorkers()) // still 5 here
+
 	ts.Advance(15 * time.Millisecond)
 	<-doneCh
+
+	assert.Equal(t, 6, p.NumWorkers()) // now 6 here
 }
 
 func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
@@ -105,6 +111,7 @@ func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
 	}()
 
 	// wait for goroutine to block in Do
+	// we can't use NumTimers since it doesn't create a timer
 	time.Sleep(10 * time.Millisecond)
 
 	select {
@@ -118,6 +125,8 @@ func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
 	<-interruptCh
 	// wait for sixth
 	<-doneCh
+
+	assert.Equal(t, 5, p.NumWorkers()) // still 5
 }
 
 func TestAdaptivePool_ShrinksAgain(t *testing.T) {
@@ -130,15 +139,19 @@ func TestAdaptivePool_ShrinksAgain(t *testing.T) {
 	// make 3 calls to force it to grow to 3 workers
 	p.Do(block)
 
-	go p.Do(block)
-	time.Sleep(10 * time.Millisecond) // wait until blocked
+	syncCh := make(chan struct{}, 10)
+	go p.Do(func() { syncCh <- struct{}{}; block() })
+	// wait for goroutine to block in Do
+	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
 	ts.Advance(10 * time.Millisecond) // allow it to start another
-	time.Sleep(10 * time.Millisecond) // wait for it to start + call blck
+	<-syncCh                          // wait for it to call the function
 
-	go p.Do(nothing)
-	time.Sleep(10 * time.Millisecond) // wait until blocked
+	go p.Do(func() { syncCh <- struct{}{} })
+	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
 	ts.Advance(10 * time.Millisecond) // allow it to start another
-	time.Sleep(10 * time.Millisecond) // wait for it to start + call nothing + return
+	<-syncCh                          // wait for it to call the function
+
+	assert.Equal(t, 3, p.NumWorkers())
 
 	// now there are 3 workers with one free, another call or three should start immediately
 	p.Do(nothing)
@@ -146,27 +159,9 @@ func TestAdaptivePool_ShrinksAgain(t *testing.T) {
 	p.Do(nothing)
 
 	// after no more than 10ms, the free worker should exit
-	time.Sleep(10 * time.Millisecond) // wait until blocked
+	// wait until worker is blocked on timer
+	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
 	ts.Advance(20 * time.Millisecond) // let timer fire
-	time.Sleep(10 * time.Millisecond) // wait until exits
-
-	// next call will have to wait for targetDelay
-	doneCh := make(chan struct{})
-	go func() {
-		p.Do(block)
-		doneCh <- struct{}{}
-	}()
-
-	// wait for goroutine to block in Do
-	time.Sleep(10 * time.Millisecond)
-
-	select {
-	case <-doneCh:
-		t.Error("should be blocked")
-		return
-	default:
-	}
-
-	ts.Advance(10 * time.Millisecond)
-	<-doneCh
+	// wait for worker to exit
+	assert.Eventually(t, func() bool { return p.NumWorkers() == 2 }, time.Second, time.Millisecond)
 }
