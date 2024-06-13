@@ -335,5 +335,6 @@ func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm
 	return hsm.Ref{
 		WorkflowKey:     taskWorkflowKey(task),
 		StateMachineRef: cbt.Info.Ref,
+		TaskID:          task.GetTaskID(),
 	}, smt, nil
 }

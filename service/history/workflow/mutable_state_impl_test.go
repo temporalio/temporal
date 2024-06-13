@@ -159,12 +159,14 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
+	s.mockConfig.EnableTransitionHistory = func() bool { return true }
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
 	namespaceEntry := tests.GlobalNamespaceEntry
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
@@ -1589,7 +1591,6 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-
 			dbState := s.buildWorkflowMutableState()
 			if tc.dbStateMutationFn != nil {
 				tc.dbStateMutationFn(dbState)
