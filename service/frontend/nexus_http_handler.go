@@ -125,7 +125,7 @@ func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
 		HandlerFunc(h.dispatchNexusTaskByEndpoint)
 }
 
-func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusCode int, failure *nexus.Failure) {
+func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusCode int, failureSource string, failure *nexus.Failure) {
 	h.preprocessErrorCounter.Record(1)
 
 	if failure == nil {
@@ -136,10 +136,12 @@ func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusC
 	bytes, err := json.Marshal(failure)
 	if err != nil {
 		h.logger.Error("failed to marshal failure", tag.Error(err))
+		writer.Header().Set(failureSourceHeaderName, failureSourceServer)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set(failureSourceHeaderName, failureSource)
 	writer.WriteHeader(statusCode)
 
 	if _, err := writer.Write(bytes); err != nil {
@@ -150,7 +152,7 @@ func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusC
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByNamespaceAndTaskQueue].
 func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.ResponseWriter, r *http.Request) {
 	if !h.enabled() {
-		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
+		h.writeNexusFailure(w, http.StatusNotFound, failureSourceClient, &nexus.Failure{Message: "nexus endpoints disabled"})
 		return
 	}
 
@@ -160,41 +162,41 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 
 	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
+		h.writeNexusFailure(w, http.StatusBadRequest, failureSourceClient, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
 	if nc.namespaceName, err = url.PathUnescape(params.Namespace); err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
+		h.writeNexusFailure(w, http.StatusBadRequest, failureSourceClient, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
 	if err = h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
 		h.logger.Error("invalid namespace name", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: err.Error()})
+		h.writeNexusFailure(w, http.StatusBadRequest, failureSourceClient, &nexus.Failure{Message: err.Error()})
 		return
 	}
 
-	r, err = h.parseTlsAndAuthInfo(r, &nc)
+	r, err = h.parseTlsAndAuthInfo(r, nc)
 	if err != nil {
 		h.logger.Error("failed to get claims", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusUnauthorized, &nexus.Failure{Message: "unauthorized"})
+		h.writeNexusFailure(w, http.StatusUnauthorized, failureSourceClient, &nexus.Failure{Message: "unauthorized"})
 		return
 	}
 
 	u, err := mux.CurrentRoute(r).URL("namespace", params.Namespace, "task_queue", params.TaskQueue)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+		h.writeNexusFailure(w, http.StatusInternalServerError, failureSourceServer, &nexus.Failure{Message: "internal error"})
 		return
 	}
 
-	h.serveResolvedURL(w, r, u)
+	h.serveResolvedURL(w, r, u, nc)
 }
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
 func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
 	if !h.enabled() {
-		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
+		h.writeNexusFailure(w, http.StatusNotFound, failureSourceClient, &nexus.Failure{Message: "nexus endpoints disabled"})
 		return
 	}
 
@@ -203,7 +205,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 	endpointID, err := url.PathUnescape(endpointIDEscaped)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
+		h.writeNexusFailure(w, http.StatusBadRequest, failureSourceClient, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
 	endpointEntry, err := h.enpointRegistry.GetByID(r.Context(), endpointID)
@@ -215,11 +217,11 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		}
 		switch s.Code() {
 		case codes.NotFound:
-			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoint not found"})
+			h.writeNexusFailure(w, http.StatusNotFound, failureSourceClient, &nexus.Failure{Message: "nexus endpoint not found"})
 		case codes.DeadlineExceeded:
-			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out"})
+			h.writeNexusFailure(w, http.StatusRequestTimeout, failureSourceServer, &nexus.Failure{Message: "request timed out"})
 		default:
-			h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+			h.writeNexusFailure(w, http.StatusInternalServerError, failureSourceServer, &nexus.Failure{Message: "internal error"})
 		}
 		return
 	}
@@ -230,31 +232,32 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		return
 	}
 
-	r, err = h.parseTlsAndAuthInfo(r, &nc)
+	r, err = h.parseTlsAndAuthInfo(r, nc)
 	if err != nil {
 		h.logger.Error("failed to get claims", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusUnauthorized, &nexus.Failure{Message: "unauthorized"})
+		h.writeNexusFailure(w, http.StatusUnauthorized, failureSourceClient, &nexus.Failure{Message: "unauthorized"})
 		return
 	}
 
 	u, err := mux.CurrentRoute(r).URL("endpoint", endpointIDEscaped)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+		h.writeNexusFailure(w, http.StatusInternalServerError, failureSourceServer, &nexus.Failure{Message: "internal error"})
 		return
 	}
 
-	h.serveResolvedURL(w, r, u)
+	h.serveResolvedURL(w, r, u, nc)
 }
 
-func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
-	return nexusContext{
+func (h *NexusHTTPHandler) baseNexusContext(apiName string) *nexusContext {
+	return &nexusContext{
 		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
 		apiName:                              apiName,
 		requestStartTime:                     time.Now(),
+		responseHeaders:                      make(map[string]string),
 	}
 }
 
@@ -262,7 +265,7 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
 // endpoint is valid for dispatching.
 // For security reasons, at the moment only worker target endpoints are considered valid, in the future external
 // endpoints may also be supported.
-func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter) (nexusContext, bool) {
+func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter) (*nexusContext, bool) {
 	switch v := entry.Endpoint.Spec.GetTarget().GetVariant().(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
@@ -270,11 +273,11 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 			h.logger.Error("failed to get namespace name by ID", tag.Error(err))
 			var notFoundErr *serviceerror.NotFound
 			if errors.As(err, &notFoundErr) {
-				h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
+				h.writeNexusFailure(w, http.StatusBadRequest, failureSourceClient, &nexus.Failure{Message: "invalid endpoint target"})
 			} else {
-				h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+				h.writeNexusFailure(w, http.StatusInternalServerError, failureSourceServer, &nexus.Failure{Message: "internal error"})
 			}
-			return nexusContext{}, false
+			return &nexusContext{}, false
 		}
 		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName)
 		nc.namespaceName = nsName.String()
@@ -282,8 +285,8 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 		nc.endpointName = entry.Endpoint.Spec.Name
 		return nc, true
 	default:
-		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
-		return nexusContext{}, false
+		h.writeNexusFailure(w, http.StatusBadRequest, failureSourceClient, &nexus.Failure{Message: "invalid endpoint target"})
+		return &nexusContext{}, false
 	}
 }
 
@@ -320,15 +323,19 @@ func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext
 		r = r.WithContext(h.auth.EnhanceContext(r.Context(), authInfo, nc.claims))
 	}
 
-	return r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, *nc)), nil
+	return r, nil
 }
 
-func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL) {
+func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL, nc *nexusContext) {
+	// Attach Nexus context to response writer and request context.
+	w = newNexusResponseWriter(w, nc)
+	r = r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, *nc))
+
 	// This whole mess is required to support escaped path vars.
 	prefix, err := url.PathUnescape(u.Path)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+		h.writeNexusFailure(w, http.StatusInternalServerError, failureSourceServer, &nexus.Failure{Message: "internal error"})
 		return
 	}
 	prefix = path.Dir(prefix)
