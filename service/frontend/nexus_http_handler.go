@@ -275,7 +275,7 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 			} else {
 				h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
 			}
-			return &nexusContext{}, false
+			return nil, false
 		}
 		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName)
 		nc.namespaceName = nsName.String()
@@ -284,7 +284,7 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 		return nc, true
 	default:
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
-		return &nexusContext{}, false
+		return nil, false
 	}
 }
 
