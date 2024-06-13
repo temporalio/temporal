@@ -35,29 +35,29 @@ const (
 	failureSourceClient = "CLIENT"
 )
 
-// nexusResponseWriter is a wrapper for http.ResponseWriter that appends headers set on a nexusContext
+// nexusHTTPResponseWriter is a wrapper for http.ResponseWriter that appends headers set on a nexusContext
 // before writing any response.
-type nexusResponseWriter struct {
+type nexusHTTPResponseWriter struct {
 	writer http.ResponseWriter
 	nc     *nexusContext
 }
 
-func newNexusResponseWriter(writer http.ResponseWriter, nc *nexusContext) http.ResponseWriter {
-	return &nexusResponseWriter{
+func newNexusHTTPResponseWriter(writer http.ResponseWriter, nc *nexusContext) http.ResponseWriter {
+	return &nexusHTTPResponseWriter{
 		writer: writer,
 		nc:     nc,
 	}
 }
 
-func (w *nexusResponseWriter) Header() http.Header {
+func (w *nexusHTTPResponseWriter) Header() http.Header {
 	return w.writer.Header()
 }
 
-func (w *nexusResponseWriter) Write(data []byte) (int, error) {
+func (w *nexusHTTPResponseWriter) Write(data []byte) (int, error) {
 	return w.writer.Write(data)
 }
 
-func (w *nexusResponseWriter) WriteHeader(statusCode int) {
+func (w *nexusHTTPResponseWriter) WriteHeader(statusCode int) {
 	h := w.writer.Header()
 	for key, val := range w.nc.responseHeaders {
 		h.Set(key, val)
