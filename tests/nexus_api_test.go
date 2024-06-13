@@ -174,7 +174,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
 				require.Equal(t, nexus.StatusDownstreamTimeout, unexpectedError.Response.StatusCode)
-				require.Equal(t, "CLIENT", unexpectedError.Response.Header.Get("Failure-Source"))
 				require.Equal(t, "downstream timeout", unexpectedError.Failure.Message)
 			},
 		},
@@ -263,7 +262,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	var unexpectedResponse *nexus.UnexpectedResponseError
 	s.ErrorAs(err, &unexpectedResponse)
 	s.Equal(http.StatusNotFound, unexpectedResponse.Response.StatusCode)
-	s.Equal("CLIENT", unexpectedResponse.Response.Header.Get("Failure-Source"))
 	s.Equal(fmt.Sprintf("namespace not found: %q", namespace), unexpectedResponse.Failure.Message)
 
 	snap := capture.Snapshot()
@@ -291,7 +289,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	var unexpectedResponse *nexus.UnexpectedResponseError
 	s.ErrorAs(err, &unexpectedResponse)
 	s.Equal(http.StatusBadRequest, unexpectedResponse.Response.StatusCode)
-	s.Equal("CLIENT", unexpectedResponse.Response.Header.Get("Failure-Source"))
 	// I wish we'd never put periods in error messages :(
 	s.Equal("Namespace length exceeds limit.", unexpectedResponse.Failure.Message)
 
@@ -378,7 +375,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 		var unexpectedResponse *nexus.UnexpectedResponseError
 		require.ErrorAs(t, err, &unexpectedResponse)
 		require.Equal(t, http.StatusForbidden, unexpectedResponse.Response.StatusCode)
-		require.Equal(t, "CLIENT", unexpectedResponse.Response.Header.Get("Failure-Source"))
 		require.Equal(t, tc.failureMessage, unexpectedResponse.Failure.Message)
 
 		snap := capture.Snapshot()
@@ -420,7 +416,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 				var unexpectedResponse *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedResponse)
 				require.Equal(t, http.StatusForbidden, unexpectedResponse.Response.StatusCode)
-				require.Equal(t, "CLIENT", unexpectedResponse.Response.Header.Get("Failure-Source"))
 				require.Equal(t, "permission denied", unexpectedResponse.Failure.Message)
 				require.Equal(t, 0, len(snap["nexus_request_preprocess_errors"]))
 			},
@@ -434,7 +429,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 				var unexpectedResponse *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedResponse)
 				require.Equal(t, http.StatusUnauthorized, unexpectedResponse.Response.StatusCode)
-				require.Equal(t, "CLIENT", unexpectedResponse.Response.Header.Get("Failure-Source"))
 				require.Equal(t, "unauthorized", unexpectedResponse.Failure.Message)
 				require.Equal(t, 1, len(snap["nexus_request_preprocess_errors"]))
 			},
@@ -548,7 +542,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_PayloadSizeLimit() {
 		var unexpectedError *nexus.UnexpectedResponseError
 		require.ErrorAs(t, err, &unexpectedError)
 		require.Equal(t, http.StatusBadRequest, unexpectedError.Response.StatusCode)
-		require.Equal(t, "CLIENT", unexpectedError.Response.Header.Get("Failure-Source"))
 		require.Equal(t, "input exceeds size limit", unexpectedError.Failure.Message)
 	}
 
@@ -623,7 +616,6 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
 				require.Equal(t, nexus.StatusDownstreamTimeout, unexpectedError.Response.StatusCode)
-				require.Equal(t, "CLIENT", unexpectedError.Response.Header.Get("Failure-Source"))
 				require.Equal(t, "downstream timeout", unexpectedError.Failure.Message)
 			},
 		},
@@ -770,7 +762,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFo
 	var unexpectedResponse *nexus.UnexpectedResponseError
 	s.ErrorAs(err, &unexpectedResponse)
 	s.Equal(http.StatusNotFound, unexpectedResponse.Response.StatusCode)
-	s.Equal("CLIENT", unexpectedResponse.Response.Header.Get("Failure-Source"))
 	s.Equal("nexus endpoint not found", unexpectedResponse.Failure.Message)
 	snap := capture.Snapshot()
 	s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
