@@ -33,6 +33,8 @@ import "unicode/utf8"
 func TruncateUTF8(s string, n int) string {
 	if len(s) <= n {
 		return s
+	} else if n <= 0 {
+		return ""
 	}
 	for n > 0 && !utf8.RuneStart(s[n]) {
 		n--

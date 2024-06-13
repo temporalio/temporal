@@ -42,17 +42,21 @@ func TestTruncate(t *testing.T) {
 		}},
 	}
 
-	newFailure := Truncate(f, 10)
+	maxSize := 18
+	newFailure := Truncate(f, maxSize)
+	assert.LessOrEqual(newFailure.Size(), maxSize)
 	assert.Len(newFailure.Message, 5)
 	assert.Equal(f.Source, newFailure.Source)
 	assert.NotNil(newFailure.GetServerFailureInfo())
 	assert.True(newFailure.GetServerFailureInfo().GetNonRetryable())
 
 	f.StackTrace = "some stack trace"
-	newFailure = Truncate(f, len(f.Message)+len(f.Source)+4)
+	maxSize = len(f.Message) + len(f.Source) + 19
+	newFailure = Truncate(f, maxSize)
+	assert.LessOrEqual(newFailure.Size(), maxSize)
 	assert.Equal(f.Message, newFailure.Message)
 	assert.Equal(f.Source, newFailure.Source)
-	assert.Len(newFailure.StackTrace, 4)
+	assert.Equal("some st", newFailure.StackTrace)
 	assert.NotNil(newFailure.GetServerFailureInfo())
 	assert.True(newFailure.GetServerFailureInfo().GetNonRetryable())
 
@@ -72,8 +76,8 @@ func TestTruncateUTF8(t *testing.T) {
 			NonRetryable: true,
 		}},
 	}
-	assert.Equal(t, "\u2299 very \u229a", Truncate(f, 16).Message)
-	assert.Equal(t, "\u2299 very ", Truncate(f, 15).Message)
+	assert.Equal(t, "\u2299 very \u229a", Truncate(f, 24).Message)
+	assert.Equal(t, "\u2299 very ", Truncate(f, 23).Message)
 }
 
 func TestTruncateDepth(t *testing.T) {
@@ -96,10 +100,12 @@ func TestTruncateDepth(t *testing.T) {
 	trunc := TruncateWithDepth(f, 1000, 3)
 	assert.Nil(t, trunc.Cause.Cause.Cause.Cause)
 
-	trunc = TruncateWithDepth(f, 17, 100)
+	trunc = TruncateWithDepth(f, 33, 100)
+	assert.LessOrEqual(t, trunc.Size(), 33)
 	assert.Nil(t, trunc.Cause.Cause.Cause)
 	assert.Equal(t, "lev", trunc.Cause.Cause.Message)
 
-	trunc = TruncateWithDepth(f, 14, 100)
+	trunc = TruncateWithDepth(f, 30, 100)
+	assert.LessOrEqual(t, trunc.Size(), 30)
 	assert.Nil(t, trunc.Cause.Cause)
 }

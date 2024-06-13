@@ -83,30 +83,33 @@ func TruncateWithDepth(f *failurepb.Failure, maxSize, maxDepth int) *failurepb.F
 	trunc := func(s string) string {
 		s = util.TruncateUTF8(s, maxSize)
 		maxSize -= len(s)
+		if s != "" {
+			maxSize -= 4 // account for proto overhead
+		}
 		return s
 	}
 
 	newFailure := &failurepb.Failure{}
 
 	// Keep failure info for ApplicationFailureInfo and for ServerFailureInfo to persist NonRetryable flag.
-	if f.GetApplicationFailureInfo() != nil {
+	if i := f.GetApplicationFailureInfo(); i != nil {
 		newFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			NonRetryable: f.GetApplicationFailureInfo().GetNonRetryable(),
-			Type:         trunc(f.GetApplicationFailureInfo().GetType()),
+			NonRetryable: i.NonRetryable,
+			Type:         trunc(i.Type),
 		}}
-	}
-
-	if f.GetServerFailureInfo() != nil {
+		maxSize -= 8 // account for proto overhead
+	} else if i := f.GetServerFailureInfo(); i != nil {
 		newFailure.FailureInfo = &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
-			NonRetryable: f.GetServerFailureInfo().GetNonRetryable(),
+			NonRetryable: i.NonRetryable,
 		}}
+		maxSize -= 4 // account for proto overhead
 	}
 
 	newFailure.Source = trunc(f.Source)
 	newFailure.Message = trunc(f.Message)
 	newFailure.StackTrace = trunc(f.StackTrace)
-	if f.Cause != nil && maxSize > 0 && maxDepth > 0 {
-		newFailure.Cause = TruncateWithDepth(f.Cause, maxSize, maxDepth-1)
+	if f.Cause != nil && maxSize > 4 && maxDepth > 0 {
+		newFailure.Cause = TruncateWithDepth(f.Cause, maxSize-4, maxDepth-1)
 	}
 
 	return newFailure
