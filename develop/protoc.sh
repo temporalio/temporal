@@ -23,9 +23,9 @@ color "Run goimports for proto files..."
 $GOIMPORTS -w "$new"
 
 color "Generate proto mocks..."
-for src in $(find "$new" -name service.pb.go -o -name service_grpc.pb.go); do
+find "$new" -name service.pb.go -o -name service_grpc.pb.go | while read -r src; do
   dst=$(echo "$src" | sed -e 's,service/,servicemock/,' -e 's,[.]go$,.mock.go,')
-  pkg=$(basename $(dirname $(dirname "$dst")))
+  pkg=$(basename "$(dirname "$(dirname "$dst")")")
   $MOCKGEN -copyright_file LICENSE -package "$pkg" -source "$src" -destination "$dst"
   # Since we're generating mocks from files in incorrect locations, mockgen
   # writes incorrect imports. Fix them manually. The awkward sed/rm invocation
