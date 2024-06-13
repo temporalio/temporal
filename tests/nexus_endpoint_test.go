@@ -34,7 +34,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
@@ -727,7 +726,7 @@ func (s *OperatorSuite) TestCreate() {
 			},
 		},
 		{
-			name: "invalid: summary too large",
+			name: "invalid: description too large",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
 					Name: s.randomizeStr(s.T().Name()),
@@ -739,41 +738,14 @@ func (s *OperatorSuite) TestCreate() {
 							},
 						},
 					},
-					Metadata: &sdk.UserMetadata{
-						Summary: &common.Payload{
-							Data: make([]byte, 401),
-						},
+					Description: &common.Payload{
+						Data: make([]byte, 20001),
 					},
 				},
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "summary size exceeds limit of 400")
-			},
-		},
-		{
-			name: "invalid: details too large",
-			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.namespace,
-								TaskQueue: s.defaultTaskQueue().Name,
-							},
-						},
-					},
-					Metadata: &sdk.UserMetadata{
-						Details: &common.Payload{
-							Data: make([]byte, 20001),
-						},
-					},
-				},
-			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
-				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "details size exceeds limit of 20000")
+				s.ErrorContains(err, "description size exceeds limit of 20000")
 			},
 		},
 	}

@@ -57,10 +57,6 @@ var retryable4xxErrorTypes = []int{
 
 type ClientProvider func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error)
 
-// EndpointChecker checks if an endpoint exists, should return serviceerror.NotFound if the endpoint does not exist or
-// any other error to indicate lookup has failed.
-type EndpointChecker func(ctx context.Context, namespaceName, endpointName string) error
-
 type TaskExecutorOptions struct {
 	fx.In
 
@@ -69,7 +65,7 @@ type TaskExecutorOptions struct {
 	MetricsHandler         metrics.Handler
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
-	EndpointChecker        EndpointChecker
+	EndpointRegistry       commonnexus.EndpointRegistry
 }
 
 func RegisterExecutor(
@@ -116,7 +112,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	if err := e.EndpointChecker(ctx, ns.Name().String(), task.Destination); err != nil {
+	if _, err := e.EndpointRegistry.GetByID(ctx, task.Destination); err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
@@ -169,6 +165,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// Reset the machine transition count to 0 so it is ignored in the completion staleness check.
 	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
 	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
+	smRef.MachineLastUpdateMutableStateTransitionCount = 0
 	smRef.MachineTransitionCount = 0
 
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
@@ -428,7 +425,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	if err := e.EndpointChecker(ctx, ns.Name().String(), task.Destination); err != nil {
+	if _, err := e.EndpointRegistry.GetByID(ctx, task.Destination); err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveCancelationResult(ctx, env, ref, &nexus.UnexpectedResponseError{
