@@ -514,6 +514,11 @@ is currently processing a task.
 		4*1024,
 		`NexusEndpointExternalURLMaxLength is the maximum length of a Nexus endpoint external target URL.`,
 	)
+	NexusEndpointDescriptionMaxSize = NewNamespaceIntSetting(
+		"limit.endpointDescriptionMaxSize",
+		20000,
+		`Maximum size of Nexus Endpoint description payload in bytes including data and metadata.`,
+	)
 	NexusEndpointListDefaultPageSize = NewGlobalIntSetting(
 		"limit.endpointListDefaultPageSize",
 		100,
