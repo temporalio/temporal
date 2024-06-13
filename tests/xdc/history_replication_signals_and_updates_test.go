@@ -135,7 +135,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationStream.Key():                            true,
 		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
 	}
-	s.logger = log.NewNoopLogger()
+	// s.logger = log.NewNoopLogger()
 	s.setupSuite(
 		[]string{"cluster1", "cluster2"},
 		tests.WithFxOptionsForService(primitives.WorkerService,
@@ -165,7 +165,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 }
 
 func (s *hrsuTestSuite) SetupTest() {
-	s.setupTest()
+	s.setupTest(false)
 }
 
 func (s *hrsuTestSuite) TearDownSuite() {
@@ -625,6 +625,7 @@ func (t *hrsuTest) executeNamespaceReplicationTasksUntil(ctx context.Context, op
 		task := <-t.namespaceReplicationTasks
 		err := t.s.namespaceTaskExecutor.Execute(ctx, task)
 		t.s.NoError(err)
+		t.s.logger.Info(fmt.Sprintf("Executed namespace task %+v", task))
 		if task.NamespaceOperation == operation {
 			return
 		}
@@ -639,7 +640,9 @@ func (c *hrsuTestCluster) executeHistoryReplicationTasksUntil(
 	for {
 		task := <-c.inboundHistoryReplicationTasks
 		events := c.t.s.executeHistoryReplicationTask(task)
+		c.t.s.logger.Info(fmt.Sprintf("Executed history task %+v", task))
 		for _, event := range events {
+			c.t.s.logger.Info(fmt.Sprintf("Executed history event %+v", event))
 			if event.GetEventType() == eventType {
 				return
 			}

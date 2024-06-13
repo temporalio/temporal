@@ -26,6 +26,7 @@ package ndc
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -276,6 +277,8 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 			releaseFn(retError)
 		}
 	}()
+
+	task.getLogger().Debug(fmt.Sprintf("REMOVEME doApplyEvents replication task, events %v", task.getEvents()))
 
 	switch task.getFirstEvent().GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:

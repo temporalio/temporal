@@ -72,7 +72,7 @@ func (s *NexusRequestForwardingSuite) SetupSuite() {
 }
 
 func (s *NexusRequestForwardingSuite) SetupTest() {
-	s.setupTest()
+	s.setupTest(true)
 }
 
 func (s *NexusRequestForwardingSuite) TearDownSuite() {
