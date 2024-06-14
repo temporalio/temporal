@@ -1,3 +1,25 @@
+// The MIT License
+//
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package persistence
 
 import (
@@ -7,12 +29,13 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func TestDLQMetricsEmitter_EmitMetrics(t *testing.T) {
+func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -42,8 +65,12 @@ func TestDLQMetricsEmitter_EmitMetrics(t *testing.T) {
 		},
 		NextPageToken: nil,
 	}, nil).Times(1)
+	resolver := membership.NewMockServiceResolver(ctrl)
+	resolver.EXPECT().Lookup("0").Return(membership.NewHostInfoFromAddress("testAddress"), nil).Times(1)
+	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
+	hostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("testAddress")).Times(1)
 
-	emitter := NewDLQMetricsEmitter(metricsHandler, logger, manager)
+	emitter := NewDLQMetricsEmitter(metricsHandler, logger, manager, resolver, hostInfoProvider)
 	emitter.emitMetricsTimer = time.NewTicker(60 * time.Millisecond)
 	logger.EXPECT().Info(gomock.Any()).AnyTimes()
 	logger.EXPECT().Error(gomock.Any()).AnyTimes()
@@ -65,4 +92,32 @@ func TestDLQMetricsEmitter_EmitMetrics(t *testing.T) {
 	assert.Equal(t, float64(9), messageCount[tasks.CategoryIDToName[tasks.CategoryIDTransfer]])
 	assert.Equal(t, float64(11), messageCount[tasks.CategoryIDToName[tasks.CategoryIDTimer]])
 	assert.Equal(t, float64(13), messageCount[tasks.CategoryIDToName[tasks.CategoryIDReplication]])
+}
+
+func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardZero(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	logger := log.NewMockLogger(ctrl)
+	manager := NewMockHistoryTaskQueueManager(ctrl)
+
+	resolver := membership.NewMockServiceResolver(ctrl)
+	resolver.EXPECT().Lookup("0").Return(membership.NewHostInfoFromAddress("testAddress1"), nil).MinTimes(1)
+	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
+	hostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("testAddress2")).MinTimes(1)
+
+	emitter := NewDLQMetricsEmitter(metricsHandler, logger, manager, resolver, hostInfoProvider)
+	emitter.emitMetricsTimer = time.NewTicker(time.Millisecond)
+	logger.EXPECT().Info(gomock.Any()).AnyTimes()
+	logger.EXPECT().Error(gomock.Any()).AnyTimes()
+
+	emitter.Start()
+	time.Sleep(100 * time.Millisecond) //nolint
+	emitter.Stop()
+	<-emitter.shutdownCh
+
+	snapshot := capture.Snapshot()
+	assert.Empty(t, snapshot[metrics.DLQMessageCount.Name()])
 }

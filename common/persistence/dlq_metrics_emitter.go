@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +30,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -40,6 +39,9 @@ const (
 	emitDLQMetricsInterval = 1 * time.Hour
 )
 
+// DLQMetricsEmitter emits the number of messages in DLQ in each task category.
+// This only has to be emitted from one history service instance. For this, DLQMetricsEmitter will only emit metrics
+// if the history service it currently run hosts shard 0.
 type (
 	DLQMetricsEmitter struct {
 		status                  int32
@@ -48,6 +50,8 @@ type (
 		logger                  log.Logger
 		emitMetricsTimer        *time.Ticker
 		historyTaskQueueManager HistoryTaskQueueManager
+		historyServiceResolver  membership.ServiceResolver
+		hostInfoProvider        membership.HostInfoProvider
 	}
 )
 
@@ -55,6 +59,8 @@ func NewDLQMetricsEmitter(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	manager HistoryTaskQueueManager,
+	historyServiceResolver membership.ServiceResolver,
+	hostInfoProvider membership.HostInfoProvider,
 ) *DLQMetricsEmitter {
 	return &DLQMetricsEmitter{
 		status:                  common.DaemonStatusInitialized,
@@ -63,6 +69,8 @@ func NewDLQMetricsEmitter(
 		emitMetricsTimer:        time.NewTicker(emitDLQMetricsInterval),
 		logger:                  logger,
 		historyTaskQueueManager: manager,
+		historyServiceResolver:  historyServiceResolver,
+		hostInfoProvider:        hostInfoProvider,
 	}
 }
 
@@ -87,6 +95,9 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 		case <-s.shutdownCh:
 			return
 		case <-s.emitMetricsTimer.C:
+			if !s.shouldEmitMetrics() {
+				continue
+			}
 			messageCounts := make(map[int]int64)
 			queues, err := s.getDLQList()
 			if err != nil {
@@ -124,4 +135,21 @@ func (s *DLQMetricsEmitter) getDLQList() ([]QueueInfo, error) {
 			return queues, nil
 		}
 	}
+}
+
+// shouldEmitMetrics determines if DLQMetricsEmitter should emit metrics. It returns true only if this instance of
+// history service is hosting shard 0.
+func (s *DLQMetricsEmitter) shouldEmitMetrics() bool {
+	ownerInfo, err := s.historyServiceResolver.Lookup("0")
+	if err != nil {
+		s.logger.Error("Failed to get the history service hosting shard 0")
+		return false
+	}
+
+	hostInfo := s.hostInfoProvider.HostInfo()
+	if ownerInfo.Identity() == hostInfo.Identity() {
+		return true
+	}
+
+	return false
 }
