@@ -594,12 +594,10 @@ func (s *subscriptionSuite) TestSubscriptionWithDefault() {
 
 	vals := make(chan int, 1)
 	init, _ := setting.Subscribe(s.cln)(func(n int) { vals <- n })
-
 	s.Equal(50, init)
 
 	// remove, should get default
 	s.client.Set(setting.Key(), nil)
-
 	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
 	s.Equal(100, <-vals)
 }

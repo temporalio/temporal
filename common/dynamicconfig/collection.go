@@ -68,11 +68,13 @@ type (
 	}
 
 	subscription[T any] struct {
-		prec []Constraints              // constant
-		f    func(T)                    // constant
-		def  T                          // constant
-		cdef []TypedConstrainedValue[T] // constant
-		prev T                          // protected by subscriptionLock in Collection
+		// constant:
+		prec []Constraints
+		f    func(T)
+		def  T
+		cdef *[]TypedConstrainedValue[T]
+		// protected by subscriptionLock in Collection:
+		prev T
 	}
 
 	subscriptionCallbackSettings struct {
@@ -228,7 +230,7 @@ func matchAndConvert[T any](
 	c *Collection,
 	key Key,
 	def T,
-	cdef []TypedConstrainedValue[T],
+	cdef *[]TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	precedence []Constraints,
 ) T {
@@ -240,13 +242,15 @@ func matchAndConvertCvs[T any](
 	c *Collection,
 	key Key,
 	def T,
-	cdef []TypedConstrainedValue[T],
+	cdef *[]TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	precedence []Constraints,
 	cvs []ConstrainedValue,
 ) T {
-	defaultCVs := cdef
-	if defaultCVs == nil {
+	var defaultCVs []TypedConstrainedValue[T]
+	if cdef != nil {
+		defaultCVs = *cdef
+	} else {
 		defaultCVs = []TypedConstrainedValue[T]{{Value: def}}
 	}
 
@@ -280,7 +284,7 @@ func subscribe[T any](
 	c *Collection,
 	key Key,
 	def T,
-	cdef []TypedConstrainedValue[T],
+	cdef *[]TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	prec []Constraints,
 	callback func(T),

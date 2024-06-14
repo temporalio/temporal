@@ -753,7 +753,7 @@ func NewGlobalTypedSettingWithConverter[T any](key Key, convert func(any) (T, er
 func NewGlobalTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) GlobalTypedSetting[T] {
 	s := GlobalTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -846,7 +846,7 @@ func NewNamespaceTypedSettingWithConverter[T any](key Key, convert func(any) (T,
 func NewNamespaceTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) NamespaceTypedSetting[T] {
 	s := NamespaceTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -939,7 +939,7 @@ func NewNamespaceIDTypedSettingWithConverter[T any](key Key, convert func(any) (
 func NewNamespaceIDTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) NamespaceIDTypedSetting[T] {
 	s := NamespaceIDTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -1032,7 +1032,7 @@ func NewTaskQueueTypedSettingWithConverter[T any](key Key, convert func(any) (T,
 func NewTaskQueueTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) TaskQueueTypedSetting[T] {
 	s := TaskQueueTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -1125,7 +1125,7 @@ func NewShardIDTypedSettingWithConverter[T any](key Key, convert func(any) (T, e
 func NewShardIDTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) ShardIDTypedSetting[T] {
 	s := ShardIDTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -1218,7 +1218,7 @@ func NewTaskTypeTypedSettingWithConverter[T any](key Key, convert func(any) (T, 
 func NewTaskTypeTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) TaskTypeTypedSetting[T] {
 	s := TaskTypeTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -1311,7 +1311,7 @@ func NewDestinationTypedSettingWithConverter[T any](key Key, convert func(any) (
 func NewDestinationTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) DestinationTypedSetting[T] {
 	s := DestinationTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}

@@ -165,7 +165,7 @@ func New{{.P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (
 func New{{.P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{.P.Name}}TypedSetting[T] {
 	s := {{.P.Name}}TypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}

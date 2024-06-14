@@ -40,7 +40,7 @@ type (
 	setting[T any, P any] struct {
 		key         Key // string value of key. case-insensitive.
 		def         T   // default value. cdef is used in preference to def if non-nil.
-		cdef        []TypedConstrainedValue[T]
+		cdef        *[]TypedConstrainedValue[T]
 		convert     func(any) (T, error) // converter function
 		description string               // documentation
 	}
