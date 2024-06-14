@@ -1510,21 +1510,26 @@ func (adh *AdminHandler) ResendReplicationTasks(
 			events [][]*historypb.HistoryEvent,
 			versionHistory []*historyspb.VersionHistoryItem,
 		) error {
-			historyBlob, err1 := adh.eventSerializer.SerializeEvents(events[0], enumspb.ENCODING_TYPE_PROTO3)
-			if err1 != nil {
-				return err1
+			for _, event := range events {
+				historyBlob, err1 := adh.eventSerializer.SerializeEvents(event, enumspb.ENCODING_TYPE_PROTO3)
+				if err1 != nil {
+					return err1
+				}
+				replicateRequest := &historyservice.ReplicateEventsV2Request{
+					NamespaceId: namespaceId.String(),
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: workflowId,
+						RunId:      runId,
+					},
+					Events:              historyBlob,
+					VersionHistoryItems: versionHistory,
+				}
+				_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
+				if err1 != nil {
+					return err1
+				}
 			}
-			replicateRequest := &historyservice.ReplicateEventsV2Request{
-				NamespaceId: namespaceId.String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowId,
-					RunId:      runId,
-				},
-				Events:              historyBlob,
-				VersionHistoryItems: versionHistory,
-			}
-			_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
-			return err1
+			return nil
 		},
 		adh.eventSerializer,
 		nil,
