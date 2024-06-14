@@ -280,7 +280,8 @@ func subscribe[T any](
 	def T,
 	cdef []TypedConstrainedValue[T],
 	convert func(value any) (T, error),
-	sub *subscription[T],
+	prec []Constraints,
+	callback func(T),
 ) (T, func()) {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
@@ -291,13 +292,17 @@ func subscribe[T any](
 	if c.subscriptions[key] == nil {
 		c.subscriptions[key] = make(map[int]any)
 	}
-	c.subscriptions[key][id] = sub
 
 	// get and return one value immediately (note that subscriptionLock is held here so we
 	// can't race with an update)
-	sub.prev = matchAndConvert(c, key, def, cdef, convert, sub.prec)
+	init := matchAndConvert(c, key, def, cdef, convert, prec)
+	c.subscriptions[key][id] = &subscription[T]{
+		prec: prec,
+		f:    callback,
+		prev: init,
+	}
 
-	return sub.prev, func() {
+	return init, func() {
 		c.subscriptionLock.Lock()
 		defer c.subscriptionLock.Unlock()
 		delete(c.subscriptions[key], id)

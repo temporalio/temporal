@@ -794,7 +794,7 @@ type TypedSubscribable[T any] func(callback func(T)) (v T, cancel func())
 func (s GlobalTypedSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
 	return func(callback func(T)) (T, func()) {
 		prec := precedenceGlobal()
-		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
 
@@ -889,7 +889,7 @@ type TypedSubscribableWithNamespaceFilter[T any] func(namespace string, callback
 func (s NamespaceTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceFilter[T] {
 	return func(namespace string, callback func(T)) (T, func()) {
 		prec := precedenceNamespace(namespace)
-		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
 
@@ -984,7 +984,7 @@ type TypedSubscribableWithNamespaceIDFilter[T any] func(namespaceID string, call
 func (s NamespaceIDTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceIDFilter[T] {
 	return func(namespaceID string, callback func(T)) (T, func()) {
 		prec := precedenceNamespaceID(namespaceID)
-		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
 
@@ -1079,7 +1079,7 @@ type TypedSubscribableWithTaskQueueFilter[T any] func(namespace string, taskQueu
 func (s TaskQueueTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskQueueFilter[T] {
 	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType, callback func(T)) (T, func()) {
 		prec := precedenceTaskQueue(namespace, taskQueue, taskQueueType)
-		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
 
@@ -1174,7 +1174,7 @@ type TypedSubscribableWithShardIDFilter[T any] func(shardID int32, callback func
 func (s ShardIDTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithShardIDFilter[T] {
 	return func(shardID int32, callback func(T)) (T, func()) {
 		prec := precedenceShardID(shardID)
-		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
 
@@ -1269,7 +1269,7 @@ type TypedSubscribableWithTaskTypeFilter[T any] func(taskType enumsspb.TaskType,
 func (s TaskTypeTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskTypeFilter[T] {
 	return func(taskType enumsspb.TaskType, callback func(T)) (T, func()) {
 		prec := precedenceTaskType(taskType)
-		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
 
@@ -1364,7 +1364,7 @@ type TypedSubscribableWithDestinationFilter[T any] func(namespace string, destin
 func (s DestinationTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithDestinationFilter[T] {
 	return func(namespace string, destination string, callback func(T)) (T, func()) {
 		prec := precedenceDestination(namespace, destination)
-		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
 
