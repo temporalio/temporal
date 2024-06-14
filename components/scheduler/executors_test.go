@@ -82,7 +82,7 @@ func TestProcessScheduleTask(t *testing.T) {
 		HsmState: enums.SCHEDULER_STATE_WAITING,
 	}}
 
-	node, err := root.AddChild(hsm.Key{Type: scheduler.StateMachineType.ID}, schedulerHsm)
+	node, err := root.AddChild(hsm.Key{Type: scheduler.StateMachineType.ID}, &schedulerHsm)
 	require.NoError(t, err)
 	env := fakeEnv{node}
 
@@ -96,10 +96,11 @@ func TestProcessScheduleTask(t *testing.T) {
 	err = reg.ExecuteTimerTask(
 		env,
 		node,
-		scheduler.SchedulerWaitTask{Deadline: env.Now().Add(10 * time.Second)},
+		scheduler.SchedulerWaitTask{Deadline: env.Now()},
 	)
 	require.NoError(t, err)
-	require.Equal(t, enums.SCHEDULER_STATE_WAITING, schedulerHsm.HsmState)
+	require.Equal(t, enums.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
+	// TODO(Tianyu): Add test for workflow scheduling
 }
 
 func newMutableState(t *testing.T) mutableState {

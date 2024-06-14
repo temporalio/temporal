@@ -63,8 +63,10 @@ func (s *Scheduler) populateTransientFieldsIfAbsent(logger log.Logger, handler m
 	if s.historyClient == nil {
 		s.historyClient = historyClient
 	}
+
+	s.nextTimeCache = nil
 	if s.cspec == nil {
-		s.specBuilder = &scheduler.SpecBuilder{}
+		s.specBuilder = scheduler.NewSpecBuilder()
 		cspec, err := s.specBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
 		if err != nil {
 			if s.logger != nil {
@@ -226,14 +228,16 @@ func (s *Scheduler) processTimeRange(
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
 	limit *int,
-) time.Time {
+) (time.Time, time.Time) {
 	s.logger.Debug("processTimeRange", tag.NewTimeTag("start", start), tag.NewTimeTag("end", end),
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 
 	if s.cspec == nil {
-		return time.Time{}
+		return time.Time{}, end
 	}
 	catchupWindow := s.getCatchupWindow()
+
+	lastAction := start
 	var next scheduler.GetNextTimeResult
 	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if !manual && s.Args.Info.UpdateTime.AsTime().After(next.Next) {
@@ -249,6 +253,7 @@ func (s *Scheduler) processTimeRange(
 			continue
 		}
 		s.bufferWorkflowStart(next.Nominal, next.Next, overlapPolicy, manual)
+		lastAction = next.Next
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
@@ -256,7 +261,7 @@ func (s *Scheduler) processTimeRange(
 			}
 		}
 	}
-	return next.Next
+	return next.Next, lastAction
 }
 
 func (s *Scheduler) processBackfills() {
@@ -269,7 +274,7 @@ func (s *Scheduler) processBackfills() {
 		bfr := s.Args.State.OngoingBackfills[0]
 		startTime := timestamp.TimeValue(bfr.GetStartTime())
 		endTime := timestamp.TimeValue(bfr.GetEndTime())
-		next := s.processTimeRange(
+		next, _ := s.processTimeRange(
 			startTime,
 			endTime,
 			bfr.GetOverlapPolicy(),
@@ -386,7 +391,7 @@ func (s *Scheduler) startWorkflow(
 			Header:               newWorkflow.Header,
 			LastCompletionResult: lastCompletionResult,
 			ContinuedFailure:     continuedFailure,
-			Namespace:            s.Args.State.NamespaceId,
+			Namespace:            s.Args.State.Namespace,
 		},
 	}
 

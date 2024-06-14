@@ -70,7 +70,7 @@ func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	case enumsspb.SCHEDULER_STATE_WAITING:
 		return []hsm.Task{SchedulerWaitTask{Deadline: s.nextInvokeTime}}, nil
 	case enumsspb.SCHEDULER_STATE_EXECUTING:
-		return []hsm.Task{SchedulerRunTask{Destination: s.Args.State.NamespaceId}}, nil
+		return []hsm.Task{SchedulerRunTask{Destination: s.Args.State.Namespace}}, nil
 	}
 	return nil, nil
 }
@@ -88,11 +88,7 @@ func (stateMachineDefinition) Deserialize(d []byte) (any, error) {
 	}
 	return &Scheduler{
 		HsmSchedulerState: state,
-		logger:            nil,
-		metrics:           nil,
-		specBuilder:       nil,
-		cspec:             nil,
-		tweakables:        scheduler.TweakablePolicies{},
+		tweakables:        scheduler.CurrentTweakablePolicies,
 		nextInvokeTime:    time.Time{},
 	}, nil
 }

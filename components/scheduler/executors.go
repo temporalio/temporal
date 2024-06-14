@@ -26,13 +26,13 @@ import (
 	"context"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/scheduler"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
@@ -54,7 +54,8 @@ func RegisterExecutor(
 
 type (
 	TaskExecutorOptions struct {
-		fx.In
+		metricsHandler metrics.Handler
+		logger         log.Logger
 		frontendClient workflowservice.WorkflowServiceClient
 		historyClient  resource.HistoryClient
 	}
@@ -93,12 +94,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 			return err
 		}
 
-		mutableState, err := hsm.MachineData[*workflow.MutableStateImpl](node.Parent)
-		if err != nil {
-			return err
-		}
-
-		s.populateTransientFieldsIfAbsent(mutableState.GetLogger(), mutableState.GetMetricsHandler(), e.options.frontendClient, e.options.historyClient)
+		s.populateTransientFieldsIfAbsent(e.options.logger, e.options.metricsHandler, e.options.frontendClient, e.options.historyClient)
 
 		if s.Args.State.LastProcessedTime == nil {
 			// log these as json since it's more readable than the Go representation
@@ -117,14 +113,14 @@ func (e taskExecutor) executeSchedulerRunTask(
 			s.logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
 			t2 = t1
 		}
-		nextWakeup := s.processTimeRange(
+		nextWakeup, lastAction := s.processTimeRange(
 			t1, t2,
 			// resolve this to the schedule's policy as late as possible
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
 			false,
 			nil,
 		)
-		s.Args.State.LastProcessedTime = timestamppb.New(t2)
+		s.Args.State.LastProcessedTime = timestamppb.New(lastAction)
 		// process backfills if we have any too
 		s.processBackfills()
 		// try starting workflows in the buffer

@@ -27,6 +27,7 @@ package tests
 import (
 	"errors"
 	"fmt"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -624,7 +625,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 
 	s.testCluster.host.dcClient.OverrideValue(
 		s.T(),
-		dynamicconfig.UseExperimentalHsmScheduler,
+		schedulerhsm.UseExperimentalHsmScheduler,
 		true)
 
 	type myData struct {
