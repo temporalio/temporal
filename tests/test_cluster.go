@@ -188,13 +188,13 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
 	)
+	clusterMap := cluster.NewTestClusterMapConfig(options.ClusterMetadata.EnableGlobalNamespace)
 	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
 		clusterMetadataConfig = &cluster.Config{
 			EnableGlobalNamespace:    options.ClusterMetadata.EnableGlobalNamespace,
 			FailoverVersionIncrement: options.ClusterMetadata.FailoverVersionIncrement,
 			MasterClusterName:        options.ClusterMetadata.MasterClusterName,
 			CurrentClusterName:       options.ClusterMetadata.CurrentClusterName,
-			ClusterInformation:       options.ClusterMetadata.ClusterInformation,
 		}
 	}
 	options.Persistence.Logger = logger
@@ -239,7 +239,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 	}
 
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
-	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
+	for clusterName, clusterInfo := range clusterMap.ClusterInformation {
 		clusterInfo.ShardCount = options.HistoryConfig.NumHistoryShards
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
@@ -258,7 +258,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 			return nil, err
 		}
 	}
-	clusterMetadataConfig.ClusterInformation = clusterInfoMap
+	clusterMap.ClusterInformation = clusterInfoMap
 
 	// This will save custom test search attributes to cluster metadata.
 	// Actual Elasticsearch fields are created in setupIndex.

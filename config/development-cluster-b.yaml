@@ -62,19 +62,11 @@ services:
 clusterMetadata:
   enableGlobalNamespace: true
   failoverVersionIncrement: 100
-  masterClusterName: "cluster-a"
+  masterClusterName: "cluster-b"
   currentClusterName: "cluster-b"
-  clusterInformation:
-    cluster-a:
-      enabled: true
-      initialFailoverVersion: 1
-      rpcName: "frontend"
-      rpcAddress: "localhost:7233"
-    cluster-b:
-      enabled: true
-      initialFailoverVersion: 2
-      rpcName: "frontend"
-      rpcAddress: "localhost:8233"
+  initialFailoverVersion: 2
+  rpcName: "frontend"
+  rpcAddress: "localhost:8233"
 # Use tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "127.0.0.1:7233"
 #    active:
 #      enabled: true
