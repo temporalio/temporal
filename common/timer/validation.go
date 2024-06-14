@@ -28,8 +28,9 @@ import (
 	"errors"
 	"time"
 
-	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -45,6 +46,7 @@ var (
 	maxNanos   = int32(MaxAllowedTimer.Nanoseconds() - maxSeconds*1e9)
 )
 
+// TODO: remove this logic, rely on scheduled task dropping logic in mutableState for long duration timers
 func ValidateAndCapTimer(delay *durationpb.Duration) error {
 	duration := timestamp.DurationValue(delay)
 	if duration < 0 {

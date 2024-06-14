@@ -45,12 +45,14 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common"
@@ -84,9 +86,12 @@ type (
 		mockShard       *shard.ContextTest
 		mockEventsCache *events.MockCache
 
-		mutableState *MutableStateImpl
-		logger       log.Logger
-		testScope    tally.TestScope
+		namespaceEntry *namespace.Namespace
+		mutableState   *MutableStateImpl
+		logger         log.Logger
+		testScope      tally.TestScope
+
+		replicationMultipleBatches bool
 	}
 )
 
@@ -138,10 +143,15 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
+	s.namespaceEntry = tests.GlobalNamespaceEntry
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(s.namespaceEntry, nil).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -1580,5 +1590,65 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 				}
 			},
 		)
+	}
+}
+
+func (s *mutableStateSuite) TestMaxAllowedTimer() {
+	testCases := []struct {
+		name                   string
+		runTimeout             time.Duration
+		runTimeoutTimerDropped bool
+	}{
+		{
+			name:                   "run timeout timer preserved",
+			runTimeout:             time.Hour * 24 * 365,
+			runTimeoutTimerDropped: false,
+		},
+		{
+			name:                   "run timeout timer dropped",
+			runTimeout:             time.Hour * 24 * 365 * 100,
+			runTimeoutTimerDropped: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(1)
+			s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+
+			workflowKey := s.mutableState.GetWorkflowKey()
+			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{
+					WorkflowId: workflowKey.WorkflowID,
+					RunId:      workflowKey.RunID,
+				},
+				&historyservice.StartWorkflowExecutionRequest{
+					NamespaceId: workflowKey.NamespaceID,
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						Namespace:  s.mutableState.GetNamespaceEntry().Name().String(),
+						WorkflowId: workflowKey.WorkflowID,
+						WorkflowType: &commonpb.WorkflowType{
+							Name: "test-workflow-type",
+						},
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: "test-task-queue",
+						},
+						WorkflowRunTimeout: durationpb.New(tc.runTimeout),
+					},
+				},
+			)
+			s.NoError(err)
+
+			snapshot, _, err := s.mutableState.CloseTransactionAsSnapshot(TransactionPolicyActive)
+			s.NoError(err)
+
+			timerTasks := snapshot.Tasks[tasks.CategoryTimer]
+			if tc.runTimeoutTimerDropped {
+				s.Empty(timerTasks)
+			} else {
+				s.Len(timerTasks, 1)
+				s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, timerTasks[0].GetType())
+			}
+		})
 	}
 }
