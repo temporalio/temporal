@@ -379,7 +379,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion_LargePayload() 
 
 	var result string
 	s.NoError(run.Get(ctx, &result))
-	s.Equal("result of StartOperation exceeds size limit", result)
+	s.Equal("http: response body too large", result)
 }
 
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {

@@ -43,7 +43,7 @@ var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
 
 var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	"component.callbacks.retryPolicy.maxInterval",
-	time.Second,
+	time.Hour,
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
 
