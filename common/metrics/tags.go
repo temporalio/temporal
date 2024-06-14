@@ -313,6 +313,10 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
 }
 
+func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
+	return &tagImpl{key: resourceExhaustedScopeTag, value: scope.String()}
+}
+
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return &tagImpl{key: serviceName, value: string(value)}
 }

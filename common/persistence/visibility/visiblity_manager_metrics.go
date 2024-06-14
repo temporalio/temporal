@@ -189,7 +189,8 @@ func (m *visibilityManagerMetrics) updateErrorMetric(handler metrics.Handler, er
 		// no-op
 
 	case *serviceerror.ResourceExhausted:
-		metrics.VisibilityPersistenceResourceExhausted.With(handler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metrics.VisibilityPersistenceResourceExhausted.With(handler).Record(
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
 	default:
 		m.logger.Error("Operation failed with an error.", tag.Error(err))
 		metrics.VisibilityPersistenceFailures.With(handler).Record(1)

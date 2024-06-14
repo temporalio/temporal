@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package pingable
 
 import "time"
 
@@ -30,10 +30,10 @@ type (
 	// Pingable is interface to check for liveness of a component, to detect deadlocks.
 	// This call should not block.
 	Pingable interface {
-		GetPingChecks() []PingCheck
+		GetPingChecks() []Check
 	}
 
-	PingCheck struct {
+	Check struct {
 		// Name of this component.
 		Name string
 		// The longest time that Ping can take. If it doesn't return in that much time, that's
