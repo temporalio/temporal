@@ -74,7 +74,7 @@ var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
 
 var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	"component.nexusoperations.retryPolicy.maxInterval",
-	time.Second,
+	time.Hour,
 	`The maximum backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
 )
 

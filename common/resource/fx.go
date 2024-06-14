@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
@@ -105,7 +106,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRegistryProvider),
 	namespace.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
-		func(p namespace.Registry) common.Pingable { return p },
+		func(p namespace.Registry) pingable.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
 	fx.Provide(serialization.NewSerializer),

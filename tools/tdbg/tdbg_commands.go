@@ -269,7 +269,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 		},
 		{
 			Name:  "list-tasks",
-			Usage: "List tasks for given shard ID and task type",
+			Usage: "List tasks for given shard ID and task category",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  FlagMore,
@@ -334,7 +334,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 		{
 			Name:    "remove-task",
 			Aliases: []string{"rmtk"},
-			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
+			Usage:   "remove a task based on shardId, task category, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
 					Name:  FlagShardID,
@@ -365,7 +365,7 @@ func getTaskCategoryFlag(taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.S
 	}
 	flag := &cli.StringFlag{
 		Name:  FlagTaskCategory,
-		Usage: "Task type: " + strings.Join(options, ", "),
+		Usage: "Task category: " + strings.Join(options, ", "),
 	}
 	return flag
 }
