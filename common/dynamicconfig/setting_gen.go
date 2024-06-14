@@ -794,8 +794,7 @@ type TypedSubscribable[T any] func(callback func(T)) (v T, cancel func())
 func (s GlobalTypedSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
 	return func(callback func(T)) (T, func()) {
 		prec := precedenceGlobal()
-		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
-		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
 	}
 }
 
@@ -890,8 +889,7 @@ type TypedSubscribableWithNamespaceFilter[T any] func(namespace string, callback
 func (s NamespaceTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceFilter[T] {
 	return func(namespace string, callback func(T)) (T, func()) {
 		prec := precedenceNamespace(namespace)
-		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
-		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
 	}
 }
 
@@ -986,8 +984,7 @@ type TypedSubscribableWithNamespaceIDFilter[T any] func(namespaceID string, call
 func (s NamespaceIDTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceIDFilter[T] {
 	return func(namespaceID string, callback func(T)) (T, func()) {
 		prec := precedenceNamespaceID(namespaceID)
-		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
-		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
 	}
 }
 
@@ -1082,8 +1079,7 @@ type TypedSubscribableWithTaskQueueFilter[T any] func(namespace string, taskQueu
 func (s TaskQueueTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskQueueFilter[T] {
 	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType, callback func(T)) (T, func()) {
 		prec := precedenceTaskQueue(namespace, taskQueue, taskQueueType)
-		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
-		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
 	}
 }
 
@@ -1178,8 +1174,7 @@ type TypedSubscribableWithShardIDFilter[T any] func(shardID int32, callback func
 func (s ShardIDTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithShardIDFilter[T] {
 	return func(shardID int32, callback func(T)) (T, func()) {
 		prec := precedenceShardID(shardID)
-		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
-		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
 	}
 }
 
@@ -1274,8 +1269,7 @@ type TypedSubscribableWithTaskTypeFilter[T any] func(taskType enumsspb.TaskType,
 func (s TaskTypeTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskTypeFilter[T] {
 	return func(taskType enumsspb.TaskType, callback func(T)) (T, func()) {
 		prec := precedenceTaskType(taskType)
-		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
-		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
 	}
 }
 
@@ -1370,8 +1364,7 @@ type TypedSubscribableWithDestinationFilter[T any] func(namespace string, destin
 func (s DestinationTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithDestinationFilter[T] {
 	return func(namespace string, destination string, callback func(T)) (T, func()) {
 		prec := precedenceDestination(namespace, destination)
-		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
-		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
 	}
 }
 

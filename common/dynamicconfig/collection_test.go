@@ -445,3 +445,143 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
 	s.Equal(100, value(namespaceName, destination2)) // priority: destination >>> namespace
 	s.Equal(10, value("testAnotherNamespace", "testAnotherDestination"))
 }
+
+type (
+	subscriptionSuite struct {
+		suite.Suite
+		client *testSubscribableClient
+		cln    *dynamicconfig.Collection
+	}
+
+	testSubscribableClient struct {
+		m    map[dynamicconfig.Key][]dynamicconfig.ConstrainedValue
+		subs []dynamicconfig.ClientUpdateFunc
+	}
+)
+
+var _ dynamicconfig.SubscribableClient = (*testSubscribableClient)(nil)
+
+func TestSubscriptionSuite(t *testing.T) {
+	suite.Run(t, new(subscriptionSuite))
+}
+
+func (s *subscriptionSuite) SetupSuite() {
+	s.client = newTestSubscribableClient()
+	logger := log.NewNoopLogger()
+	s.cln = dynamicconfig.NewCollection(s.client, logger)
+}
+
+func (s *subscriptionSuite) SetupTest() {
+	dynamicconfig.ResetRegistryForTest()
+}
+
+func newTestSubscribableClient() *testSubscribableClient {
+	return &testSubscribableClient{
+		m: make(map[dynamicconfig.Key][]dynamicconfig.ConstrainedValue),
+	}
+}
+
+func (c *testSubscribableClient) Subscribe(f dynamicconfig.ClientUpdateFunc) func() {
+	c.subs = append(c.subs, f)
+	return func() {} // ignore cancel
+}
+
+func (c *testSubscribableClient) GetValue(k dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
+	return c.m[k]
+}
+
+func (c *testSubscribableClient) Set(k dynamicconfig.Key, cvs []dynamicconfig.ConstrainedValue) {
+	c.m[k] = cvs
+	for _, f := range c.subs {
+		f(map[dynamicconfig.Key][]dynamicconfig.ConstrainedValue{k: cvs})
+	}
+}
+
+func (s *subscriptionSuite) TestSubscriptionGlobal() {
+	setting := dynamicconfig.NewGlobalBoolSetting(testGetBoolPropertyKey, false, "")
+
+	vals := make(chan bool, 1)
+	cb := func(newVal bool) { vals <- newVal }
+	initial, cancel := setting.Subscribe(s.cln)(cb)
+
+	s.False(initial)
+
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: true}})
+	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
+	s.True(<-vals)
+
+	s.client.Set(setting.Key(), nil) // back to default
+	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
+	s.False(<-vals)
+
+	cancel()
+
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: true}})
+	// no update should be delivered
+	time.Sleep(10 * time.Millisecond)
+	s.Empty(vals)
+}
+
+func (s *subscriptionSuite) TestSubscriptionGlobal_DoesNotCallUnchanged() {
+	setting := dynamicconfig.NewGlobalBoolSetting(testGetBoolPropertyKey, true, "")
+	vals := make(chan bool, 1)
+	cb := func(newVal bool) { vals <- newVal }
+	initial, _ := setting.Subscribe(s.cln)(cb)
+	s.True(initial)
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: true}})
+	time.Sleep(10 * time.Millisecond)
+	s.Empty(vals)
+
+}
+
+func (s *subscriptionSuite) TestSubscriptionNamespace() {
+	setting := dynamicconfig.NewNamespaceIntSetting(testGetIntPropertyKey, 0, "")
+
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns1"}, Value: 1},
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns3"}, Value: 3},
+	})
+
+	vals1 := make(chan int, 1)
+	init1, _ := setting.Subscribe(s.cln)("ns1", func(n int) { vals1 <- n })
+	vals2 := make(chan int, 1)
+	init2, _ := setting.Subscribe(s.cln)("ns2", func(n int) { vals2 <- n })
+	vals3 := make(chan int, 1)
+	init3, _ := setting.Subscribe(s.cln)("ns3", func(n int) { vals3 <- n })
+
+	s.Equal(1, init1)
+	s.Equal(0, init2)
+	s.Equal(3, init3)
+
+	// change ns3 to 33
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns1"}, Value: 1},
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns3"}, Value: 33},
+	})
+
+	s.Require().Eventually(func() bool { return len(vals3) == 1 }, time.Second, time.Millisecond)
+	s.Equal(33, <-vals3)
+	s.Empty(vals1)
+	s.Empty(vals2)
+
+	// add ns2
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns1"}, Value: 1},
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns2"}, Value: 2},
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns3"}, Value: 33},
+	})
+	s.Require().Eventually(func() bool { return len(vals2) == 1 }, time.Second, time.Millisecond)
+	s.Equal(2, <-vals2)
+	s.Empty(vals1)
+	s.Empty(vals3)
+
+	// remove ns1 and ns3
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns2"}, Value: 2},
+	})
+	s.Require().Eventually(func() bool { return len(vals1) == 1 }, time.Second, time.Millisecond)
+	s.Require().Eventually(func() bool { return len(vals3) == 1 }, time.Second, time.Millisecond)
+	s.Equal(0, <-vals1)
+	s.Empty(vals2)
+	s.Equal(0, <-vals3)
+}

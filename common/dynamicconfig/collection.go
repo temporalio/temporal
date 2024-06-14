@@ -60,7 +60,7 @@ type (
 		cancelClientSubscription func()
 
 		subscriptionLock sync.Mutex
-		subscriptions    map[GenericSetting]map[int]any // final "any" is *subscription[T]
+		subscriptions    map[Key]map[int]any // final "any" is *subscription[T]
 		subscriptionIdx  int
 
 		poller       goro.Group
@@ -113,7 +113,7 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 		client:        client,
 		logger:        logger,
 		errCount:      -1,
-		subscriptions: make(map[GenericSetting]map[int]any),
+		subscriptions: make(map[Key]map[int]any),
 	}
 	s := DynamicConfigSubscriptionCallback.Get(c)()
 	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
@@ -165,9 +165,13 @@ func (c *Collection) pollOnce(ctx context.Context) {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
 
-	for setting, subs := range c.subscriptions {
+	for key, subs := range c.subscriptions {
+		setting := queryRegistry(key)
+		if setting == nil {
+			continue
+		}
 		for _, sub := range subs {
-			cvs := c.client.GetValue(setting.Key())
+			cvs := c.client.GetValue(key)
 			setting.dispatchUpdate(c, sub, cvs)
 		}
 	}
@@ -182,33 +186,9 @@ func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
 		if setting == nil {
 			continue
 		}
-
-		for _, sub := range c.subscriptions[setting] {
+		for _, sub := range c.subscriptions[key] {
 			setting.dispatchUpdate(c, sub, cvs)
 		}
-	}
-}
-
-func (c *Collection) subscribe(s GenericSetting, sub any) ([]ConstrainedValue, func()) {
-	c.subscriptionLock.Lock()
-	defer c.subscriptionLock.Unlock()
-
-	c.subscriptionIdx++
-	id := c.subscriptionIdx
-
-	if c.subscriptions[s] == nil {
-		c.subscriptions[s] = make(map[int]any)
-	}
-	c.subscriptions[s][id] = sub
-
-	// get and return one value immediately (note that subscriptionLock is held here so we
-	// can't race with an update)
-	cvs := c.client.GetValue(s.Key())
-
-	return cvs, func() {
-		c.subscriptionLock.Lock()
-		defer c.subscriptionLock.Unlock()
-		delete(c.subscriptions[s], id)
 	}
 }
 
@@ -292,6 +272,36 @@ func matchAndConvertCvs[T any](
 		// Return typedVal anyway since we have to return something.
 	}
 	return typedVal
+}
+
+func subscribe[T any](
+	c *Collection,
+	key Key,
+	def T,
+	cdef []TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	sub *subscription[T],
+) (T, func()) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+
+	c.subscriptionIdx++
+	id := c.subscriptionIdx
+
+	if c.subscriptions[key] == nil {
+		c.subscriptions[key] = make(map[int]any)
+	}
+	c.subscriptions[key][id] = sub
+
+	// get and return one value immediately (note that subscriptionLock is held here so we
+	// can't race with an update)
+	sub.prev = matchAndConvert(c, key, def, cdef, convert, sub.prec)
+
+	return sub.prev, func() {
+		c.subscriptionLock.Lock()
+		defer c.subscriptionLock.Unlock()
+		delete(c.subscriptions[key], id)
+	}
 }
 
 // called with subscriptionLock

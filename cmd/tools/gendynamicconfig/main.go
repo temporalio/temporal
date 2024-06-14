@@ -224,8 +224,7 @@ func (s {{.P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWi
 	return func({{.P.GoArgs}}, callback func(T)) (T, func()) {
 {{- end}}
 		prec := precedence{{.P.Name}}({{.P.GoArgNames}})
-		cvs, cancel := c.subscribe(s, &subscription[T]{prec: prec, f: callback})
-		return matchAndConvertCvs(c, s.key, s.def, s.cdef, s.convert, prec, cvs), cancel
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, &subscription[T]{prec: prec, f: callback})
 	}
 }
 
