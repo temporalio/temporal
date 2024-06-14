@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
-	"time"
 )
 
 // Unique type identifier for this state machine.

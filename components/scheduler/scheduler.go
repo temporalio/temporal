@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -21,7 +23,6 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"time"
 )
 
 type Scheduler struct {
@@ -111,11 +112,11 @@ func (s *Scheduler) getCatchupWindow() time.Duration {
 	cw := s.Args.Schedule.Policies.CatchupWindow
 	if cw == nil {
 		return s.tweakables.DefaultCatchupWindow
-	} else if cw.AsDuration() < s.tweakables.MinCatchupWindow {
-		return s.tweakables.MinCatchupWindow
-	} else {
-		return cw.AsDuration()
 	}
+	if cw.AsDuration() < s.tweakables.MinCatchupWindow {
+		return s.tweakables.MinCatchupWindow
+	}
+	return cw.AsDuration()
 }
 
 func (s *Scheduler) jitterSeed() string {

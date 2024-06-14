@@ -24,6 +24,8 @@ package scheduler
 
 import (
 	"context"
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log"
@@ -35,7 +37,6 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"time"
 )
 
 func RegisterExecutor(
