@@ -91,7 +91,7 @@ var Module = fx.Options(
 
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
-	fx.Provide(DLQMetricsEmitterProvider),
+	fx.Provide(persistence.NewDLQMetricsEmitter),
 	fx.Provide(EventBlobCacheProvider),
 )
 
@@ -165,14 +165,6 @@ func HealthSignalAggregatorProvider(
 	}
 
 	return persistence.NoopHealthSignalAggregator
-}
-
-func DLQMetricsEmitterProvider(
-	metricsHandler metrics.Handler,
-	logger log.Logger,
-	manager persistence.HistoryTaskQueueManager,
-) *persistence.DLQMetricsEmitter {
-	return persistence.NewDLQMetricsEmitter(metricsHandler, logger, manager)
 }
 
 func DataStoreFactoryProvider(
