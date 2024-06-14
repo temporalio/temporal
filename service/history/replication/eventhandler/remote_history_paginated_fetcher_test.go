@@ -118,14 +118,12 @@ func (s *historyPaginatedFetcherSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 	s.serializer = serialization.NewSerializer()
-
-	s.fetcher = NewHistoryPaginatedFetcher(
-		s.mockNamespaceCache,
-		s.mockClientBean,
-		serialization.NewSerializer(),
-		nil,
-		s.logger,
-	)
+	s.fetcher = &HistoryPaginatedFetcherImpl{
+		NamespaceRegistry: s.mockNamespaceCache,
+		ClientBean:        s.mockClientBean,
+		Serializer:        serialization.NewSerializer(),
+		Logger:            s.logger,
+	}
 }
 
 func (s *historyPaginatedFetcherSuite) TearDownTest() {
@@ -161,9 +159,9 @@ func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 		},
 	}
 
-	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(
+	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
-		&adminservice.GetWorkflowExecutionRawHistoryRequest{
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -175,7 +173,7 @@ func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 			EndEventVersion:   common.EmptyVersion,
 			MaximumPageSize:   pageSize,
 			NextPageToken:     nil,
-		}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
+		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: []*commonpb.DataBlob{blob},
 		NextPageToken:  token,
 		VersionHistory: &historyspb.VersionHistory{
@@ -183,9 +181,9 @@ func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 		},
 	}, nil)
 
-	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(
+	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
-		&adminservice.GetWorkflowExecutionRawHistoryRequest{
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -197,7 +195,7 @@ func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 			EndEventVersion:   common.EmptyVersion,
 			MaximumPageSize:   pageSize,
 			NextPageToken:     token,
-		}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
+		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: []*commonpb.DataBlob{blob},
 		NextPageToken:  nil,
 		VersionHistory: &historyspb.VersionHistory{
@@ -240,14 +238,14 @@ func (s *historyPaginatedFetcherSuite) TestGetHistory() {
 	pageSize := int32(59)
 	blob := []byte("some random events blob")
 
-	response := &adminservice.GetWorkflowExecutionRawHistoryResponse{
+	response := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: []*commonpb.DataBlob{{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,
 	}
-	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
+	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: s.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

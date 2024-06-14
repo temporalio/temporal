@@ -1,0 +1,222 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package eventhandler
+
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination event_importer_mock.go
+
+import (
+	"context"
+
+	"go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	common2 "go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
+)
+
+const (
+	historyImportBlobSize = 16
+	historyImportPageSize = 256 * 1024 // 256K
+)
+
+type (
+	EventImporter interface {
+		ImportHistoryEventsFromFirstEvent(
+			ctx context.Context,
+			remoteCluster string,
+			workflowKey definition.WorkflowKey,
+			endEventId int64, // exclusive
+			endEventVersion int64,
+			pendingEvents [][]*historypb.HistoryEvent,
+		) error
+	}
+
+	eventImporterImpl struct {
+		historyFetcher HistoryPaginatedFetcher
+		engineProvider historyEngineProvider
+		serializer     serialization.Serializer
+		logger         log.Logger
+	}
+)
+
+func NewEventImporter(
+	historyFetcher HistoryPaginatedFetcher,
+	engineProvider historyEngineProvider,
+	serializer serialization.Serializer,
+	logger log.Logger,
+) EventImporter {
+	return &eventImporterImpl{
+		historyFetcher: historyFetcher,
+		engineProvider: engineProvider,
+		serializer:     serializer,
+		logger:         logger,
+	}
+}
+
+func (e *eventImporterImpl) ImportHistoryEventsFromFirstEvent(
+	ctx context.Context,
+	remoteCluster string,
+	workflowKey definition.WorkflowKey,
+	endEventId int64,
+	endEventVersion int64,
+	pendingEvents [][]*historypb.HistoryEvent,
+) error {
+	historyIterator := e.historyFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+		ctx,
+		remoteCluster,
+		namespace.ID(workflowKey.NamespaceID),
+		workflowKey.WorkflowID,
+		workflowKey.RunID,
+		common2.EmptyEventID,
+		common2.EmptyVersion,
+		endEventId,
+		endEventVersion,
+	)
+	engine, err := e.engineProvider(ctx, namespace.ID(workflowKey.NamespaceID), workflowKey.WorkflowID)
+	if err != nil {
+		return err
+	}
+
+	var blobs []*common.DataBlob
+	blobSize := 0
+	var token []byte
+	var versionHistory *historyspb.VersionHistory
+	for historyIterator.HasNext() {
+		batch, err := historyIterator.Next()
+		if err != nil {
+			e.logger.Error("failed to get history events",
+				tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+				tag.WorkflowID(workflowKey.WorkflowID),
+				tag.WorkflowRunID(workflowKey.RunID),
+				tag.Error(err))
+			return err
+		}
+
+		if versionHistory != nil && !versionhistory.IsVersionHistoryItemsInSameBranch(versionHistory.Items, batch.VersionHistory.Items) {
+			return serviceerror.NewInternal("History Branch changed during importing")
+		}
+		versionHistory = batch.VersionHistory
+
+		blobSize++
+		blobs = append(blobs, batch.RawEventBatch)
+		events, err := e.serializer.DeserializeEvents(batch.RawEventBatch)
+		if err != nil {
+			return err
+		}
+
+		if blobSize >= historyImportBlobSize ||
+			len(blobs) >= historyImportPageSize ||
+			isLastEventAtHistoryBoundary(events[len(events)-1], versionHistory) { // Import API only take events that has same version
+			response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
+			if err != nil {
+				return err
+			}
+			blobs = []*common.DataBlob{}
+			blobSize = 0
+			token = response.Token
+		}
+	}
+	if len(pendingEvents) != 0 {
+		for _, events := range pendingEvents {
+			eventsBlob, err := e.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return err
+			}
+			blobs = append(blobs, eventsBlob)
+		}
+	}
+	if len(blobs) != 0 {
+		response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
+		if err != nil {
+			return err
+		}
+		token = response.Token
+	}
+
+	// call with empty event blob to commit the import
+	blobs = []*common.DataBlob{}
+	response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
+	if err != nil || len(response.Token) != 0 {
+		e.logger.Error("failed to commit import action",
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+			tag.Error(err))
+		return serviceerror.NewInternal("Failed to commit import transaction")
+	}
+	return nil
+}
+
+func isLastEventAtHistoryBoundary(
+	lastLocalEvent *historypb.HistoryEvent,
+	versionHistory *historyspb.VersionHistory,
+) bool {
+	for _, item := range versionHistory.Items {
+		if item.EventId == lastLocalEvent.EventId {
+			return true
+		}
+	}
+	return false
+}
+
+func invokeImportWorkflowExecutionCall(
+	ctx context.Context,
+	historyEngine shard.Engine,
+	workflowKey definition.WorkflowKey,
+	historyBatches []*common.DataBlob,
+	versionHistory *historyspb.VersionHistory,
+	token []byte,
+	logger log.Logger,
+) (*historyservice.ImportWorkflowExecutionResponse, error) {
+	request := &historyservice.ImportWorkflowExecutionRequest{
+		NamespaceId: workflowKey.NamespaceID,
+		Execution: &common.WorkflowExecution{
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
+		},
+		HistoryBatches: historyBatches,
+		VersionHistory: versionHistory,
+		Token:          token,
+	}
+	response, err := historyEngine.ImportWorkflowExecution(ctx, request)
+	if err != nil {
+		logger.Error("failed to import events",
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+			tag.Error(err))
+		return nil, err
+	}
+	return response, nil
+}

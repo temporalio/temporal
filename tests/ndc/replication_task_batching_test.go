@@ -219,7 +219,6 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 		nil,
 		mockClientBean,
 		serializer,
-		nil,
 		s.logger,
 	)
 

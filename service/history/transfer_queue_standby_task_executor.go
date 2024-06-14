@@ -644,8 +644,8 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			taskInfo.GetRunID(),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
-			0,
-			0,
+			common.EmptyEventID,
+			common.EmptyVersion,
 		)
 	} else {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(

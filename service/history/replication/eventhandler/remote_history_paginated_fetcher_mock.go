@@ -61,10 +61,10 @@ func (m *MockHistoryPaginatedFetcher) EXPECT() *MockHistoryPaginatedFetcherMockR
 }
 
 // GetSingleWorkflowHistoryPaginatedIterator mocks base method.
-func (m *MockHistoryPaginatedFetcher) GetSingleWorkflowHistoryPaginatedIterator(ctx context.Context, remoteClusterName string, namespaceID namespace.ID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) collection.Iterator[HistoryBatch] {
+func (m *MockHistoryPaginatedFetcher) GetSingleWorkflowHistoryPaginatedIterator(ctx context.Context, remoteClusterName string, namespaceID namespace.ID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) collection.Iterator[*HistoryBatch] {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSingleWorkflowHistoryPaginatedIterator", ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
-	ret0, _ := ret[0].(collection.Iterator[HistoryBatch])
+	ret0, _ := ret[0].(collection.Iterator[*HistoryBatch])
 	return ret0
 }
 

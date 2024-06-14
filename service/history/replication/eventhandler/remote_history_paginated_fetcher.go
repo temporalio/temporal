@@ -50,7 +50,7 @@ const (
 
 type (
 	// HistoryPaginatedFetcher is the interface for fetching history from remote cluster
-	// Start and End event ID is inclusive.
+	// Start and End event ID is exclusive
 	HistoryPaginatedFetcher interface {
 		GetSingleWorkflowHistoryPaginatedIterator(
 			ctx context.Context,
@@ -58,22 +58,11 @@ type (
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
-			startEventID int64,
+			startEventID int64, // exclusive
 			startEventVersion int64,
-			endEventID int64,
+			endEventID int64, // exclusive
 			endEventVersion int64,
-		) collection.Iterator[HistoryBatch]
-		GetWorkflowVersionHistory(
-			ctx context.Context,
-			remoteClusterName string,
-			namespaceID namespace.ID,
-			workflowID string,
-			runID string,
-			startEventID int64,
-			startEventVersion int64,
-			endEventID int64,
-			endEventVersion int64,
-		) (*historyspb.VersionHistory, error)
+		) collection.Iterator[*HistoryBatch]
 	}
 
 	HistoryPaginatedFetcherImpl struct {
@@ -119,7 +108,7 @@ func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIterator(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
-) collection.Iterator[HistoryBatch] {
+) collection.Iterator[*HistoryBatch] {
 	return collection.NewPagingIterator(n.getPaginationFn(
 		ctx,
 		remoteClusterName,
@@ -132,23 +121,6 @@ func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIterator(
 		endEventVersion,
 	))
 }
-func (n *HistoryPaginatedFetcherImpl) GetWorkflowVersionHistory(
-	ctx context.Context,
-	remoteClusterName string,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	startEventID int64,
-	startEventVersion int64,
-	endEventID int64,
-	endEventVersion int64,
-) (*historyspb.VersionHistory, error) {
-	res, err := n.getHistory(ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion, nil, defaultPageSize)
-	if err != nil {
-		return nil, err
-	}
-	return res.GetVersionHistory(), nil
-}
 
 func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 	ctx context.Context,
@@ -160,9 +132,8 @@ func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
-) collection.PaginationFn[HistoryBatch] {
-
-	return func(paginationToken []byte) ([]HistoryBatch, []byte, error) {
+) collection.PaginationFn[*HistoryBatch] {
+	return func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
 
 		response, err := n.getHistory(
 			ctx,
@@ -180,10 +151,10 @@ func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 		if err != nil {
 			return nil, nil, err
 		}
-		batches := make([]HistoryBatch, 0, len(response.GetHistoryBatches()))
+		batches := make([]*HistoryBatch, 0, len(response.GetHistoryBatches()))
 		versionHistory := response.GetVersionHistory()
 		for _, history := range response.GetHistoryBatches() {
-			batch := HistoryBatch{
+			batch := &HistoryBatch{
 				VersionHistory: versionHistory,
 				RawEventBatch:  history,
 			}
@@ -205,7 +176,7 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 	endEventVersion int64,
 	token []byte,
 	pageSize int32,
-) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
 	logger := log.With(n.Logger, tag.WorkflowRunID(runID))
 
@@ -217,7 +188,7 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 		return nil, err
 	}
 
-	response, err := adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
+	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

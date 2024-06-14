@@ -249,7 +249,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 // Test scenario: workflow was running in cluster-1, then migrated to cluster-2, then migrated to cluster-1, then we want to migrate to cluster-2.
 // passive cluster is cluster 2.
 // events are organized in 8 batches: [{1,1}], [{2,1}], [{3,1}], [{4,1},{5,1}], [{6,2},{7,2}], [{8,2}], [{9,2},{10,2}], [{11,11},{12,11}]
-// version history is [{5,1},{10,2},{12,11}], when any event(s) id from 1 to 10 is supplied, it should import events 1 to 10 (inclusive).
+// version history is [{5,1},{10,2},{12,11},{15,12}], when any event(s) id from 1 to 10 is supplied, it should import events 1 to 10 (inclusive).
 // i.e. when history replication task with batch [{2,1}] is supplied, it should import all events [1 to 10].
 func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMigrationBack_ReplicationTaskContainsLocalEvents() {
 	for i := 0; i < 7; i++ {
@@ -395,7 +395,6 @@ func (s *ReplicationMigrationBackTestSuite) assertHistoryEvents(
 		nil,
 		mockClientBean,
 		serializer,
-		nil,
 		s.logger,
 	)
 

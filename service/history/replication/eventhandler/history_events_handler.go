@@ -26,14 +26,21 @@ package eventhandler
 
 import (
 	"context"
+	"fmt"
 
+	"go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 )
 
 //go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination history_events_handler_mock.go
@@ -65,21 +72,24 @@ type (
 	}
 
 	historyEventsHandlerImpl struct {
-		clusterMetadata     cluster.Metadata
-		localEventsHandler  LocalGeneratedEventsHandler
-		remoteEventsHandler RemoteGeneratedEventsHandler
+		clusterMetadata cluster.Metadata
+		eventImporter   EventImporter
+		shardController shard.Controller
+		logger          log.Logger
 	}
 )
 
 func NewHistoryEventsHandler(
 	clusterMetadata cluster.Metadata,
-	localHandler LocalGeneratedEventsHandler,
-	remoteHandler RemoteGeneratedEventsHandler,
+	eventImporter EventImporter,
+	shardController shard.Controller,
+	logger log.Logger,
 ) HistoryEventsHandler {
 	return &historyEventsHandlerImpl{
-		clusterMetadata,
-		localHandler,
-		remoteHandler,
+		clusterMetadata: clusterMetadata,
+		eventImporter:   eventImporter,
+		shardController: shardController,
+		logger:          logger,
 	}
 }
 
@@ -102,7 +112,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 	}
 
 	if len(localEvents) != 0 {
-		if err := h.localEventsHandler.HandleLocalGeneratedHistoryEvents(
+		if err := h.handleLocalGeneratedEvent(
 			ctx,
 			sourceClusterName,
 			workflowKey,
@@ -113,7 +123,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 		}
 	}
 	if len(remoteEvents) != 0 {
-		if err := h.remoteEventsHandler.HandleRemoteGeneratedHistoryEvents(
+		if err := h.handleRemoteGeneratedHistoryEvents(
 			ctx,
 			workflowKey,
 			baseExecutionInfo,
@@ -162,4 +172,99 @@ func (h *historyEventsHandlerImpl) splitBatchesToLocalAndRemote(
 		return nil, nil, serviceerror.NewInternal("No boundary events found") // if this happens, means the events are not consecutive and we have bug somewhere
 	}
 	return eventsBatches[:lastLocalBatchIndex+1], eventsBatches[lastLocalBatchIndex+1:], nil
+}
+
+func (h *historyEventsHandlerImpl) handleLocalGeneratedEvent(
+	ctx context.Context,
+	sourceClusterName string,
+	workflowKey definition.WorkflowKey,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+	localEvents [][]*historypb.HistoryEvent,
+) error {
+	if len(versionHistoryItems) == 0 {
+		return serviceerror.NewInvalidArgument("local generated version history items is empty")
+	}
+	if len(localEvents) == 0 {
+		return serviceerror.NewInvalidArgument("local events is empty")
+	}
+	for _, events := range localEvents {
+		if len(events) == 0 {
+			return serviceerror.NewInvalidArgument("local events batch is empty")
+		}
+	}
+	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.clusterMetadata.GetClusterID(), h.clusterMetadata.GetFailoverVersionIncrement())
+	lastVersionHistoryItem := localVersionHistory[len(localVersionHistory)-1]
+	shardContext, err := h.shardController.GetShardByNamespaceWorkflow(namespace.ID(workflowKey.NamespaceID), workflowKey.WorkflowID)
+	if err != nil {
+		return err
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return err
+	}
+	mu, err := engine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		NamespaceId: workflowKey.NamespaceID,
+		Execution: &common.WorkflowExecution{
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
+		},
+	})
+
+	switch err.(type) {
+	case nil:
+		_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(mu.GetVersionHistories(), lastVersionHistoryItem)
+		// if mutable state is found, we expect it should have at least events to the last local generated event, otherwise it is a data lose
+		if err != nil {
+			h.logger.Error(fmt.Sprintf("Encountered data lose issue when handling local generated events, expected event: %v, version : %v", lastVersionHistoryItem.EventId, lastVersionHistoryItem.Version), tag.Error(err))
+			return err
+		}
+		return nil
+	case *serviceerror.NotFound:
+		lastEventId := localEvents[len(localEvents)-1][len(localEvents[len(localEvents)-1])-1].EventId
+		if lastEventId != localVersionHistory[len(localVersionHistory)-1].EventId {
+			return serviceerror.NewInvalidArgument("Expecting last local event ID to be the same as last localVersionHistory item event ID")
+		}
+		// if mutable state not found, we import from beginning
+		return h.eventImporter.ImportHistoryEventsFromFirstEvent(
+			ctx,
+			sourceClusterName,
+			workflowKey,
+			localEvents[0][0].EventId,
+			localEvents[0][0].Version,
+			localEvents,
+		)
+	default:
+		return err
+	}
+}
+
+func (h *historyEventsHandlerImpl) handleRemoteGeneratedHistoryEvents(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	baseExecutionInfo *workflowpb.BaseExecutionInfo,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+	historyEvents [][]*historypb.HistoryEvent,
+	newEvents []*historypb.HistoryEvent,
+	newRunID string,
+) error {
+	shardContext, err := h.shardController.GetShardByNamespaceWorkflow(
+		namespace.ID(workflowKey.NamespaceID),
+		workflowKey.WorkflowID,
+	)
+	if err != nil {
+		return err
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return err
+	}
+	return engine.ReplicateHistoryEvents(
+		ctx,
+		workflowKey,
+		baseExecutionInfo,
+		versionHistoryItems,
+		historyEvents,
+		newEvents,
+		newRunID,
+	)
 }

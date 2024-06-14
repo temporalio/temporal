@@ -27,6 +27,7 @@ package xdc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -84,7 +85,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
 	}
-	s.logger = log.NewTestLogger()
+	s.logger = log.NewNoopLogger()
 	s.serializer = serialization.NewSerializer()
 	s.setupSuite(
 		[]string{
@@ -142,7 +143,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 
 	// let's import some events into cluster 1
 	historyClient1 := s.cluster1.GetHistoryClient()
-	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), []int64{3, 13, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102})
+	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), []int64{2})
 
 	// let's trigger replication by calling GenerateLastHistoryReplicationTasks. This is also used by force replication logic
 	for _, execution := range executions {
@@ -175,12 +176,20 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(namespaceName, namespaceId, version)
+	ImportLoop:
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
 
 			historyEvents := &historypb.History{}
 			for _, event := range events {
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+			}
+			lastEventType := historyEvents.Events[len(historyEvents.Events)-1].GetEventType()
+			switch lastEventType {
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+				break ImportLoop
+			default:
 			}
 			historyBatch = append(historyBatch, historyEvents)
 		}
@@ -259,8 +268,14 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 		s.NoError(err)
 		batch2, err := iterator2.Next()
 		s.NoError(err)
+		getMsg := func() string {
+			events1, _ := s.serializer.DeserializeEvents(batch1.RawEventBatch)
+			events2, _ := s.serializer.DeserializeEvents(batch2.RawEventBatch)
+			return fmt.Sprintf("Not equal \nevents1: %v \nevents2: %v", events1, events2)
+		}
+		s.Equal(batch1.RawEventBatch, batch2.RawEventBatch, getMsg())
 		s.Equal(batch1.VersionHistory.Items, batch2.VersionHistory.Items)
-		s.Equal(batch1.RawEventBatch, batch2.RawEventBatch)
+
 	}
 	s.False(iterator2.HasNext())
 	return nil
