@@ -99,6 +99,13 @@ const (
 )
 
 var (
+	// Scheduled tasks with timestamp after this will not be created.
+	// Those tasks are too far in the future and pratically never fire and just consume storage space.
+	// NOTE: this value is less than timer.MaxAllowedTimer so that no capped timers will be created.
+	maxScheduledTaskDuration = time.Hour * 24 * 365 * 99
+)
+
+var (
 	// ErrWorkflowFinished indicates trying to mutate mutable state after workflow finished
 	ErrWorkflowFinished = serviceerror.NewInternal("invalid mutable state action: mutation after finish")
 	// ErrMissingTimerInfo indicates missing timer info
@@ -4925,15 +4932,18 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 // TODO mutable state should generate corresponding transfer / timer tasks according to
 //  updates accumulated, while currently all transfer / timer tasks are managed manually
 
-// TODO convert AddTasks to prepareTasks
-
-// AddTasks append transfer tasks
 func (ms *MutableStateImpl) AddTasks(
-	tasks ...tasks.Task,
+	newTasks ...tasks.Task,
 ) {
 
-	for _, task := range tasks {
+	now := ms.timeSource.Now()
+	for _, task := range newTasks {
 		category := task.GetCategory()
+		if category.Type() == tasks.CategoryTypeScheduled &&
+			task.GetVisibilityTime().Sub(now) > maxScheduledTaskDuration {
+			ms.logger.Info("Dropped long duration scheduled task.", tasks.Tags(task)...)
+			continue
+		}
 		ms.InsertTasks[category] = append(ms.InsertTasks[category], task)
 	}
 }
