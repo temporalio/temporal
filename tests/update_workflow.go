@@ -1223,6 +1223,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			}
 			go updateWorkflowFn(tc.RespondWorkflowTaskError != "")
 
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
+
 			// Process update in workflow.
 			_, err := poller.PollAndProcessWorkflowTask()
 			if tc.RespondWorkflowTaskError != "" {
