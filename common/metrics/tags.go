@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/locks"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
@@ -335,6 +336,10 @@ func StringTag(key string, value string) Tag {
 
 func CacheTypeTag(value string) Tag {
 	return &tagImpl{key: CacheTypeTagName, value: value}
+}
+
+func PriorityTag(value locks.Priority) Tag {
+	return &tagImpl{key: TaskPriorityTagName, value: strconv.Itoa(int(value))}
 }
 
 // ReasonString is just a string but the special type is defined here to remind callers of ReasonTag to limit the

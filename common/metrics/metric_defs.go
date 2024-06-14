@@ -47,6 +47,7 @@ const (
 	resourceExhaustedTag        = "resource_exhausted_cause"
 	resourceExhaustedScopeTag   = "resource_exhausted_scope"
 	PartitionTypeName           = "partition_type"
+	PriorityTagName             = "priority"
 )
 
 // This package should hold all the metrics and tags for temporal
