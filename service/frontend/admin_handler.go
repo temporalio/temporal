@@ -1507,10 +1507,10 @@ func (adh *AdminHandler) ResendReplicationTasks(
 			namespaceId namespace.ID,
 			workflowId string,
 			runId string,
-			events []*historypb.HistoryEvent,
+			events [][]*historypb.HistoryEvent,
 			versionHistory []*historyspb.VersionHistoryItem,
 		) error {
-			historyBlob, err1 := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+			historyBlob, err1 := adh.eventSerializer.SerializeEvents(events[0], enumspb.ENCODING_TYPE_PROTO3)
 			if err1 != nil {
 				return err1
 			}
@@ -1529,6 +1529,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		adh.eventSerializer,
 		nil,
 		adh.logger,
+		nil,
 	)
 	if err := resender.SendSingleWorkflowHistory(
 		ctx,
