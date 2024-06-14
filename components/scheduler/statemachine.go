@@ -88,7 +88,6 @@ func (stateMachineDefinition) Deserialize(d []byte) (any, error) {
 	return &Scheduler{
 		HsmSchedulerState: state,
 		tweakables:        scheduler.CurrentTweakablePolicies,
-		nextInvokeTime:    time.Time{},
 	}, nil
 }
 
