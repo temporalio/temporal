@@ -519,7 +519,7 @@ func (s *subscriptionSuite) TestSubscriptionGlobal() {
 	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: true}})
 	// no update should be delivered
 	time.Sleep(10 * time.Millisecond)
-	s.Empty(vals)
+	s.Empty(vals, "should not deliver update")
 }
 
 func (s *subscriptionSuite) TestSubscriptionGlobal_DoesNotCallUnchanged() {
@@ -530,8 +530,7 @@ func (s *subscriptionSuite) TestSubscriptionGlobal_DoesNotCallUnchanged() {
 	s.True(initial)
 	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: true}})
 	time.Sleep(10 * time.Millisecond)
-	s.Empty(vals)
-
+	s.Empty(vals, "should not deliver update")
 }
 
 func (s *subscriptionSuite) TestSubscriptionNamespace() {
@@ -579,9 +578,28 @@ func (s *subscriptionSuite) TestSubscriptionNamespace() {
 	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns2"}, Value: 2},
 	})
-	s.Require().Eventually(func() bool { return len(vals1) == 1 }, time.Second, time.Millisecond)
-	s.Require().Eventually(func() bool { return len(vals3) == 1 }, time.Second, time.Millisecond)
+	s.Require().Eventually(
+		func() bool { return len(vals1) == 1 && len(vals3) == 1 },
+		time.Second, time.Millisecond)
 	s.Equal(0, <-vals1)
 	s.Empty(vals2)
 	s.Equal(0, <-vals3)
+}
+
+func (s *subscriptionSuite) TestSubscriptionWithDefault() {
+	baseSetting := dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+	setting := baseSetting.WithDefault(100)
+
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: 50}})
+
+	vals := make(chan int, 1)
+	init, _ := setting.Subscribe(s.cln)(func(n int) { vals <- n })
+
+	s.Equal(50, init)
+
+	// remove, should get default
+	s.client.Set(setting.Key(), nil)
+
+	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
+	s.Equal(100, <-vals)
 }

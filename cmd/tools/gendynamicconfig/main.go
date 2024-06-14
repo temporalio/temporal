@@ -232,8 +232,6 @@ func (s {{.P.Name}}TypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 	dispatchUpdate(
 		c,
 		s.key,
-		s.def,
-		s.cdef,
 		s.convert,
 		sub.(*subscription[T]),
 		cvs,

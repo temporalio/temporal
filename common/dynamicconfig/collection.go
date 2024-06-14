@@ -68,9 +68,11 @@ type (
 	}
 
 	subscription[T any] struct {
-		prec []Constraints // constant
-		f    func(T)       // constant
-		prev T             // protected by subscriptionLock in Collection
+		prec []Constraints              // constant
+		f    func(T)                    // constant
+		def  T                          // constant
+		cdef []TypedConstrainedValue[T] // constant
+		prev T                          // protected by subscriptionLock in Collection
 	}
 
 	subscriptionCallbackSettings struct {
@@ -299,6 +301,8 @@ func subscribe[T any](
 	c.subscriptions[key][id] = &subscription[T]{
 		prec: prec,
 		f:    callback,
+		def:  def,
+		cdef: cdef,
 		prev: init,
 	}
 
@@ -313,13 +317,11 @@ func subscribe[T any](
 func dispatchUpdate[T any](
 	c *Collection,
 	key Key,
-	def T,
-	cdef []TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	sub *subscription[T],
 	cvs []ConstrainedValue,
 ) {
-	newVal := matchAndConvertCvs(c, key, def, cdef, convert, sub.prec, cvs)
+	newVal := matchAndConvertCvs(c, key, sub.def, sub.cdef, convert, sub.prec, cvs)
 	// Unfortunately we have to use reflect.DeepEqual instead of just == because T is not comparable.
 	// We can't make T comparable because maps and slices are not comparable, and we want to support
 	// those directly. We could have two versions of this, one for comparable types and one for

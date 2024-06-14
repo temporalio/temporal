@@ -802,8 +802,6 @@ func (s GlobalTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Cons
 	dispatchUpdate(
 		c,
 		s.key,
-		s.def,
-		s.cdef,
 		s.convert,
 		sub.(*subscription[T]),
 		cvs,
@@ -897,8 +895,6 @@ func (s NamespaceTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []C
 	dispatchUpdate(
 		c,
 		s.key,
-		s.def,
-		s.cdef,
 		s.convert,
 		sub.(*subscription[T]),
 		cvs,
@@ -992,8 +988,6 @@ func (s NamespaceIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 	dispatchUpdate(
 		c,
 		s.key,
-		s.def,
-		s.cdef,
 		s.convert,
 		sub.(*subscription[T]),
 		cvs,
@@ -1087,8 +1081,6 @@ func (s TaskQueueTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []C
 	dispatchUpdate(
 		c,
 		s.key,
-		s.def,
-		s.cdef,
 		s.convert,
 		sub.(*subscription[T]),
 		cvs,
@@ -1182,8 +1174,6 @@ func (s ShardIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Con
 	dispatchUpdate(
 		c,
 		s.key,
-		s.def,
-		s.cdef,
 		s.convert,
 		sub.(*subscription[T]),
 		cvs,
@@ -1277,8 +1267,6 @@ func (s TaskTypeTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Co
 	dispatchUpdate(
 		c,
 		s.key,
-		s.def,
-		s.cdef,
 		s.convert,
 		sub.(*subscription[T]),
 		cvs,
@@ -1372,8 +1360,6 @@ func (s DestinationTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 	dispatchUpdate(
 		c,
 		s.key,
-		s.def,
-		s.cdef,
 		s.convert,
 		sub.(*subscription[T]),
 		cvs,
