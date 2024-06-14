@@ -339,7 +339,7 @@ func CacheTypeTag(value string) Tag {
 }
 
 func PriorityTag(value locks.Priority) Tag {
-	return &tagImpl{key: TaskPriorityTagName, value: strconv.Itoa(int(value))}
+	return &tagImpl{key: PriorityTagName, value: strconv.Itoa(int(value))}
 }
 
 // ReasonString is just a string but the special type is defined here to remind callers of ReasonTag to limit the
