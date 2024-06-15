@@ -35,8 +35,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 )
@@ -59,9 +57,11 @@ const (
 	//	- ShardID
 	//	- Blob (a serialized task) <-- when this cannot be deserialized
 	ErrMsgDeserializeHistoryTask = "failed to deserialize history task blob"
-	// ErrMsgFailedToParseQueueName is returned when the queue name cannot be parsed into category id, source cluster
+	// ErrMsgInvalidQueueName is returned when the queue name cannot be split into category id, source cluster
 	// and target cluster
-	ErrMsgFailedToParseQueueName = "failed to parse fields from queue name"
+	ErrMsgInvalidQueueName = "invalid queue name %v. expected 4 fields"
+	// ErrMsgFailedToParseCategoryID is returned when category id cannot be parsed as an integer value.
+	ErrMsgFailedToParseCategoryID = "failed to parse category id from queue name"
 )
 
 var (
@@ -276,11 +276,11 @@ func GetHistoryTaskQueueName(
 func GetHistoryTaskQueueCategoryID(queueName string) (int, error) {
 	fields := strings.Split(queueName, "_")
 	if len(fields) != 4 {
-		return 0, serviceerror.NewInternal(fmt.Sprintf("failed to parse fields from queue name %v", queueName))
+		return 0, fmt.Errorf(ErrMsgInvalidQueueName, queueName)
 	}
 	category, err := strconv.Atoi(fields[0])
 	if err != nil {
-		return 0, serviceerror.NewInternal(fmt.Sprintf("failed to parse category id from queue name %v: %v", queueName, err))
+		return 0, fmt.Errorf("%v: %w", ErrMsgFailedToParseCategoryID, err)
 	}
 	return category, nil
 }

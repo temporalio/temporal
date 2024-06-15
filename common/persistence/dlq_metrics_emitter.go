@@ -24,6 +24,7 @@ package persistence
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -32,7 +33,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -111,8 +111,8 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 				}
 				messageCounts[category] += q.MessageCount
 			}
-			for id, name := range tasks.CategoryIDToName {
-				metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(messageCounts[id]), metrics.TaskCategoryTag(name))
+			for category, count := range messageCounts {
+				metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(strconv.Itoa(category)))
 			}
 		}
 	}

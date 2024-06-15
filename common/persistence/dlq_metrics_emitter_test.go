@@ -23,6 +23,7 @@
 package persistence
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -40,7 +41,6 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 	defer ctrl.Finish()
 
 	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
 	logger := log.NewMockLogger(ctrl)
 	manager := NewMockHistoryTaskQueueManager(ctrl)
 	manager.EXPECT().ListQueues(gomock.Any(), &ListQueuesRequest{
@@ -75,11 +75,12 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 	logger.EXPECT().Info(gomock.Any()).AnyTimes()
 	logger.EXPECT().Error(gomock.Any()).AnyTimes()
 
+	capture := metricsHandler.StartCapture()
 	snapshot := capture.Snapshot()
 	emitter.Start()
 	assert.Eventually(t, func() bool {
 		snapshot = capture.Snapshot()
-		return len(snapshot[metrics.DLQMessageCount.Name()]) == len(tasks.CategoryIDToName)
+		return len(snapshot[metrics.DLQMessageCount.Name()]) == 3
 	}, 5*time.Second, 100*time.Millisecond)
 
 	emitter.Stop()
@@ -89,9 +90,9 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 	for _, recording := range snapshot[metrics.DLQMessageCount.Name()] {
 		messageCount[recording.Tags[metrics.TaskCategoryTagName]] = recording.Value.(float64)
 	}
-	assert.Equal(t, float64(9), messageCount[tasks.CategoryIDToName[tasks.CategoryIDTransfer]])
-	assert.Equal(t, float64(11), messageCount[tasks.CategoryIDToName[tasks.CategoryIDTimer]])
-	assert.Equal(t, float64(13), messageCount[tasks.CategoryIDToName[tasks.CategoryIDReplication]])
+	assert.Equal(t, float64(9), messageCount[strconv.Itoa(tasks.CategoryIDTransfer)])
+	assert.Equal(t, float64(11), messageCount[strconv.Itoa(tasks.CategoryIDTimer)])
+	assert.Equal(t, float64(13), messageCount[strconv.Itoa(tasks.CategoryIDReplication)])
 }
 
 func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardZero(t *testing.T) {
