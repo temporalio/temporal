@@ -48,6 +48,9 @@ func NewTargetedDataStoreErrorGenerator(cfg *config.FaultInjectionDataStoreConfi
 		methodErrRate := 0.0
 		for errName, errRate := range methodConfig.Errors {
 			err := newError(errName, errRate, methodName)
+			if err == nil {
+				continue
+			}
 			faultWeights = append(faultWeights, FaultWeight{
 				errFactory: func(data string) error {
 					return err
@@ -111,6 +114,8 @@ func newError(errName string, errRate float64, methodName string) error {
 		return fmt.Errorf("%s: %w", header, context.DeadlineExceeded)
 	case "Timeout":
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}
+	case "ExecuteAndTimeout":
+		return nil
 	case "ResourceExhausted":
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
