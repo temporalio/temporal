@@ -830,12 +830,12 @@ func (e *CircuitBreakerExecutable) Execute() error {
 	}()
 
 	err = e.Executable.Execute()
-	destinationDownErr, destinationDown := err.(*DestinationDownError)
-	if destinationDown {
+	var destinationDownErr *DestinationDownError
+	if errors.As(err, &destinationDownErr) {
 		err = destinationDownErr.Unwrap()
 	}
 
-	doneCb(!destinationDown)
+	doneCb(destinationDownErr == nil)
 	return err
 }
 

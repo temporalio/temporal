@@ -354,7 +354,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				nexusoperations.InvocationTask{Destination: "endpoint-name"},
 			)
 			if tc.destinationDown {
-				require.IsType(t, &queues.DestinationDownError{}, err)
+				var destinationDownErr *queues.DestinationDownError
+				require.ErrorAs(t, err, &destinationDownErr)
 			} else {
 				require.NoError(t, err)
 			}
