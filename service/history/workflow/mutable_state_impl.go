@@ -4832,14 +4832,41 @@ func (ms *MutableStateImpl) RetryActivity(
 	if err := ms.checkMutability(opTag); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-	activityVisitor := newActivityVisitor(ai, failure, ms.timeSource)
-	if state := activityVisitor.State(); state != enumspb.RETRY_STATE_IN_PROGRESS {
-		return state, nil
+	if !ai.HasRetryPolicy {
+		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
 	}
+	if ai.CancelRequested {
+		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
+	}
+
+	if !isRetryable(failure, ai.RetryNonRetryableErrorTypes) {
+		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
+	}
+
+	retryMaxInterval := ai.RetryMaximumInterval
+	// if a delay is specified by the application it should override the maximum interval set by the retry policy.
+	delay := nextRetryDelayFrom(failure)
+	if delay != nil {
+		retryMaxInterval = durationpb.New(*delay)
+	}
+
+	now := ms.timeSource.Now().In(time.UTC)
+	retryBackoff, retryState := nextBackoffInterval(
+		ms.timeSource.Now().In(time.UTC),
+		ai.Attempt,
+		ai.RetryMaximumAttempts,
+		ai.RetryInitialInterval,
+		retryMaxInterval,
+		ai.RetryExpirationTime,
+		ai.RetryBackoffCoefficient,
+		makeBackoffAlgorithm(delay),
+	)
+	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		return retryState, nil
+	}
+
+	nextScheduledTime := now.Add(retryBackoff)
 	nextAttempt := ai.Attempt + 1
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai.ScheduledEventId, activityVisitor.NextScheduledTime(), nextAttempt); err != nil {
-		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-	}
 	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity
 	// info and if prev found it points to the same activity info as ai, so updating ai will cause
 	// size of prev change.
@@ -4847,15 +4874,21 @@ func (ms *MutableStateImpl) RetryActivity(
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-	ai = activityVisitor.UpdateActivityInfo(
+	ai = updateActivityInfoForRetries(
 		ai,
 		ms.GetCurrentVersion(),
 		nextAttempt,
 		ms.truncateRetryableActivityFailure(failure),
+		timestamppb.New(nextScheduledTime),
 	)
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+	}
+
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 

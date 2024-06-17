@@ -77,7 +77,7 @@ type (
 		GenerateActivityTasks(
 			activityScheduledEventID int64,
 		) error
-		GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error
+		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
 		GenerateChildWorkflowTasks(
 			event *historypb.HistoryEvent,
 		) error
@@ -544,14 +544,14 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
+func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error {
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		Version:             r.mutableState.GetCurrentVersion(),
-		VisibilityTimestamp: visibilityTimestamp,
-		EventID:             eventID,
-		Attempt:             nextAttempt,
+		Version:             activityInfo.GetVersion(),
+		VisibilityTimestamp: activityInfo.GetScheduledTime().AsTime(),
+		EventID:             activityInfo.GetScheduledEventId(),
+		Attempt:             activityInfo.GetAttempt(),
 	})
 	return nil
 }
