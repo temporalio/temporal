@@ -174,12 +174,16 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 					},
 					RunnableFactory: func(e queues.Executable) ctasks.Runnable {
 						key := grouper.KeyTyped(e.GetTask())
-						return ctasks.RateLimitedTaskRunnable{
-							Limiter: rateLimiterPool.Get(key),
-							Runnable: ctasks.RunnableTask{
+						return ctasks.NewRateLimitedTaskRunnableFromTask(
+							ctasks.RunnableTask{
 								Task: queues.NewCircuitBreakerExecutable(e, circuitBreakerPool.Get(key)),
 							},
-						}
+							rateLimiterPool.Get(key),
+							metricsHandler.WithTags(
+								metrics.NamespaceTag(key.NamespaceID),
+								metrics.DestinationTag(key.Destination),
+							),
+						)
 					},
 					SchedulerFactory: func(
 						key queues.StateMachineTaskTypeNamespaceIDAndDestination,
