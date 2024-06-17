@@ -22,45 +22,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package timer
+package pingable
 
-import (
-	"errors"
-	"time"
+import "time"
 
-	"go.temporal.io/server/common/primitives/timestamp"
-	"google.golang.org/protobuf/types/known/durationpb"
-)
-
-const (
-	// MaxAllowedTimer is the maximum allowed timer duration in the system
-	// exported for integration tests
-	MaxAllowedTimer = 100 * 365 * 24 * time.Hour
-)
-
-var (
-	errNegativeDuration = errors.New("negative timer duration")
-	// Pre-extracted for ease of use later
-	maxSeconds = MaxAllowedTimer.Nanoseconds() / 1e9
-	maxNanos   = int32(MaxAllowedTimer.Nanoseconds() - maxSeconds*1e9)
-)
-
-// TODO: remove this logic, rely on scheduled task dropping logic in mutableState for long duration timers
-func ValidateAndCapTimer(delay *durationpb.Duration) error {
-	duration := timestamp.DurationValue(delay)
-	if duration < 0 {
-		return errNegativeDuration
+type (
+	// Pingable is interface to check for liveness of a component, to detect deadlocks.
+	// This call should not block.
+	Pingable interface {
+		GetPingChecks() []Check
 	}
 
-	// unix nano (max int64) is 2262-04-11T23:47:16.854775807Z
-	// allowing 100 years timer is safe until 2162
-	//
-	// NOTE: we choose to cap the timer instead of returning error so that
-	// existing workflows implementation using higher than allowed timer
-	// can continue to run.
-	if duration > MaxAllowedTimer {
-		delay.Nanos = maxNanos
-		delay.Seconds = maxSeconds
+	Check struct {
+		// Name of this component.
+		Name string
+		// The longest time that Ping can take. If it doesn't return in that much time, that's
+		// considered a deadlock and the deadlock detector may take actions to recover, like
+		// killing the process.
+		Timeout time.Duration
+		// Perform the check. The typical implementation will just be Lock() and then Unlock()
+		// on a mutex, returning nil. Ping can also return more Pingables for sub-components
+		// that will be checked independently. These should form a tree and not lead to cycles.
+		Ping func() []Pingable
+
+		// Metrics recording:
+		// Timer id within DeadlockDetectorScope (or zero for no metrics)
+		MetricsName string
 	}
-	return nil
-}
+)

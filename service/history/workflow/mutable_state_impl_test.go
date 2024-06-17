@@ -86,9 +86,10 @@ type (
 		mockShard       *shard.ContextTest
 		mockEventsCache *events.MockCache
 
-		mutableState *MutableStateImpl
-		logger       log.Logger
-		testScope    tally.TestScope
+		namespaceEntry *namespace.Namespace
+		mutableState   *MutableStateImpl
+		logger         log.Logger
+		testScope      tally.TestScope
 
 		replicationMultipleBatches bool
 	}
@@ -162,15 +163,15 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockConfig.EnableTransitionHistory = func() bool { return true }
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
-	namespaceEntry := tests.GlobalNamespaceEntry
-	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
-	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.namespaceEntry = tests.GlobalNamespaceEntry
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(s.namespaceEntry, nil).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -1945,5 +1946,65 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks() {
 				}
 			},
 		)
+	}
+}
+
+func (s *mutableStateSuite) TestMaxAllowedTimer() {
+	testCases := []struct {
+		name                   string
+		runTimeout             time.Duration
+		runTimeoutTimerDropped bool
+	}{
+		{
+			name:                   "run timeout timer preserved",
+			runTimeout:             time.Hour * 24 * 365,
+			runTimeoutTimerDropped: false,
+		},
+		{
+			name:                   "run timeout timer dropped",
+			runTimeout:             time.Hour * 24 * 365 * 100,
+			runTimeoutTimerDropped: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(1)
+			s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+
+			workflowKey := s.mutableState.GetWorkflowKey()
+			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{
+					WorkflowId: workflowKey.WorkflowID,
+					RunId:      workflowKey.RunID,
+				},
+				&historyservice.StartWorkflowExecutionRequest{
+					NamespaceId: workflowKey.NamespaceID,
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						Namespace:  s.mutableState.GetNamespaceEntry().Name().String(),
+						WorkflowId: workflowKey.WorkflowID,
+						WorkflowType: &commonpb.WorkflowType{
+							Name: "test-workflow-type",
+						},
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: "test-task-queue",
+						},
+						WorkflowRunTimeout: durationpb.New(tc.runTimeout),
+					},
+				},
+			)
+			s.NoError(err)
+
+			snapshot, _, err := s.mutableState.CloseTransactionAsSnapshot(TransactionPolicyActive)
+			s.NoError(err)
+
+			timerTasks := snapshot.Tasks[tasks.CategoryTimer]
+			if tc.runTimeoutTimerDropped {
+				s.Empty(timerTasks)
+			} else {
+				s.Len(timerTasks, 1)
+				s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, timerTasks[0].GetType())
+			}
+		})
 	}
 }

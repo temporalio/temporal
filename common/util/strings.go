@@ -22,45 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package timer
+package util
 
-import (
-	"errors"
-	"time"
+import "unicode/utf8"
 
-	"go.temporal.io/server/common/primitives/timestamp"
-	"google.golang.org/protobuf/types/known/durationpb"
-)
-
-const (
-	// MaxAllowedTimer is the maximum allowed timer duration in the system
-	// exported for integration tests
-	MaxAllowedTimer = 100 * 365 * 24 * time.Hour
-)
-
-var (
-	errNegativeDuration = errors.New("negative timer duration")
-	// Pre-extracted for ease of use later
-	maxSeconds = MaxAllowedTimer.Nanoseconds() / 1e9
-	maxNanos   = int32(MaxAllowedTimer.Nanoseconds() - maxSeconds*1e9)
-)
-
-// TODO: remove this logic, rely on scheduled task dropping logic in mutableState for long duration timers
-func ValidateAndCapTimer(delay *durationpb.Duration) error {
-	duration := timestamp.DurationValue(delay)
-	if duration < 0 {
-		return errNegativeDuration
+// TruncateUTF8 truncates s to no more than n _bytes_, and returns a valid utf-8 string as long
+// as the input is a valid utf-8 string.
+// Note that truncation pays attention to codepoints only! This may truncate in the middle of a
+// grapheme cluster.
+func TruncateUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	} else if n <= 0 {
+		return ""
 	}
-
-	// unix nano (max int64) is 2262-04-11T23:47:16.854775807Z
-	// allowing 100 years timer is safe until 2162
-	//
-	// NOTE: we choose to cap the timer instead of returning error so that
-	// existing workflows implementation using higher than allowed timer
-	// can continue to run.
-	if duration > MaxAllowedTimer {
-		delay.Nanos = maxNanos
-		delay.Seconds = maxSeconds
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
 	}
-	return nil
+	return s[:n]
 }

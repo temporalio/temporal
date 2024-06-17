@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -242,14 +243,14 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
 }
 
-func (s *ContextImpl) GetPingChecks() []common.PingCheck {
-	return []common.PingCheck{
+func (s *ContextImpl) GetPingChecks() []pingable.Check {
+	return []pingable.Check{
 		{
 			Name: s.String() + "-shard-lock",
 			// rwLock may be held for the duration of renewing shard rangeID, which are called with a
 			// timeout of shardIOTimeout. add a few more seconds for reliability.
 			Timeout: s.config.ShardIOTimeout() + 5*time.Second,
-			Ping: func() []common.Pingable {
+			Ping: func() []pingable.Pingable {
 				// call rwLock.Lock directly to bypass metrics since this isn't a real request
 				s.rwLock.Lock()
 				//nolint:staticcheck // SA2001 just checking if we can acquire the lock
@@ -263,7 +264,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			// ioSemaphore is for the duration of a persistence op which has a persistence connection timeout
 			// of 10 sec.
 			Timeout: 10 * time.Second,
-			Ping: func() []common.Pingable {
+			Ping: func() []pingable.Pingable {
 				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
 				s.ioSemaphore.Release(1)
 				return nil
@@ -1523,7 +1524,13 @@ func (s *ContextImpl) rUnlock() {
 func (s *ContextImpl) ioSemaphoreAcquire(
 	ctx context.Context,
 ) (retErr error) {
-	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	priority := locks.PriorityHigh
+	callerInfo := headers.GetCallerInfo(ctx)
+	if callerInfo.CallerType == headers.CallerTypePreemptable {
+		priority = locks.PriorityLow
+	}
+
+	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope), metrics.PriorityTag(priority))
 	metrics.SemaphoreRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -1533,11 +1540,6 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
-	priority := locks.PriorityHigh
-	callerInfo := headers.GetCallerInfo(ctx)
-	if callerInfo.CallerType == headers.CallerTypePreemptable {
-		priority = locks.PriorityLow
-	}
 	return s.ioSemaphore.Acquire(ctx, priority, 1)
 }
 
