@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -350,9 +349,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 
-	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &common.Callback{
-		Variant: &common.Callback_Nexus_{
-			Nexus: &common.Callback_Nexus{
+	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+		Variant: &persistencespb.Callback_Nexus_{
+			Nexus: &persistencespb.Callback_Nexus{
 				Url: "http://localhost?foo=bar",
 			},
 		},
@@ -364,14 +363,14 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &common.Callback{
-		Variant: &common.Callback_Nexus_{
-			Nexus: &common.Callback_Nexus{
+	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+		Variant: &persistencespb.Callback_Nexus_{
+			Nexus: &persistencespb.Callback_Nexus{
 				Url: "http://localhost?foo=bar",
 			},
 		},
 	})
-	callbackToBackoff.PublicInfo.State = enumspb.CALLBACK_STATE_SCHEDULED
+	callbackToBackoff.CallbackInfo.State = enumsspb.CALLBACK_STATE_SCHEDULED
 	_, err = coll.Add("backoff", callbackToBackoff)
 	require.NoError(t, err)
 	err = coll.Transition("backoff", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
@@ -436,7 +435,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	timers := mutableState.GetExecutionInfo().StateMachineTimers
 	require.Equal(t, 1, len(timers))
 	protorequire.ProtoEqual(t, &persistencespb.StateMachineTimerGroup{
-		Deadline:  callbackToBackoff.PublicInfo.NextAttemptScheduleTime,
+		Deadline:  callbackToBackoff.NextAttemptScheduleTime,
 		Scheduled: true,
 		Infos: []*persistencespb.StateMachineTaskInfo{
 			{

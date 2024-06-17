@@ -509,7 +509,7 @@ func NewMutableStateInChain(
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := cb.PublicInfo.GetTrigger().GetVariant().(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); ok {
+		if _, ok := cb.GetTrigger().GetVariant().(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); ok {
 			if _, err := newCallbacks.Add(node.Key.ID, cb); err != nil {
 				return nil, err
 			}
@@ -2155,7 +2155,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	coll := callbacks.MachineCollection(ms.HSM())
 	for idx, cb := range event.GetCompletionCallbacks() {
-		machine := callbacks.NewCallback(startEvent.EventTime, callbacks.NewWorkflowClosedTrigger(), cb)
+		persistenceCB := &persistencespb.Callback{}
+		switch variant := cb.Variant.(type) {
+		case *commonpb.Callback_Nexus_:
+			persistenceCB.Variant = &persistencespb.Callback_Nexus_{
+				Nexus: &persistencespb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		}
+		machine := callbacks.NewCallback(startEvent.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
 		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
 		// IDs that are deterministically created across clusters.
 		// TODO: Replicate the state machine state and allocate a uuid there instead of relying on history event
@@ -4329,7 +4339,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		if err != nil {
 			return nil, nil, err
 		}
-		if _, ok := cb.PublicInfo.GetTrigger().GetVariant().(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); ok {
+		if _, ok := cb.GetTrigger().GetVariant().(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); ok {
 			if _, err := newCallbacks.Add(node.Key.ID, cb); err != nil {
 				return nil, nil, err
 			}
@@ -4916,7 +4926,7 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 			return err
 		}
 		// Only try to trigger "WorkflowClosed" callbacks.
-		if _, ok := cb.PublicInfo.Trigger.Variant.(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); !ok {
+		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
 			continue
 		}
 		err = coll.Transition(node.Key.ID, func(cb callbacks.Callback) (hsm.TransitionOutput, error) {

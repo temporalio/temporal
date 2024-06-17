@@ -32,9 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -87,7 +85,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			destinationDown:       false,
 			expectedMetricOutcome: "status:200",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, cb.PublicInfo.State)
+				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
 			},
 		},
 		{
@@ -98,7 +96,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			destinationDown:       true,
 			expectedMetricOutcome: "unknown-error",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
+				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
 		},
 		{
@@ -109,7 +107,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			destinationDown:       true,
 			expectedMetricOutcome: "status:500",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
+				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
 		},
 		{
@@ -120,7 +118,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			destinationDown:       false,
 			expectedMetricOutcome: "status:400",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumspb.CALLBACK_STATE_FAILED, cb.PublicInfo.State)
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
 		},
 	}
@@ -158,16 +156,14 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			root := newRoot(t)
 			cb := callbacks.Callback{
 				CallbackInfo: &persistencespb.CallbackInfo{
-					PublicInfo: &workflowpb.CallbackInfo{
-						Callback: &common.Callback{
-							Variant: &common.Callback_Nexus_{
-								Nexus: &common.Callback_Nexus{
-									Url: "http://localhost",
-								},
+					Callback: &persistencespb.Callback{
+						Variant: &persistencespb.Callback_Nexus_{
+							Nexus: &persistencespb.Callback_Nexus{
+								Url: "http://localhost",
 							},
 						},
-						State: enumspb.CALLBACK_STATE_SCHEDULED,
 					},
+					State: enumsspb.CALLBACK_STATE_SCHEDULED,
 				},
 			}
 			coll := callbacks.MachineCollection(root)
@@ -229,16 +225,14 @@ func TestProcessBackoffTask(t *testing.T) {
 	root := newRoot(t)
 	cb := callbacks.Callback{
 		CallbackInfo: &persistencespb.CallbackInfo{
-			PublicInfo: &workflowpb.CallbackInfo{
-				Callback: &common.Callback{
-					Variant: &common.Callback_Nexus_{
-						Nexus: &common.Callback_Nexus{
-							Url: "http://localhost",
-						},
+			Callback: &persistencespb.Callback{
+				Variant: &persistencespb.Callback_Nexus_{
+					Nexus: &persistencespb.Callback_Nexus{
+						Url: "http://localhost",
 					},
 				},
-				State: enumspb.CALLBACK_STATE_BACKING_OFF,
 			},
+			State: enumsspb.CALLBACK_STATE_BACKING_OFF,
 		},
 	}
 	coll := callbacks.MachineCollection(root)
@@ -271,7 +265,7 @@ func TestProcessBackoffTask(t *testing.T) {
 
 	cb, err = coll.Data("ID")
 	require.NoError(t, err)
-	require.Equal(t, enumspb.CALLBACK_STATE_SCHEDULED, cb.PublicInfo.State)
+	require.Equal(t, enumsspb.CALLBACK_STATE_SCHEDULED, cb.State())
 }
 
 func newMutableState(t *testing.T) mutableState {

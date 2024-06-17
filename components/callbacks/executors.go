@@ -31,9 +31,9 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	commonpb "go.temporal.io/api/common/v1"
 	"go.uber.org/fx"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
@@ -177,8 +177,8 @@ func (e taskExecutor) loadInvocationArgs(
 		if err != nil {
 			return err
 		}
-		switch variant := callback.PublicInfo.GetCallback().GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
+		switch variant := callback.GetCallback().GetVariant().(type) {
+		case *persistencespb.Callback_Nexus_:
 			args.url = variant.Nexus.GetUrl()
 			args.header = variant.Nexus.GetHeader()
 			args.completion, err = target.GetNexusCompletion(ctx)
