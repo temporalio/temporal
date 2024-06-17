@@ -145,7 +145,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		{
 			name:            "sync failed",
 			requestTimeout:  time.Hour,
-			destinationDown: true,
+			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, &nexus.UnsuccessfulOperationError{
 					Failure: nexus.Failure{Message: "operation failed from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
@@ -191,7 +191,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		{
 			name:            "sync canceled",
 			requestTimeout:  time.Hour,
-			destinationDown: true,
+			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, &nexus.UnsuccessfulOperationError{
 					Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},

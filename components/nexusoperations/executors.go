@@ -228,15 +228,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	err = e.saveResult(ctx, env, ref, result, callErr)
 
-	if callErr != nil {
-		var unexpectedErr *nexus.UnexpectedResponseError
-		if errors.As(callErr, &unexpectedErr) {
-			if isRetryableHTTPResponse(unexpectedErr.Response) {
-				err = queues.NewDestinationDownError(callErr.Error(), err)
-			}
-		} else if !errors.Is(callErr, ErrResponseBodyTooLarge) {
-			err = queues.NewDestinationDownError(callErr.Error(), err)
-		}
+	if callErr != nil && isDestinationDown(callErr) {
+		err = queues.NewDestinationDownError(callErr.Error(), err)
 	}
 
 	return err
@@ -482,15 +475,8 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	err = e.saveCancelationResult(ctx, env, ref, callErr)
 
-	if callErr != nil {
-		var unexpectedResponseErr *nexus.UnexpectedResponseError
-		if errors.As(callErr, &unexpectedResponseErr) {
-			if isRetryableHTTPResponse(unexpectedResponseErr.Response) {
-				err = queues.NewDestinationDownError(callErr.Error(), err)
-			}
-		} else {
-			err = queues.NewDestinationDownError(callErr.Error(), err)
-		}
+	if callErr != nil && isDestinationDown(callErr) {
+		err = queues.NewDestinationDownError(callErr.Error(), err)
 	}
 
 	return err
@@ -622,4 +608,19 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 
 func isRetryableHTTPResponse(response *http.Response) bool {
 	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
+}
+
+func isDestinationDown(err error) bool {
+	var unexpectedErr *nexus.UnexpectedResponseError
+	var opFailedErr *nexus.UnsuccessfulOperationError
+	if errors.As(err, &opFailedErr) {
+		return false
+	}
+	if errors.As(err, &unexpectedErr) {
+		return isRetryableHTTPResponse(unexpectedErr.Response)
+	}
+	if errors.Is(err, ErrResponseBodyTooLarge) {
+		return false
+	}
+	return true
 }
