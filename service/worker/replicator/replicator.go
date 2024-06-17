@@ -189,7 +189,7 @@ func (r *Replicator) cleanupAckedMessages(
 ) (int64, error) {
 	ackLevelByCluster, err := r.namespaceReplicationQueue.GetAckLevels(ctx)
 	if err != nil {
-		return ackMessageID, fmt.Errorf("failed to delete acked messages from namespace replication queue: %v", err)
+		return ackMessageID, err
 	}
 
 	if len(ackLevelByCluster) == 0 {
