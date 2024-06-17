@@ -180,15 +180,20 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 							key.NamespaceID,
 							metricsHandler,
 						)
+						taggedMetricsHandler := metricsHandler.WithTags(
+							metrics.NamespaceTag(nsName),
+							metrics.DestinationTag(key.Destination),
+						)
 						return ctasks.NewRateLimitedTaskRunnableFromTask(
 							ctasks.RunnableTask{
-								Task: queues.NewCircuitBreakerExecutable(e, circuitBreakerPool.Get(key)),
+								Task: queues.NewCircuitBreakerExecutable(
+									e,
+									circuitBreakerPool.Get(key),
+									taggedMetricsHandler,
+								),
 							},
 							rateLimiterPool.Get(key),
-							metricsHandler.WithTags(
-								metrics.NamespaceTag(nsName),
-								metrics.DestinationTag(key.Destination),
-							),
+							taggedMetricsHandler,
 						)
 					},
 					SchedulerFactory: func(
