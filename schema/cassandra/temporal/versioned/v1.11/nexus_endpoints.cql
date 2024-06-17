@@ -1,3 +1,5 @@
+DROP TABLE nexus_incoming_services;
+
 CREATE TABLE nexus_endpoints
 (
     partition       int, -- constant for all rows (using a single partition for efficient list queries)

@@ -96,7 +96,7 @@ type (
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
-			events []*historypb.HistoryEvent,
+			eventBatches [][]*historypb.HistoryEvent,
 		) error
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 
@@ -296,14 +296,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	stateMachineRegistry *hsm.Registry,
 ) error {
 	tree := r.mutableState.HSM()
-	// Early return here to avoid accessing the transition history. It may be disabled via dynamic config.
-	outputs := tree.Outputs()
-	if len(outputs) == 0 {
-		return nil
-	}
-	transitionHistory := r.mutableState.GetExecutionInfo().TransitionHistory
-	versionedTransition := transitionHistory[len(transitionHistory)-1]
-	for _, pao := range outputs {
+	for _, pao := range tree.Outputs() {
 		node, err := tree.Child(pao.Path)
 		if err != nil {
 			return err
@@ -316,7 +309,6 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 					node,
 					pao.Path,
 					task,
-					versionedTransition,
 				); err != nil {
 					return nil
 				}
@@ -695,18 +687,27 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 }
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
-	events []*historypb.HistoryEvent,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
-	if len(events) == 0 {
+	if len(eventBatches) == 0 {
 		return nil
 	}
-
-	firstEvent := events[0]
-	lastEvent := events[len(events)-1]
-	if firstEvent.GetVersion() != lastEvent.GetVersion() {
-		return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
+	for _, events := range eventBatches {
+		if len(events) == 0 {
+			return serviceerror.NewInternal("TaskGeneratorImpl encountered empty event batch")
+		}
 	}
+
+	firstBatch := eventBatches[0]
+	firstEvent := firstBatch[0]
+	lastBatch := eventBatches[len(eventBatches)-1]
+	lastEvent := lastBatch[len(lastBatch)-1]
 	version := firstEvent.GetVersion()
+	for _, events := range eventBatches {
+		if events[0].GetVersion() != version || events[len(events)-1].GetVersion() != version {
+			return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
+		}
+	}
 
 	r.mutableState.AddTasks(&tasks.HistoryReplicationTask{
 		// TaskID, VisibilityTimestamp is set by shard
@@ -803,7 +804,6 @@ func generateSubStateMachineTask(
 	node *hsm.Node,
 	subStateMachinePath []hsm.Key,
 	task hsm.Task,
-	versionedTransition *persistencespb.VersionedTransition,
 ) error {
 	ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
 	if !ok {
@@ -822,16 +822,22 @@ func generateSubStateMachineTask(
 	}
 	// Only set transition count if a task is non-concurrent.
 	transitionCount := int64(0)
+	machineLastUpdateMutableStateTransitionCount := int64(0)
 	if !task.Concurrent() {
-		transitionCount = node.TransitionCount()
+		transitionCount = node.InternalRepr().GetTransitionCount()
+		machineLastUpdateMutableStateTransitionCount = node.InternalRepr().GetLastUpdateMutableStateTransitionCount()
 	}
 
 	taskInfo := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
-			Path:                                 ppath,
-			MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
-			MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
-			MachineTransitionCount:               transitionCount,
+			Path: ppath,
+
+			MachineInitialNamespaceFailoverVersion:       node.InternalRepr().GetInitialNamespaceFailoverVersion(),
+			MachineInitialMutableStateTransitionCount:    node.InternalRepr().GetInitialMutableStateTransitionCount(),
+			MutableStateNamespaceFailoverVersion:         mutableState.GetCurrentVersion(),
+			MutableStateTransitionCount:                  mutableState.TransitionCount(),
+			MachineTransitionCount:                       transitionCount,
+			MachineLastUpdateMutableStateTransitionCount: machineLastUpdateMutableStateTransitionCount,
 		},
 		Type: task.Type().ID,
 		Data: data,

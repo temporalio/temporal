@@ -32,6 +32,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -50,42 +51,42 @@ type CanGetNexusCompletion interface {
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
+type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
 func RegisterExecutor(
 	registry *hsm.Registry,
-	activeExecutorOptions ActiveExecutorOptions,
-	standbyExecutorOptions StandbyExecutorOptions,
+	executorOptions TaskExecutorOptions,
 	config *Config,
 ) error {
-	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
-	standbyExec := standbyExecutor{options: standbyExecutorOptions}
+	exec := taskExecutor{options: executorOptions, config: config}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,
-		activeExec.executeInvocationTask,
+		exec.executeInvocationTask,
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterTimerExecutors(
+	return hsm.RegisterTimerExecutor(
 		registry,
-		activeExec.executeBackoffTask,
-		standbyExec.executeBackoffTask,
+		exec.executeBackoffTask,
 	)
 }
 
 type (
-	ActiveExecutorOptions struct {
+	TaskExecutorOptions struct {
+		fx.In
+
 		NamespaceRegistry namespace.Registry
 		MetricsHandler    metrics.Handler
-		CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
+		CallerProvider    HTTPCallerProvider
 	}
 
-	activeExecutor struct {
-		options ActiveExecutorOptions
+	taskExecutor struct {
+		options TaskExecutorOptions
 		config  *Config
 	}
 )
 
-func (e activeExecutor) executeInvocationTask(
+func (e taskExecutor) executeInvocationTask(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
@@ -162,7 +163,7 @@ type invocationArgs struct {
 	completion nexus.OperationCompletion
 }
 
-func (e activeExecutor) loadInvocationArgs(
+func (e taskExecutor) loadInvocationArgs(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
@@ -194,7 +195,7 @@ func (e activeExecutor) loadInvocationArgs(
 	return
 }
 
-func (e activeExecutor) saveResult(
+func (e taskExecutor) saveResult(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
@@ -224,7 +225,7 @@ func (e activeExecutor) saveResult(
 	})
 }
 
-func (e activeExecutor) executeBackoffTask(
+func (e taskExecutor) executeBackoffTask(
 	env hsm.Environment,
 	node *hsm.Node,
 	task BackoffTask,
@@ -232,22 +233,6 @@ func (e activeExecutor) executeBackoffTask(
 	return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
 		return TransitionRescheduled.Apply(callback, EventRescheduled{})
 	})
-}
-
-type (
-	StandbyExecutorOptions struct{}
-
-	standbyExecutor struct {
-		options StandbyExecutorOptions
-	}
-)
-
-func (e standbyExecutor) executeBackoffTask(
-	env hsm.Environment,
-	node *hsm.Node,
-	task BackoffTask,
-) error {
-	panic("unimplemented")
 }
 
 func isRetryableHTTPResponse(response *http.Response) bool {

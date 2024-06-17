@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -104,6 +105,7 @@ func newOperationContext(options contextOptions) *operationContext {
 	mh := metricstest.NewCaptureHandler()
 	oc.metricsHandlerForInterceptors = mh
 	oc.metricsHandler = mh
+	oc.clientVersionChecker = headers.NewDefaultVersionChecker()
 	oc.apiName = "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"
 
 	oc.namespaceName = "test-namespace"
@@ -296,4 +298,31 @@ func TestNexusInterceptRequest_ForwardingEnabled_ResultsInNotActiveError(t *test
 	snap := capture.Snapshot()
 	require.Equal(t, 1, len(snap["test"]))
 	require.Equal(t, map[string]string{"outcome": "request_forwarded"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_InvalidSDKVersion_ResultsInBadRequest(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		namespacePassive:        false,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          true,
+		redirectAllow:           true,
+	})
+	header := nexus.Header{headerUserAgent: "Nexus-go-sdk/v99.0.0"}
+	ctx = oc.augmentContext(ctx, header)
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, header)
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Equal(t, 1, len(snap["test"]))
+	require.Equal(t, map[string]string{"outcome": "unsupported_client"}, snap["test"][0].Tags)
 }

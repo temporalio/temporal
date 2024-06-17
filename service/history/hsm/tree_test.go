@@ -43,6 +43,14 @@ var reg = hsm.NewRegistry()
 
 type backend struct{}
 
+func (b *backend) GetCurrentVersion() int64 {
+	return 1
+}
+
+func (b *backend) TransitionCount() int64 {
+	return 2
+}
+
 func (b *backend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
 	return nil
 }
@@ -64,7 +72,7 @@ func init() {
 }
 
 func TestNode_MaintainsCachedData(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 
 	v1, err := hsm.MachineData[*hsmtest.Data](root)
@@ -160,7 +168,7 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 }
 
 func TestNode_Path(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 
 	l1, err := root.AddChild(hsm.Key{Type: def1.Type().ID, ID: "l1"}, hsmtest.NewData(hsmtest.State1))
@@ -174,7 +182,7 @@ func TestNode_Path(t *testing.T) {
 }
 
 func TestNode_AddChild(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 
 	_, err = root.AddChild(hsm.Key{Type: 100, ID: "dont-care"}, "data")
@@ -188,7 +196,7 @@ func TestNode_AddChild(t *testing.T) {
 }
 
 func TestNode_Child(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 	l1, err := root.AddChild(hsm.Key{Type: def1.Type().ID, ID: "l1"}, hsmtest.NewData(hsmtest.State1))
 	require.NoError(t, err)
@@ -230,7 +238,7 @@ func TestNode_Child(t *testing.T) {
 }
 
 func TestNode_Walk(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 
 	l1_1, err := root.AddChild(hsm.Key{Type: def1.Type().ID, ID: "l1_1"}, hsmtest.NewData(hsmtest.State1))
@@ -254,7 +262,7 @@ func TestNode_Walk(t *testing.T) {
 }
 
 func TestMachineData(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 
 	_, err = hsm.MachineData[string](root)
@@ -267,7 +275,7 @@ func TestMachineData(t *testing.T) {
 }
 
 func TestMachineTransition(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 
 	err = hsm.MachineTransition(root, func(string) (hsm.TransitionOutput, error) {
@@ -282,7 +290,8 @@ func TestMachineTransition(t *testing.T) {
 		return hsm.TransitionOutput{}, fmt.Errorf("test") // nolint:goerr113
 	})
 	require.ErrorContains(t, err, "test")
-	require.Equal(t, int64(0), root.TransitionCount())
+	require.Equal(t, int64(0), root.InternalRepr().TransitionCount)
+	require.Equal(t, int64(0), root.InternalRepr().LastUpdateMutableStateTransitionCount)
 	d, err := hsm.MachineData[*hsmtest.Data](root)
 	require.NoError(t, err)
 	// Got the pre-mutation value back.
@@ -294,14 +303,17 @@ func TestMachineTransition(t *testing.T) {
 		return hsm.TransitionOutput{}, nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), root.TransitionCount())
+	require.Equal(t, int64(1), root.InternalRepr().TransitionCount)
+	// 3 = 2 - which is a constant returned by our test backend - and an increment of 1 to account for backend
+	// incrementing its own transition count at the end of a transaction.
+	require.Equal(t, int64(3), root.InternalRepr().LastUpdateMutableStateTransitionCount)
 	d, err = hsm.MachineData[*hsmtest.Data](root)
 	require.NoError(t, err)
 	require.Equal(t, hsmtest.State2, d.State())
 }
 
 func TestCollection(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, def1.Type().ID, hsmtest.NewData(hsmtest.State1), make(map[int32]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 
 	coll := hsm.NewCollection[*hsmtest.Data](root, def1.Type().ID)

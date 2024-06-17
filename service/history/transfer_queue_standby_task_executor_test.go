@@ -255,7 +255,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	activityID := "activity-1"
 	activityType := "some random activity type"
 	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
@@ -337,7 +337,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	activityID := "activity-1"
 	activityType := "some random activity type"
 	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
@@ -392,7 +392,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 	)
 	s.Nil(err)
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := time.Now().UTC()
@@ -464,7 +464,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	)
 	s.Nil(err)
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := time.Now().UTC()
@@ -521,7 +521,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	wt.StartedEventID = event.GetEventId()
 	addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	wt = addWorkflowTaskScheduledEvent(mutableState)
 
 	now := time.Now().UTC()
@@ -596,7 +596,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
 	now := time.Now().UTC()
@@ -697,7 +697,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 	nextEventID := event.GetEventId()
 
@@ -779,7 +779,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
 	now := time.Now().UTC()
@@ -845,7 +845,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, nil, "", nil)
 	nextEventID := event.GetEventId()
@@ -928,7 +928,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, nil, "", nil)
 
@@ -993,7 +993,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	event, _ = addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_ABANDON)
 	nextEventID := event.GetEventId()
@@ -1115,7 +1115,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
+	taskID := s.mustGenerateTaskID()
 	event, childInfo := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_ABANDON)
 
@@ -1194,4 +1194,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		nil,
 		metrics.NoopMetricsHandler,
 	)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) mustGenerateTaskID() int64 {
+	taskID, err := s.mockShard.GenerateTaskID()
+	s.NoError(err)
+	return taskID
 }

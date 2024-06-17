@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -178,14 +179,13 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			reg := hsm.NewRegistry()
 			require.NoError(t, callbacks.RegisterExecutor(
 				reg,
-				callbacks.ActiveExecutorOptions{
+				callbacks.TaskExecutorOptions{
 					NamespaceRegistry: namespaceRegistryMock,
 					MetricsHandler:    metricsHandler,
 					CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
 				},
-				callbacks.StandbyExecutorOptions{},
 				&callbacks.Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -194,7 +194,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				},
 			))
 
-			err = reg.ExecuteActiveImmediateTask(
+			err = reg.ExecuteImmediateTask(
 				context.Background(),
 				env,
 				hsm.Ref{
@@ -248,12 +248,11 @@ func TestProcessBackoffTask(t *testing.T) {
 	reg := hsm.NewRegistry()
 	require.NoError(t, callbacks.RegisterExecutor(
 		reg,
-		callbacks.ActiveExecutorOptions{
+		callbacks.TaskExecutorOptions{
 			CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 				return nil
 			},
 		},
-		callbacks.StandbyExecutorOptions{},
 		&callbacks.Config{
 			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 			RetryPolicy: func() backoff.RetryPolicy {
@@ -262,7 +261,7 @@ func TestProcessBackoffTask(t *testing.T) {
 		},
 	))
 
-	err = reg.ExecuteActiveTimerTask(
+	err = reg.ExecuteTimerTask(
 		env,
 		node,
 		callbacks.BackoffTask{},
@@ -288,8 +287,7 @@ func newRoot(t *testing.T) *hsm.Node {
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	mutableState := newMutableState(t)
 
-	// Backend is nil because we don't need to generate history events for this test.
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	return root
 }

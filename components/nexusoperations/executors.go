@@ -57,11 +57,7 @@ var retryable4xxErrorTypes = []int{
 
 type ClientProvider func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error)
 
-// EndpointChecker checks if an endpoint exists, should return serviceerror.NotFound if the endpoint does not exist or
-// any other error to indicate lookup has failed.
-type EndpointChecker func(ctx context.Context, namespaceName, endpointName string) error
-
-type ActiveExecutorOptions struct {
+type TaskExecutorOptions struct {
 	fx.In
 
 	Config                 *Config
@@ -69,31 +65,29 @@ type ActiveExecutorOptions struct {
 	MetricsHandler         metrics.Handler
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
-	EndpointChecker        EndpointChecker
+	EndpointRegistry       commonnexus.EndpointRegistry
 }
 
 func RegisterExecutor(
 	registry *hsm.Registry,
-	options ActiveExecutorOptions,
+	options TaskExecutorOptions,
 ) error {
-	exec := activeExecutor{options}
+	exec := taskExecutor{options}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,
 		exec.executeInvocationTask,
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterTimerExecutors(
+	if err := hsm.RegisterTimerExecutor(
 		registry,
 		exec.executeBackoffTask,
-		nil,
 	); err != nil {
 		return err
 	}
-	if err := hsm.RegisterTimerExecutors(
+	if err := hsm.RegisterTimerExecutor(
 		registry,
 		exec.executeTimeoutTask,
-		nil,
 	); err != nil {
 		return err
 	}
@@ -103,23 +97,22 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterTimerExecutors(
+	return hsm.RegisterTimerExecutor(
 		registry,
 		exec.executeCancelationBackoffTask,
-		nil,
 	)
 }
 
-type activeExecutor struct {
-	ActiveExecutorOptions
+type taskExecutor struct {
+	TaskExecutorOptions
 }
 
-func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
+func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	if err := e.EndpointChecker(ctx, ns.Name().String(), task.Destination); err != nil {
+	if _, err := e.EndpointRegistry.GetByID(ctx, task.Destination); err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
@@ -172,6 +165,7 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 	// Reset the machine transition count to 0 so it is ignored in the completion staleness check.
 	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
 	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
+	smRef.MachineLastUpdateMutableStateTransitionCount = 0
 	smRef.MachineTransitionCount = 0
 
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
@@ -247,7 +241,7 @@ type startArgs struct {
 	namespaceFailoverVersion int64
 }
 
-func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
+func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
@@ -274,7 +268,7 @@ func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environme
 	return
 }
 
-func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
+func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
@@ -291,7 +285,7 @@ func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
 				// to allow it to complete via callback.
 				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-					// nolint:revive
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
 					e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 						NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 							ScheduledEventId: eventID,
@@ -306,77 +300,73 @@ func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref
 				})
 			}
 			// Operation completed synchronously. Store the result and update the state machine.
-			attemptTime := env.Now()
-			return handleSuccessfulOperationResult(node, operation, result.Successful, &attemptTime)
+			return handleSuccessfulOperationResult(node, operation, result.Successful, CompletionSourceResponse)
 		})
 	})
 }
 
-func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
-	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
-	if err != nil {
-		return hsm.TransitionOutput{}, err
-	}
+func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
 	var unexpectedResponseError *nexus.UnexpectedResponseError
 	var opFailedError *nexus.UnsuccessfulOperationError
 
 	if errors.As(callErr, &opFailedError) {
-		attemptTime := env.Now()
-		return handleUnsuccessfulOperationError(node, operation, opFailedError, &attemptTime)
+		return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceResponse)
 	} else if errors.As(callErr, &unexpectedResponseError) {
 		response := unexpectedResponseError.Response
 		if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
-			return handleNonRetryableStartOperationError(env, node, operation, callErr, eventID, unexpectedResponseError.Message)
+			return handleNonRetryableStartOperationError(env, node, operation, unexpectedResponseError.Message)
 		}
 		// Fall through to the AttemptFailed transition.
 	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
-		return handleNonRetryableStartOperationError(env, node, operation, callErr, eventID, "result of StartOperation exceeds size limit")
+		return handleNonRetryableStartOperationError(env, node, operation, callErr.Error())
 	}
 	return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
-		AttemptFailure: AttemptFailure{
-			Time: env.Now(),
-			Err:  callErr,
-		},
+		Time:        env.Now(),
+		Err:         callErr,
 		Node:        node,
 		RetryPolicy: e.Config.RetryPolicy(),
 	})
 }
 
-func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error, eventID int64, message string) (hsm.TransitionOutput, error) {
-	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
-		// nolint:revive
-		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-			NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-				Failure: nexusOperationFailure(
-					operation,
-					eventID,
-					&failurepb.Failure{
-						Message: message,
-						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-								NonRetryable: true,
-							},
-						},
+func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, message string) (hsm.TransitionOutput, error) {
+	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
+	}
+	attrs := &historypb.NexusOperationFailedEventAttributes{
+		Failure: nexusOperationFailure(
+			operation,
+			eventID,
+			&failurepb.Failure{
+				Message: message,
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable: true,
 					},
-				),
-				ScheduledEventId: eventID,
+				},
 			},
+		),
+		ScheduledEventId: eventID,
+	}
+	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+			NexusOperationFailedEventAttributes: attrs,
 		}
 	})
 
 	return TransitionFailed.Apply(operation, EventFailed{
-		AttemptFailure: &AttemptFailure{
-			Time: env.Now(),
-			Err:  callErr,
-		},
-		Node: node,
+		Time:             env.Now(),
+		Attributes:       attrs,
+		CompletionSource: CompletionSourceResponse,
+		Node:             node,
 	})
 }
 
-func (e activeExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
+func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
@@ -387,7 +377,7 @@ func (e activeExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, 
 	})
 }
 
-func (e activeExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
+func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
 	if err := task.Validate(node); err != nil {
 		return err
 	}
@@ -400,7 +390,7 @@ func (e activeExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, 
 			return hsm.TransitionOutput{}, err
 		}
 		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
-			// nolint:revive
+			// nolint:revive // We must mutate here even if the linter doesn't like it.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
 					Failure: nexusOperationFailure(
@@ -426,12 +416,12 @@ func (e activeExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, 
 	})
 }
 
-func (e activeExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {
+func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	if err := e.EndpointChecker(ctx, ns.Name().String(), task.Destination); err != nil {
+	if _, err := e.EndpointRegistry.GetByID(ctx, task.Destination); err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveCancelationResult(ctx, env, ref, &nexus.UnexpectedResponseError{
@@ -490,7 +480,7 @@ type cancelArgs struct {
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
 // given reference is pointing to.
-func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args cancelArgs, err error) {
+func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args cancelArgs, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
 		if err := n.CheckRunning(); err != nil {
 			return err
@@ -511,7 +501,7 @@ func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Envi
 	return
 }
 
-func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
+func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
 		if err := n.CheckRunning(); err != nil {
 			return err
@@ -547,7 +537,7 @@ func (e activeExecutor) saveCancelationResult(ctx context.Context, env hsm.Envir
 	})
 }
 
-func (e activeExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
+func (e taskExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
