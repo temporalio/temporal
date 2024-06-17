@@ -500,6 +500,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				request.Identity,
 				versioningStamp,
 				nil,
+				false,
 			)
 			if err != nil {
 				return nil, err
@@ -609,6 +610,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			request.Identity,
 			versioningStamp,
 			nil,
+			false,
 		)
 		if err != nil {
 			return nil, err

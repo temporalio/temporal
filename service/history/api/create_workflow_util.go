@@ -26,6 +26,7 @@ package api
 
 import (
 	"context"
+
 	"go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/sdk"
 	schedulerhsm "go.temporal.io/server/components/scheduler"
@@ -154,6 +155,7 @@ func NewWorkflowWithSignal(
 			startRequest.StartRequest.Identity,
 			nil,
 			nil,
+			false,
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history
