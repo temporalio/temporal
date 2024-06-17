@@ -474,7 +474,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 		if common.IsResourceExhausted(err) {
 			r.pauseLocked(throttleRetryDelay)
 		} else {
-			r.pauseLocked(r.retrier.NextBackOff())
+			r.pauseLocked(r.retrier.NextBackOff(err))
 		}
 		return
 	}

@@ -31,12 +31,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/service/history/hsm"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -271,7 +272,7 @@ var TransitionAttemptFailed = hsm.NewTransition(
 	func(op Operation, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(op.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(op.Attempt), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		op.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
 		op.LastAttemptFailure = &failurepb.Failure{
@@ -550,7 +551,7 @@ var TransitionCancelationAttemptFailed = hsm.NewTransition(
 	func(c Cancelation, event EventCancelationAttemptFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		c.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
 		c.LastAttemptFailure = &failurepb.Failure{
