@@ -733,20 +733,20 @@ func (e *executableImpl) backoffDuration(
 		common.IsInternalError(err) {
 		// using a different reschedule policy to slow down retry
 		// as immediate retry typically won't resolve the issue.
-		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt)
+		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt, err)
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt)
+		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt, err)
 	}
 
-	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt)
+	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt, err)
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon system resource exhausted error and pick the longer backoff duration
 		backoffDuration = max(
 			backoffDuration,
-			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount),
+			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount, err),
 		)
 	}
 
@@ -830,12 +830,12 @@ func (e *CircuitBreakerExecutable) Execute() error {
 	}()
 
 	err = e.Executable.Execute()
-	destinationDownErr, destinationDown := err.(*DestinationDownError)
-	if destinationDown {
+	var destinationDownErr *DestinationDownError
+	if errors.As(err, &destinationDownErr) {
 		err = destinationDownErr.Unwrap()
 	}
 
-	doneCb(!destinationDown)
+	doneCb(destinationDownErr == nil)
 	return err
 }
 

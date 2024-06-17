@@ -70,7 +70,7 @@ func transitionHistoryRangeForVersion(history []*persistencespb.VersionedTransit
 	return -1, 0, 0
 }
 
-// TransitionHistoryStalenessCheck verifies that task namespace failover version and transition count is contained in
+// TransitionHistoryStalenessCheck verifies that ref namespace failover version and transition count is contained in
 // the given transition history.
 //
 // When a task or API request is being processed, the history is compared with the imprinted state reference to verify
@@ -89,9 +89,9 @@ func TransitionHistoryStalenessCheck(history []*persistencespb.VersionedTransiti
 	if idx == -1 {
 		lastItem := history[len(history)-1]
 		if lastItem.NamespaceFailoverVersion < refNamespaceFailoverVersion {
-			return fmt.Errorf("%w: state namespace failover version < task namespace failover version", consts.ErrStaleState)
+			return fmt.Errorf("%w: state namespace failover version < ref namespace failover version", consts.ErrStaleState)
 		}
-		return fmt.Errorf("%w: state namespace failover version > task namespace failover version", consts.ErrStaleReference)
+		return fmt.Errorf("%w: state namespace failover version > ref namespace failover version", consts.ErrStaleReference)
 	}
 	if idx == len(history)-1 && refStateTransitionCount > max {
 		return fmt.Errorf("%w: state transition count < ref transition count", consts.ErrStaleState)

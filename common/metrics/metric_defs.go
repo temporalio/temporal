@@ -45,7 +45,9 @@ const (
 	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
+	resourceExhaustedScopeTag   = "resource_exhausted_scope"
 	PartitionTypeName           = "partition_type"
+	PriorityTagName             = "priority"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -954,6 +956,8 @@ var (
 		"dlq_writes",
 		WithDescription("The number of times a message is enqueued to DLQ. DLQ can be inspected using tdbg dlq command."),
 	)
+	ReadNamespaceErrors             = NewCounterDef("read_namespace_errors")
+	RateLimitedTaskRunnableWaitTime = NewTimerDef("rate_limited_task_runnable_wait_time")
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")

@@ -169,7 +169,7 @@ func (f *transferQueueFactory) CreateQueue(
 				namespaceId namespace.ID,
 				workflowId string,
 				runId string,
-				events []*historypb.HistoryEvent,
+				events [][]*historypb.HistoryEvent,
 				versionHistory []*historyspb.VersionHistoryItem,
 			) error {
 				engine, err := shardContext.GetEngine(ctx)
@@ -185,7 +185,7 @@ func (f *transferQueueFactory) CreateQueue(
 					},
 					nil,
 					versionHistory,
-					[][]*historypb.HistoryEvent{events},
+					events,
 					nil,
 					"",
 				)
@@ -193,6 +193,7 @@ func (f *transferQueueFactory) CreateQueue(
 			shardContext.GetPayloadSerializer(),
 			f.Config.StandbyTaskReReplicationContextTimeout,
 			logger,
+			f.Config,
 		),
 		resendHandler,
 		logger,

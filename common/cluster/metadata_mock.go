@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/server/common"
+	pingable "go.temporal.io/server/common/pingable"
 )
 
 // MockMetadata is a mock of Metadata interface.
@@ -157,10 +157,10 @@ func (mr *MockMetadataMockRecorder) GetNextFailoverVersion(arg0, arg1 interface{
 }
 
 // GetPingChecks mocks base method.
-func (m *MockMetadata) GetPingChecks() []common.PingCheck {
+func (m *MockMetadata) GetPingChecks() []pingable.Check {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPingChecks")
-	ret0, _ := ret[0].([]common.PingCheck)
+	ret0, _ := ret[0].([]pingable.Check)
 	return ret0
 }
 

@@ -273,7 +273,7 @@ func ndcHistoryResenderProvider(
 			namespaceId namespace.ID,
 			workflowId string,
 			runId string,
-			events []*historypb.HistoryEvent,
+			events [][]*historypb.HistoryEvent,
 			versionHistory []*historyspb.VersionHistoryItem,
 		) error {
 			if config.EnableReplicateLocalGeneratedEvent() {
@@ -287,7 +287,7 @@ func ndcHistoryResenderProvider(
 					},
 					nil,
 					versionHistory,
-					[][]*historypb.HistoryEvent{events},
+					events,
 					nil,
 					"",
 				)
@@ -313,7 +313,7 @@ func ndcHistoryResenderProvider(
 				},
 				nil,
 				versionHistory,
-				[][]*historypb.HistoryEvent{events},
+				events,
 				nil,
 				"",
 			)
@@ -321,6 +321,7 @@ func ndcHistoryResenderProvider(
 		serializer,
 		config.StandbyTaskReReplicationContextTimeout,
 		logger,
+		config,
 	)
 }
 

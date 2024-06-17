@@ -41,6 +41,8 @@ func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	now := time.Now()
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	ms.EXPECT().TransitionCount().Return(int64(2)).AnyTimes()
 
 	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: 0})
 	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: 1})
@@ -59,15 +61,12 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 	ms := workflow.NewMockMutableState(ctrl)
 
 	now := time.Now().UTC()
-	execInfo := &persistencespb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, MaxTransitionCount: 2},
-		},
-	}
 	var scheduledTasks []tasks.Task
 
-	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	ms.EXPECT().TransitionCount().Return(int64(2)).AnyTimes()
 	ms.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(task tasks.Task) {
 		scheduledTasks = append(scheduledTasks, task)
 	})

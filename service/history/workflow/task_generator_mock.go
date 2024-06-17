@@ -175,17 +175,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDirtySubStateMachineTasks(state
 }
 
 // GenerateHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(events []*v1.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(eventBatches [][]*v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", events)
+	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", eventBatches)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateHistoryReplicationTasks indicates an expected call of GenerateHistoryReplicationTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(events interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(eventBatches interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateHistoryReplicationTasks), events)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateHistoryReplicationTasks), eventBatches)
 }
 
 // GenerateMigrationTasks mocks base method.

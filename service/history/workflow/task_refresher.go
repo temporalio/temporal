@@ -67,6 +67,8 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	ctx context.Context,
 	mutableState MutableState,
 ) error {
+	// Invalidate all tasks generated for this mutable state before the refresh.
+	mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(
 		r.shard,
@@ -476,15 +478,9 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	// in previous state transitions, so we can use the last versioned transition here.
 	// In replication case, task refresher should be called after applying the state from source
 	// cluster, which updated the transition history.
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	if len(transitionHistory) == 0 {
-		// transition history not enabled.
-		return nil
-	}
+
 	// Reset all the state machine timers, we'll recreate them all.
 	mutableState.GetExecutionInfo().StateMachineTimers = nil
-
-	versionedTransition := transitionHistory[len(transitionHistory)-1]
 
 	err := mutableState.HSM().Walk(func(node *hsm.Node) error {
 		taskRegenerator, err := hsm.MachineData[hsm.TaskRegenerator](node)
@@ -508,7 +504,6 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 				node,
 				node.Path(),
 				task,
-				versionedTransition,
 			); err != nil {
 				return err
 			}
