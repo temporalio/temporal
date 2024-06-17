@@ -30,10 +30,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
-var (
-	rateLimitedTaskRunnableWaitTimeTimer = metrics.NewTimerDef("rate_limited_task_runnable_wait_time")
-)
-
 // RunnableScheduler is scheduler for [Runnable] tasks.
 type RunnableScheduler interface {
 	// InitiateShutdown signals the scheduler to stop without waiting for shutdown to complete.
@@ -93,6 +89,6 @@ func (r RateLimitedTaskRunnable) Run(ctx context.Context) {
 		return
 	}
 
-	rateLimitedTaskRunnableWaitTimeTimer.With(r.metricsHandler).Record(time.Since(t0))
+	metrics.RateLimitedTaskRunnableWaitTime.With(r.metricsHandler).Record(time.Since(t0))
 	r.Runnable.Run(ctx)
 }
