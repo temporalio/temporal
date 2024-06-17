@@ -192,10 +192,6 @@ func (r *Replicator) cleanupAckedMessages(
 		return ackMessageID, err
 	}
 
-	if len(ackLevelByCluster) == 0 {
-		return ackMessageID, nil
-	}
-
 	connectedClusters := r.clusterMetadata.GetAllClusterInfo()
 	maxAckLevel := ackMessageID
 	minAckLevel := int64(math.MaxInt64)

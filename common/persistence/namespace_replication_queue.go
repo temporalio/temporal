@@ -180,7 +180,7 @@ func (q *namespaceReplicationQueueImpl) DeleteMessagesBefore(
 ) error {
 	err := q.queue.DeleteMessagesBefore(ctx, exclusiveMessageID)
 	if err != nil {
-		return fmt.Errorf("failed to delete namespace replication messages: %v", err)
+		return err
 	}
 	metrics.NamespaceReplicationTaskAckLevelGauge.With(q.metricsHandler).
 		Record(float64(exclusiveMessageID), metrics.OperationTag(metrics.PersistenceNamespaceReplicationQueueScope))
