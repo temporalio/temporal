@@ -4881,14 +4881,13 @@ func (ms *MutableStateImpl) RetryActivity(
 		ms.truncateRetryableActivityFailure(failure),
 		timestamppb.New(nextScheduledTime),
 	)
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
-		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-	}
-
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+	}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
