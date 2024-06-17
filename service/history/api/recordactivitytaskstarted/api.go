@@ -130,7 +130,9 @@ func Invoke(
 					namespaceName.String(),
 					taskQueueName,
 					enumspb.TASK_QUEUE_KIND_NORMAL,
-				)).Record(
+					false,
+				),
+			).Record(
 				scheduleToStartLatency,
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 			)

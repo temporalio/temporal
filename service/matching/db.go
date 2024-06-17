@@ -355,5 +355,5 @@ func (db *taskQueueDB) emitBacklogCountAndAge() {
 	backlogHeadAge := db.backlogMgr.taskReader.getBacklogHeadAge()
 
 	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
-	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(backlogHeadAge.Seconds())
+	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogAgeSeconds.Name()).Record(backlogHeadAge.Seconds())
 }

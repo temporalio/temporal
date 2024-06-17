@@ -251,13 +251,16 @@ func newPhysicalTaskQueueManager(
 	config := partitionMgr.config
 	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(queue.VersionSet()))
 	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(queue.VersionSet()))
-	buildIdTagValue := queue.VersionSet()
+
+	buildIdTagValue := ""
+	buildIdTagValue = queue.VersionSet()
 	if buildIdTagValue == "" {
 		buildIdTagValue = queue.BuildId()
 	}
 	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(buildIdTagValue))
+		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
+
 	pqMgr := &physicalTaskQueueManagerImpl{
 		status:                     common.DaemonStatusInitialized,
 		partitionMgr:               partitionMgr,

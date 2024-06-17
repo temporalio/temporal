@@ -138,10 +138,11 @@ func newTaskQueuePartitionManager(
 	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
 		e.metricsHandler.WithTags(
 			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-			metrics.TaskQueueTypeTag(partition.TaskType())),
+			metrics.TaskQueueTypeTag(partition.TaskType()),
+			metrics.PartitionTag(partition, tqConfig.BreakdownMetricsByPartition())),
 		nsName,
-		partition.RpcName(),
-		partition.Kind(),
+		partition,
+		tqConfig.BreakdownMetricsByBuildID(),
 	)
 
 	pm := &taskQueuePartitionManagerImpl{

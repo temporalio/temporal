@@ -1058,6 +1058,30 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		defaultNumTaskQueuePartitions,
 		`MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue`,
 	)
+	MatchingBreakdownMetricsByTaskQueue = NewTaskQueueBoolSetting(
+		"matching.breakdownMetricsByTaskQueue",
+		true,
+		`MatchingBreakdownMetricsByTaskQueue determines if the 'taskqueue' tag in Matching metrics should 
+contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your 
+observability stack. Disabling this option will disable all the Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MatchingBreakdownMetricsByPartition = NewTaskQueueBoolSetting(
+		"matching.breakdownMetricsByPartition",
+		true,
+		`MatchingBreakdownMetricsByPartition determines if the 'partition' tag in Matching metrics should 
+contain the actual normal partition ID a generic __normal__ value. Regardless of this config, the tag value for sticky 
+queues will be "__sticky__". Disable this option if the partition cardinality is too high for your 
+observability stack. Disabling this option will disable all the Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MatchingBreakdownMetricsByBuildID = NewTaskQueueBoolSetting(
+		"matching.breakdownMetricsByBuildID",
+		true,
+		`MatchingBreakdownMetricsByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
+contain the actual Build ID a generic "__versioned__"" value. Regardless of this config, the tag value for unversioned 
+queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your 
+observability stack. Disabling this option will disable all the Task Queue gauges such as backlog lag, count, and age 
+for versioned queues.`,
+	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
 		1,

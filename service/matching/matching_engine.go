@@ -1951,7 +1951,7 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueM
 		float64(loadedPhysicalTaskQueueCounter),
 		metrics.NamespaceTag(pmImpl.ns.Name().String()),
 		metrics.TaskTypeTag(physicalTaskQueueParameters.taskType.String()),
-		metrics.PartitionTypeTag(physicalTaskQueueParameters.partitionType.String()),
+		metrics.PartitionKindTag(physicalTaskQueueParameters.partitionType.String()),
 		metrics.VersionedTag(versioned),
 	)
 }
@@ -2010,7 +2010,7 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitio
 		float64(loadedTaskQueuePartitionCounter),
 		metrics.NamespaceTag(pm.ns.Name().String()),
 		metrics.TaskTypeTag(taskQueueParameters.taskType.String()),
-		metrics.PartitionTypeTag(taskQueuePartitionParameters.partitionType.String()),
+		metrics.PartitionKindTag(taskQueuePartitionParameters.partitionType.String()),
 	)
 }
 

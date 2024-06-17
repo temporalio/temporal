@@ -136,7 +136,9 @@ func (h *Handler) opMetricsHandler(
 		h.metricsHandler.WithTags(metrics.OperationTag(operation)),
 		h.namespaceName(namespaceID).String(),
 		taskQueue.GetName(),
-		taskQueue.GetKind())
+		taskQueue.GetKind(),
+		false,
+	)
 }
 
 // AddActivityTask - adds an activity task.

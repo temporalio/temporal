@@ -46,7 +46,8 @@ const (
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
 	resourceExhaustedScopeTag   = "resource_exhausted_scope"
-	PartitionTypeName           = "partition_type"
+	PartitionKindTagName        = "partition_kind"
+	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
 )
 
@@ -1013,6 +1014,7 @@ var (
 	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                   = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds              = NewGaugeDef("approximate_backlog_age_seconds")
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")

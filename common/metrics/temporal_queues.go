@@ -31,6 +31,7 @@ func GetPerTaskQueueScope(
 	namespaceName string,
 	taskQueueName string,
 	taskQueueKind enumspb.TaskQueueKind,
+	include bool,
 ) Handler {
 	var metricTaskQueueName string
 	switch taskQueueKind {

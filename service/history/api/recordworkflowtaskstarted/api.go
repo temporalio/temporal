@@ -177,7 +177,9 @@ func Invoke(
 				namespaceName.String(),
 				taskQueue.GetName(),
 				taskQueue.GetKind(),
-			)).Record(workflowScheduleToStartLatency,
+				false,
+			),
+			).Record(workflowScheduleToStartLatency,
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 

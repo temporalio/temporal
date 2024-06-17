@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/locks"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -181,9 +182,11 @@ func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
 }
 
-func WorkerBuildIdTag(buildId string) Tag {
+func WorkerBuildIdTag(buildId string, include bool) Tag {
 	if buildId == "" {
-		buildId = "_unversioned_"
+		buildId = "__unversioned__"
+	} else if !include {
+		buildId = "__versioned__"
 	}
 	return &tagImpl{key: workerBuildId, value: buildId}
 }
@@ -242,11 +245,27 @@ func TaskTypeTag(value string) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: value}
 }
 
-func PartitionTypeTag(value string) Tag {
+func PartitionKindTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: PartitionTypeName, value: value}
+	return &tagImpl{key: PartitionKindTagName, value: value}
+}
+
+func PartitionTag(partition tqid.Partition, include bool) Tag {
+	var value string
+	if partition == nil {
+		value = unknownValue
+	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok {
+		if include {
+			value = strconv.Itoa(normalPartition.PartitionId())
+		} else {
+			value = "__normal__"
+		}
+	} else {
+		value = "__sticky__"
+	}
+	return &tagImpl{key: PartitionTagName, value: value}
 }
 
 func TaskPriorityTag(value string) Tag {
