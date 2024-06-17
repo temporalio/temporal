@@ -226,10 +226,13 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 	}
 
-	if err := e.saveResult(ctx, env, ref, result, callErr); err != nil {
-		return fmt.Errorf("failed to save result: %w", err)
+	err = e.saveResult(ctx, env, ref, result, callErr)
+
+	if callErr != nil && isDestinationDown(callErr) {
+		err = queues.NewDestinationDownError(callErr.Error(), err)
 	}
-	return nil
+
+	return err
 }
 
 type startArgs struct {
@@ -312,8 +315,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	if errors.As(callErr, &opFailedError) {
 		return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceResponse)
 	} else if errors.As(callErr, &unexpectedResponseError) {
-		response := unexpectedResponseError.Response
-		if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
+		if !isRetryableHTTPResponse(unexpectedResponseError.Response) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 			return handleNonRetryableStartOperationError(env, node, operation, unexpectedResponseError.Message)
 		}
@@ -471,7 +473,13 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
 	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
 
-	return e.saveCancelationResult(ctx, env, ref, callErr)
+	err = e.saveCancelationResult(ctx, env, ref, callErr)
+
+	if callErr != nil && isDestinationDown(callErr) {
+		err = queues.NewDestinationDownError(callErr.Error(), err)
+	}
+
+	return err
 }
 
 type cancelArgs struct {
@@ -510,8 +518,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			if callErr != nil {
 				var unexpectedResponseErr *nexus.UnexpectedResponseError
 				if errors.As(callErr, &unexpectedResponseErr) {
-					response := unexpectedResponseErr.Response
-					if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
+					if !isRetryableHTTPResponse(unexpectedResponseErr.Response) {
 						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
 							Time: env.Now(),
 							Err:  callErr,
@@ -597,4 +604,23 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 		return "unknown-error"
 	}
 	return "successful"
+}
+
+func isRetryableHTTPResponse(response *http.Response) bool {
+	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
+}
+
+func isDestinationDown(err error) bool {
+	var unexpectedErr *nexus.UnexpectedResponseError
+	var opFailedErr *nexus.UnsuccessfulOperationError
+	if errors.As(err, &opFailedErr) {
+		return false
+	}
+	if errors.As(err, &unexpectedErr) {
+		return isRetryableHTTPResponse(unexpectedErr.Response)
+	}
+	if errors.Is(err, ErrResponseBodyTooLarge) {
+		return false
+	}
+	return true
 }

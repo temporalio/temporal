@@ -212,7 +212,8 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			)
 
 			if tc.destinationDown {
-				require.IsType(t, &queues.DestinationDownError{}, err)
+				var destinationDownErr *queues.DestinationDownError
+				require.ErrorAs(t, err, &destinationDownErr)
 			} else {
 				require.NoError(t, err)
 			}
