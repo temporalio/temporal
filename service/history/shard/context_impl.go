@@ -564,7 +564,7 @@ func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
 		return err
 	}
 
-	engine.AddSpeculativeWorkflowTaskTimeoutTask(task)
+	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{task.GetCategory(): []tasks.Task{task}})
 
 	return nil
 }

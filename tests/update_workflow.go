@@ -45,6 +45,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -2564,6 +2565,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Co
 func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_StartToCloseTimeout() {
 	tv := testvars.New(s.T())
 
+	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           tv.Any().String(),
 		Namespace:           s.namespace,
@@ -2669,6 +2673,25 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_StartToClos
 	_, err = poller.PollAndProcessWorkflowTask(WithoutRetries)
 	s.Error(err)
 	s.Equal("Workflow task not found.", err.Error())
+
+	// ensure correct metrics were recorded
+	snap := capture.Snapshot()
+
+	var speculativeWorkflowTaskTimeoutTasks int
+	for _, m := range snap[metrics.TaskRequests.Name()] {
+		if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
+			speculativeWorkflowTaskTimeoutTasks += 1
+		}
+	}
+	s.Equal(1, speculativeWorkflowTaskTimeoutTasks, "expected 1 speculative workflow task timeout task to be created")
+
+	var speculativeStartToCloseTimeouts int
+	for _, m := range snap[metrics.StartToCloseTimeoutCounter.Name()] {
+		if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
+			speculativeStartToCloseTimeouts += 1
+		}
+	}
+	s.Equal(1, speculativeStartToCloseTimeouts, "expected 1 timeout of a speculative workflow task timeout task")
 
 	// New normal WT was created on server after speculative WT has timed out.
 	// It will accept and complete update first and workflow itself with the same WT.

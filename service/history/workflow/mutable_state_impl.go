@@ -5012,6 +5012,7 @@ func (ms *MutableStateImpl) GetUpdateCondition() (int64, int64) {
 func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 	task *tasks.WorkflowTaskTimeoutTask,
 ) error {
+	task.Speculative = true
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
