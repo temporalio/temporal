@@ -1620,9 +1620,9 @@ func (s *workflowSuite) TestUpdate() {
 
 func (s *workflowSuite) TestUpdateNotRetroactive() {
 	// TODO - remove when AccurateFutureActionTimes becomes the active version
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = AccurateFutureActionTimes
-	defer func() { currentTweakablePolicies = prevTweakables }()
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.Version = AccurateFutureActionTimes
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
 	s.runAcrossContinue(
 		[]workflowRun{
@@ -1860,9 +1860,9 @@ func (s *workflowSuite) TestPauseUnpauseBetweenNominalAndJittered() {
 
 func (s *workflowSuite) TestLimitedActions() {
 	// TODO - remove when AccurateFutureActionTimes becomes the active version
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = AccurateFutureActionTimes
-	defer func() { currentTweakablePolicies = prevTweakables }()
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.Version = AccurateFutureActionTimes
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
 	// written using low-level mocks so we can sleep forever
 
