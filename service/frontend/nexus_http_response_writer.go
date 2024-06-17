@@ -28,11 +28,9 @@ import (
 
 const (
 	// The Failure-Source header is used to indicate from where the Nexus failure originated.
-	failureSourceHeaderName = "Failure-Source"
-	// failureSourceServer indicates the failure originated within the Nexus server.
-	failureSourceServer = "SERVER"
-	// failureSourceClient indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
-	failureSourceClient = "CLIENT"
+	nexusFailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
+	// failureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
+	failureSourceWorker = "worker"
 )
 
 // nexusHTTPResponseWriter is a wrapper for http.ResponseWriter that appends headers set on a nexusContext
@@ -60,7 +58,9 @@ func (w *nexusHTTPResponseWriter) Write(data []byte) (int, error) {
 func (w *nexusHTTPResponseWriter) WriteHeader(statusCode int) {
 	h := w.writer.Header()
 	for key, val := range w.nc.responseHeaders {
-		h.Set(key, val)
+		if val != "" {
+			h.Set(key, val)
+		}
 	}
 
 	w.writer.WriteHeader(statusCode)
