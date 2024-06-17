@@ -4860,9 +4860,6 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	nextScheduledTime := now.Add(retryBackoff)
 	nextAttempt := ai.Attempt + 1
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai.ScheduledEventId, nextScheduledTime, nextAttempt); err != nil {
-		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-	}
 	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity
 	// info and if prev found it points to the same activity info as ai, so updating ai will cause
 	// size of prev change.
@@ -4877,10 +4874,14 @@ func (ms *MutableStateImpl) RetryActivity(
 		ms.truncateRetryableActivityFailure(failure),
 		timestamppb.New(nextScheduledTime),
 	)
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+	}
 
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
