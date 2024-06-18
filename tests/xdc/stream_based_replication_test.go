@@ -258,9 +258,9 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 		serializer,
 		s.logger,
 	)
-	iterator1 := cluster1Fetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	iterator1 := cluster1Fetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx, "cluster1", namespace.ID(namespaceId), workflowId, runId, 0, 1, 0, 0)
-	iterator2 := cluster2Fetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	iterator2 := cluster2Fetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx, "cluster2", namespace.ID(namespaceId), workflowId, runId, 0, 1, 0, 0)
 	for iterator1.HasNext() {
 		s.True(iterator2.HasNext())

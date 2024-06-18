@@ -52,7 +52,7 @@ type (
 	// HistoryPaginatedFetcher is the interface for fetching history from remote cluster
 	// Start and End event ID is exclusive
 	HistoryPaginatedFetcher interface {
-		GetSingleWorkflowHistoryPaginatedIterator(
+		GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 			ctx context.Context,
 			remoteClusterName string,
 			namespaceID namespace.ID,
@@ -61,6 +61,18 @@ type (
 			startEventID int64, // exclusive
 			startEventVersion int64,
 			endEventID int64, // exclusive
+			endEventVersion int64,
+		) collection.Iterator[*HistoryBatch]
+
+		GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+			ctx context.Context,
+			remoteClusterName string,
+			namespaceID namespace.ID,
+			workflowID string,
+			runID string,
+			startEventID int64, // inclusive
+			startEventVersion int64,
+			endEventID int64, // inclusive
 			endEventVersion int64,
 		) collection.Iterator[*HistoryBatch]
 	}
@@ -98,7 +110,7 @@ func NewHistoryPaginatedFetcher(
 	}
 }
 
-func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIterator(
+func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIteratorInclusive(
 	ctx context.Context,
 	remoteClusterName string,
 	namespaceID namespace.ID,
@@ -119,6 +131,32 @@ func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIterator(
 		startEventVersion,
 		endEventID,
 		endEventVersion,
+		true,
+	))
+}
+
+func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIteratorExclusive(
+	ctx context.Context,
+	remoteClusterName string,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64,
+) collection.Iterator[*HistoryBatch] {
+	return collection.NewPagingIterator(n.getPaginationFn(
+		ctx,
+		remoteClusterName,
+		namespaceID,
+		workflowID,
+		runID,
+		startEventID,
+		startEventVersion,
+		endEventID,
+		endEventVersion,
+		false,
 	))
 }
 
@@ -132,10 +170,10 @@ func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
+	inclusive bool,
 ) collection.PaginationFn[*HistoryBatch] {
 	return func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
-
-		response, err := n.getHistory(
+		return n.getHistory(
 			ctx,
 			remoteClusterName,
 			namespaceID,
@@ -147,20 +185,8 @@ func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 			endEventVersion,
 			paginationToken,
 			defaultPageSize,
+			inclusive,
 		)
-		if err != nil {
-			return nil, nil, err
-		}
-		batches := make([]*HistoryBatch, 0, len(response.GetHistoryBatches()))
-		versionHistory := response.GetVersionHistory()
-		for _, history := range response.GetHistoryBatches() {
-			batch := &HistoryBatch{
-				VersionHistory: versionHistory,
-				RawEventBatch:  history,
-			}
-			batches = append(batches, batch)
-		}
-		return batches, response.NextPageToken, nil
 	}
 }
 
@@ -176,7 +202,8 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 	endEventVersion int64,
 	token []byte,
 	pageSize int32,
-) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+	inclusive bool,
+) ([]*HistoryBatch, []byte, error) {
 
 	logger := log.With(n.Logger, tag.WorkflowRunID(runID))
 
@@ -185,26 +212,60 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 
 	adminClient, err := n.ClientBean.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	getResponse := func() ([]*commonpb.DataBlob, *historyspb.VersionHistory, []byte, error) {
+		if inclusive {
+			response, err := adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				StartEventId:      startEventID,
+				StartEventVersion: startEventVersion,
+				EndEventId:        endEventID,
+				EndEventVersion:   endEventVersion,
+				MaximumPageSize:   pageSize,
+				NextPageToken:     token,
+			})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			return response.GetHistoryBatches(), response.GetVersionHistory(), response.NextPageToken, nil
+		}
+		response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			StartEventId:      startEventID,
+			StartEventVersion: startEventVersion,
+			EndEventId:        endEventID,
+			EndEventVersion:   endEventVersion,
+			MaximumPageSize:   pageSize,
+			NextPageToken:     token,
+		})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return response.GetHistoryBatches(), response.GetVersionHistory(), response.NextPageToken, nil
 	}
 
-	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		NamespaceId: namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		StartEventId:      startEventID,
-		StartEventVersion: startEventVersion,
-		EndEventId:        endEventID,
-		EndEventVersion:   endEventVersion,
-		MaximumPageSize:   pageSize,
-		NextPageToken:     token,
-	})
+	dataBlobs, versionHistory, nextPageToken, err := getResponse()
 	if err != nil {
 		logger.Error("error getting history", tag.Error(err))
-		return nil, err
+		return nil, nil, err
 	}
 
-	return response, nil
+	batches := make([]*HistoryBatch, 0, len(dataBlobs))
+	for _, history := range dataBlobs {
+		batch := &HistoryBatch{
+			VersionHistory: versionHistory,
+			RawEventBatch:  history,
+		}
+		batches = append(batches, batch)
+	}
+	return batches, nextPageToken, nil
 }

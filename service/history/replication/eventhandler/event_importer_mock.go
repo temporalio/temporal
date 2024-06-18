@@ -33,7 +33,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	history "go.temporal.io/api/history/v1"
 	definition "go.temporal.io/server/common/definition"
 )
 
@@ -60,16 +59,16 @@ func (m *MockEventImporter) EXPECT() *MockEventImporterMockRecorder {
 	return m.recorder
 }
 
-// ImportHistoryEventsFromFirstEvent mocks base method.
-func (m *MockEventImporter) ImportHistoryEventsFromFirstEvent(ctx context.Context, remoteCluster string, workflowKey definition.WorkflowKey, endEventId, endEventVersion int64, pendingEvents [][]*history.HistoryEvent) error {
+// ImportHistoryEventsFromBeginning mocks base method.
+func (m *MockEventImporter) ImportHistoryEventsFromBeginning(ctx context.Context, remoteCluster string, workflowKey definition.WorkflowKey, endEventId, endEventVersion int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ImportHistoryEventsFromFirstEvent", ctx, remoteCluster, workflowKey, endEventId, endEventVersion, pendingEvents)
+	ret := m.ctrl.Call(m, "ImportHistoryEventsFromBeginning", ctx, remoteCluster, workflowKey, endEventId, endEventVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ImportHistoryEventsFromFirstEvent indicates an expected call of ImportHistoryEventsFromFirstEvent.
-func (mr *MockEventImporterMockRecorder) ImportHistoryEventsFromFirstEvent(ctx, remoteCluster, workflowKey, endEventId, endEventVersion, pendingEvents interface{}) *gomock.Call {
+// ImportHistoryEventsFromBeginning indicates an expected call of ImportHistoryEventsFromBeginning.
+func (mr *MockEventImporterMockRecorder) ImportHistoryEventsFromBeginning(ctx, remoteCluster, workflowKey, endEventId, endEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportHistoryEventsFromFirstEvent", reflect.TypeOf((*MockEventImporter)(nil).ImportHistoryEventsFromFirstEvent), ctx, remoteCluster, workflowKey, endEventId, endEventVersion, pendingEvents)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportHistoryEventsFromBeginning", reflect.TypeOf((*MockEventImporter)(nil).ImportHistoryEventsFromBeginning), ctx, remoteCluster, workflowKey, endEventId, endEventVersion)
 }

@@ -222,7 +222,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 		s.logger,
 	)
 
-	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx, s.passiveClusterName, namespace.ID(namespaceId), execution.ID, execution.RunID, 0, 1, 0, 0)
 
 	index := 0

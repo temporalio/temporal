@@ -117,7 +117,6 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 			sourceClusterName,
 			workflowKey,
 			versionHistoryItems,
-			localEvents,
 		); err != nil {
 			return err
 		}
@@ -179,18 +178,9 @@ func (h *historyEventsHandlerImpl) handleLocalGeneratedEvent(
 	sourceClusterName string,
 	workflowKey definition.WorkflowKey,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
-	localEvents [][]*historypb.HistoryEvent,
 ) error {
 	if len(versionHistoryItems) == 0 {
 		return serviceerror.NewInvalidArgument("local generated version history items is empty")
-	}
-	if len(localEvents) == 0 {
-		return serviceerror.NewInvalidArgument("local events is empty")
-	}
-	for _, events := range localEvents {
-		if len(events) == 0 {
-			return serviceerror.NewInvalidArgument("local events batch is empty")
-		}
 	}
 	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.clusterMetadata.GetClusterID(), h.clusterMetadata.GetFailoverVersionIncrement())
 	lastVersionHistoryItem := localVersionHistory[len(localVersionHistory)-1]
@@ -220,18 +210,13 @@ func (h *historyEventsHandlerImpl) handleLocalGeneratedEvent(
 		}
 		return nil
 	case *serviceerror.NotFound:
-		lastEventId := localEvents[len(localEvents)-1][len(localEvents[len(localEvents)-1])-1].EventId
-		if lastEventId != localVersionHistory[len(localVersionHistory)-1].EventId {
-			return serviceerror.NewInvalidArgument("Expecting last local event ID to be the same as last localVersionHistory item event ID")
-		}
 		// if mutable state not found, we import from beginning
-		return h.eventImporter.ImportHistoryEventsFromFirstEvent(
+		return h.eventImporter.ImportHistoryEventsFromBeginning(
 			ctx,
 			sourceClusterName,
 			workflowKey,
-			localEvents[0][0].EventId,
-			localEvents[0][0].Version,
-			localEvents,
+			lastVersionHistoryItem.EventId,
+			lastVersionHistoryItem.Version,
 		)
 	default:
 		return err

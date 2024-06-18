@@ -103,7 +103,7 @@ func (s *eventImporterSuite) SetupTest() {
 	)
 }
 
-func (s *eventImporterSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLocalAndCommit() {
+func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 	remoteCluster := cluster.TestAlternativeClusterName
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
@@ -152,7 +152,7 @@ func (s *eventImporterSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLocalAnd
 
 	gomock.InOrder(
 		// fetch more events
-		s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIterator(
+		s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorInclusive(
 			gomock.Any(),
 			remoteCluster,
 			namespace.ID(namespaceId),
@@ -231,13 +231,12 @@ func (s *eventImporterSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLocalAnd
 		}, nil).Times(1),
 	)
 
-	err := s.eventImporter.ImportHistoryEventsFromFirstEvent(
+	err := s.eventImporter.ImportHistoryEventsFromBeginning(
 		context.Background(),
 		remoteCluster,
 		workflowKey,
 		6,
 		1001,
-		initialHistoryEvents,
 	)
 	s.Nil(err)
 }

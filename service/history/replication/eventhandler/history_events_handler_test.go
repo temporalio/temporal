@@ -260,12 +260,6 @@ func (s *historyEventHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 			{EventId: 15, Version: 2},
 		},
 	}
-	historyEvents := [][]*historypb.HistoryEvent{
-		{
-			{EventId: 9, Version: 1},
-			{EventId: 10, Version: 1},
-		},
-	}
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: namespaceId,
 		WorkflowID:  workflowId,
@@ -299,7 +293,6 @@ func (s *historyEventHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 		remoteCluster,
 		workflowKey,
 		versionHistory.Items,
-		historyEvents,
 	)
 	s.Nil(err)
 }
@@ -349,13 +342,12 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLo
 				RunId:      runId,
 			},
 		}).Return(nil, serviceerror.NewNotFound("Mutable state not found")).Times(1),
-		s.eventImporter.EXPECT().ImportHistoryEventsFromFirstEvent(
+		s.eventImporter.EXPECT().ImportHistoryEventsFromBeginning(
 			gomock.Any(),
 			remoteCluster,
 			workflowKey,
 			incomingEvents[0][0].EventId,
 			incomingEvents[0][0].Version,
-			incomingEvents,
 		).Return(nil).Times(1),
 	)
 
@@ -364,7 +356,6 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLo
 		remoteCluster,
 		workflowKey,
 		versionHistory.Items,
-		incomingEvents,
 	)
 	s.Nil(err)
 }

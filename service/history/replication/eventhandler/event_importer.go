@@ -30,7 +30,6 @@ import (
 	"context"
 
 	"go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -52,13 +51,12 @@ const (
 
 type (
 	EventImporter interface {
-		ImportHistoryEventsFromFirstEvent(
+		ImportHistoryEventsFromBeginning(
 			ctx context.Context,
 			remoteCluster string,
 			workflowKey definition.WorkflowKey,
-			endEventId int64, // exclusive
+			endEventId int64, // inclusive
 			endEventVersion int64,
-			pendingEvents [][]*historypb.HistoryEvent,
 		) error
 	}
 
@@ -84,15 +82,14 @@ func NewEventImporter(
 	}
 }
 
-func (e *eventImporterImpl) ImportHistoryEventsFromFirstEvent(
+func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 	ctx context.Context,
 	remoteCluster string,
 	workflowKey definition.WorkflowKey,
 	endEventId int64,
 	endEventVersion int64,
-	pendingEvents [][]*historypb.HistoryEvent,
 ) error {
-	historyIterator := e.historyFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	historyIterator := e.historyFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
 		ctx,
 		remoteCluster,
 		namespace.ID(workflowKey.NamespaceID),
@@ -145,15 +142,6 @@ func (e *eventImporterImpl) ImportHistoryEventsFromFirstEvent(
 			blobs = []*common.DataBlob{}
 			blobSize = 0
 			token = response.Token
-		}
-	}
-	if len(pendingEvents) != 0 {
-		for _, events := range pendingEvents {
-			eventsBlob, err := e.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
-			if err != nil {
-				return err
-			}
-			blobs = append(blobs, eventsBlob)
 		}
 	}
 	if len(blobs) != 0 {
@@ -211,12 +199,7 @@ func invokeImportWorkflowExecutionCall(
 	}
 	response, err := historyEngine.ImportWorkflowExecution(ctx, request)
 	if err != nil {
-		logger.Error("failed to import events",
-			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
-			tag.WorkflowID(workflowKey.WorkflowID),
-			tag.WorkflowRunID(workflowKey.RunID),
-			tag.Error(err))
-		return nil, err
+		return nil, serviceerror.NewInternal("Failed to import events")
 	}
 	return response, nil
 }

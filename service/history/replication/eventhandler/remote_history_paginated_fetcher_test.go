@@ -203,7 +203,7 @@ func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 		},
 	}, nil)
 
-	fetcher := s.fetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	fetcher := s.fetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		context.Background(),
 		cluster.TestCurrentClusterName,
 		s.namespaceID,
@@ -259,7 +259,7 @@ func (s *historyPaginatedFetcherSuite) TestGetHistory() {
 		NextPageToken:     nextTokenIn,
 	}).Return(response, nil)
 
-	out, err := s.fetcher.getHistory(
+	out, token, err := s.fetcher.getHistory(
 		context.Background(),
 		cluster.TestCurrentClusterName,
 		s.namespaceID,
@@ -270,9 +270,12 @@ func (s *historyPaginatedFetcherSuite) TestGetHistory() {
 		endEventID,
 		version,
 		nextTokenIn,
-		pageSize)
+		pageSize,
+		false,
+	)
 	s.Nil(err)
-	s.Equal(response, out)
+	s.Equal(token, nextTokenOut)
+	s.Equal(out[0].RawEventBatch.Data, blob)
 }
 
 func (s *historyPaginatedFetcherSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {

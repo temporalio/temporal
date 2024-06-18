@@ -398,7 +398,7 @@ func (s *ReplicationMigrationBackTestSuite) assertHistoryEvents(
 		s.logger,
 	)
 
-	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx, s.passiveClusterName, namespace.ID(namespaceId), workflowId, runId, startEventId, startEventVersion, endEventId, endEventVersion)
 
 	index := 0

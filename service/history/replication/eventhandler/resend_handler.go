@@ -31,16 +31,18 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -64,11 +66,11 @@ type (
 		clientBean           client.Bean
 		serializer           serialization.Serializer
 		engineProvider       historyEngineProvider
-		rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 		remoteHistoryFetcher HistoryPaginatedFetcher
 		eventImporter        EventImporter
 		logger               log.Logger
 		clusterMetadata      cluster.Metadata
+		config               *configs.Config
 	}
 )
 
@@ -78,25 +80,25 @@ func NewResendHandler(
 	serializer serialization.Serializer,
 	clusterMetadata cluster.Metadata,
 	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error),
-	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
 	remoteHistoryFetcher HistoryPaginatedFetcher,
 	logger log.Logger,
+	config *configs.Config,
 ) ResendHandler {
 	return &resendHandlerImpl{
 		namespaceRegistry:    namespaceRegistry,
 		clientBean:           clientBean,
 		serializer:           serializer,
 		engineProvider:       historyEngineProvider,
-		rereplicationTimeout: rereplicationTimeout,
 		remoteHistoryFetcher: remoteHistoryFetcher,
 		logger:               logger,
 		clusterMetadata:      clusterMetadata,
+		config:               config,
 	}
 }
 
-// ResendHistoryEvents is used to resend history events from remote to target cluster. Mostly handle 3 cases:
+// ResendHistoryEvents is used to retrieve history events from remote and apply to current(passive) cluster. Mostly handle 3 cases:
 //
-//	1.For normal out-of-order delivery case i.e. passive has event from 1-10, gets history replication task for event 20 to 25, then it should call this API with
+//	1.For normal out-of-order delivery case i.e. passive has event from 1-10, got history replication task for event 20 to 25, then it should call this API with
 //		  (10, 20). In this case, event (10, 20) should not include any local generated events, otherwise it is data lose on passive side.
 //	2.For a special out-of-order delivery case(force replication of running workflow) i.e. passive side does not have any data for this workflow and gets history replication task for event 10
 //	  i. If the event 10 is local generated event, it should be handled by history_event_handler, no resend should be triggered, otherwise it is bug.
@@ -116,7 +118,7 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 	endEventID int64,
 	endEventVersion int64,
 ) error {
-	historyEventIterator := r.remoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	historyEventIterator := r.remoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx,
 		remoteClusterName,
 		namespaceID,
@@ -140,9 +142,14 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 	versionHistory := firstBatch.VersionHistory
 	localVersionHistory, remoteVersionHistory := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistory.GetItems(), r.clusterMetadata.GetClusterID(), r.clusterMetadata.GetFailoverVersionIncrement())
 
-	// Simple case and most common case: no need to handle local portion
+	if len(remoteVersionHistory) == 0 {
+		// rule out case 2-i
+		return serviceerror.NewInvalidArgument("Invalid Resend Request.")
+	}
+
+	// most common case: no need to handle local portion
 	if len(localVersionHistory) == 0 || startEventID >= localVersionHistory[len(localVersionHistory)-1].EventId {
-		return r.resendEvents(
+		return r.resendRemoteEvents(
 			ctx,
 			namespaceID,
 			workflowID,
@@ -152,15 +159,12 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 		)
 	}
 
-	if len(remoteVersionHistory) == 0 {
-		// rule out case 2-i
-		return serviceerror.NewInvalidArgument("Invalid Resend Request. This should be handled by history_event_handler")
-	}
 	if startEventID != common.EmptyEventID {
-		// make sure resend is requesting from the first event when requesting local portion
-		return serviceerror.NewInvalidArgument("Invalid Resend Request. This should be handled by history_event_handler")
+		// make sure resend is requesting from the first event when requesting local generated portion
+		return serviceerror.NewInvalidArgument("Invalid Resend Request.")
 	}
-	err = r.resendLocalGeneratedHistoryEvents(ctx, remoteClusterName, namespaceID, workflowID, runID, remoteVersionHistory[0].EventId, remoteVersionHistory[0].Version)
+	lastLocalItem := localVersionHistory[len(localVersionHistory)-1]
+	err = r.resendLocalGeneratedHistoryEvents(ctx, remoteClusterName, namespaceID, workflowID, runID, lastLocalItem.EventId, lastLocalItem.EventId)
 	if err != nil {
 		return err
 	}
@@ -183,10 +187,10 @@ func (r *resendHandlerImpl) resendLocalGeneratedHistoryEvents(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	endEventID int64,
+	endEventID int64, // inclusive
 	endEventVersion int64,
 ) error {
-	return r.eventImporter.ImportHistoryEventsFromFirstEvent(
+	return r.eventImporter.ImportHistoryEventsFromBeginning(
 		ctx,
 		remoteClusterName,
 		definition.WorkflowKey{
@@ -196,7 +200,6 @@ func (r *resendHandlerImpl) resendLocalGeneratedHistoryEvents(
 		},
 		endEventID,
 		endEventVersion,
-		nil,
 	)
 }
 
@@ -211,7 +214,7 @@ func (r *resendHandlerImpl) resendRemoteGeneratedHistoryEvents(
 	endEventID int64, // inclusive
 	endEventVersion int64,
 ) error {
-	historyEventIterator := r.remoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	historyEventIterator := r.remoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx,
 		remoteClusterName,
 		namespaceID,
@@ -221,10 +224,10 @@ func (r *resendHandlerImpl) resendRemoteGeneratedHistoryEvents(
 		startEventVersion,
 		endEventID,
 		endEventVersion)
-	return r.resendEvents(ctx, namespaceID, workflowID, runID, nil, historyEventIterator)
+	return r.resendRemoteEvents(ctx, namespaceID, workflowID, runID, nil, historyEventIterator)
 }
 
-func (r *resendHandlerImpl) resendEvents(
+func (r *resendHandlerImpl) resendRemoteEvents(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -240,36 +243,65 @@ func (r *resendHandlerImpl) resendEvents(
 	if err != nil {
 		return err
 	}
-	err = engine.ReplicateHistoryEvents(
-		ctx,
-		definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
-		nil,
-		headBatch.VersionHistory.GetItems(),
-		[][]*historypb.HistoryEvent{events},
-		nil,
-		"",
-	)
-	if err != nil {
-		return err
-	}
-	for historyBatchIterator.HasNext() {
-		historyBatch, err := historyBatchIterator.Next()
-		if err != nil {
-			return err
-		}
-		events, err := r.serializer.DeserializeEvents(historyBatch.RawEventBatch)
-		if err != nil {
-			return err
-		}
-		err = engine.ReplicateHistoryEvents(
+	var eventsBatch [][]*historypb.HistoryEvent
+	var versionHistory []*historyspb.VersionHistoryItem
+	eventsBatch = append(eventsBatch, events)
+	versionHistory = headBatch.VersionHistory.GetItems()
+	applyFn := func() error {
+		err := engine.ReplicateHistoryEvents(
 			ctx,
 			definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 			nil,
-			historyBatch.VersionHistory.GetItems(),
-			[][]*historypb.HistoryEvent{events},
+			versionHistory,
+			eventsBatch,
 			nil,
 			"",
 		)
+		if err != nil {
+			r.logger.Error("failed to replicate events",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.Error(err))
+			return err
+		}
+		eventsBatch = nil
+		versionHistory = nil
+		return nil
+	}
+
+	for historyBatchIterator.HasNext() {
+		batch, err := historyBatchIterator.Next()
+		if err != nil {
+			r.logger.Error("failed to get history events",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.Error(err))
+			return err
+		}
+		events, err := r.serializer.DeserializeEvents(batch.RawEventBatch)
+		if err != nil {
+			return err
+		}
+		// check if version history changed during the batching process
+		if len(eventsBatch) != 0 && len(versionHistory) != 0 && !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.Items) {
+			err := applyFn()
+			if err != nil {
+				return err
+			}
+		}
+		eventsBatch = append(eventsBatch, events)
+		versionHistory = batch.VersionHistory.Items
+		if len(eventsBatch) >= r.config.ReplicationResendMaxBatchCount() {
+			err := applyFn()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if len(eventsBatch) > 0 {
+		err := applyFn()
 		if err != nil {
 			return err
 		}
