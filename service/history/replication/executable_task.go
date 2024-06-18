@@ -33,8 +33,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/service/history/shard"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -63,10 +61,10 @@ const (
 
 var (
 	TaskRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
-			WithBackoffCoefficient(1.2).
-			WithMaximumInterval(5 * time.Second).
-			WithMaximumAttempts(80).
-			WithExpirationInterval(5 * time.Minute)
+		WithBackoffCoefficient(1.2).
+		WithMaximumInterval(5 * time.Second).
+		WithMaximumAttempts(80).
+		WithExpirationInterval(5 * time.Minute)
 	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
@@ -236,9 +234,6 @@ func (e *ExecutableTaskImpl) Reschedule() {
 }
 
 func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
-	if shard.IsShardOwnershipLostError(err) {
-		return false
-	}
 	switch err.(type) {
 	case *serviceerror.InvalidArgument, *serviceerror.DataLoss:
 		return false
