@@ -958,6 +958,7 @@ var (
 	)
 	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
 	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")
+	CircuitBreakerExecutableBlocked         = NewCounterDef("circuit_breaker_executable_blocked")
 	DynamicWorkerPoolSchedulerBufferSize    = NewCounterDef("dynamic_worker_pool_scheduler_buffer_size")
 	DynamicWorkerPoolSchedulerActiveWorkers = NewCounterDef("dynamic_worker_pool_scheduler_active_workers")
 
