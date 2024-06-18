@@ -2129,17 +2129,20 @@ func newContext(
 			false,
 		)
 	}
+	shardContext.initLastUpdatesTime()
+	return shardContext, nil
+}
 
+func (s *ContextImpl) initLastUpdatesTime() {
 	// We need to set lastUpdate time to "now" - "wait between shard updates time" +  "first update interval".
 	// This is done to make sure that first shard update` will happen around "first update interval" after "now".
 	// The idea is to allow queue to persist even in the case of (relativly) constantly
 	// moving shards between hosts.
 	// Note: it still may prevent queue from progressing if shard moving rate is too high
-	lastUpdated := shardContext.timeSource.Now()
-	lastUpdated = lastUpdated.Add(-1 * shardContext.config.ShardUpdateMinInterval())
-	lastUpdated = lastUpdated.Add(shardContext.config.ShardFirstUpdateInterval())
-	shardContext.lastUpdated = lastUpdated
-	return shardContext, nil
+	lastUpdated := s.timeSource.Now()
+	lastUpdated = lastUpdated.Add(-1 * s.config.ShardUpdateMinInterval())
+	lastUpdated = lastUpdated.Add(s.config.ShardFirstUpdateInterval())
+	s.lastUpdated = lastUpdated
 }
 
 // TODO: why do we need a deep copy here?
