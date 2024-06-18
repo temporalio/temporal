@@ -184,7 +184,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 		if wftCompletedBuildId != wftStartedBuildId {
 			workflowLease.GetReleaseFn()(nil)
-			return nil, serviceerror.NewNotFound("this workflow task was not dispatched to this Build ID")
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId))
 		}
 	}
 
