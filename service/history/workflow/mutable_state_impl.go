@@ -299,7 +299,7 @@ func NewMutableState(
 		StartTime:                         timestamppb.New(startTime),
 		VersionHistories:                  versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:                    &persistencespb.ExecutionStats{HistorySize: 0},
-		SubStateMachinesByType:            make(map[int32]*persistencespb.StateMachineMap),
+		SubStateMachinesByType:            make(map[string]*persistencespb.StateMachineMap),
 		TaskGenerationShardClockTimestamp: shard.CurrentVectorClock().GetClock(),
 	}
 	s.approximateSize += s.executionInfo.Size()
@@ -524,7 +524,7 @@ func NewMutableStateInChain(
 
 func (ms *MutableStateImpl) mustInitHSM() {
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
-	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType, ms)
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
 		panic(err)
 	}

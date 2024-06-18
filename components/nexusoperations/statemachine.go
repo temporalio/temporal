@@ -40,26 +40,20 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-var (
+const (
 	// OperationMachineType is a unique type identifier for the Operation state machine.
-	OperationMachineType = hsm.MachineType{
-		ID:   3,
-		Name: "nexusoperations.Operation",
-	}
+	OperationMachineType = "nexusoperations.Operation"
 
 	// CancelationMachineType is a unique type identifier for the Cancelation state machine.
-	CancelationMachineType = hsm.MachineType{
-		ID:   4,
-		Name: "nexusoperations.Cancelation",
-	}
+	CancelationMachineType = "nexusoperations.Cancelation"
+)
 
 	// CancelationMachineKey is a fixed key for the cancelation machine as a child of the operation machine.
-	CancelationMachineKey = hsm.Key{Type: CancelationMachineType.ID, ID: ""}
-)
+var	CancelationMachineKey = hsm.Key{Type: CancelationMachineType, ID: ""}
 
 // MachineCollection creates a new typed [statemachines.Collection] for operations.
 func MachineCollection(tree *hsm.Node) hsm.Collection[Operation] {
-	return hsm.NewCollection[Operation](tree, OperationMachineType.ID)
+	return hsm.NewCollection[Operation](tree, OperationMachineType)
 }
 
 // Operation state machine.
@@ -71,7 +65,7 @@ type Operation struct {
 func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventToken []byte, deleteOnCompletion bool) (*hsm.Node, error) {
 	attrs := event.GetNexusOperationScheduledEventAttributes()
 
-	node, err := node.AddChild(hsm.Key{Type: OperationMachineType.ID, ID: id}, Operation{
+	node, err := node.AddChild(hsm.Key{Type: OperationMachineType, ID: id}, Operation{
 		&persistencespb.NexusOperationInfo{
 			EndpointId:             attrs.EndpointId,
 			Endpoint:               attrs.Endpoint,
@@ -191,7 +185,7 @@ func (o Operation) output(node *hsm.Node) (hsm.TransitionOutput, error) {
 
 type operationMachineDefinition struct{}
 
-func (operationMachineDefinition) Type() hsm.MachineType {
+func (operationMachineDefinition) Type() string {
 	return OperationMachineType
 }
 
@@ -460,7 +454,7 @@ func (cancelationMachineDefinition) Serialize(state any) ([]byte, error) {
 	return nil, fmt.Errorf("invalid cancelation provided: %v", state) // nolint:goerr113
 }
 
-func (cancelationMachineDefinition) Type() hsm.MachineType {
+func (cancelationMachineDefinition) Type() string {
 	return CancelationMachineType
 }
 
