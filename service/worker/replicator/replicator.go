@@ -185,40 +185,40 @@ func (r *Replicator) listenToClusterMetadataChange() {
 
 func (r *Replicator) cleanupAckedMessages(
 	ctx context.Context,
-	ackMessageID int64,
+	deletedMessageID int64,
 ) (int64, error) {
 	ackLevelByCluster, err := r.namespaceReplicationQueue.GetAckLevels(ctx)
 	if err != nil {
-		return ackMessageID, err
+		return deletedMessageID, err
 	}
 
 	connectedClusters := r.clusterMetadata.GetAllClusterInfo()
-	maxAckLevel := ackMessageID
-	minAckLevel := int64(math.MaxInt64)
+	highWatermark := deletedMessageID
+	connectedClustersLowWatermark := int64(math.MaxInt64)
 	for clusterName, ackLevel := range ackLevelByCluster {
 		if clusterName == r.clusterMetadata.GetCurrentClusterName() {
 			continue
 		}
-		if ackLevel > maxAckLevel {
-			maxAckLevel = ackLevel
+		if ackLevel > highWatermark {
+			highWatermark = ackLevel
 		}
 		if _, ok := connectedClusters[clusterName]; !ok {
 			continue
 		}
-		if ackLevel < minAckLevel {
-			minAckLevel = ackLevel
+		if ackLevel < connectedClustersLowWatermark {
+			connectedClustersLowWatermark = ackLevel
 		}
 	}
-	ackLevel := minAckLevel
-	if ackLevel == int64(math.MaxInt64) {
-		ackLevel = maxAckLevel
+	toDeleteMessageID := connectedClustersLowWatermark
+	if toDeleteMessageID == int64(math.MaxInt64) {
+		toDeleteMessageID = highWatermark
 	}
 
-	if ackLevel <= ackMessageID {
-		return ackMessageID, nil
+	if toDeleteMessageID <= deletedMessageID {
+		return deletedMessageID, nil
 	}
-	err = r.namespaceReplicationQueue.DeleteMessagesBefore(ctx, ackLevel)
-	return ackLevel, err
+	err = r.namespaceReplicationQueue.DeleteMessagesBefore(ctx, toDeleteMessageID)
+	return toDeleteMessageID, err
 }
 
 func (r *Replicator) cleanupNamespaceReplicationQueue(
