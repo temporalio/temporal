@@ -31,10 +31,10 @@ import (
 )
 
 const (
-	TaskTypeTimeout = "nexusoperations.Timeout"
-	TaskTypeInvocation = "nexusoperations.Invocation"
-	TaskTypeBackoff = "nexusoperations.Backoff"
-	TaskTypeCancelation = "nexusoperations.Cancelation"
+	TaskTypeTimeout            = "nexusoperations.Timeout"
+	TaskTypeInvocation         = "nexusoperations.Invocation"
+	TaskTypeBackoff            = "nexusoperations.Backoff"
+	TaskTypeCancelation        = "nexusoperations.Cancelation"
 	TaskTypeCancelationBackoff = "nexusoperations.CancelationBackoff"
 )
 

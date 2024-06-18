@@ -438,7 +438,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 	s.Equal("b1", s.mutableState.GetAssignedBuildId())
 	s.Equal(int64(0), wft.BuildIdRedirectCounter)
 	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
-	e, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{},
 		WorkflowTaskCompletionLimits{
