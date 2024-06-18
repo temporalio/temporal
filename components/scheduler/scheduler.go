@@ -54,7 +54,6 @@ type Scheduler struct {
 	specBuilder    *scheduler.SpecBuilder
 	cspec          *scheduler.CompiledSpec
 	nextTimeCache  *schedspb.NextTimeCache
-	nextInvokeTime time.Time
 	uuidBatch      []string
 	frontendClient workflowservice.WorkflowServiceClient
 	historyClient  resource.HistoryClient

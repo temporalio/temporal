@@ -24,13 +24,15 @@ package scheduler_test
 
 import (
 	"context"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/components/callbacks"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/components/scheduler"
@@ -57,7 +59,7 @@ var _ hsm.Environment = fakeEnv{}
 type mutableState struct {
 }
 
-func TestProcessScheduleTask(t *testing.T) {
+func TestProcessScheduleWaitTask(t *testing.T) {
 	root := newRoot(t)
 	sched := schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
@@ -69,18 +71,15 @@ func TestProcessScheduleTask(t *testing.T) {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}
-	schedulerHsm := scheduler.Scheduler{HsmSchedulerState: &schedspb.HsmSchedulerState{
-		Args: &schedspb.StartScheduleArgs{
-			Schedule: &sched,
-			State: &schedspb.InternalState{
-				Namespace:     "myns",
-				NamespaceId:   "mynsid",
-				ScheduleId:    "myschedule",
-				ConflictToken: 1,
-			},
+	schedulerHsm := scheduler.NewScheduler(&schedspb.StartScheduleArgs{
+		Schedule: &sched,
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: 1,
 		},
-		HsmState: enums.SCHEDULER_STATE_WAITING,
-	}}
+	})
 
 	node, err := root.AddChild(hsm.Key{Type: scheduler.StateMachineType.ID}, &schedulerHsm)
 	require.NoError(t, err)
@@ -99,8 +98,61 @@ func TestProcessScheduleTask(t *testing.T) {
 		scheduler.SchedulerWaitTask{Deadline: env.Now()},
 	)
 	require.NoError(t, err)
-	require.Equal(t, enums.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
-	// TODO(Tianyu): Add test for workflow scheduling
+	require.Equal(t, enumsspb.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
+}
+
+func TestProcessScheduleRunTask(t *testing.T) {
+	root := newRoot(t)
+	sched := schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: durationpb.New(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}
+	schedulerHsm := scheduler.NewScheduler(&schedspb.StartScheduleArgs{
+		Schedule: &sched,
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: 1,
+		},
+	})
+	schedulerHsm.HsmState = enumsspb.SCHEDULER_STATE_EXECUTING
+
+	node, err := root.AddChild(hsm.Key{Type: scheduler.StateMachineType.ID, ID: "ID"}, &schedulerHsm)
+	require.NoError(t, err)
+	env := fakeEnv{node}
+
+	reg := hsm.NewRegistry()
+	// TODO(Tianyu): Add mock clients to verify things have been invoked
+	require.NoError(t, scheduler.RegisterExecutor(
+		reg,
+		scheduler.TaskExecutorOptions{},
+		&scheduler.Config{},
+	))
+
+	err = reg.ExecuteImmediateTask(
+		context.Background(),
+		env,
+		hsm.Ref{
+			WorkflowKey: definition.NewWorkflowKey("mynsid", "", ""),
+			StateMachineRef: &persistencespb.StateMachineRef{
+				Path: []*persistencespb.StateMachineKey{
+					{
+						Type: callbacks.StateMachineType.ID,
+						Id:   "ID",
+					},
+				},
+			}},
+		scheduler.SchedulerActivateTask{Destination: "myns"},
+	)
+	require.NoError(t, err)
+	require.Equal(t, enumsspb.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
 }
 
 func newMutableState(t *testing.T) mutableState {

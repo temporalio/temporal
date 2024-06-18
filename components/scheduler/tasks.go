@@ -72,21 +72,21 @@ func (ScheduleWaitTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 	return nil, nil
 }
 
-type SchedulerRunTask struct {
+type SchedulerActivateTask struct {
 	Destination string
 }
 
-var _ hsm.Task = SchedulerRunTask{}
+var _ hsm.Task = SchedulerActivateTask{}
 
-func (SchedulerRunTask) Type() hsm.TaskType {
+func (SchedulerActivateTask) Type() hsm.TaskType {
 	return TaskTypeSchedulerExecute
 }
 
-func (t SchedulerRunTask) Kind() hsm.TaskKind {
+func (t SchedulerActivateTask) Kind() hsm.TaskKind {
 	return hsm.TaskKindOutbound{Destination: t.Destination}
 }
 
-func (SchedulerRunTask) Concurrent() bool {
+func (SchedulerActivateTask) Concurrent() bool {
 	return false
 }
 
@@ -94,7 +94,7 @@ type ScheduleExecuteTaskSerializer struct{}
 
 func (ScheduleExecuteTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return SchedulerRunTask{Destination: kind.Destination}, nil
+		return SchedulerActivateTask{Destination: kind.Destination}, nil
 	}
 	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
 }

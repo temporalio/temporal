@@ -67,9 +67,9 @@ func (s *Scheduler) SetState(state enumsspb.SchedulerState) {
 func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch s.HsmState { // nolint:exhaustive
 	case enumsspb.SCHEDULER_STATE_WAITING:
-		return []hsm.Task{SchedulerWaitTask{Deadline: s.nextInvokeTime}}, nil
+		return []hsm.Task{SchedulerWaitTask{Deadline: s.NextInvocationTime.AsTime()}}, nil
 	case enumsspb.SCHEDULER_STATE_EXECUTING:
-		return []hsm.Task{SchedulerRunTask{Destination: s.Args.State.Namespace}}, nil
+		return []hsm.Task{SchedulerActivateTask{Destination: s.Args.State.Namespace}}, nil
 	}
 	return nil, nil
 }

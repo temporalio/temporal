@@ -84,7 +84,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-	task SchedulerRunTask,
+	task SchedulerActivateTask,
 ) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
@@ -128,7 +128,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 		//nolint:revive
 		for s.processBuffer() {
 		}
-		s.nextInvokeTime = nextWakeup
+		s.NextInvocationTime = timestamppb.New(nextWakeup)
 
 		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
 			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
