@@ -61,6 +61,7 @@ type (
 		controller *gomock.Controller
 
 		*persistencetests.TestBase
+		namespaceRegistry              namespace.Registry
 		VisibilityMgr                  manager.VisibilityManager
 		SearchAttributesProvider       searchattribute.Provider
 		SearchAttributesMapperProvider searchattribute.MapperProvider
@@ -87,6 +88,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		nil,
 		s.SearchAttributesProvider,
 		s.SearchAttributesMapperProvider,
+		s.namespaceRegistry,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetFloatPropertyFn(0.2),
