@@ -61,7 +61,8 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
 	require.Equal(t, 1, len(out.Tasks))
-	runTask, _ := out.Tasks[0].(scheduler.SchedulerActivateTask)
+	runTask, ok := out.Tasks[0].(scheduler.SchedulerActivateTask)
+	require.True(t, ok)
 	require.Equal(t, "myns", runTask.Destination)
 
 	// Manually set the next invocation time and verify that it is scheduled for that
@@ -71,6 +72,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.SCHEDULER_STATE_WAITING, schedulerHsm.HsmState)
 	require.Equal(t, 1, len(out.Tasks))
-	waitTask, _ := out.Tasks[0].(scheduler.SchedulerWaitTask)
+	waitTask, ok := out.Tasks[0].(scheduler.SchedulerWaitTask)
+	require.True(t, ok)
 	require.Equal(t, now.AsTime(), waitTask.Deadline)
 }
