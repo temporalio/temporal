@@ -29,25 +29,16 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-var (
-	TaskTypeSchedulerWait = hsm.TaskType{
-		ID:   8,
-		Name: "scheduler.SchedulerWait",
-	}
-
-	TaskTypeSchedulerExecute = hsm.TaskType{
-		ID:   9,
-		Name: "scheduler.SchedulerExecute",
-	}
+const (
+	TaskTypeSchedulerWait    = "scheduler.SchedulerWait"
+	TaskTypeSchedulerExecute = "scheduler.SchedulerExecute"
 )
 
 type SchedulerWaitTask struct {
 	Deadline time.Time
 }
 
-var _ hsm.Task = SchedulerWaitTask{}
-
-func (SchedulerWaitTask) Type() hsm.TaskType {
+func (SchedulerWaitTask) Type() string {
 	return TaskTypeSchedulerWait
 }
 
@@ -78,7 +69,7 @@ type SchedulerActivateTask struct {
 
 var _ hsm.Task = SchedulerActivateTask{}
 
-func (SchedulerActivateTask) Type() hsm.TaskType {
+func (SchedulerActivateTask) Type() string {
 	return TaskTypeSchedulerExecute
 }
 
@@ -104,9 +95,8 @@ func (ScheduleExecuteTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {
-	if err := reg.RegisterTaskSerializer(TaskTypeSchedulerWait.ID, ScheduleWaitTaskSerializer{}); err != nil {
+	if err := reg.RegisterTaskSerializer(TaskTypeSchedulerWait, ScheduleWaitTaskSerializer{}); err != nil {
 		return err
 	}
-	return reg.RegisterTaskSerializer(TaskTypeSchedulerExecute.ID, ScheduleExecuteTaskSerializer{})
-
+	return reg.RegisterTaskSerializer(TaskTypeSchedulerExecute, ScheduleExecuteTaskSerializer{})
 }

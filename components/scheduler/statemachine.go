@@ -34,14 +34,11 @@ import (
 )
 
 // Unique type identifier for this state machine.
-var StateMachineType = hsm.MachineType{
-	ID:   5,
-	Name: "scheduler.Scheduler",
-}
+const StateMachineType = "scheduler.Scheduler"
 
 // MachineCollection creates a new typed [statemachines.Collection] for callbacks.
-func MachineCollection(tree *hsm.Node) hsm.Collection[Scheduler] {
-	return hsm.NewCollection[Scheduler](tree, StateMachineType.ID)
+func MachineCollection(tree *hsm.Node) hsm.Collection[*Scheduler] {
+	return hsm.NewCollection[*Scheduler](tree, StateMachineType)
 }
 
 // NewScheduler creates a new scheduler in the WAITING state from given params.
@@ -76,7 +73,7 @@ func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 
 type stateMachineDefinition struct{}
 
-func (stateMachineDefinition) Type() hsm.MachineType {
+func (stateMachineDefinition) Type() string {
 	return StateMachineType
 }
 

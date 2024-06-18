@@ -69,7 +69,7 @@ func newRoot(t *testing.T, backend *hsmtest.NodeBackend) *hsm.Node {
 	reg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, root{}, make(map[int32]*persistence.StateMachineMap), backend)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, root{}, make(map[string]*persistence.StateMachineMap), backend)
 	require.NoError(t, err)
 	return root
 }

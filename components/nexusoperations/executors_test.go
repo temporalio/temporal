@@ -86,10 +86,12 @@ func TestProcessInvocationTask(t *testing.T) {
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
 		requestTimeout        time.Duration
+		destinationDown       bool
 	}{
 		{
-			name:           "async start",
-			requestTimeout: time.Hour,
+			name:            "async start",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
 			},
@@ -105,8 +107,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:           "sync start",
-			requestTimeout: time.Hour,
+			name:            "sync start",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				// Also use this test case to check the input and options provided.
 				if service != "service" {
@@ -140,8 +143,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:           "sync failed",
-			requestTimeout: time.Hour,
+			name:            "sync failed",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, &nexus.UnsuccessfulOperationError{
 					Failure: nexus.Failure{Message: "operation failed from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
@@ -185,8 +189,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:           "sync canceled",
-			requestTimeout: time.Hour,
+			name:            "sync canceled",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, &nexus.UnsuccessfulOperationError{
 					Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
@@ -228,8 +233,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:           "transient error",
-			requestTimeout: time.Hour,
+			name:            "transient error",
+			requestTimeout:  time.Hour,
+			destinationDown: true,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
@@ -244,6 +250,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		{
 			name:                  "invocation timeout",
 			requestTimeout:        time.Microsecond,
+			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				time.Sleep(time.Millisecond * 100)
@@ -260,6 +267,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			name:             "service not found",
 			endpointNotFound: true,
 			requestTimeout:   time.Hour,
+			destinationDown:  false,
 			onStartOperation: nil, // This should not be called if the service is not found.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
@@ -345,7 +353,12 @@ func TestProcessInvocationTask(t *testing.T) {
 				},
 				nexusoperations.InvocationTask{Destination: "endpoint-name"},
 			)
-			require.NoError(t, err)
+			if tc.destinationDown {
+				var destinationDownErr *queues.DestinationDownError
+				require.ErrorAs(t, err, &destinationDownErr)
+			} else {
+				require.NoError(t, err)
+			}
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, op, backend.Events[1:]) // Ignore the original scheduled event.
@@ -433,10 +446,12 @@ func TestProcessCancelationTask(t *testing.T) {
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op nexusoperations.Cancelation)
 		requestTimeout        time.Duration
+		destinationDown       bool
 	}{
 		{
-			name:           "failure",
-			requestTimeout: time.Hour,
+			name:            "failure",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
 			},
@@ -448,8 +463,9 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
-			name:           "success",
-			requestTimeout: time.Hour,
+			name:            "success",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nil
 			},
@@ -460,8 +476,9 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
-			name:           "transient error",
-			requestTimeout: time.Hour,
+			name:            "transient error",
+			requestTimeout:  time.Hour,
+			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
@@ -473,8 +490,9 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
-			name:           "invocation timeout",
-			requestTimeout: time.Microsecond,
+			name:            "invocation timeout",
+			requestTimeout:  time.Microsecond,
+			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				time.Sleep(time.Millisecond * 100)
 				return nil
@@ -490,6 +508,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			name:              "service not found",
 			endpointNotFound:  true,
 			requestTimeout:    time.Hour,
+			destinationDown:   false,
 			onCancelOperation: nil, // This should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
@@ -586,7 +605,11 @@ func TestProcessCancelationTask(t *testing.T) {
 				},
 				nexusoperations.CancelationTask{Destination: "endpoint-name"},
 			)
-			require.NoError(t, err)
+			if tc.destinationDown {
+				require.IsType(t, &queues.DestinationDownError{}, err)
+			} else {
+				require.NoError(t, err)
+			}
 			cancelation, err := hsm.MachineData[nexusoperations.Cancelation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, cancelation)

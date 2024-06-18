@@ -78,7 +78,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	if err != nil {
 		taskType = "StandbyUnknownOutbound"
 	} else {
-		taskType = "Standby." + smt.Type().Name
+		taskType = "Standby." + smt.Type()
 	}
 
 	respond := func(err error) queues.ExecuteResponse {

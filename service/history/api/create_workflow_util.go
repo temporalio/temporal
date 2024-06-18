@@ -26,6 +26,7 @@ package api
 
 import (
 	"context"
+
 	"go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/sdk"
 	schedulerhsm "go.temporal.io/server/components/scheduler"
@@ -102,7 +103,7 @@ func NewWorkflowWithSignal(
 		}
 
 		// Key ID is left empty as the scheduler machine is a singleton.
-		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType.ID}, schedulerhsm.NewScheduler(&args))
+		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerhsm.NewScheduler(&args))
 		if err != nil {
 			return nil, err
 		}
