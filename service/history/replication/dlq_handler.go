@@ -231,7 +231,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 		return nil, err
 	}
 
-	taskExecutor, err := r.getOrCreateTaskExecutor(ctx, sourceCluster)
+	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
 	if err != nil {
 		return nil, err
 	}
@@ -340,6 +340,14 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 				NextEventId:      0,
 				ScheduledEventId: 0,
 			})
+		case *tasks.SyncHSMTask:
+			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+				NamespaceId: task.NamespaceID,
+				WorkflowId:  task.WorkflowID,
+				RunId:       task.RunID,
+				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+				TaskId:      task.TaskID,
+			})
 		default:
 			panic(fmt.Sprintf("Unknown repication task type: %v", task))
 		}
@@ -362,7 +370,7 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	return dlqResponse.ReplicationTasks, taskInfo, ackLevel, pageToken, nil
 }
 
-func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterName string) (TaskExecutor, error) {
+func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecutor, error) {
 	r.taskExecutorsLock.Lock()
 	defer r.taskExecutorsLock.Unlock()
 	if executor, ok := r.taskExecutors[clusterName]; ok {

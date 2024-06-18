@@ -310,7 +310,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 					pao.Path,
 					task,
 				); err != nil {
-					return nil
+					return err
 				}
 			}
 		}
@@ -760,6 +760,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		r.mutableState.GetPendingActivityInfos(),
 		activityIDs,
 	)...)
+	if r.config.EnableNexus() {
+		replicationTasks = append(replicationTasks, &tasks.SyncHSMTask{
+			WorkflowKey: workflowKey,
+			// TaskID and VisibilityTimestamp are set by shard
+		})
+	}
 	return replicationTasks, executionInfo.StateTransitionCount, nil
 
 }

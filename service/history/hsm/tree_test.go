@@ -261,6 +261,64 @@ func TestNode_Walk(t *testing.T) {
 	require.Equal(t, 5, nodeCount)
 }
 
+func TestNode_Sync(t *testing.T) {
+	testCases := []struct {
+		currentState  hsmtest.State
+		incomingState hsmtest.State
+		synced        bool
+	}{
+		{
+			currentState:  hsmtest.State1,
+			incomingState: hsmtest.State1,
+			synced:        false,
+		},
+		{
+			currentState:  hsmtest.State4,
+			incomingState: hsmtest.State2,
+			synced:        false,
+		},
+		{
+			currentState:  hsmtest.State1,
+			incomingState: hsmtest.State3,
+			synced:        true,
+		},
+	}
+
+	for _, tc := range testCases {
+		currentNode, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(tc.currentState), make(map[string]*persistencespb.StateMachineMap), &backend{})
+		require.NoError(t, err)
+
+		incomingNode, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(tc.incomingState), make(map[string]*persistencespb.StateMachineMap), &backend{})
+		require.NoError(t, err)
+
+		currentNodeTransitionCount := currentNode.InternalRepr().TransitionCount
+
+		synced, err := currentNode.Sync(incomingNode)
+		require.NoError(t, err)
+		require.Equal(t, tc.synced, synced)
+
+		if synced {
+			incomingData, err := def1.Serialize(hsmtest.NewData(tc.incomingState))
+			require.NoError(t, err)
+			require.Equal(t, incomingData, currentNode.InternalRepr().Data)
+			require.Equal(t, incomingNode.InternalRepr().LastUpdateMutableStateTransitionCount, currentNode.InternalRepr().LastUpdateMutableStateTransitionCount)
+			require.Equal(t, currentNodeTransitionCount+1, currentNode.InternalRepr().TransitionCount)
+
+			paos := currentNode.Outputs()
+			require.Len(t, paos, 1)
+			pao := paos[0]
+			require.Equal(t, currentNode.Path(), pao.Path)
+			require.Len(t, pao.Outputs, 1)
+			require.Len(t, pao.Outputs[0].Tasks, 2)
+		} else {
+			currentData, err := def1.Serialize(hsmtest.NewData(tc.currentState))
+			require.NoError(t, err)
+			require.Equal(t, currentData, currentNode.InternalRepr().Data)
+			require.False(t, currentNode.Dirty())
+		}
+	}
+}
+
 func TestMachineData(t *testing.T) {
 	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)

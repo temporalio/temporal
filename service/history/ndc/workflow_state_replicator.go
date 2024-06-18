@@ -84,6 +84,7 @@ func NewWorkflowStateReplicator(
 	logger log.Logger,
 ) *WorkflowStateReplicatorImpl {
 
+	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
 	return &WorkflowStateReplicatorImpl{
 		shardContext:      shardContext,
 		namespaceRegistry: shardContext.GetNamespaceRegistry(),
@@ -92,7 +93,7 @@ func NewWorkflowStateReplicator(
 		executionMgr:      shardContext.GetExecutionManager(),
 		historySerializer: eventSerializer,
 		transactionMgr:    NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
-		logger:            log.With(logger, tag.ComponentHistoryReplicator),
+		logger:            logger,
 	}
 }
 
@@ -166,7 +167,23 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 				common.EmptyVersion,
 			)
 		}
-		return nil
+
+		// release the workflow lock here otherwise SyncHSM will deadlock
+		releaseFn(nil)
+
+		engine, err := r.shardContext.GetEngine(ctx)
+		if err != nil {
+			return err
+		}
+
+		// we don't care about activity state here as activity can't run after workflow is closed.
+		return engine.SyncHSM(ctx, &shard.SyncHSMRequest{
+			WorkflowKey: ms.GetWorkflowKey(),
+			StateMachineNode: &persistencespb.StateMachineNode{
+				Children: executionInfo.SubStateMachinesByType,
+			},
+			EventVersionHistory: incomingVersionHistory,
+		})
 	default:
 		return err
 	}

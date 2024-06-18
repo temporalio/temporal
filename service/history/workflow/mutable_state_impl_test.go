@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -177,6 +178,12 @@ func (s *mutableStateSuite) SetupTest() {
 func (s *mutableStateSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
+}
+
+func (s *mutableStateSuite) SetupSubTest() {
+	// create a fresh mutable state for each sub test
+	// this will be invoked upon s.Run()
+	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.mutableState.GetNamespaceEntry(), tests.WorkflowID, tests.RunID, time.Now().UTC())
 }
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied_ApplyWorkflowTaskCompleted() {
@@ -609,6 +616,13 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 		},
 	}}
 	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
+	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 1000
+
+	stateMachineDef := hsmtest.NewDefinition("test")
+	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
+	s.NoError(err)
+	_, err = mutableState.HSM().AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
+	s.NoError(err)
 
 	mutableStateProto := mutableState.CloneToProto()
 	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0, 0)
@@ -619,6 +633,12 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 		s.Nil(childInfo.Clock)
 	}
 	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
+	s.Zero(sanitizedMutableState.executionInfo.TaskGenerationShardClockTimestamp)
+	err = mutableState.HSM().Walk(func(node *hsm.Node) error {
+		s.Equal(1, node.InternalRepr().TransitionCount)
+		return nil
+	})
+	s.NoError(err)
 }
 
 func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchApplied(version int64, workflowID, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
@@ -1853,7 +1873,7 @@ func (s *mutableStateSuite) TestGetCloseVersion() {
 	s.Equal(expectedVersion, closeVersion)
 }
 
-func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks() {
+func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryTask() {
 	version := int64(777)
 	firstEventID := int64(2)
 	lastEventID := int64(3)
@@ -2007,5 +2027,82 @@ func (s *mutableStateSuite) TestMaxAllowedTimer() {
 				s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, timerTasks[0].GetType())
 			}
 		})
+	}
+}
+
+func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMTask() {
+	version := s.mutableState.GetCurrentVersion()
+	stateMachineDef := hsmtest.NewDefinition("test")
+	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
+	s.NoError(err)
+
+	testCases := []struct {
+		name                    string
+		hsmDirty                bool
+		eventBatches            [][]*historypb.HistoryEvent
+		expectedReplicationTask tasks.Task
+	}{
+		{
+			name:     "with events",
+			hsmDirty: true,
+			eventBatches: [][]*historypb.HistoryEvent{
+				{
+					&historypb.HistoryEvent{
+						Version:   version,
+						EventId:   5,
+						EventTime: timestamppb.New(time.Now()),
+						EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+							NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
+						},
+					},
+				},
+			},
+			expectedReplicationTask: &tasks.HistoryReplicationTask{
+				WorkflowKey:  s.mutableState.GetWorkflowKey(),
+				FirstEventID: 5,
+				NextEventID:  6,
+				Version:      version,
+			},
+		},
+		{
+			name:     "without events",
+			hsmDirty: true,
+			expectedReplicationTask: &tasks.SyncHSMTask{
+				WorkflowKey: s.mutableState.GetWorkflowKey(),
+			},
+		},
+		{
+			name:                    "no dirty hsm",
+			hsmDirty:                false,
+			expectedReplicationTask: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(
+			tc.name,
+			func() {
+				if tc.hsmDirty {
+					_, err = s.mutableState.HSM().AddChild(
+						hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"},
+						hsmtest.NewData(hsmtest.State1),
+					)
+					s.NoError(err)
+				}
+
+				err := s.mutableState.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, tc.eventBatches)
+				s.NoError(err)
+
+				repicationTasks := s.mutableState.PopTasks()[tasks.CategoryReplication]
+
+				if tc.expectedReplicationTask != nil {
+					s.Len(repicationTasks, 1)
+					s.Equal(tc.expectedReplicationTask, repicationTasks[0])
+				} else {
+					s.Empty(repicationTasks)
+				}
+			},
+		)
 	}
 }

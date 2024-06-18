@@ -473,6 +473,14 @@ func NewSanitizedMutableState(
 	// Timer tasks are generated locally, do not sync them.
 	mutableState.executionInfo.StateMachineTimers = nil
 	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 0
+	if err := mutableState.HSM().Walk(func(node *hsm.Node) error {
+		// Node TransitionCount is cluster local information used for detecting staleness.
+		// Reset it to 1 since we are creating a new mutable state.
+		node.InternalRepr().TransitionCount = 1
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
@@ -5399,6 +5407,11 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 		ms.syncActivityToReplicationTask(transactionPolicy)...,
 	)
 
+	ms.InsertTasks[tasks.CategoryReplication] = append(
+		ms.InsertTasks[tasks.CategoryReplication],
+		ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches)...,
+	)
+
 	if transactionPolicy == TransactionPolicyPassive &&
 		len(ms.InsertTasks[tasks.CategoryReplication]) > 0 {
 		return serviceerror.NewInternal("should not generate replication task when close transaction as passive")
@@ -5538,6 +5551,32 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 			)
 		}
 		return nil
+	case TransactionPolicyPassive:
+		return emptyTasks
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+	}
+}
+
+func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
+	transactionPolicy TransactionPolicy,
+	eventBatches [][]*historypb.HistoryEvent,
+) []tasks.Task {
+	switch transactionPolicy {
+	case TransactionPolicyActive:
+		// HSM().Dirty() implies Nexus is enabled
+		// We also assume that - for the time being - if events were generated in a transaction,
+		// all HSM node updates are a result of applying those events.
+		// The passive cluster will transition the HSM when applying the events.
+		if ms.HSM().Dirty() && len(eventBatches) == 0 && ms.generateReplicationTask() {
+			return []tasks.Task{
+				&tasks.SyncHSMTask{
+					WorkflowKey: ms.GetWorkflowKey(),
+					// TaskID and VisibilityTimestamp are set by shard
+				},
+			}
+		}
+		return emptyTasks
 	case TransactionPolicyPassive:
 		return emptyTasks
 	default:
