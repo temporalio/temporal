@@ -70,23 +70,38 @@ func (md metricDefinition) Unit() MetricUnit {
 }
 
 func NewTimerDef(name string, opts ...Option) timerDefinition {
-	return timerDefinition{globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)
+	return timerDefinition{def}
 }
 
 func NewBytesHistogramDef(name string, opts ...Option) histogramDefinition {
-	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Bytes))...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := globalRegistry.register(name, append(opts, WithUnit(Bytes))...)
+	return histogramDefinition{def}
 }
 
 func NewDimensionlessHistogramDef(name string, opts ...Option) histogramDefinition {
-	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)
+	return histogramDefinition{def}
 }
 
 func NewCounterDef(name string, opts ...Option) counterDefinition {
-	return counterDefinition{globalRegistry.register(name, opts...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := globalRegistry.register(name, opts...)
+	return counterDefinition{def}
 }
 
 func NewGaugeDef(name string, opts ...Option) gaugeDefinition {
-	return gaugeDefinition{globalRegistry.register(name, opts...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := globalRegistry.register(name, opts...)
+	return gaugeDefinition{def}
 }
 
 func (d histogramDefinition) With(handler Handler) HistogramIface {

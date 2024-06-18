@@ -153,7 +153,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+				require.Equal(t, "worker", unexpectedError.Response.Header.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
@@ -594,7 +595,8 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 			assertion: func(t *testing.T, err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+				require.Equal(t, "worker", unexpectedError.Response.Header.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},

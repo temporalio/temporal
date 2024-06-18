@@ -201,8 +201,8 @@ github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyua
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/ncruces/go-strftime v0.1.9 h1:bY0MQC28UADQmHmaF5dgpLmImcShSi2kHU9XLdhx/f4=
 github.com/ncruces/go-strftime v0.1.9/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
-github.com/nexus-rpc/sdk-go v0.0.8-0.20240502185337-2b47041a2cc2 h1:NhCabJX4shhYcqtw52H5gFhLToXDhDKZy3KjB81UcTo=
-github.com/nexus-rpc/sdk-go v0.0.8-0.20240502185337-2b47041a2cc2/go.mod h1:uBe8fX151zUW9DhXxwHjji19d6YfnNUqJ81tR3JbwHY=
+github.com/nexus-rpc/sdk-go v0.0.8-0.20240617225139-cd9d6c50e99d h1:OY7OVvmJgHji2GjQVaY1y4NHTZ5vvYr1GJaZTAjo/SQ=
+github.com/nexus-rpc/sdk-go v0.0.8-0.20240617225139-cd9d6c50e99d/go.mod h1:uBe8fX151zUW9DhXxwHjji19d6YfnNUqJ81tR3JbwHY=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/olekukonko/tablewriter v0.0.5 h1:P2Ga83D34wi1o9J6Wh1mRuqd4mF/x/lgBS7N7AbDhec=
 github.com/olekukonko/tablewriter v0.0.5/go.mod h1:hPp6KlRPjbx+hW8ykQs1w3UBbZlj6HuIJcUGPhkA7kY=
