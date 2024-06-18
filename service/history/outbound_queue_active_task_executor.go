@@ -68,7 +68,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	if err != nil {
 		taskType = "ActiveUnknownOutbound"
 	} else {
-		taskType = "Active." + smt.Type().Name
+		taskType = "Active." + smt.Type()
 	}
 
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(

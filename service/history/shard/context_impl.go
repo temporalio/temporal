@@ -1524,7 +1524,13 @@ func (s *ContextImpl) rUnlock() {
 func (s *ContextImpl) ioSemaphoreAcquire(
 	ctx context.Context,
 ) (retErr error) {
-	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	priority := locks.PriorityHigh
+	callerInfo := headers.GetCallerInfo(ctx)
+	if callerInfo.CallerType == headers.CallerTypePreemptable {
+		priority = locks.PriorityLow
+	}
+
+	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope), metrics.PriorityTag(priority))
 	metrics.SemaphoreRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -1534,11 +1540,6 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
-	priority := locks.PriorityHigh
-	callerInfo := headers.GetCallerInfo(ctx)
-	if callerInfo.CallerType == headers.CallerTypePreemptable {
-		priority = locks.PriorityLow
-	}
 	return s.ioSemaphore.Acquire(ctx, priority, 1)
 }
 

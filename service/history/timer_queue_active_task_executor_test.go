@@ -1798,6 +1798,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	numInvocations := 0
 
 	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterStateMachine(reg))
 	s.NoError(dummy.RegisterTaskSerializers(reg))
 	s.NoError(dummy.RegisterExecutor(
 		reg,
@@ -1819,9 +1820,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	info := &persistencespb.WorkflowExecutionInfo{}
 	root, err := hsm.NewRoot(
 		reg,
-		workflow.StateMachineType.ID,
+		workflow.StateMachineType,
 		ms,
-		make(map[int32]*persistencespb.StateMachineMap),
+		make(map[string]*persistencespb.StateMachineMap),
 		ms,
 	)
 	s.NoError(err)
@@ -1846,17 +1847,17 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 			MutableStateNamespaceFailoverVersion:   1,
 			MachineInitialNamespaceFailoverVersion: 2,
 		},
-		Type: dummy.TaskTypeTimer.ID,
+		Type: dummy.TaskTypeTimer,
 	}
 	validTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
-				{Type: dummy.StateMachineType.ID, Id: "dummy"},
+				{Type: dummy.StateMachineType, Id: "dummy"},
 			},
 			MutableStateNamespaceFailoverVersion:   2,
 			MachineInitialNamespaceFailoverVersion: 2,
 		},
-		Type: dummy.TaskTypeTimer.ID,
+		Type: dummy.TaskTypeTimer,
 	}
 
 	// Past deadline, should get executed.

@@ -2128,6 +2128,11 @@ that task will be sent to DLQ.`,
 		50,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
+	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
+		"history.ReplicationResendMaxBatchCount",
+		10,
+		`Maximum number of resend events batch for a single replication request`,
+	)
 
 	// keys for worker
 
