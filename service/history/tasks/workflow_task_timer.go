@@ -53,7 +53,7 @@ type (
 		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
-		Speculative         bool
+		InMemory            bool
 
 		// state is used by speculative WT only.
 		state atomic.Uint32 // of type ctasks.State
@@ -89,7 +89,7 @@ func (d *WorkflowTaskTimeoutTask) SetVisibilityTime(t time.Time) {
 }
 
 func (d *WorkflowTaskTimeoutTask) GetCategory() Category {
-	if d.Speculative {
+	if d.InMemory {
 		return CategoryMemoryTimer
 	}
 	return CategoryTimer

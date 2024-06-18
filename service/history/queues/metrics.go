@@ -92,7 +92,7 @@ func GetActiveTimerTaskTypeTagValue(
 	task := executable.GetTask()
 	switch t := task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
-		if t.Speculative {
+		if t.InMemory {
 			return metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout
 		}
 		return metrics.TaskTypeTimerActiveTaskWorkflowTaskTimeout
