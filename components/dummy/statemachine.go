@@ -35,13 +35,10 @@ const (
 	State1
 )
 
-var StateMachineType = hsm.MachineType{
-	ID:   1,
-	Name: "dummy.Dummy",
-}
+var StateMachineType = "dummy.Dummy"
 
 func MachineCollection(tree *hsm.Node) hsm.Collection[*Dummy] {
-	return hsm.NewCollection[*Dummy](tree, StateMachineType.ID)
+	return hsm.NewCollection[*Dummy](tree, StateMachineType)
 }
 
 // Dummy state machine.
@@ -75,7 +72,7 @@ type stateMachineDefinition struct{}
 
 var _ hsm.StateMachineDefinition = stateMachineDefinition{}
 
-func (stateMachineDefinition) Type() hsm.MachineType {
+func (stateMachineDefinition) Type() string {
 	return StateMachineType
 }
 

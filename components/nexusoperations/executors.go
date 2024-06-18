@@ -226,10 +226,13 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 	}
 
-	if err := e.saveResult(ctx, env, ref, result, callErr); err != nil {
-		return fmt.Errorf("failed to save result: %w", err)
+	err = e.saveResult(ctx, env, ref, result, callErr)
+
+	if callErr != nil && isDestinationDown(callErr) {
+		err = queues.NewDestinationDownError(callErr.Error(), err)
 	}
-	return nil
+
+	return err
 }
 
 type startArgs struct {
@@ -285,7 +288,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
 				// to allow it to complete via callback.
 				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-					// nolint:revive
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
 					e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 						NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 							ScheduledEventId: eventID,
@@ -300,73 +303,68 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				})
 			}
 			// Operation completed synchronously. Store the result and update the state machine.
-			attemptTime := env.Now()
-			return handleSuccessfulOperationResult(node, operation, result.Successful, &attemptTime)
+			return handleSuccessfulOperationResult(node, operation, result.Successful, CompletionSourceResponse)
 		})
 	})
 }
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
-	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
-	if err != nil {
-		return hsm.TransitionOutput{}, err
-	}
 	var unexpectedResponseError *nexus.UnexpectedResponseError
 	var opFailedError *nexus.UnsuccessfulOperationError
 
 	if errors.As(callErr, &opFailedError) {
-		attemptTime := env.Now()
-		return handleUnsuccessfulOperationError(node, operation, opFailedError, &attemptTime)
+		return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceResponse)
 	} else if errors.As(callErr, &unexpectedResponseError) {
-		response := unexpectedResponseError.Response
-		if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
+		if !isRetryableHTTPResponse(unexpectedResponseError.Response) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
-			return handleNonRetryableStartOperationError(env, node, operation, callErr, eventID, unexpectedResponseError.Message)
+			return handleNonRetryableStartOperationError(env, node, operation, unexpectedResponseError.Message)
 		}
 		// Fall through to the AttemptFailed transition.
 	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
-		return handleNonRetryableStartOperationError(env, node, operation, callErr, eventID, "result of StartOperation exceeds size limit")
+		return handleNonRetryableStartOperationError(env, node, operation, callErr.Error())
 	}
 	return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
-		AttemptFailure: AttemptFailure{
-			Time: env.Now(),
-			Err:  callErr,
-		},
+		Time:        env.Now(),
+		Err:         callErr,
 		Node:        node,
 		RetryPolicy: e.Config.RetryPolicy(),
 	})
 }
 
-func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error, eventID int64, message string) (hsm.TransitionOutput, error) {
-	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
-		// nolint:revive
-		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-			NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-				Failure: nexusOperationFailure(
-					operation,
-					eventID,
-					&failurepb.Failure{
-						Message: message,
-						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-								NonRetryable: true,
-							},
-						},
+func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, message string) (hsm.TransitionOutput, error) {
+	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
+	}
+	attrs := &historypb.NexusOperationFailedEventAttributes{
+		Failure: nexusOperationFailure(
+			operation,
+			eventID,
+			&failurepb.Failure{
+				Message: message,
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable: true,
 					},
-				),
-				ScheduledEventId: eventID,
+				},
 			},
+		),
+		ScheduledEventId: eventID,
+	}
+	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+			NexusOperationFailedEventAttributes: attrs,
 		}
 	})
 
 	return TransitionFailed.Apply(operation, EventFailed{
-		AttemptFailure: &AttemptFailure{
-			Time: env.Now(),
-			Err:  callErr,
-		},
-		Node: node,
+		Time:             env.Now(),
+		Attributes:       attrs,
+		CompletionSource: CompletionSourceResponse,
+		Node:             node,
 	})
 }
 
@@ -394,7 +392,7 @@ func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, ta
 			return hsm.TransitionOutput{}, err
 		}
 		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
-			// nolint:revive
+			// nolint:revive // We must mutate here even if the linter doesn't like it.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
 					Failure: nexusOperationFailure(
@@ -475,7 +473,13 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
 	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
 
-	return e.saveCancelationResult(ctx, env, ref, callErr)
+	err = e.saveCancelationResult(ctx, env, ref, callErr)
+
+	if callErr != nil && isDestinationDown(callErr) {
+		err = queues.NewDestinationDownError(callErr.Error(), err)
+	}
+
+	return err
 }
 
 type cancelArgs struct {
@@ -514,8 +518,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			if callErr != nil {
 				var unexpectedResponseErr *nexus.UnexpectedResponseError
 				if errors.As(callErr, &unexpectedResponseErr) {
-					response := unexpectedResponseErr.Response
-					if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
+					if !isRetryableHTTPResponse(unexpectedResponseErr.Response) {
 						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
 							Time: env.Now(),
 							Err:  callErr,
@@ -601,4 +604,23 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 		return "unknown-error"
 	}
 	return "successful"
+}
+
+func isRetryableHTTPResponse(response *http.Response) bool {
+	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
+}
+
+func isDestinationDown(err error) bool {
+	var unexpectedErr *nexus.UnexpectedResponseError
+	var opFailedErr *nexus.UnsuccessfulOperationError
+	if errors.As(err, &opFailedErr) {
+		return false
+	}
+	if errors.As(err, &unexpectedErr) {
+		return isRetryableHTTPResponse(unexpectedErr.Response)
+	}
+	if errors.Is(err, ErrResponseBodyTooLarge) {
+		return false
+	}
+	return true
 }

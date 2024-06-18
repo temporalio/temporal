@@ -48,25 +48,15 @@ var ErrIncompatibleType = errors.New("state machine data was cast into an incomp
 
 // Key is used for looking up a state machine in a [Node].
 type Key struct {
-	// Type ID of the state machine.
-	Type int32
+	// Type of the state machine.
+	Type string
 	// ID of the state machine.
 	ID string
 }
 
-// State machine type.
-type MachineType struct {
-	// Type ID that is used to minimize the persistence storage space and address a machine (see also [Key]).
-	// Type IDs are expected to be immutable as they are used for looking up state machine definitions when loading data
-	// from persistence.
-	ID int32
-	// Human readable name for this type.
-	Name string
-}
-
 // StateMachineDefinition provides type information and a serializer for a state machine.
 type StateMachineDefinition interface {
-	Type() MachineType
+	Type() string
 	// Serialize a state machine into bytes.
 	Serialize(any) ([]byte, error)
 	// Deserialize a state machine from bytes.
@@ -127,7 +117,7 @@ type Node struct {
 // NewRoot creates a new root [Node].
 // Children may be provided from persistence to rehydrate the tree.
 // Returns [ErrNotRegistered] if the key's type is not registered in the given registry or serialization errors.
-func NewRoot(registry *Registry, t int32, data any, children map[int32]*persistencespb.StateMachineMap, backend NodeBackend) (*Node, error) {
+func NewRoot(registry *Registry, t string, data any, children map[string]*persistencespb.StateMachineMap, backend NodeBackend) (*Node, error) {
 	def, ok := registry.Machine(t)
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, t)
@@ -285,7 +275,7 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		definition: def,
 		registry:   n.registry,
 		persistence: &persistencespb.StateMachineNode{
-			Children:                              make(map[int32]*persistencespb.StateMachineMap),
+			Children:                              make(map[string]*persistencespb.StateMachineMap),
 			Data:                                  serialized,
 			InitialNamespaceFailoverVersion:       n.backend.GetCurrentVersion(),
 			InitialMutableStateTransitionCount:    n.backend.TransitionCount(),
@@ -305,7 +295,7 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
 		// Children may be nil if the map was empty and the proto message we serialized and deserialized.
 		if n.persistence.Children == nil {
-			n.persistence.Children = make(map[int32]*persistencespb.StateMachineMap, 1)
+			n.persistence.Children = make(map[string]*persistencespb.StateMachineMap, 1)
 		}
 		n.persistence.Children[key.Type] = children
 	}
@@ -421,12 +411,12 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 // A Collection of similarly typed sibling state machines.
 type Collection[T any] struct {
 	// The type of machines stored in this collection.
-	Type int32
+	Type string
 	node *Node
 }
 
 // NewCollection creates a new [Collection].
-func NewCollection[T any](node *Node, stateMachineType int32) Collection[T] {
+func NewCollection[T any](node *Node, stateMachineType string) Collection[T] {
 	return Collection[T]{
 		Type: stateMachineType,
 		node: node,

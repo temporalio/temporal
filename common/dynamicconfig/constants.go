@@ -514,6 +514,11 @@ is currently processing a task.
 		4*1024,
 		`NexusEndpointExternalURLMaxLength is the maximum length of a Nexus endpoint external target URL.`,
 	)
+	NexusEndpointDescriptionMaxSize = NewNamespaceIntSetting(
+		"limit.endpointDescriptionMaxSize",
+		20000,
+		`Maximum size of Nexus Endpoint description payload in bytes including data and metadata.`,
+	)
 	NexusEndpointListDefaultPageSize = NewGlobalIntSetting(
 		"limit.endpointListDefaultPageSize",
 		100,
@@ -2122,6 +2127,11 @@ that task will be sent to DLQ.`,
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
 		50,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
+	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
+		"history.ReplicationResendMaxBatchCount",
+		10,
+		`Maximum number of resend events batch for a single replication request`,
 	)
 
 	// keys for worker

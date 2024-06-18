@@ -174,7 +174,7 @@ func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_bac
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	nextAttempt := s.activity.Attempt + 1
 	scheduledTime := s.timeSource.Now().Add(1 * time.Second).UTC()
-	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId, scheduledTime, nextAttempt)
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
 	// second := time.Second
@@ -195,7 +195,7 @@ func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_ret
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	nextAttempt := s.activity.Attempt + 1
 	expectedScheduledTime := s.timeSource.Now().Add(time.Minute).UTC()
-	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId, expectedScheduledTime, nextAttempt)
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
 	s.failure.GetApplicationFailureInfo().NextRetryDelay = durationpb.New(time.Minute)
@@ -214,7 +214,7 @@ func (s *retryActivitySuite) TestRetryActivity_next_retry_delay_should_override_
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	nextAttempt := s.activity.Attempt + 1
 	expectedScheduledTime := s.timeSource.Now().Add(3 * time.Minute).UTC()
-	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId, expectedScheduledTime, nextAttempt)
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
 	s.failure.GetApplicationFailureInfo().NextRetryDelay = durationpb.New(3 * time.Minute)
@@ -251,7 +251,7 @@ func (s *retryActivitySuite) moveClockBeyondActivityExpirationTime() {
 func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_should_fail() {
 	e := errors.New("can't generate task")
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
-	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId, gomock.Any(), s.activity.Attempt+1).Return(e)
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity).Return(e)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
 	s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
