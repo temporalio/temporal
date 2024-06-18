@@ -106,6 +106,7 @@ func (s *workflowReplicatorSuite) SetupTest() {
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache

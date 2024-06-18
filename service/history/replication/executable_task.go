@@ -283,11 +283,13 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 			now.Sub(e.taskCreationTime),
 			metrics.OperationTag(e.metricsTag),
 			nsTag,
+			metrics.SourceClusterTag(e.sourceClusterName),
 		)
 		metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
 			e.taskReceivedTime.Sub(e.taskCreationTime),
 			metrics.OperationTag(e.metricsTag),
 			nsTag,
+			metrics.SourceClusterTag(e.sourceClusterName),
 		)
 	}
 	// TODO consider emit attempt metrics

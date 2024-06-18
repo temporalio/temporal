@@ -34,8 +34,6 @@ import (
 // AddNextStateMachineTimerTask generates a state machine timer task if the first deadline doesn't have a task scheduled
 // yet.
 func AddNextStateMachineTimerTask(ms MutableState) {
-	transitionHistory := ms.GetExecutionInfo().TransitionHistory
-	versionedTransition := transitionHistory[len(transitionHistory)-1]
 	timers := ms.GetExecutionInfo().StateMachineTimers
 	if len(timers) == 0 {
 		return
@@ -48,8 +46,8 @@ func AddNextStateMachineTimerTask(ms MutableState) {
 	ms.AddTasks(&tasks.StateMachineTimerTask{
 		WorkflowKey:                 ms.GetWorkflowKey(),
 		VisibilityTimestamp:         timerGroup.Deadline.AsTime(),
-		Version:                     versionedTransition.NamespaceFailoverVersion,
-		MutableStateTransitionCount: versionedTransition.MaxTransitionCount,
+		Version:                     ms.GetCurrentVersion(),
+		MutableStateTransitionCount: ms.TransitionCount(),
 	})
 	timerGroup.Scheduled = true
 }

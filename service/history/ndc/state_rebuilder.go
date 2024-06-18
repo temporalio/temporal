@@ -179,7 +179,7 @@ func (r *StateRebuilderImpl) Rebuild(
 			return nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
 				"StateRebuilder unable to Rebuild mutable state to event ID: %v, version: %v, this event must be at the boundary",
 				baseLastEventID,
-				baseLastEventVersion,
+				*baseLastEventVersion,
 			))
 		}
 	}

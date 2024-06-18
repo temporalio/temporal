@@ -30,14 +30,13 @@ import (
 	"sync"
 
 	"github.com/golang/mock/gomock"
-	"go.temporal.io/server/common/log"
-	"golang.org/x/sync/semaphore"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
@@ -177,7 +176,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		archivalMetadata:        t.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,
 		taskCategoryRegistry:    tasks.NewDefaultTaskCategoryRegistry(),
-		ioSemaphore:             semaphore.NewWeighted(1),
+		ioSemaphore:             locks.NewPrioritySemaphore(1),
 	}
 	ctx.taskKeyManager = newTaskKeyManager(
 		ctx.taskCategoryRegistry,

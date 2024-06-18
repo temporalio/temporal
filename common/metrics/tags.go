@@ -25,10 +25,12 @@
 package metrics
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/locks"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
@@ -46,6 +48,7 @@ const (
 	instance       = "instance"
 	namespace      = "namespace"
 	namespaceState = "namespace_state"
+	sourceCluster  = "source_cluster"
 	targetCluster  = "target_cluster"
 	fromCluster    = "from_cluster"
 	toCluster      = "to_cluster"
@@ -93,6 +96,10 @@ func (v *tagImpl) Value() string {
 	return v.value
 }
 
+func (v *tagImpl) String() string {
+	return fmt.Sprintf("tag{key: %q, value: %q}", v.key, v.value)
+}
+
 // NamespaceTag returns a new namespace tag. For timers, this also ensures that we
 // dual emit the metric with the all tag. If a blank namespace is provided then
 // this converts that to an unknown namespace.
@@ -134,6 +141,14 @@ func TaskQueueUnknownTag() Tag {
 // InstanceTag returns a new instance tag
 func InstanceTag(value string) Tag {
 	return &tagImpl{key: instance, value: value}
+}
+
+// SourceClusterTag returns a new source cluster tag.
+func SourceClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: sourceCluster, value: value}
 }
 
 // TargetClusterTag returns a new target cluster tag.
@@ -299,6 +314,10 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
 }
 
+func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
+	return &tagImpl{key: resourceExhaustedScopeTag, value: scope.String()}
+}
+
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return &tagImpl{key: serviceName, value: string(value)}
 }
@@ -317,6 +336,10 @@ func StringTag(key string, value string) Tag {
 
 func CacheTypeTag(value string) Tag {
 	return &tagImpl{key: CacheTypeTagName, value: value}
+}
+
+func PriorityTag(value locks.Priority) Tag {
+	return &tagImpl{key: PriorityTagName, value: strconv.Itoa(int(value))}
 }
 
 // ReasonString is just a string but the special type is defined here to remind callers of ReasonTag to limit the

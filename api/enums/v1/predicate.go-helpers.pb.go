@@ -31,16 +31,16 @@ import (
 
 var (
 	PredicateType_shorthandValue = map[string]int32{
-		"Unspecified":          0,
-		"Universal":            1,
-		"Empty":                2,
-		"And":                  3,
-		"Or":                   4,
-		"Not":                  5,
-		"NamespaceId":          6,
-		"TaskType":             7,
-		"Destination":          8,
-		"StateMachineTaskType": 9,
+		"Unspecified":       0,
+		"Universal":         1,
+		"Empty":             2,
+		"And":               3,
+		"Or":                4,
+		"Not":               5,
+		"NamespaceId":       6,
+		"TaskType":          7,
+		"Destination":       8,
+		"OutboundTaskGroup": 9,
 	}
 )
 

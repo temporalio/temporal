@@ -84,6 +84,8 @@ const (
 	CANAfterSignals = 7
 	// set LastProcessedTime to last action instead of now
 	UseLastAction = 8
+	// getFutureActionTimes accounts for UpdateTime and RemainingActions
+	AccurateFutureActionTimes = 9
 )
 
 const (
@@ -931,6 +933,11 @@ func (s *scheduler) processSignals() bool {
 	return scheduleChanged
 }
 
+// Returns up to `n` future action times.
+//
+// After workflow version `AccurateFutureActionTimes`, No more than the
+// schedule's `RemainingActions` will be returned. Future action times that
+// precede the schedule's UpdateTime are not included.
 func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*timestamppb.Timestamp {
 	// Note that `s` may be a `scheduler` created outside of a workflow context, used to
 	// compute list info at creation time or in a query. In that case inWorkflowContext will
@@ -950,6 +957,10 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*times
 		}
 	}
 
+	if s.hasMinVersion(AccurateFutureActionTimes) && s.Schedule.State.LimitedActions {
+		n = min(int(s.Schedule.State.RemainingActions), n)
+	}
+
 	if s.cspec == nil {
 		return nil
 	}
@@ -960,6 +971,12 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*times
 		if t1.IsZero() {
 			break
 		}
+
+		if s.hasMinVersion(AccurateFutureActionTimes) && s.Info.UpdateTime.AsTime().After(t1) {
+			// Skip action times whose nominal times are prior to the schedule's update time
+			continue
+		}
+
 		out = append(out, timestamppb.New(t1))
 	}
 	return out

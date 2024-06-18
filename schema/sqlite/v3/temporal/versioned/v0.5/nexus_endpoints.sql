@@ -1,3 +1,6 @@
+DROP TABLE nexus_incoming_services;
+DROP TABLE nexus_incoming_services_partition_status;
+
 -- Stores information about Nexus endpoints
 CREATE TABLE nexus_endpoints (
     id             BINARY(16) NOT NULL,

@@ -22,12 +22,16 @@
 
 package hsm
 
-import enumspb "go.temporal.io/api/enums/v1"
+import (
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+)
 
 // EventDefinition is a definition for a history event for a given event type.
 type EventDefinition interface {
 	Type() enumspb.EventType
 	// IsWorkflowTaskTrigger returns a boolean indicating whether this event type should trigger a workflow task.
 	IsWorkflowTaskTrigger() bool
-	// More methods will be added here once replication is implemented.
+	// Apply a history event to the state machine. Triggered during replication and workflow reset.
+	Apply(root *Node, event *historypb.HistoryEvent) error
 }

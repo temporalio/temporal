@@ -39,7 +39,6 @@ import (
 	v11 "go.temporal.io/server/api/clock/v1"
 	v12 "go.temporal.io/server/api/historyservice/v1"
 	v13 "go.temporal.io/server/api/persistence/v1"
-	common "go.temporal.io/server/common"
 	archiver "go.temporal.io/server/common/archiver"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
@@ -49,6 +48,7 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	serialization "go.temporal.io/server/common/persistence/serialization"
+	pingable "go.temporal.io/server/common/pingable"
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
@@ -1137,10 +1137,10 @@ func (mr *MockControllableContextMockRecorder) GetPayloadSerializer() *gomock.Ca
 }
 
 // GetPingChecks mocks base method.
-func (m *MockControllableContext) GetPingChecks() []common.PingCheck {
+func (m *MockControllableContext) GetPingChecks() []pingable.Check {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPingChecks")
-	ret0, _ := ret[0].([]common.PingCheck)
+	ret0, _ := ret[0].([]pingable.Check)
 	return ret0
 }
 

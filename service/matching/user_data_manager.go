@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -309,7 +310,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		if elapsed < minWaitTime {
-			common.InterruptibleSleep(ctx, minWaitTime-elapsed)
+			util.InterruptibleSleep(ctx, minWaitTime-elapsed)
 			// Don't let this get near our call timeout, otherwise we can't tell the difference
 			// between a fast reply and a timeout.
 			minWaitTime = min(minWaitTime*2, m.config.GetUserDataLongPollTimeout()/2)

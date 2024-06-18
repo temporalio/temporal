@@ -176,8 +176,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" {
-		// worker versioning is used, make sure the task was completed by the right build ID
+	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" && !ms.IsStickyTaskQueueSet() {
+		// Worker versioning is used, make sure the task was completed by the right build ID, unless we're using a
+		// sticky queue in which case Matching will not send the build ID
 		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
 		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 		if wftCompletedBuildId != wftStartedBuildId {

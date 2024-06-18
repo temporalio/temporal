@@ -221,7 +221,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 		WorkflowKey:     ms.GetWorkflowKey(),
 		StateMachineRef: timer.Ref,
 	}
-	if err := t.validateStateMachineRef(ms, ref); err != nil {
+	if err := t.validateStateMachineRef(ms, ref, false); err != nil {
 		return err
 	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())
@@ -235,34 +235,18 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	return nil
 }
 
-func (t *timerQueueTaskExecutorBase) executeStateMachineTimerTask(
-	ctx context.Context,
-	task *tasks.StateMachineTimerTask,
+// executeStateMachineTimers gets the state machine timers, processed the expired timers,
+// and return a slice of unprocessed timers.
+func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
+	ms workflow.MutableState,
 	execute func(node *hsm.Node, task hsm.Task) error,
-) (retError error) {
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
-	defer cancel()
-
-	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
-	if err != nil {
-		return err
-	}
-	defer func() { release(retError) }()
-
-	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
-	if err != nil {
-		return err
-	}
-	if ms == nil {
-		return nil
-	}
-
+) (int, error) {
 	timers := ms.GetExecutionInfo().StateMachineTimers
-
+	processedTimers := 0
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
-		if !queues.IsTimeExpired(t.shardContext.GetTimeSource().Now(), group.Deadline.AsTime()) {
+		if !queues.IsTimeExpired(t.Now(), group.Deadline.AsTime()) {
 			break
 		}
 
@@ -273,7 +257,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimerTask(
 					// Return on first error as we don't want to duplicate the Executable's error handling logic.
 					// This implies that a single bad task in the mutable state timer sequence will cause all other
 					// tasks to be stuck. We'll accept this limitation for now.
-					return err
+					return 0, err
 				}
 				// TODO(bergundy): Metric?
 				t.logger.Warn("Skipped state machine timer", tag.Error(err))
@@ -281,23 +265,12 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimerTask(
 		}
 		// Remove the processed timer group.
 		timers = timers[1:]
+		processedTimers++
 	}
 
-	// We haven't done any work, return without committing.
-	if len(timers) == len(ms.GetExecutionInfo().StateMachineTimers) {
-		return nil
+	if processedTimers > 0 {
+		// Update processed timers.
+		ms.GetExecutionInfo().StateMachineTimers = timers
 	}
-
-	// Update processed timers and ensure the next timer task is scheduled.
-	ms.GetExecutionInfo().StateMachineTimers = timers
-	// TODO(bergundy): Right now there's an early return in task_generator.go GenerateDirtySubStateMachineTasks because
-	// transition history may be disabled. Remove this line from here once that early return is gone.
-	workflow.AddNextStateMachineTimerTask(ms)
-
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
-		// closed workflow.
-		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
-	}
-	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	return processedTimers, nil
 }

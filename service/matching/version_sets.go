@@ -399,7 +399,11 @@ func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *common
 		// A poller is using a build ID, but we don't know about that build ID. See comments in
 		// lookupVersionSetForPoll. If we consider it the default for its set, then we should
 		// leave it on the sticky queue here.
-		return false, nil
+		// We set return true for all sticky tasks until old versioning is cleaned up.
+		// this value is used by matching_engine for deciding if it should pass the worker build ID
+		// to history in the recordStart call or not. We don't need to pass build ID for sticky
+		// tasks as no redirect happen in a sticky queue.
+		return true, nil
 	}
 	set := data.VersionSets[setIdx]
 	lastIndex := len(set.BuildIds) - 1

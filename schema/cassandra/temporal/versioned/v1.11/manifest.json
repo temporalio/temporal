@@ -1,0 +1,6 @@
+{
+  "CurrVersion": "1.11",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Replace nexus_incoming_services table with nexus_endpoints table",
+  "SchemaUpdateCqlFiles": ["nexus_endpoints.cql"]
+}

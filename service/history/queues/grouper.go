@@ -59,11 +59,11 @@ type NamespaceIDAndDestination struct {
 	Destination string
 }
 
-// StateMachineTaskTypeNamespaceIDAndDestination is the key for grouping tasks by task type namespace ID and destination.
-type StateMachineTaskTypeNamespaceIDAndDestination struct {
-	StateMachineTaskType int32
-	NamespaceID          string
-	Destination          string
+// OutboundTaskGroupNamespaceIDAndDestination is the key for grouping tasks by task type namespace ID and destination.
+type OutboundTaskGroupNamespaceIDAndDestination struct {
+	TaskGroup   string
+	NamespaceID string
+	Destination string
 }
 
 type GrouperStateMachineNamespaceIDAndDestination struct {
@@ -73,31 +73,31 @@ func (g GrouperStateMachineNamespaceIDAndDestination) Key(task tasks.Task) (key 
 	return g.KeyTyped(task)
 }
 
-func (GrouperStateMachineNamespaceIDAndDestination) KeyTyped(task tasks.Task) (key StateMachineTaskTypeNamespaceIDAndDestination) {
+func (GrouperStateMachineNamespaceIDAndDestination) KeyTyped(task tasks.Task) (key OutboundTaskGroupNamespaceIDAndDestination) {
 	destGetter, ok := task.(tasks.HasDestination)
 	var dest string
 	if ok {
 		dest = destGetter.GetDestination()
 	}
 	smtGetter, ok := task.(tasks.HasStateMachineTaskType)
-	var smt int32
+	var smt string
 	if ok {
 		smt = smtGetter.StateMachineTaskType()
 	}
-	return StateMachineTaskTypeNamespaceIDAndDestination{
-		StateMachineTaskType: smt,
-		NamespaceID:          task.GetNamespaceID(),
-		Destination:          dest,
+	return OutboundTaskGroupNamespaceIDAndDestination{
+		TaskGroup:   smt,
+		NamespaceID: task.GetNamespaceID(),
+		Destination: dest,
 	}
 }
 
 func (GrouperStateMachineNamespaceIDAndDestination) Predicate(keys []any) tasks.Predicate {
 	pred := predicates.Empty[tasks.Task]()
 	for _, anyKey := range keys {
-		// Assume predicate is only called with keys returned from GrouperStateMachineNamespaceIDAndDestination.Key()
-		key := anyKey.(StateMachineTaskTypeNamespaceIDAndDestination)
+		// Assume predicate is only called with keys returned from OutboundTaskGroupNamespaceIDAndDestination.Key()
+		key := anyKey.(OutboundTaskGroupNamespaceIDAndDestination)
 		pred = predicates.Or(pred, predicates.And(
-			tasks.NewStateMachineTaskTypePredicate([]int32{key.StateMachineTaskType}),
+			tasks.NewOutboundTaskGroupPredicate([]string{key.TaskGroup}),
 			tasks.NewNamespacePredicate([]string{key.NamespaceID}),
 			tasks.NewDestinationPredicate([]string{key.Destination}),
 		))

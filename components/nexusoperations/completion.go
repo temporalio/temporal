@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -42,13 +41,13 @@ func handleSuccessfulOperationResult(
 	node *hsm.Node,
 	operation Operation,
 	result *commonpb.Payload,
-	attemptTime *time.Time,
+	completionSource CompletionSource,
 ) (hsm.TransitionOutput, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
 		return hsm.TransitionOutput{}, err
 	}
-	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
+	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
 		// We must assign to this property, linter doesn't like this.
 		// nolint:revive
 		e.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
@@ -59,8 +58,9 @@ func handleSuccessfulOperationResult(
 		}
 	})
 	return TransitionSucceeded.Apply(operation, EventSucceeded{
-		AttemptTime: attemptTime,
-		Node:        node,
+		Time:             event.EventTime.AsTime(),
+		Node:             node,
+		CompletionSource: completionSource,
 	})
 }
 
@@ -68,7 +68,7 @@ func handleUnsuccessfulOperationError(
 	node *hsm.Node,
 	operation Operation,
 	opFailedError *nexus.UnsuccessfulOperationError,
-	attemptTime *time.Time,
+	completionSource CompletionSource,
 ) (hsm.TransitionOutput, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
@@ -76,7 +76,7 @@ func handleUnsuccessfulOperationError(
 	}
 	switch opFailedError.State { // nolint:exhaustive
 	case nexus.OperationStateFailed:
-		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
@@ -91,20 +91,14 @@ func handleUnsuccessfulOperationError(
 			}
 		})
 
-		var attemptFailure *AttemptFailure
-		if attemptTime != nil {
-			attemptFailure = &AttemptFailure{
-				Time: *attemptTime,
-				Err:  opFailedError,
-			}
-		}
-
 		return TransitionFailed.Apply(operation, EventFailed{
-			AttemptFailure: attemptFailure,
-			Node:           node,
+			Time:             event.EventTime.AsTime(),
+			Attributes:       event.GetNexusOperationFailedEventAttributes(),
+			Node:             node,
+			CompletionSource: completionSource,
 		})
 	case nexus.OperationStateCanceled:
-		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
+		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
@@ -119,17 +113,10 @@ func handleUnsuccessfulOperationError(
 			}
 		})
 
-		var attemptFailure *AttemptFailure
-		if attemptTime != nil {
-			attemptFailure = &AttemptFailure{
-				Time: *attemptTime,
-				Err:  opFailedError,
-			}
-		}
-
 		return TransitionCanceled.Apply(operation, EventCanceled{
-			AttemptFailure: attemptFailure,
-			Node:           node,
+			Time:             event.EventTime.AsTime(),
+			Node:             node,
+			CompletionSource: completionSource,
 		})
 	default:
 		// Both the Nexus Client and CompletionHandler reject invalid states, but just in case, we return this as a
@@ -148,9 +135,9 @@ func CompletionHandler(
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 			if opFailedError != nil {
-				return handleUnsuccessfulOperationError(node, operation, opFailedError, nil)
+				return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceCallback)
 			}
-			return handleSuccessfulOperationResult(node, operation, result, nil)
+			return handleSuccessfulOperationResult(node, operation, result, CompletionSourceCallback)
 		})
 		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion.
 		if errors.Is(err, hsm.ErrInvalidTransition) {

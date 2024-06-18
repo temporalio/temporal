@@ -173,16 +173,6 @@ func BlockWithTimeout(fn func(), timeout time.Duration) bool {
 	}
 }
 
-// InterruptibleSleep is like time.Sleep but can be interrupted by a context.
-func InterruptibleSleep(ctx context.Context, timeout time.Duration) {
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
-	}
-}
-
 // CreatePersistenceClientRetryPolicy creates a retry policy for calls to persistence
 func CreatePersistenceClientRetryPolicy() backoff.RetryPolicy {
 	return backoff.NewExponentialRetryPolicy(persistenceClientRetryInitialInterval).

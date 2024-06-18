@@ -390,7 +390,7 @@ func getCategory(registry tasks.TaskCategoryRegistry, key string) (tasks.Categor
 // AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
 func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry tasks.TaskCategoryRegistry) error {
 	sid := int32(c.Int(FlagShardID))
-	categoryStr := c.String(FlagTaskType)
+	categoryStr := c.String(FlagTaskCategory)
 	category, err := getCategory(registry, categoryStr)
 	if err != nil {
 		return err
@@ -457,7 +457,7 @@ func AdminRemoveTask(
 	adminClient := clientFactory.AdminClient(c)
 	shardID := c.Int(FlagShardID)
 	taskID := c.Int64(FlagTaskID)
-	category, err := getCategory(taskCategoryRegistry, c.String(FlagTaskType))
+	category, err := getCategory(taskCategoryRegistry, c.String(FlagTaskCategory))
 	if err != nil {
 		return err
 	}

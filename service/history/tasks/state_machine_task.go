@@ -56,7 +56,7 @@ func (t *StateMachineTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
 }
 
-func (t *StateMachineTask) StateMachineTaskType() int32 {
+func (t *StateMachineTask) StateMachineTaskType() string {
 	return t.Info.Type
 }
 

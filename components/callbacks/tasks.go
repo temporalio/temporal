@@ -29,15 +29,9 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-var (
-	TaskTypeInvocation = hsm.TaskType{
-		ID:   1,
-		Name: "callbacks.Invocation",
-	}
-	TaskTypeBackoff = hsm.TaskType{
-		ID:   2,
-		Name: "callbacks.Backoff",
-	}
+const (
+	TaskTypeInvocation = "callbacks.Invocation"
+	TaskTypeBackoff    = "callbacks.Backoff"
 )
 
 type InvocationTask struct {
@@ -46,7 +40,7 @@ type InvocationTask struct {
 
 var _ hsm.Task = InvocationTask{}
 
-func (InvocationTask) Type() hsm.TaskType {
+func (InvocationTask) Type() string {
 	return TaskTypeInvocation
 }
 
@@ -77,7 +71,7 @@ type BackoffTask struct {
 
 var _ hsm.Task = BackoffTask{}
 
-func (BackoffTask) Type() hsm.TaskType {
+func (BackoffTask) Type() string {
 	return TaskTypeBackoff
 }
 
@@ -103,10 +97,10 @@ func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {
-	if err := reg.RegisterTaskSerializer(TaskTypeInvocation.ID, InvocationTaskSerializer{}); err != nil {
+	if err := reg.RegisterTaskSerializer(TaskTypeInvocation, InvocationTaskSerializer{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterTaskSerializer(TaskTypeBackoff.ID, BackoffTaskSerializer{}); err != nil { // nolint:revive
+	if err := reg.RegisterTaskSerializer(TaskTypeBackoff, BackoffTaskSerializer{}); err != nil { // nolint:revive
 		return err
 	}
 	return nil

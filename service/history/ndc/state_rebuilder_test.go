@@ -117,6 +117,7 @@ func (s *stateRebuilderSuite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()

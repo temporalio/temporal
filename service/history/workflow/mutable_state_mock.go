@@ -2925,6 +2925,20 @@ func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueueScheduleToStartTimeout", reflect.TypeOf((*MockMutableState)(nil).TaskQueueScheduleToStartTimeout), name)
 }
 
+// TransitionCount mocks base method.
+func (m *MockMutableState) TransitionCount() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TransitionCount")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// TransitionCount indicates an expected call of TransitionCount.
+func (mr *MockMutableStateMockRecorder) TransitionCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransitionCount", reflect.TypeOf((*MockMutableState)(nil).TransitionCount))
+}
+
 // UpdateActivity mocks base method.
 func (m *MockMutableState) UpdateActivity(arg0 *v112.ActivityInfo) error {
 	m.ctrl.T.Helper()

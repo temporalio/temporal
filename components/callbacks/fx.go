@@ -26,8 +26,6 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
 )
@@ -35,29 +33,17 @@ import (
 var Module = fx.Module(
 	"component.callbacks",
 	fx.Provide(ConfigProvider),
-	fx.Provide(ActiveExecutorOptionsProvider),
-	fx.Provide(StandbyExecutorOptionsProvider),
+	fx.Provide(HTTPCallerProviderProvider),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterStateMachine),
 	fx.Invoke(RegisterExecutor),
 )
 
-func ActiveExecutorOptionsProvider(
-	namespaceRegistry namespace.Registry,
-	metricsHandler metrics.Handler,
-) ActiveExecutorOptions {
+func HTTPCallerProviderProvider() HTTPCallerProvider {
 	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
-		// In the future, we'll want to support HTTP2 clients as well and inject headers and certs here.
+		// In the future, we'll want to inject headers and certs here.
 		client := &http.Client{}
 		return client.Do
 	})
-	return ActiveExecutorOptions{
-		NamespaceRegistry: namespaceRegistry,
-		MetricsHandler:    metricsHandler,
-		CallerProvider:    m.Get,
-	}
-}
-
-func StandbyExecutorOptionsProvider() StandbyExecutorOptions {
-	return StandbyExecutorOptions{}
+	return m.Get
 }

@@ -158,6 +158,10 @@ func loadMutableStateForTask(
 		return nil, err
 	}
 
+	if err := validateTaskGeneration(mutableState, task.GetTaskID()); err != nil {
+		return nil, err
+	}
+
 	// TODO: With validateTaskByClock check above, we should never run into the situation where
 	// mutable state cache is stale. This is based on the assumption that shard context
 	// will never re-acquire the shard after it has been stolen.
@@ -181,6 +185,11 @@ func loadMutableStateForTask(
 	if err != nil {
 		return nil, err
 	}
+
+	if err := validateTaskGeneration(mutableState, task.GetTaskID()); err != nil {
+		return nil, err
+	}
+
 	// after refresh, still mutable state's next event ID <= task's event ID
 	if eventID >= mutableState.GetNextEventID() {
 		metrics.TaskSkipped.With(metricsHandler).Record(1)
@@ -215,6 +224,14 @@ func validateTaskByClock(
 		}
 	}
 
+	return nil
+}
+
+func validateTaskGeneration(mutableState workflow.MutableState, taskID int64) error {
+	tgClock := mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp
+	if tgClock != 0 && taskID != 0 && taskID < tgClock {
+		return fmt.Errorf("%w: task was generated before mutable state rebuild", consts.ErrStaleReference)
+	}
 	return nil
 }
 

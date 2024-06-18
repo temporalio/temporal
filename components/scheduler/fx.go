@@ -29,17 +29,12 @@ import (
 var Module = fx.Module(
 	"component.scheduler",
 	fx.Provide(ConfigProvider),
-	fx.Provide(ActiveExecutorOptionsProvider),
-	fx.Provide(StandbyExecutorOptionsProvider),
+	fx.Provide(TaskExecutorOptionsProvider),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterStateMachine),
 	fx.Invoke(RegisterExecutor),
 )
 
-func ActiveExecutorOptionsProvider() ActiveExecutorOptions {
-	return ActiveExecutorOptions{}
-}
-
-func StandbyExecutorOptionsProvider() StandbyExecutorOptions {
-	return StandbyExecutorOptions{}
+func TaskExecutorOptionsProvider() TaskExecutorOptions {
+	return TaskExecutorOptions{}
 }

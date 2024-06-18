@@ -708,7 +708,13 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
-	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{v1, v1, v1, v1, v1}, "")
+	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{
+		v1, // WFT
+		v1, // activity
+		// v1, skipped because it belongs to sticky queue
+		v1, // activity
+		// v1, skipped because it belongs to sticky queue
+	}, "")
 }
 
 func (s *VersioningIntegSuite) TestUnversionedWorkflowStaysUnversioned() {
@@ -1182,17 +1188,23 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	wfBuild := ""
 	if versionedWf {
-		wfBuild = wfV1
+		s.validateWorkflowEventsVersionStamps(
+			ctx, run.GetID(), run.GetRunID(), []string{
+				wfV1,
+				v3, // succeeded activity
+				// wfV1, removed because it's on a sticky queue
+			}, "",
+		)
+	} else {
+		s.validateWorkflowEventsVersionStamps(
+			ctx, run.GetID(), run.GetRunID(), []string{
+				"",
+				v3, // succeeded activity
+				"",
+			}, "",
+		)
 	}
-	s.validateWorkflowEventsVersionStamps(
-		ctx, run.GetID(), run.GetRunID(), []string{
-			wfBuild,
-			v3, // succeeded activity
-			wfBuild,
-		}, "",
-	)
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_SyncMatch_VersionedWorkflow() {
@@ -1354,18 +1366,25 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	wfBuild := ""
 	if versionedWf {
-		wfBuild = wfV1
+		s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), wfV1, true, wfV1, "", nil)
+		s.validateWorkflowEventsVersionStamps(
+			ctx, run.GetID(), run.GetRunID(), []string{
+				wfV1,
+				v3, // succeeded activity
+				// wfV1, skipping stamp because this is a sticky queue task
+			}, "",
+		)
+	} else {
+		s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), "", true, wfV1, "", nil)
+		s.validateWorkflowEventsVersionStamps(
+			ctx, run.GetID(), run.GetRunID(), []string{
+				"",
+				v3, // succeeded activity
+				"",
+			}, "",
+		)
 	}
-	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), wfBuild, true, wfV1, "", nil)
-	s.validateWorkflowEventsVersionStamps(
-		ctx, run.GetID(), run.GetRunID(), []string{
-			wfBuild,
-			v3, // succeeded activity
-			wfBuild,
-		}, "",
-	)
 }
 
 func (s *VersioningIntegSuite) TestWorkflowTaskRedirectInRetryFirstTask() {
@@ -1516,9 +1535,9 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	}
 	if !firstTask {
 		expectedStamps = []string{
-			v1,  // first wf task
-			v1,  // activity task
-			v1,  // failed wf task on sticky queue
+			v1, // first wf task
+			v1, // activity task
+			// v1,  // skipping stamp for failed wf task on sticky queue
 			v1,  // failed wf task on normal queue
 			v11, // timed out wf task show up in history because they happened on a different build ID
 			v12, // succeeded wf task
@@ -2300,9 +2319,12 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 			activityPerVersion[buildId]--
 		} else if wfStarted := he.GetWorkflowTaskStartedEventAttributes(); wfStarted != nil {
 			taskStartedStamp = wfStarted.GetWorkerVersion()
-			s.True(taskStartedStamp.GetUseVersioning())
-			buildId = taskStartedStamp.GetBuildId()
-			taskRedirectCounter = wfStarted.GetBuildIdRedirectCounter()
+			if taskStartedStamp != nil {
+				// taskStartedStamp is nil for sticky queues
+				s.True(taskStartedStamp.GetUseVersioning())
+				buildId = taskStartedStamp.GetBuildId()
+				taskRedirectCounter = wfStarted.GetBuildIdRedirectCounter()
+			}
 		}
 		if he.EventTime.AsTime().Before(maxStartedTimestamp) {
 			sawUnorderedEvents = true
@@ -3904,7 +3926,12 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	s.NoError(run2.Get(ctx, &out))
 	s.Equal("done!", out)
 	s.validateWorkflowBuildIds(ctx, run2.GetID(), run2.GetRunID(), expectedBuildId, true, expectedBuildId, inheritedBuildId, nil)
-	s.validateWorkflowEventsVersionStamps(ctx, run2.GetID(), run2.GetRunID(), []string{expectedBuildId, expectedBuildId, expectedBuildId}, inheritedBuildId)
+	s.validateWorkflowEventsVersionStamps(ctx, run2.GetID(), run2.GetRunID(), []string{
+		expectedBuildId,
+		expectedBuildId,
+		// expectedBuildId, skipped because it belongs to a sticky queue
+	},
+		inheritedBuildId)
 
 	// now reset the original wf to second wf task and make sure it remains in v1
 	wfr, err = s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{

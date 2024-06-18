@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"runtime/debug"
 	"strings"
@@ -38,11 +39,13 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -55,7 +58,12 @@ import (
 
 var apiName = configs.CompleteNexusOperation
 
-const methodNameForMetrics = "CompleteNexusOperation"
+const (
+	methodNameForMetrics = "CompleteNexusOperation"
+	// user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
+	headerUserAgent        = "user-agent"
+	clientNameVersionDelim = "/v"
+)
 
 type Config struct {
 	Enabled          dynamicconfig.BoolPropertyFn
@@ -81,6 +89,7 @@ type HandlerOptions struct {
 
 type completionHandler struct {
 	HandlerOptions
+	clientVersionChecker    headers.VersionChecker
 	preProcessErrorsCounter metrics.CounterIface
 }
 
@@ -120,7 +129,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		),
 		requestStartTime: startTime,
 	}
-	ctx = rCtx.augmentContext(ctx)
+	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
@@ -203,9 +212,24 @@ type requestContext struct {
 	outcomeTag                    metrics.Tag
 }
 
-func (c *requestContext) augmentContext(ctx context.Context) context.Context {
+func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {
 	ctx = metrics.AddMetricsContext(ctx)
-	return interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
+	ctx = interceptor.PopulateCallerInfo(
+		ctx,
+		func() string { return c.namespace.Name().String() },
+		func() string { return methodNameForMetrics },
+	)
+	if userAgent := header.Get(http.CanonicalHeaderKey(headerUserAgent)); userAgent != "" {
+		parts := strings.Split(userAgent, clientNameVersionDelim)
+		if len(parts) == 2 {
+			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
+				headers.ClientNameHeaderName:    parts[0],
+				headers.ClientVersionHeaderName: parts[1],
+			}))
+		}
+	}
+	return ctx
 }
 
 func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
@@ -315,6 +339,10 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 
-	// TODO: Apply other relevant interceptors.
+	if err := c.clientVersionChecker.ClientSupported(ctx); err != nil {
+		c.outcomeTag = metrics.NexusOutcomeTag("unsupported_client")
+		return commonnexus.ConvertGRPCError(err, true)
+	}
+
 	return nil
 }

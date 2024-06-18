@@ -35,7 +35,6 @@ import (
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -131,7 +131,7 @@ type (
 
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
-		common.Pingable
+		pingable.Pingable
 		GetNamespace(name Name) (*Namespace, error)
 		GetNamespaceWithOptions(name Name, opts GetNamespaceOptions) (*Namespace, error)
 		GetNamespaceByID(id ID) (*Namespace, error)
@@ -257,13 +257,13 @@ func (r *registry) Stop() {
 	<-r.refresher.Done()
 }
 
-func (r *registry) GetPingChecks() []common.PingCheck {
-	return []common.PingCheck{
+func (r *registry) GetPingChecks() []pingable.Check {
+	return []pingable.Check{
 		{
 			Name: "namespace registry lock",
 			// we don't do any persistence ops, this shouldn't be blocked
 			Timeout: 10 * time.Second,
-			Ping: func() []common.Pingable {
+			Ping: func() []pingable.Pingable {
 				r.cacheLock.Lock()
 				//lint:ignore SA2001 just checking if we can acquire the lock
 				r.cacheLock.Unlock()

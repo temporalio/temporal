@@ -50,7 +50,6 @@ var Module = fx.Module(
 	fx.Provide(CallbackTokenGeneratorProvider),
 	fx.Provide(EndpointRegistryProvider),
 	fx.Invoke(EndpointRegistryLifetimeHooks),
-	fx.Provide(EndpointCheckerProvider),
 	fx.Invoke(RegisterStateMachines),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterEventDefinitions),
@@ -74,13 +73,6 @@ func EndpointRegistryProvider(
 
 func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry commonnexus.EndpointRegistry) {
 	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
-}
-
-func EndpointCheckerProvider(reg commonnexus.EndpointRegistry) EndpointChecker {
-	return func(ctx context.Context, namespaceName, endpointName string) error {
-		_, err := reg.GetByName(ctx, endpointName)
-		return err
-	}
 }
 
 // NexusTransportProvider type alias allows a provider to customize the default implementation specifically for Nexus.
@@ -116,7 +108,7 @@ func ClientProviderFactory(
 		}, nil
 	})
 	return func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
-		entry, err := endpointRegistry.GetByName(ctx, key.Destination)
+		entry, err := endpointRegistry.GetByID(ctx, key.Destination)
 		if err != nil {
 			return nil, err
 		}

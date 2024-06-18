@@ -34,12 +34,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/service/history/tests"
 
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/protorequire"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -80,18 +82,40 @@ type (
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
 
-		taskID         int64
-		task           *ExecutableHistoryTask
-		events         []*historypb.HistoryEvent
-		newRunEvents   []*historypb.HistoryEvent
-		newRunID       string
-		processToolBox ProcessToolBox
+		taskID                     int64
+		task                       *ExecutableHistoryTask
+		events                     []*historypb.HistoryEvent
+		eventsBatches              [][]*historypb.HistoryEvent
+		eventsBlob                 *commonpb.DataBlob
+		eventsBlobs                []*commonpb.DataBlob
+		newRunEvents               []*historypb.HistoryEvent
+		newRunID                   string
+		processToolBox             ProcessToolBox
+		replicationMultipleBatches bool
 	}
 )
 
 func TestExecutableHistoryTaskSuite(t *testing.T) {
-	s := new(executableHistoryTaskSuite)
-	suite.Run(t, s)
+	for _, tc := range []struct {
+		name                       string
+		replicationMultipleBatches bool
+	}{
+		{
+			name:                       "ReplicationMultipleBatchesEnabled",
+			replicationMultipleBatches: true,
+		},
+		{
+			name:                       "ReplicationMultipleBatchesDisabled",
+			replicationMultipleBatches: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &executableHistoryTaskSuite{
+				replicationMultipleBatches: tc.replicationMultipleBatches,
+			}
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *executableHistoryTaskSuite) SetupSuite() {
@@ -116,37 +140,6 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.eventSerializer = serialization.NewSerializer()
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 
-	firstEventID := rand.Int63()
-	nextEventID := firstEventID + 1
-	version := rand.Int63()
-	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
-		EventId: firstEventID,
-		Version: version,
-	}}, enumspb.ENCODING_TYPE_PROTO3)
-	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
-
-	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
-		EventId: 1,
-		Version: version,
-	}}, enumspb.ENCODING_TYPE_PROTO3)
-	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
-	s.newRunID = uuid.NewString()
-
-	s.replicationTask = &replicationspb.HistoryTaskAttributes{
-		NamespaceId:       uuid.NewString(),
-		WorkflowId:        uuid.NewString(),
-		RunId:             uuid.NewString(),
-		BaseExecutionInfo: &workflowspb.BaseExecutionInfo{},
-		VersionHistoryItems: []*history.VersionHistoryItem{{
-			EventId: nextEventID - 1,
-			Version: version,
-		}},
-		Events:       eventsBlob,
-		NewRunEvents: newEventsBlob,
-		NewRunId:     s.newRunID,
-	}
-	s.sourceClusterName = cluster.TestCurrentClusterName
-
 	s.taskID = rand.Int63()
 	s.processToolBox = ProcessToolBox{
 		ClusterMetadata:         s.clusterMetadata,
@@ -161,6 +154,46 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  tests.NewDynamicConfig(),
 	}
+	s.processToolBox.Config.ReplicationMultipleBatches = dynamicconfig.GetBoolPropertyFn(s.replicationMultipleBatches)
+
+	firstEventID := rand.Int63()
+	nextEventID := firstEventID + 1
+	version := rand.Int63()
+	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
+		EventId: firstEventID,
+		Version: version,
+	}}, enumspb.ENCODING_TYPE_PROTO3)
+	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
+	s.eventsBatches = [][]*historypb.HistoryEvent{s.events}
+	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
+		EventId: 1,
+		Version: version,
+	}}, enumspb.ENCODING_TYPE_PROTO3)
+	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
+	s.newRunID = uuid.NewString()
+
+	if s.processToolBox.Config.ReplicationMultipleBatches() {
+		s.eventsBlobs = []*commonpb.DataBlob{eventsBlob}
+	} else {
+		s.eventsBlob = eventsBlob
+	}
+
+	s.replicationTask = &replicationspb.HistoryTaskAttributes{
+		NamespaceId:       uuid.NewString(),
+		WorkflowId:        uuid.NewString(),
+		RunId:             uuid.NewString(),
+		BaseExecutionInfo: &workflowspb.BaseExecutionInfo{},
+		VersionHistoryItems: []*history.VersionHistoryItem{{
+			EventId: nextEventID - 1,
+			Version: version,
+		}},
+		Events:        s.eventsBlob,
+		NewRunEvents:  newEventsBlob,
+		NewRunId:      s.newRunID,
+		EventsBatches: s.eventsBlobs,
+	}
+	s.sourceClusterName = cluster.TestCurrentClusterName
+
 	s.task = NewExecutableHistoryTask(
 		s.processToolBox,
 		s.taskID,
@@ -196,7 +229,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
-		[][]*historypb.HistoryEvent{s.events},
+		s.eventsBatches,
 		s.newRunEvents,
 		s.newRunID,
 	).Return(nil).Times(1)
@@ -249,7 +282,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
-		[][]*historypb.HistoryEvent{s.events},
+		s.eventsBatches,
 		s.newRunEvents,
 		s.newRunID,
 	).Return(nil)
@@ -474,6 +507,15 @@ func (s *executableHistoryTaskSuite) TestBatchWith_IncomingTaskHasNewRunEvents_B
 	batchedTask, success := currentTask.BatchWith(incomingTask)
 	s.True(success)
 	s.Equal(incomingTask.newRunID, batchedTask.(*ExecutableHistoryTask).newRunID)
+}
+
+func (s *executableHistoryTaskSuite) TestNewExecutableHistoryTask() {
+	if s.processToolBox.Config.ReplicationMultipleBatches() {
+		s.Equal(s.eventsBlobs, s.task.eventsBlobs)
+	} else {
+		s.Equal(len(s.task.eventsBlobs), 1)
+		s.Equal(s.eventsBlob, s.task.eventsBlobs[0])
+	}
 }
 
 func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHistoryTask, *ExecutableHistoryTask) {

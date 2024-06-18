@@ -29,11 +29,8 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-var (
-	TaskTypeSchedule = hsm.TaskType{
-		ID:   8,
-		Name: "scheduler.Schedule",
-	}
+const (
+	TaskTypeSchedule = "scheduler.Schedule"
 )
 
 type ScheduleTask struct {
@@ -42,7 +39,7 @@ type ScheduleTask struct {
 
 var _ hsm.Task = ScheduleTask{}
 
-func (ScheduleTask) Type() hsm.TaskType {
+func (ScheduleTask) Type() string {
 	return TaskTypeSchedule
 }
 
@@ -68,5 +65,5 @@ func (ScheduleTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {
-	return reg.RegisterTaskSerializer(TaskTypeSchedule.ID, ScheduleTaskSerializer{})
+	return reg.RegisterTaskSerializer(TaskTypeSchedule, ScheduleTaskSerializer{})
 }

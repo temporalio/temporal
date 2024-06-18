@@ -30,6 +30,7 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -54,6 +55,7 @@ func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.
 	h := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{
 		Handler: &completionHandler{
 			options,
+			headers.NewDefaultVersionChecker(),
 			options.MetricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 		},
 		Logger:     log.NewSlogLogger(logger),

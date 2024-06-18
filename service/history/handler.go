@@ -1145,6 +1145,11 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(err)
 	}
 
+	h.logger.Info("DeleteWorkflowExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(workflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(workflowExecution.GetRunId()))
+
 	resp, err := engine.DeleteWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2199,6 +2204,13 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		request.Request.Execution.WorkflowId,
 		h.config.NumberOfShards,
 	)
+
+	workflowExecution := request.GetRequest().GetExecution()
+	h.logger.Info("ForceDeleteWorkflowExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(workflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(workflowExecution.GetRunId()))
+
 	return forcedeleteworkflowexecution.Invoke(
 		ctx,
 		request,
@@ -2304,7 +2316,13 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			Failure: *commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
 		}
 	}
-	err = nexusoperations.CompletionHandler(ctx, engine.StateMachineEnvironment(), ref, request.GetSuccess(), opErr)
+	err = nexusoperations.CompletionHandler(
+		ctx,
+		engine.StateMachineEnvironment(),
+		ref,
+		request.GetSuccess(),
+		opErr,
+	)
 	if err != nil {
 		return nil, h.convertError(err)
 	}

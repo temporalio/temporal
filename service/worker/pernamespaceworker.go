@@ -361,7 +361,7 @@ func (w *perNamespaceWorker) handleError(err error) {
 		// asked for an explicit delay due to rate limit, use that
 		sleep = time.Duration(retryAfter)
 	} else {
-		sleep = w.retrier.NextBackOff()
+		sleep = w.retrier.NextBackOff(err)
 		if sleep < 0 {
 			w.logger.Error("Failed to start sdk worker, out of retries", tag.Error(err))
 			return

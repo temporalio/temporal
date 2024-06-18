@@ -36,8 +36,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -1146,19 +1144,11 @@ func emitStateTransitionCount(
 		return
 	}
 	namespaceEntry := mutableState.GetNamespaceEntry()
-	handler := metricsHandler.WithTags(
+	metrics.StateTransitionCount.With(metricsHandler).Record(
+		mutableState.GetExecutionInfo().StateTransitionCount,
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 		metrics.NamespaceStateTag(namespaceState(clusterMetadata, util.Ptr(mutableState.GetCurrentVersion()))),
 	)
-	metrics.StateTransitionCount.With(handler).Record(
-		mutableState.GetExecutionInfo().StateTransitionCount,
-	)
-	if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		metrics.StateTransitionCount.With(handler).Record(
-			mutableState.GetExecutionInfo().StateTransitionCount,
-			metrics.OperationTag(metrics.WorkflowCompletionStatsScope),
-		)
-	}
 }
 
 const (

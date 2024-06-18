@@ -1619,6 +1619,11 @@ func (s *workflowSuite) TestUpdate() {
 }
 
 func (s *workflowSuite) TestUpdateNotRetroactive() {
+	// TODO - remove when AccurateFutureActionTimes becomes the active version
+	prevTweakables := currentTweakablePolicies
+	currentTweakablePolicies.Version = AccurateFutureActionTimes
+	defer func() { currentTweakablePolicies = prevTweakables }()
+
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -1654,6 +1659,16 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 							Action: s.defaultAction("newid"),
 						},
 					})
+				},
+			},
+			// After the update above modifies the schedule, we should discard any newly
+			// scheduled times that are scheduled prior to the update time.
+			{
+				at: time.Date(2022, 6, 1, 1, 7, 12, 0, time.UTC),
+				f: func() {
+					desc := s.describe()
+					times := desc.Info.FutureActionTimes
+					s.True(times[0].AsTime().After(desc.Info.UpdateTime.AsTime()), "getFutureActionTimes returned an action preceding the update time after a schedule change")
 				},
 			},
 			{
@@ -1844,6 +1859,11 @@ func (s *workflowSuite) TestPauseUnpauseBetweenNominalAndJittered() {
 }
 
 func (s *workflowSuite) TestLimitedActions() {
+	// TODO - remove when AccurateFutureActionTimes becomes the active version
+	prevTweakables := currentTweakablePolicies
+	currentTweakablePolicies.Version = AccurateFutureActionTimes
+	defer func() { currentTweakablePolicies = prevTweakables }()
+
 	// written using low-level mocks so we can sleep forever
 
 	// limited to 2
@@ -1870,13 +1890,19 @@ func (s *workflowSuite) TestLimitedActions() {
 	})
 
 	s.env.RegisterDelayedCallback(func() {
-		s.Equal(int64(2), s.describe().Schedule.State.RemainingActions)
+		desc := s.describe()
+		s.Equal(int64(2), desc.Schedule.State.RemainingActions)
+		s.Equal(2, len(desc.Info.FutureActionTimes))
 	}, 1*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		s.Equal(int64(1), s.describe().Schedule.State.RemainingActions)
+		desc := s.describe()
+		s.Equal(int64(1), desc.Schedule.State.RemainingActions)
+		s.Equal(1, len(desc.Info.FutureActionTimes))
 	}, 5*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		s.Equal(int64(0), s.describe().Schedule.State.RemainingActions)
+		desc := s.describe()
+		s.Equal(int64(0), desc.Schedule.State.RemainingActions)
+		s.Equal(0, len(desc.Info.FutureActionTimes))
 		s.Equal(1, len(s.runningWorkflows()))
 	}, 7*time.Minute)
 	s.env.RegisterDelayedCallback(func() {

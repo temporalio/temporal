@@ -255,7 +255,9 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 			now := p.shard.GetTimeSource().Now()
 			metrics.ReplicationLatency.With(p.metricsHandler).Record(
 				now.Sub(taskCreationTime.AsTime()),
-				metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
+				metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+				metrics.SourceClusterTag(p.sourceCluster),
+			)
 		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
 			return err
@@ -549,7 +551,8 @@ func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		metrics.ServiceErrNotFoundCounter.With(metricsScope).Record(1)
 	case *serviceerror.ResourceExhausted:
-		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
 	case *serviceerrors.RetryReplication:
 		metrics.ServiceErrRetryTaskCounter.With(metricsScope).Record(1)
 	default:

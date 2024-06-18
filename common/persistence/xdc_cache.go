@@ -47,7 +47,7 @@ type (
 	XDCCacheValue struct {
 		BaseWorkflowInfo    *workflowspb.BaseExecutionInfo
 		VersionHistoryItems []*historyspb.VersionHistoryItem
-		EventBlob           *commonpb.DataBlob
+		EventBlobs          []*commonpb.DataBlob
 	}
 
 	XDCCache interface {
@@ -84,12 +84,12 @@ func NewXDCCacheKey(
 func NewXDCCacheValue(
 	baseWorkflowInfo *workflowspb.BaseExecutionInfo,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
-	eventBlob *commonpb.DataBlob,
+	eventBlobs []*commonpb.DataBlob,
 ) XDCCacheValue {
 	return XDCCacheValue{
 		BaseWorkflowInfo:    baseWorkflowInfo,
 		VersionHistoryItems: versionHistoryItems,
-		EventBlob:           eventBlob,
+		EventBlobs:          eventBlobs,
 	}
 }
 
@@ -98,7 +98,10 @@ func (v XDCCacheValue) CacheSize() int {
 	for _, item := range v.VersionHistoryItems {
 		size += item.Size()
 	}
-	return v.BaseWorkflowInfo.Size() + size + v.EventBlob.Size()
+	for _, blob := range v.EventBlobs {
+		size += blob.Size()
+	}
+	return v.BaseWorkflowInfo.Size() + size
 }
 
 func NewEventsBlobCache(

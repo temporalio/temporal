@@ -28,30 +28,27 @@ import (
 
 func RegisterExecutor(
 	registry *hsm.Registry,
-	activeExecutorOptions ActiveExecutorOptions,
-	standbyExecutorOptions StandbyExecutorOptions,
+	executorOptions TaskExecutorOptions,
 	config *Config,
 ) error {
-	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
-	standbyExec := standbyExecutor{options: standbyExecutorOptions}
-	return hsm.RegisterTimerExecutors(
+	activeExec := taskExecutor{options: executorOptions, config: config}
+	return hsm.RegisterTimerExecutor(
 		registry,
 		activeExec.executeScheduleTask,
-		standbyExec.executeScheduleTask,
 	)
 }
 
 type (
-	ActiveExecutorOptions struct {
+	TaskExecutorOptions struct {
 	}
 
-	activeExecutor struct {
-		options ActiveExecutorOptions
+	taskExecutor struct {
+		options TaskExecutorOptions
 		config  *Config
 	}
 )
 
-func (e activeExecutor) executeScheduleTask(
+func (e taskExecutor) executeScheduleTask(
 	env hsm.Environment,
 	node *hsm.Node,
 	task ScheduleTask,
@@ -63,20 +60,4 @@ func (e activeExecutor) executeScheduleTask(
 	return hsm.MachineTransition(node, func(scheduler Scheduler) (hsm.TransitionOutput, error) {
 		return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
 	})
-}
-
-type (
-	StandbyExecutorOptions struct{}
-
-	standbyExecutor struct {
-		options StandbyExecutorOptions
-	}
-)
-
-func (e standbyExecutor) executeScheduleTask(
-	env hsm.Environment,
-	node *hsm.Node,
-	task ScheduleTask,
-) error {
-	panic("unimplemented")
 }

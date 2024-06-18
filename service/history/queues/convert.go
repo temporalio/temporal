@@ -145,8 +145,8 @@ func ToPersistencePredicate(
 		return ToPersistenceTaskTypePredicate(predicate)
 	case *tasks.DestinationPredicate:
 		return ToPersistenceDestinationPredicate(predicate)
-	case *tasks.StateMachineTaskTypePredicate:
-		return ToPersistenceStateMachineTaskTypePredicate(predicate)
+	case *tasks.OutboundTaskGroupPredicate:
+		return ToPersistenceOutboundTaskGroupPredicate(predicate)
 	default:
 		panic(fmt.Sprintf("unknown task predicate type: %T", predicate))
 	}
@@ -172,8 +172,8 @@ func FromPersistencePredicate(
 		return FromPersistenceTaskTypePredicate(predicate.GetTaskTypePredicateAttributes())
 	case enumsspb.PREDICATE_TYPE_DESTINATION:
 		return FromPersistenceDestinationPredicate(predicate.GetDestinationPredicateAttributes())
-	case enumsspb.PREDICATE_TYPE_STATE_MACHINE_TASK_TYPE:
-		return FromPersistenceStateMachineTypePredicate(predicate.GetStateMachineTaskTypePredicateAttributes())
+	case enumsspb.PREDICATE_TYPE_OUTBOUND_TASK_GROUP:
+		return FromPersistenceOutboundTaskGroupPredicate(predicate.GetOutboundTaskGroupPredicateAttributes())
 	default:
 		panic(fmt.Sprintf("unknown persistence task predicate type: %v", predicate.GetPredicateType()))
 	}
@@ -343,21 +343,21 @@ func FromPersistenceDestinationPredicate(
 	return tasks.NewDestinationPredicate(attributes.Destinations)
 }
 
-func ToPersistenceStateMachineTaskTypePredicate(
-	pred *tasks.StateMachineTaskTypePredicate,
+func ToPersistenceOutboundTaskGroupPredicate(
+	pred *tasks.OutboundTaskGroupPredicate,
 ) *persistencespb.Predicate {
 	return &persistencespb.Predicate{
-		PredicateType: enumsspb.PREDICATE_TYPE_STATE_MACHINE_TASK_TYPE,
-		Attributes: &persistencespb.Predicate_StateMachineTaskTypePredicateAttributes{
-			StateMachineTaskTypePredicateAttributes: &persistencespb.StateMachineTaskTypePredicateAttributes{
-				TaskTypes: maps.Keys(pred.Types),
+		PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK_GROUP,
+		Attributes: &persistencespb.Predicate_OutboundTaskGroupPredicateAttributes{
+			OutboundTaskGroupPredicateAttributes: &persistencespb.OutboundTaskGroupPredicateAttributes{
+				Groups: maps.Keys(pred.Groups),
 			},
 		},
 	}
 }
 
-func FromPersistenceStateMachineTypePredicate(
-	attributes *persistencespb.StateMachineTaskTypePredicateAttributes,
+func FromPersistenceOutboundTaskGroupPredicate(
+	attributes *persistencespb.OutboundTaskGroupPredicateAttributes,
 ) tasks.Predicate {
-	return tasks.NewStateMachineTaskTypePredicate(attributes.TaskTypes)
+	return tasks.NewOutboundTaskGroupPredicate(attributes.Groups)
 }

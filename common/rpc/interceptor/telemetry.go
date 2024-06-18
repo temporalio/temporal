@@ -400,7 +400,8 @@ func (ti *TelemetryInterceptor) HandleError(
 
 	// specific metric for resource exhausted error with throttle reason
 	case *serviceerror.ResourceExhausted:
-		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
 	// Any other errors are treated as ServiceFailures against SLA unless constructed with the standard
 	// `status.Error` (or Errorf) constructors, in which case the status code is checked below.
 	// Including below known errors and any other unknown errors.

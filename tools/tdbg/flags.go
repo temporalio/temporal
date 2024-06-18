@@ -55,7 +55,7 @@ var (
 	FlagClusterMembershipRole      = "role"
 	FlagSkipErrorMode              = "skip-errors"
 	FlagTaskID                     = "task-id"
-	FlagTaskType                   = "task-type"
+	FlagTaskCategory               = "task-category"
 	FlagTaskVisibilityTimestamp    = "task-timestamp"
 	FlagMinVisibilityTimestamp     = "min-visibility-ts"
 	FlagMaxVisibilityTimestamp     = "max-visibility-ts"

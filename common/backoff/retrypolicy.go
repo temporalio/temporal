@@ -42,8 +42,7 @@ const (
 	defaultMaximumInterval    = 10 * time.Second
 	defaultExpirationInterval = time.Minute
 	defaultMaximumAttempts    = noMaximumAttempts
-
-	defaultFirstPhaseMaximumAttempts = 3
+	defaultJitterPct          = 0
 )
 
 var (
@@ -54,12 +53,12 @@ var (
 type (
 	// RetryPolicy is the API which needs to be implemented by various retry policy implementations
 	RetryPolicy interface {
-		ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration
+		ComputeNextDelay(elapsedTime time.Duration, numAttempts int, err error) time.Duration
 	}
 
 	// Retrier manages the state of retry operation
 	Retrier interface {
-		NextBackOff() time.Duration
+		NextBackOff(err error) time.Duration
 		Reset()
 	}
 
@@ -72,6 +71,20 @@ type (
 		maximumInterval    time.Duration
 		expirationInterval time.Duration
 		maximumAttempts    int
+	}
+
+	// ErrorDependentRetryPolicy is a policy that computes the next delay time based on the error returned by the
+	// operation. The delay time to use for a particular error is determined by the delayForError function.
+	ErrorDependentRetryPolicy struct {
+		maximumAttempts int
+		jitterPct       float64
+		delayForError   func(err error) time.Duration
+	}
+
+	ConstantDelayRetryPolicy struct {
+		maximumAttempts int
+		jitterPct       float64
+		delay           time.Duration
 	}
 
 	disabledRetryPolicyImpl struct{}
@@ -144,7 +157,7 @@ func (p *ExponentialRetryPolicy) WithMaximumAttempts(maximumAttempts int) *Expon
 }
 
 // ComputeNextDelay returns the next delay interval.  This is used by Retrier to delay calling the operation again
-func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration {
+func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int, _ error) time.Duration {
 	// Check to see if we ran out of maximum number of attempts
 	// NOTE: if maxAttempts is X, return done when numAttempts == X, otherwise there will be attempt X+1
 	if p.maximumAttempts != noMaximumAttempts && numAttempts >= p.maximumAttempts {
@@ -187,7 +200,7 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	return time.Duration(nextInterval)
 }
 
-func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int) time.Duration {
+func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int, _ error) time.Duration {
 	return done
 }
 
@@ -198,8 +211,8 @@ func (r *retrierImpl) Reset() {
 }
 
 // NextBackOff returns the next delay interval.  This is used by Retry to delay calling the operation again
-func (r *retrierImpl) NextBackOff() time.Duration {
-	nextInterval := r.policy.ComputeNextDelay(r.getElapsedTime(), r.currentAttempt)
+func (r *retrierImpl) NextBackOff(err error) time.Duration {
+	nextInterval := r.policy.ComputeNextDelay(r.getElapsedTime(), r.currentAttempt, err)
 
 	// Now increment the current attempt
 	r.currentAttempt++
@@ -208,4 +221,64 @@ func (r *retrierImpl) NextBackOff() time.Duration {
 
 func (r *retrierImpl) getElapsedTime() time.Duration {
 	return r.timeSource.Now().Sub(r.startTime)
+}
+
+var _ RetryPolicy = (*ErrorDependentRetryPolicy)(nil)
+
+func NewErrorDependentRetryPolicy(delayForError func(err error) time.Duration) *ErrorDependentRetryPolicy {
+	return &ErrorDependentRetryPolicy{
+		maximumAttempts: defaultMaximumAttempts,
+		delayForError:   delayForError,
+		jitterPct:       defaultJitterPct,
+	}
+}
+
+func (p *ErrorDependentRetryPolicy) WithMaximumAttempts(maximumAttempts int) *ErrorDependentRetryPolicy {
+	p.maximumAttempts = maximumAttempts
+	return p
+}
+
+func (p *ErrorDependentRetryPolicy) WithJitter(jitterPct float64) *ErrorDependentRetryPolicy {
+	p.jitterPct = jitterPct
+	return p
+}
+
+func (p *ErrorDependentRetryPolicy) ComputeNextDelay(_ time.Duration, attempt int, err error) time.Duration {
+	if p.maximumAttempts != noMaximumAttempts && attempt >= p.maximumAttempts {
+		return done
+	}
+
+	return addJitter(p.delayForError(err), p.jitterPct)
+}
+
+var _ RetryPolicy = (*ConstantDelayRetryPolicy)(nil)
+
+func NewConstantDelayRetryPolicy(delay time.Duration) *ConstantDelayRetryPolicy {
+	return &ConstantDelayRetryPolicy{
+		maximumAttempts: defaultMaximumAttempts,
+		jitterPct:       defaultJitterPct,
+		delay:           delay,
+	}
+}
+
+func (p *ConstantDelayRetryPolicy) WithMaximumAttempts(maximumAttempts int) *ConstantDelayRetryPolicy {
+	p.maximumAttempts = maximumAttempts
+	return p
+}
+
+func (p *ConstantDelayRetryPolicy) WithJitter(jitterPct float64) *ConstantDelayRetryPolicy {
+	p.jitterPct = jitterPct
+	return p
+}
+
+func (p *ConstantDelayRetryPolicy) ComputeNextDelay(_ time.Duration, attempt int, _ error) time.Duration {
+	if p.maximumAttempts != noMaximumAttempts && attempt >= p.maximumAttempts {
+		return done
+	}
+
+	return addJitter(p.delay, p.jitterPct)
+}
+
+func addJitter(duration time.Duration, jitterPct float64) time.Duration {
+	return duration * time.Duration(1+jitterPct*rand.Float64())
 }
