@@ -133,7 +133,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetCloseVersion().Return(int64(1), nil)
-	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
@@ -178,7 +178,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetCloseVersion().Return(int64(1), nil)
-	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)

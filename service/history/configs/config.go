@@ -80,6 +80,7 @@ type Config struct {
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
+	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -280,6 +281,7 @@ type Config struct {
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
 	ReplicationReceiverMaxOutstandingTaskCount          dynamicconfig.IntPropertyFn
+	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -400,6 +402,7 @@ func NewConfig(
 		EnableHostLevelHistoryCache:           dynamicconfig.EnableHostHistoryCache.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
+		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
@@ -504,6 +507,7 @@ func NewConfig(
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
 		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
+		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),

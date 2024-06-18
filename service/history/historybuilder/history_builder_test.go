@@ -2306,6 +2306,7 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 }
 
 func (s *historyBuilderSuite) TestReorder() {
+	// Only completion events are reordered.
 	reorderEventTypes := map[enumspb.EventType]struct{}{
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:             {},
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:                {},
@@ -2316,7 +2317,6 @@ func (s *historyBuilderSuite) TestReorder() {
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:  {},
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:   {},
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED: {},
-		enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED:             {},
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:           {},
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:              {},
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:            {},
