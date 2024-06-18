@@ -36,6 +36,7 @@ var Module = fx.Module(
 	"component.scheduler",
 	fx.Provide(ConfigProvider),
 	fx.Provide(TaskExecutorOptionsProvider),
+	fx.Provide(scheduler.NewSpecBuilder),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterStateMachine),
 	fx.Invoke(RegisterExecutor),

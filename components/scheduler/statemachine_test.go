@@ -23,6 +23,9 @@
 package scheduler_test
 
 import (
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
@@ -31,8 +34,6 @@ import (
 	"go.temporal.io/server/components/scheduler"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"testing"
-	"time"
 )
 
 func TestValidTransitions(t *testing.T) {
@@ -60,7 +61,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
 	require.Equal(t, 1, len(out.Tasks))
-	runTask := out.Tasks[0].(scheduler.SchedulerActivateTask)
+	runTask, _ := out.Tasks[0].(scheduler.SchedulerActivateTask)
 	require.Equal(t, "myns", runTask.Destination)
 
 	// Manually set the next invocation time and verify that it is scheduled for that
@@ -70,6 +71,6 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.SCHEDULER_STATE_WAITING, schedulerHsm.HsmState)
 	require.Equal(t, 1, len(out.Tasks))
-	waitTask := out.Tasks[0].(scheduler.SchedulerWaitTask)
+	waitTask, _ := out.Tasks[0].(scheduler.SchedulerWaitTask)
 	require.Equal(t, now.AsTime(), waitTask.Deadline)
 }
