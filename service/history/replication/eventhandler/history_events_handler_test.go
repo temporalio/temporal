@@ -157,8 +157,8 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 	workflowId := uuid.NewString()
 	runId := uuid.NewString()
 
-	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(1)) // current cluster ID is 1
-	s.clusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
+	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes() // current cluster ID is 1
+	s.clusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000)).AnyTimes()
 
 	versionHistory := &historyspb.VersionHistory{
 		Items: []*historyspb.VersionHistoryItem{
@@ -178,25 +178,25 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 		{
 			{
 				EventId: 6,
-				Version: 1,
+				Version: 1001,
 			},
 		},
 		{
 			{
 				EventId: 7,
-				Version: 1,
+				Version: 1001,
 			},
 			{
 				EventId: 8,
-				Version: 1,
+				Version: 1001,
 			},
 			{
 				EventId: 9,
-				Version: 1,
+				Version: 1001,
 			},
 			{
 				EventId: 10,
-				Version: 1,
+				Version: 1001,
 			},
 		},
 	}

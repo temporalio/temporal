@@ -129,8 +129,6 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 		{EventId: 6, Version: 1001},
 		{EventId: 7, Version: 1001},
 	}
-	initialHistoryEvents := [][]*historypb.HistoryEvent{historyBatch2}
-	initialBatch := serializeEvents(s.eventSerializer, initialHistoryEvents)
 
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: namespaceId,
@@ -138,17 +136,18 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 		RunID:       runId,
 	}
 
-	rawBatches := serializeEvents(s.eventSerializer, [][]*historypb.HistoryEvent{historyBatch0, historyBatch1})
+	rawBatches := serializeEvents(s.eventSerializer, [][]*historypb.HistoryEvent{historyBatch0, historyBatch1, historyBatch2})
 	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
 		return []*HistoryBatch{
 			{RawEventBatch: rawBatches[0], VersionHistory: versionHistory},
 			{RawEventBatch: rawBatches[1], VersionHistory: versionHistory},
+			{RawEventBatch: rawBatches[2], VersionHistory: versionHistory},
 		}, nil, nil
 	})
 
-	returnToken1 := []byte{1, 0, 0, 1, 1, 1, 1, 0}
-	returnToken2 := []byte{1, 0, 0, 1, 1, 1, 1, 1}
-	returnToken3 := []byte{1, 0, 0, 1, 1, 0, 1, 1}
+	returnToken1 := []byte{0}
+	returnToken2 := []byte{1}
+	returnToken3 := []byte{1, 0}
 
 	gomock.InOrder(
 		// fetch more events
@@ -160,7 +159,7 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 			runId,
 			common.EmptyEventID,
 			common.EmptyVersion,
-			int64(6),
+			int64(7),
 			int64(1001),
 		).Return(fetcher).Times(1),
 
@@ -205,7 +204,7 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 					WorkflowId: workflowId,
 					RunId:      runId,
 				},
-				HistoryBatches: initialBatch,
+				HistoryBatches: []*commonpb.DataBlob{rawBatches[2]},
 				VersionHistory: versionHistory,
 				Token:          returnToken2,
 			},
@@ -235,7 +234,7 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 		context.Background(),
 		remoteCluster,
 		workflowKey,
-		6,
+		7,
 		1001,
 	)
 	s.Nil(err)
