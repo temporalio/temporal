@@ -26,6 +26,9 @@ import (
 	"container/list"
 	"context"
 	"sync"
+	"time"
+
+	"go.temporal.io/server/common/metrics"
 )
 
 // DynamicWorkerPoolLimiter provides dynamic limiters for [DynamicWorkerPoolScheduler].
@@ -54,18 +57,29 @@ type DynamicWorkerPoolScheduler struct {
 	// Number of runningGoroutines held by this worker pool.
 	runningGoroutines int
 	// Tasks that exceed the concurrency limit are buffered here.
-	buffer *list.List
+	buffer     *list.List
+	bufferSize int
+
+	metricsHandler metrics.Handler
 }
 
 // NewDynamicWorkerPoolScheduler creates a [DynamicWorkerPoolScheduler] with the given limiter.
-func NewDynamicWorkerPoolScheduler(limiter DynamicWorkerPoolLimiter) *DynamicWorkerPoolScheduler {
+func NewDynamicWorkerPoolScheduler(
+	limiter DynamicWorkerPoolLimiter,
+	metricsHandler metrics.Handler,
+) *DynamicWorkerPoolScheduler {
 	stopCtx, stopFn := context.WithCancel(context.Background())
-	return &DynamicWorkerPoolScheduler{
+	scheduler := &DynamicWorkerPoolScheduler{
 		stopCtx: stopCtx,
 		stopFn:  stopFn,
 		limiter: limiter,
 		buffer:  list.New(),
+
+		metricsHandler: metricsHandler,
 	}
+	scheduler.wg.Add(1)
+	go scheduler.exportMetricsWorker()
+	return scheduler
 }
 
 // InitiateShutdown aborts all buffered tasks and empties the buffer.
@@ -134,6 +148,7 @@ func (pool *DynamicWorkerPoolScheduler) dequeueLocked() (task Runnable, ok bool)
 	if elem := pool.buffer.Front(); elem != nil {
 		task := elem.Value.(Runnable)
 		pool.buffer.Remove(elem)
+		pool.bufferSize--
 		return task, true
 	}
 	return task, false
@@ -145,7 +160,26 @@ func (pool *DynamicWorkerPoolScheduler) dequeueLocked() (task Runnable, ok bool)
 func (pool *DynamicWorkerPoolScheduler) tryEnqueueLocked(task Runnable) bool {
 	if pool.buffer.Len() < pool.limiter.BufferSize() {
 		pool.buffer.PushBack(task)
+		pool.bufferSize++
 		return true
 	}
 	return false
+}
+
+func (pool *DynamicWorkerPoolScheduler) exportMetricsWorker() {
+	defer pool.wg.Done()
+	// TODO(rodrigozhou) add a dynamic config for the ticker interval
+	timer := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case <-pool.stopCtx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+			metrics.DynamicWorkerPoolSchedulerBufferSize.With(pool.metricsHandler).
+				Record(int64(pool.bufferSize))
+			metrics.DynamicWorkerPoolSchedulerActiveWorkers.With(pool.metricsHandler).
+				Record(int64(pool.runningGoroutines))
+		}
+	}
 }

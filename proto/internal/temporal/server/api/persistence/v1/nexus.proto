@@ -24,7 +24,7 @@ package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
-import "temporal/api/sdk/v1/user_metadata.proto";
+import "temporal/api/common/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 
 // Contains mutable fields for an Endpoint. Duplicated from the public API's temporal.api.nexus.v1.EndpointSpec where
@@ -34,7 +34,7 @@ message NexusEndpointSpec {
     // Endpoint name, unique for this cluster. Must match `[a-zA-Z_][a-zA-Z0-9_]*`.
     // Renaming an endpoint breaks all workflow callers that reference this endpoint, causing operations to fail.
     string name = 1;
-    temporal.api.sdk.v1.UserMetadata metadata = 2;
+    temporal.api.common.v1.Payload description = 2;
 
     // Target to route requests to.
     NexusEndpointTarget target = 3;

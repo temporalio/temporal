@@ -112,7 +112,9 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	if err != nil {
 		return nil, err
 	}
-	// must generate the activity timer / user timer at the very end
+	// TODO: There doesn't seem to be a good reason to generate tasks here since they'll be generated eventually when we
+	// close the transaction.
+	// Previously this comment was here: must generate the activity timer / user timer at the very end
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
 		return nil, err
@@ -676,7 +678,13 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			return nil, serviceerror.NewUnimplemented("Workflow/activity property modification not implemented")
 
 		default:
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
+			def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())
+			if !ok {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
+			}
+			if err := def.Apply(b.mutableState.HSM(), event); err != nil {
+				return nil, err
+			}
 		}
 	}
 

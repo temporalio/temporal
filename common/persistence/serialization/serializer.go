@@ -429,7 +429,7 @@ func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) 
 	}
 	// Proto serialization replaces empty maps with nils, ensure this map is never nil.
 	if result.SubStateMachinesByType == nil {
-		result.SubStateMachinesByType = make(map[int32]*persistencespb.StateMachineMap)
+		result.SubStateMachinesByType = make(map[string]*persistencespb.StateMachineMap)
 	}
 	return result, nil
 }

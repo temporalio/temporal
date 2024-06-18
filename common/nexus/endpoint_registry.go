@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
@@ -53,8 +54,10 @@ type (
 	}
 
 	EndpointRegistry interface {
-		GetByName(ctx context.Context, endpointName string) (*persistencespb.NexusEndpointEntry, error)
-		GetByID(ctx context.Context, id string) (*persistencespb.NexusEndpointEntry, error)
+		// GetByName returns an endpoint entry for the endpoint name for a caller from the given namespace ID.
+		// Note that the default implementation is global to the cluster and can ignore the namespace ID param.
+		GetByName(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error)
+		GetByID(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error)
 		StartLifecycle()
 		StopLifecycle()
 	}
@@ -127,7 +130,7 @@ func (r *EndpointRegistryImpl) StopLifecycle() {
 	}
 }
 
-func (r *EndpointRegistryImpl) GetByName(ctx context.Context, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
+func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}

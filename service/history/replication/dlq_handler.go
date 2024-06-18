@@ -128,7 +128,7 @@ func newDLQHandler(
 				namespaceId namespace.ID,
 				workflowId string,
 				runId string,
-				events []*historypb.HistoryEvent,
+				events [][]*historypb.HistoryEvent,
 				versionHistory []*historyspb.VersionHistoryItem,
 			) error {
 				engine, err := shard.GetEngine(ctx)
@@ -144,7 +144,7 @@ func newDLQHandler(
 					},
 					nil,
 					versionHistory,
-					[][]*historypb.HistoryEvent{events},
+					events,
 					nil,
 					"",
 				)
@@ -153,6 +153,7 @@ func newDLQHandler(
 			shard.GetPayloadSerializer(),
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 			shard.GetLogger(),
+			nil,
 		),
 		taskExecutors:        taskExecutors,
 		taskExecutorProvider: taskExecutorProvider,

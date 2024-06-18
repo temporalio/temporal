@@ -29,13 +29,33 @@ import "google/protobuf/timestamp.proto";
 
 // A node in a hierarchical state machine tree.
 message StateMachineNode {
+    // Serialized data of the underlying state machine.
+    bytes data = 1;
+    // Map of state machine type to a map of machines by ID.
+    map<string, StateMachineMap> children = 2;
+    // Namespace failover version at the time this node was instantiated.
+    // If this node is deleted and later recreated, this field, in combination with
+    // initial_mutable_state_transition_count, can be used to invalidate references to a previous incarnation of the
+    // node.
+    // Also used for staleness checks while transition history is disabled in mutable state.
+    // NOTE: Node deletion is not yet implemented at the time of writing.
+    int64 initial_namespace_failover_version = 3;
+    // Tracks the mutable state transition count at the time this node was instantiated.
+    // This field, in combination with initial_namespace_failover_version, can be used to invalidate references to a
+    // previous incarnation of the node.
+    // NOTE: Transition history is disabled at the time of writing.
+    // NOTE: Node deletion is not yet implemented at the time of writing.
+    int64 initial_mutable_state_transition_count = 4;
+    // Tracks the mutable state transition count at the time this node was last updated.
+    // This field is used to check non-concurrent task staleness and to determine whether this node should be synced
+    // during state replication.
+    // NOTE: Transition history is disabled at the time of writing.
+    int64 last_update_mutable_state_transition_count = 5;
     // Number of transitions on this state machine object.
     // Used to verify that a task is not stale if the state machine does not allow concurrent task execution.
-    int64 transition_count = 1;
-
-    // Seralized data of the underlying state machine.
-    bytes data = 2;
-    map<int32, StateMachineMap> children = 3;
+    // NOTE: This field will be made obsolete when transition history is enabled in favor of
+    // last_update_mutable_state_transition_count.
+    int64 transition_count = 100;
 }
 
 // Map of state machine ID to StateMachineNode.
@@ -47,7 +67,7 @@ message StateMachineMap {
 
 message StateMachineKey {
     // Addressable type of the corresponding state machine in a single tree level.
-    int32 type = 1;
+    string type = 1;
     // Addressable ID of the corresponding state machine in a single tree level.
     string id = 2;
 }
@@ -62,17 +82,36 @@ message StateMachineRef {
     // Number of transitions on the corresponding mutable state object. Used to verify that a task is not referencing a
     // stale state or, in some situations, that the task itself is not stale.
     int64 mutable_state_transition_count = 3;
+    // The namespace failover at the time the machine node was instantiated.
+    // This field, in combination with machine_initial_mutable_state_transition_count, is used to verify this ref is not
+    // targeting a previous incarnation of the machine.
+    // Also used for staleness checks while transition history is disabled.
+    // NOTE: Transition history is disabled at the time of writing.
+    // NOTE: Node deletion is not yet implemented at the time of writing.
+    int64 machine_initial_namespace_failover_version = 4;
+    // Tracks the mutable state transition count at the time the machine node was instantiated.
+    // This field, in combination with machine_initial_namespace_failover_version, is used to verify this ref is not
+    // targeting a previous incarnation of the machine.
+    // NOTE: Transition history is disabled at the time of writing.
+    // NOTE: Node deletion is not yet implemented at the time of writing.
+    int64 machine_initial_mutable_state_transition_count = 5;
+    // Tracks the mutable state transition count at the time this ref was generated.
+    // If non-zero, this reference is considered non-concurrent and this number should match the
+    // last_update_mutable_state_transition_count on the corresponding state machine node.
+    // NOTE: Transition history is disabled at the time of writing.
+    int64 machine_last_update_mutable_state_transition_count = 6;
     // Number of transitions executed on the referenced state machine node at the time this Ref is instantiated.
-    // If non-zero, the state machine is assumed to support only non-concurrent tasks, and this number should match the
-    // number of state transitions on the corresponding state machine object.
-    int64 machine_transition_count = 4;
+    // If non-zero, this reference is considered non-concurrent and this number should match the number of state
+    // transitions on the corresponding state machine node.
+    // This field will be obsolete once mutable state transition history is productionized.
+    int64 machine_transition_count = 100;
 }
 
 message StateMachineTaskInfo {
     // Reference to a state machine.
     StateMachineRef ref = 1;
     // Task type. Not to be confused with the state machine's type in the `ref` field.
-    int32 type = 2;
+    string type = 2;
     // Opaque data attached to this task. May be nil. Deserialized by a registered TaskSerializer for this type.
     bytes data = 3;
 }
@@ -85,7 +124,6 @@ message StateMachineTimerGroup {
     // (-- api-linter: core::0142::time-field-names=disabled
     //     aip.dev/not-precedent: Ignoring lint rules. --)
     google.protobuf.Timestamp deadline = 2;
-
     // Whether or not a task was put in the queue for this group's deadline.
     bool scheduled = 3;
 }

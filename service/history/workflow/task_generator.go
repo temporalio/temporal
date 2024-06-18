@@ -77,7 +77,7 @@ type (
 		GenerateActivityTasks(
 			activityScheduledEventID int64,
 		) error
-		GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error
+		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
 		GenerateChildWorkflowTasks(
 			event *historypb.HistoryEvent,
 		) error
@@ -296,14 +296,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	stateMachineRegistry *hsm.Registry,
 ) error {
 	tree := r.mutableState.HSM()
-	// Early return here to avoid accessing the transition history. It may be disabled via dynamic config.
-	outputs := tree.Outputs()
-	if len(outputs) == 0 {
-		return nil
-	}
-	transitionHistory := r.mutableState.GetExecutionInfo().TransitionHistory
-	versionedTransition := transitionHistory[len(transitionHistory)-1]
-	for _, pao := range outputs {
+	for _, pao := range tree.Outputs() {
 		node, err := tree.Child(pao.Path)
 		if err != nil {
 			return err
@@ -316,7 +309,6 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 					node,
 					pao.Path,
 					task,
-					versionedTransition,
 				); err != nil {
 					return nil
 				}
@@ -552,14 +544,14 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
+func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error {
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		Version:             r.mutableState.GetCurrentVersion(),
-		VisibilityTimestamp: visibilityTimestamp,
-		EventID:             eventID,
-		Attempt:             nextAttempt,
+		Version:             activityInfo.GetVersion(),
+		VisibilityTimestamp: activityInfo.GetScheduledTime().AsTime(),
+		EventID:             activityInfo.GetScheduledEventId(),
+		Attempt:             activityInfo.GetAttempt(),
 	})
 	return nil
 }
@@ -812,9 +804,8 @@ func generateSubStateMachineTask(
 	node *hsm.Node,
 	subStateMachinePath []hsm.Key,
 	task hsm.Task,
-	versionedTransition *persistencespb.VersionedTransition,
 ) error {
-	ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
+	ser, ok := stateMachineRegistry.TaskSerializer(task.Type())
 	if !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
 	}
@@ -831,18 +822,24 @@ func generateSubStateMachineTask(
 	}
 	// Only set transition count if a task is non-concurrent.
 	transitionCount := int64(0)
+	machineLastUpdateMutableStateTransitionCount := int64(0)
 	if !task.Concurrent() {
-		transitionCount = node.TransitionCount()
+		transitionCount = node.InternalRepr().GetTransitionCount()
+		machineLastUpdateMutableStateTransitionCount = node.InternalRepr().GetLastUpdateMutableStateTransitionCount()
 	}
 
 	taskInfo := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
-			Path:                                 ppath,
-			MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
-			MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
-			MachineTransitionCount:               transitionCount,
+			Path: ppath,
+
+			MachineInitialNamespaceFailoverVersion:       node.InternalRepr().GetInitialNamespaceFailoverVersion(),
+			MachineInitialMutableStateTransitionCount:    node.InternalRepr().GetInitialMutableStateTransitionCount(),
+			MutableStateNamespaceFailoverVersion:         mutableState.GetCurrentVersion(),
+			MutableStateTransitionCount:                  mutableState.TransitionCount(),
+			MachineTransitionCount:                       transitionCount,
+			MachineLastUpdateMutableStateTransitionCount: machineLastUpdateMutableStateTransitionCount,
 		},
-		Type: task.Type().ID,
+		Type: task.Type(),
 		Data: data,
 	}
 	switch kind := task.Kind().(type) {

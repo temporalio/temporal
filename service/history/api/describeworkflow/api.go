@@ -38,6 +38,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -271,9 +272,56 @@ func Invoke(
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
-		// HSM data is mutable and must be cloned to avoid a data race during serialization, which happens after we
-		// release the lock on this workflow.
-		result.Callbacks = append(result.Callbacks, common.CloneProto(callback.PublicInfo))
+		var state enumspb.CallbackState
+		switch callback.State() {
+		case enumsspb.CALLBACK_STATE_UNSPECIFIED:
+			shard.GetLogger().Error(
+				"unexpected error: got an operation with an UNSPECIFIED state",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		case enumsspb.CALLBACK_STATE_STANDBY:
+			state = enumspb.CALLBACK_STATE_STANDBY
+		case enumsspb.CALLBACK_STATE_SCHEDULED:
+			state = enumspb.CALLBACK_STATE_SCHEDULED
+		case enumsspb.CALLBACK_STATE_BACKING_OFF:
+			state = enumspb.CALLBACK_STATE_BACKING_OFF
+		case enumsspb.CALLBACK_STATE_FAILED:
+			state = enumspb.CALLBACK_STATE_FAILED
+		case enumsspb.CALLBACK_STATE_SUCCEEDED:
+			state = enumspb.CALLBACK_STATE_SUCCEEDED
+		}
+		cbSpec := &commonpb.Callback{}
+		switch variant := callback.Callback.Variant.(type) {
+		case *persistence.Callback_Nexus_:
+			cbSpec.Variant = &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		default:
+			// Ignore non-nexus callbacks for now (there aren't any just yet).
+			continue
+		}
+		trigger := &workflowpb.CallbackInfo_Trigger{}
+		switch callback.Trigger.Variant.(type) {
+		case *persistence.CallbackInfo_Trigger_WorkflowClosed:
+			trigger.Variant = &workflowpb.CallbackInfo_Trigger_WorkflowClosed{}
+		}
+		result.Callbacks = append(result.Callbacks, &workflowpb.CallbackInfo{
+			Callback:                cbSpec,
+			Trigger:                 trigger,
+			RegistrationTime:        callback.RegistrationTime,
+			State:                   state,
+			Attempt:                 callback.Attempt,
+			LastAttemptCompleteTime: callback.LastAttemptCompleteTime,
+			LastAttemptFailure:      callback.LastAttemptFailure,
+			NextAttemptScheduleTime: callback.NextAttemptScheduleTime,
+		})
 	}
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
