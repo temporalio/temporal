@@ -1619,6 +1619,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_ExecutesAllAvailableTimers() {
 	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterStateMachine(reg))
 	s.NoError(dummy.RegisterTaskSerializers(reg))
 
 	we := &commonpb.WorkflowExecution{
@@ -1631,9 +1632,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 
 	root, err := hsm.NewRoot(
 		reg,
-		workflow.StateMachineType.ID,
+		workflow.StateMachineType,
 		ms,
-		make(map[int32]*persistencespb.StateMachineMap),
+		make(map[string]*persistencespb.StateMachineMap),
 		ms,
 	)
 	s.NoError(err)
@@ -1652,7 +1653,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	s.NoError(err)
 
 	dummyRoot, err := root.Child([]hsm.Key{
-		{Type: dummy.StateMachineType.ID, ID: "dummy"},
+		{Type: dummy.StateMachineType, ID: "dummy"},
 	})
 	s.NoError(err)
 	err = hsm.MachineTransition(dummyRoot, func(sm *dummy.Dummy) (hsm.TransitionOutput, error) {
@@ -1672,18 +1673,18 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 			MutableStateNamespaceFailoverVersion:   2,
 			MachineInitialNamespaceFailoverVersion: 1,
 		},
-		Type: dummy.TaskTypeTimer.ID,
+		Type: dummy.TaskTypeTimer,
 	}
 	staleTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
-				{Type: dummy.StateMachineType.ID, Id: "dummy"},
+				{Type: dummy.StateMachineType, Id: "dummy"},
 			},
 			MutableStateNamespaceFailoverVersion:   2,
 			MachineInitialNamespaceFailoverVersion: 2,
 			MachineTransitionCount:                 1,
 		},
-		Type: dummy.TaskTypeTimer.ID,
+		Type: dummy.TaskTypeTimer,
 	}
 
 	// Past deadline, should get executed.
@@ -1730,6 +1731,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_StaleStateMachine() {
 	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterStateMachine(reg))
 	s.NoError(dummy.RegisterTaskSerializers(reg))
 
 	we := &commonpb.WorkflowExecution{
@@ -1755,9 +1757,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	}
 	root, err := hsm.NewRoot(
 		reg,
-		workflow.StateMachineType.ID,
+		workflow.StateMachineType,
 		ms,
-		make(map[int32]*persistencespb.StateMachineMap),
+		make(map[string]*persistencespb.StateMachineMap),
 		ms,
 	)
 	s.NoError(err)
@@ -1780,13 +1782,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	validTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
-				{Type: dummy.StateMachineType.ID, Id: "dummy"},
+				{Type: dummy.StateMachineType, Id: "dummy"},
 			},
 			MutableStateNamespaceFailoverVersion: 2,
 			MutableStateTransitionCount:          1,
 			MachineTransitionCount:               0,
 		},
-		Type: dummy.TaskTypeTimer.ID,
+		Type: dummy.TaskTypeTimer,
 	}
 
 	// Past deadline, still valid task

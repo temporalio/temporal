@@ -198,7 +198,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 					StateMachineRef: &persistencespb.StateMachineRef{
 						Path: []*persistencespb.StateMachineKey{
 							{
-								Type: callbacks.StateMachineType.ID,
+								Type: callbacks.StateMachineType,
 								Id:   "ID",
 							},
 						},
@@ -282,7 +282,7 @@ func newRoot(t *testing.T) *hsm.Node {
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	mutableState := newMutableState(t)
 
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	return root
 }

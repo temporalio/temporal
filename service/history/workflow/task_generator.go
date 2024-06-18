@@ -805,7 +805,7 @@ func generateSubStateMachineTask(
 	subStateMachinePath []hsm.Key,
 	task hsm.Task,
 ) error {
-	ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
+	ser, ok := stateMachineRegistry.TaskSerializer(task.Type())
 	if !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
 	}
@@ -839,7 +839,7 @@ func generateSubStateMachineTask(
 			MachineTransitionCount:                       transitionCount,
 			MachineLastUpdateMutableStateTransitionCount: machineLastUpdateMutableStateTransitionCount,
 		},
-		Type: task.Type().ID,
+		Type: task.Type(),
 		Data: data,
 	}
 	switch kind := task.Kind().(type) {
