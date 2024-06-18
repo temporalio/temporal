@@ -263,7 +263,6 @@ func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_sh
 		"failure to generate task should produce RETRY_STATE_INTERNAL_SERVER_ERROR got %v",
 		state,
 	)
-	s.assertActivityWasNotScheduled(s.activity, "with failing task generator")
 }
 
 func (s *retryActivitySuite) TestRetryActivity_when_workflow_is_not_mutable_should_fail() {

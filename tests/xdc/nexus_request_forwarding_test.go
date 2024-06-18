@@ -153,7 +153,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+				require.Equal(t, "worker", unexpectedError.Response.Header.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
@@ -254,7 +255,8 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+				require.Equal(t, "worker", unexpectedError.Response.Header.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")

@@ -42,6 +42,8 @@ import (
 
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -63,6 +65,7 @@ type TaskExecutorOptions struct {
 	Config                 *Config
 	NamespaceRegistry      namespace.Registry
 	MetricsHandler         metrics.Handler
+	Logger                 log.Logger
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
 	EndpointRegistry       commonnexus.EndpointRegistry
@@ -224,6 +227,10 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 				}
 			}
 		}
+	}
+
+	if callErr != nil {
+		e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
 	}
 
 	err = e.saveResult(ctx, env, ref, result, callErr)
@@ -472,6 +479,10 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	statusCodeTag := metrics.NexusOutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
 	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
 	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
+
+	if callErr != nil {
+		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
+	}
 
 	err = e.saveCancelationResult(ctx, env, ref, callErr)
 

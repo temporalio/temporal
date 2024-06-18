@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -334,6 +335,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
 				MetricsHandler:         metricsHandler,
+				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
 				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
@@ -586,6 +588,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				},
 				NamespaceRegistry: namespaceRegistry,
 				MetricsHandler:    metricsHandler,
+				Logger:            log.NewNoopLogger(),
 				EndpointRegistry:  endpointReg,
 				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
