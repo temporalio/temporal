@@ -956,8 +956,10 @@ var (
 		"dlq_writes",
 		WithDescription("The number of times a message is enqueued to DLQ. DLQ can be inspected using tdbg dlq command."),
 	)
-	ReadNamespaceErrors             = NewCounterDef("read_namespace_errors")
-	RateLimitedTaskRunnableWaitTime = NewTimerDef("rate_limited_task_runnable_wait_time")
+	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
+	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")
+	DynamicWorkerPoolSchedulerBufferSize    = NewCounterDef("dynamic_worker_pool_scheduler_buffer_size")
+	DynamicWorkerPoolSchedulerActiveWorkers = NewCounterDef("dynamic_worker_pool_scheduler_active_workers")
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
