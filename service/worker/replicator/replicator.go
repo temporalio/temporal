@@ -221,6 +221,7 @@ func (r *Replicator) cleanupAckedMessages(
 	return toDeleteMessageID, err
 }
 
+// TODO: delete the ack levels on disconnected cluster
 func (r *Replicator) cleanupNamespaceReplicationQueue(
 	ctx context.Context,
 ) error {
@@ -229,14 +230,14 @@ func (r *Replicator) cleanupNamespaceReplicationQueue(
 	ticker := time.NewTicker(replicationQueueCleanupInterval)
 	defer ticker.Stop()
 
-	ackMessageID := persistence.EmptyQueueMessageID
+	deletedMessageID := persistence.EmptyQueueMessageID
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
 			var err error
-			ackMessageID, err = r.cleanupAckedMessages(ctx, ackMessageID)
+			deletedMessageID, err = r.cleanupAckedMessages(ctx, deletedMessageID)
 			if err != nil {
 				r.logger.Warn("Failed to cleanup acked messages on namespace replication queue", tag.Error(err))
 			}
