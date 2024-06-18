@@ -90,7 +90,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
 	require.NoError(t, nexusoperations.RegisterEventDefinitions(smReg))
 	ms := workflow.NewMockMutableState(gomock.NewController(t))
-	node, err := hsm.NewRoot(smReg, workflow.StateMachineType.ID, ms, make(map[int32]*persistencespb.StateMachineMap), ms)
+	node, err := hsm.NewRoot(smReg, workflow.StateMachineType, ms, make(map[string]*persistencespb.StateMachineMap), ms)
 	require.NoError(t, err)
 	ms.EXPECT().HSM().Return(node).AnyTimes()
 	lastEventID := int64(4)
@@ -381,7 +381,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Equal(t, cAttrs.ScheduleToCloseTimeout, eAttrs.ScheduleToCloseTimeout)
 		require.Equal(t, cAttrs.NexusHeader, eAttrs.NexusHeader)
 		require.Equal(t, int64(1), eAttrs.WorkflowTaskCompletedEventId)
-		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType.ID, ID: strconv.FormatInt(event.EventId, 10)}})
+		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType, ID: strconv.FormatInt(event.EventId, 10)}})
 		require.NoError(t, err)
 		require.NotNil(t, child)
 		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
@@ -502,7 +502,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType.ID, ID: strconv.FormatInt(event.EventId, 10)}})
+		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType, ID: strconv.FormatInt(event.EventId, 10)}})
 		require.NoError(t, err)
 		require.NotNil(t, child)
 

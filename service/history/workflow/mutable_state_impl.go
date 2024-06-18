@@ -299,7 +299,7 @@ func NewMutableState(
 		StartTime:                         timestamppb.New(startTime),
 		VersionHistories:                  versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:                    &persistencespb.ExecutionStats{HistorySize: 0},
-		SubStateMachinesByType:            make(map[int32]*persistencespb.StateMachineMap),
+		SubStateMachinesByType:            make(map[string]*persistencespb.StateMachineMap),
 		TaskGenerationShardClockTimestamp: shard.CurrentVectorClock().GetClock(),
 	}
 	s.approximateSize += s.executionInfo.Size()
@@ -524,7 +524,7 @@ func NewMutableStateInChain(
 
 func (ms *MutableStateImpl) mustInitHSM() {
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
-	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType, ms)
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
 		panic(err)
 	}
@@ -4891,14 +4891,13 @@ func (ms *MutableStateImpl) RetryActivity(
 		ms.truncateRetryableActivityFailure(failure),
 		timestamppb.New(nextScheduledTime),
 	)
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
-		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-	}
-
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+	}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 

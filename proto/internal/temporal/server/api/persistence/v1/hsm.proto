@@ -32,7 +32,7 @@ message StateMachineNode {
     // Serialized data of the underlying state machine.
     bytes data = 1;
     // Map of state machine type to a map of machines by ID.
-    map<int32, StateMachineMap> children = 2;
+    map<string, StateMachineMap> children = 2;
     // Namespace failover version at the time this node was instantiated.
     // If this node is deleted and later recreated, this field, in combination with
     // initial_mutable_state_transition_count, can be used to invalidate references to a previous incarnation of the
@@ -67,7 +67,7 @@ message StateMachineMap {
 
 message StateMachineKey {
     // Addressable type of the corresponding state machine in a single tree level.
-    int32 type = 1;
+    string type = 1;
     // Addressable ID of the corresponding state machine in a single tree level.
     string id = 2;
 }
@@ -111,7 +111,7 @@ message StateMachineTaskInfo {
     // Reference to a state machine.
     StateMachineRef ref = 1;
     // Task type. Not to be confused with the state machine's type in the `ref` field.
-    int32 type = 2;
+    string type = 2;
     // Opaque data attached to this task. May be nil. Deserialized by a registered TaskSerializer for this type.
     bytes data = 3;
 }

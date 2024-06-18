@@ -49,8 +49,8 @@ type (
 		Destinations map[string]struct{}
 	}
 
-	StateMachineTaskTypePredicate struct {
-		Types map[int32]struct{}
+	OutboundTaskGroupPredicate struct {
+		Groups map[string]struct{}
 	}
 
 	TypePredicate struct {
@@ -116,35 +116,35 @@ func (n *DestinationPredicate) Equals(predicate Predicate) bool {
 	return maps.Equal(n.Destinations, dPredicate.Destinations)
 }
 
-func NewStateMachineTaskTypePredicate(
-	types []int32,
-) *StateMachineTaskTypePredicate {
-	typesMap := make(map[int32]struct{}, len(types))
-	for _, id := range types {
-		typesMap[id] = struct{}{}
+func NewOutboundTaskGroupPredicate(
+	groups []string,
+) *OutboundTaskGroupPredicate {
+	groupsMap := make(map[string]struct{}, len(groups))
+	for _, id := range groups {
+		groupsMap[id] = struct{}{}
 	}
 
-	return &StateMachineTaskTypePredicate{
-		Types: typesMap,
+	return &OutboundTaskGroupPredicate{
+		Groups: groupsMap,
 	}
 }
 
-func (n *StateMachineTaskTypePredicate) Test(task Task) bool {
+func (n *OutboundTaskGroupPredicate) Test(task Task) bool {
 	smTask, ok := task.(HasStateMachineTaskType)
 	if !ok {
 		return false
 	}
-	_, ok = n.Types[smTask.StateMachineTaskType()]
+	_, ok = n.Groups[smTask.StateMachineTaskType()]
 	return ok
 }
 
-func (n *StateMachineTaskTypePredicate) Equals(predicate Predicate) bool {
-	smPredicate, ok := predicate.(*StateMachineTaskTypePredicate)
+func (n *OutboundTaskGroupPredicate) Equals(predicate Predicate) bool {
+	smPredicate, ok := predicate.(*OutboundTaskGroupPredicate)
 	if !ok {
 		return false
 	}
 
-	return maps.Equal(n.Types, smPredicate.Types)
+	return maps.Equal(n.Groups, smPredicate.Groups)
 }
 
 func NewTypePredicate(

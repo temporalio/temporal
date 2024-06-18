@@ -948,7 +948,7 @@ var (
 	MutableStateChecksumMismatch                   = NewCounterDef("mutable_state_checksum_mismatch")
 	MutableStateChecksumInvalidated                = NewCounterDef("mutable_state_checksum_invalidated")
 	ClosedWorkflowBufferEventCount                 = NewCounterDef("closed_workflow_buffer_event_counter")
-	InorderBufferedEventsCounter                   = NewCounterDef("inordered_buffered_events")
+	OutOfOrderBufferedEventsCounter                = NewCounterDef("out_of_order_buffered_events")
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
 	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
 	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")

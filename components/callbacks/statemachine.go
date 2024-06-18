@@ -39,15 +39,12 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-// Unique type identifier for this state machine.
-var StateMachineType = hsm.MachineType{
-	ID:   2,
-	Name: "callbacks.Callback",
-}
+// StateMachineType is a unique type identifier for this state machine.
+var StateMachineType = "callbacks.Callback"
 
 // MachineCollection creates a new typed [statemachines.Collection] for callbacks.
 func MachineCollection(tree *hsm.Node) hsm.Collection[Callback] {
-	return hsm.NewCollection[Callback](tree, StateMachineType.ID)
+	return hsm.NewCollection[Callback](tree, StateMachineType)
 }
 
 // Callback state machine.
@@ -118,7 +115,7 @@ func (c Callback) output() (hsm.TransitionOutput, error) {
 
 type stateMachineDefinition struct{}
 
-func (stateMachineDefinition) Type() hsm.MachineType {
+func (stateMachineDefinition) Type() string {
 	return StateMachineType
 }
 

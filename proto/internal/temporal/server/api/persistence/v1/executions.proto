@@ -189,7 +189,7 @@ message WorkflowExecutionInfo {
     // Map of state machine type to map of machine by ID.
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
-    map<int32, StateMachineMap> sub_state_machines_by_type = 81;
+    map<string, StateMachineMap> sub_state_machines_by_type = 81;
 
     // This field is for tracking if the workflow execution timer task is created or not.
     // We don't need this field if we always create the execution timer task when the first
