@@ -48,10 +48,10 @@ func TaskExecutorOptionsProvider(
 	frontendClient workflowservice.WorkflowServiceClient,
 	historyClient resource.HistoryClient) TaskExecutorOptions {
 	return TaskExecutorOptions{
-		logger:         logger,
-		metricsHandler: metricsHandler,
-		specBuilder:    specBuilder,
-		frontendClient: frontendClient,
-		historyClient:  historyClient,
+		Logger:         logger,
+		MetricsHandler: metricsHandler,
+		SpecBuilder:    specBuilder,
+		FrontendClient: frontendClient,
+		HistoryClient:  historyClient,
 	}
 }

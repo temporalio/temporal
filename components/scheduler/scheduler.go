@@ -99,6 +99,8 @@ func (s *Scheduler) populateTransientFieldsIfAbsent(logger log.Logger, handler m
 }
 
 func (s *Scheduler) ensureFields() {
+	s.tweakables = scheduler.CurrentTweakablePolicies
+
 	if s.Args.Schedule == nil {
 		s.Args.Schedule = &schedpb.Schedule{}
 	}
@@ -143,27 +145,6 @@ func (s *Scheduler) jitterSeed() string {
 
 func (s *Scheduler) identity() string {
 	return fmt.Sprintf("temporal-scheduler-%s-%s", s.Args.State.Namespace, s.Args.State.ScheduleId)
-}
-
-func searchCache(cache *schedspb.NextTimeCache, after time.Time) (scheduler.GetNextTimeResult, bool) {
-	// The cache covers a contiguous time range so we can do a linear search in it.
-	start := cache.StartTime.AsTime()
-	afterOffset := int64(after.Sub(start))
-	for i, nextOffset := range cache.NextTimes {
-		if nextOffset > afterOffset {
-			next := start.Add(time.Duration(nextOffset))
-			nominal := next
-			if i < len(cache.NominalTimes) && cache.NominalTimes[i] != 0 {
-				nominal = start.Add(time.Duration(cache.NominalTimes[i]))
-			}
-			return scheduler.GetNextTimeResult{Nominal: nominal, Next: next}, true
-		}
-	}
-	// Ran off end: if completed, then we're done
-	if cache.Completed {
-		return scheduler.GetNextTimeResult{}, true
-	}
-	return scheduler.GetNextTimeResult{}, false
 }
 
 func (s *Scheduler) bufferWorkflowStart(nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {

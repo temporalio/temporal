@@ -55,11 +55,11 @@ func RegisterExecutor(
 
 type (
 	TaskExecutorOptions struct {
-		metricsHandler metrics.Handler
-		logger         log.Logger
-		specBuilder    *scheduler.SpecBuilder
-		frontendClient workflowservice.WorkflowServiceClient
-		historyClient  resource.HistoryClient
+		MetricsHandler metrics.Handler
+		Logger         log.Logger
+		SpecBuilder    *scheduler.SpecBuilder
+		FrontendClient workflowservice.WorkflowServiceClient
+		HistoryClient  resource.HistoryClient
 	}
 
 	taskExecutor struct {
@@ -96,7 +96,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 			return err
 		}
 
-		s.populateTransientFieldsIfAbsent(e.options.logger, e.options.metricsHandler, e.options.specBuilder, e.options.frontendClient, e.options.historyClient)
+		s.populateTransientFieldsIfAbsent(e.options.Logger, e.options.MetricsHandler, e.options.SpecBuilder, e.options.FrontendClient, e.options.HistoryClient)
 
 		if s.Args.State.LastProcessedTime == nil {
 			// log these as json since it's more readable than the Go representation
