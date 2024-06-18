@@ -24,6 +24,8 @@ package scheduler_test
 
 import (
 	"context"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/components/callbacks"
 	"testing"
 	"time"
 
@@ -134,23 +136,23 @@ func TestProcessScheduleRunTask(t *testing.T) {
 		&scheduler.Config{},
 	))
 
-	//err = reg.ExecuteImmediateTask(
-	//	context.Background(),
-	//	env,
-	//	hsm.Ref{
-	//		WorkflowKey: definition.NewWorkflowKey("mynsid", "", ""),
-	//		StateMachineRef: &persistencespb.StateMachineRef{
-	//			Path: []*persistencespb.StateMachineKey{
-	//				{
-	//					Type: callbacks.StateMachineType,
-	//					Id:   "ID",
-	//				},
-	//			},
-	//		}},
-	//	scheduler.SchedulerActivateTask{Destination: "myns"},
-	//)
-	//require.NoError(t, err)
-	//require.Equal(t, enumsspb.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
+	err = reg.ExecuteImmediateTask(
+		context.Background(),
+		env,
+		hsm.Ref{
+			WorkflowKey: definition.NewWorkflowKey("mynsid", "", ""),
+			StateMachineRef: &persistencespb.StateMachineRef{
+				Path: []*persistencespb.StateMachineKey{
+					{
+						Type: callbacks.StateMachineType,
+						Id:   "ID",
+					},
+				},
+			}},
+		scheduler.SchedulerActivateTask{Destination: "myns"},
+	)
+	require.NoError(t, err)
+	require.Equal(t, enumsspb.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
 }
 
 func newMutableState(t *testing.T) mutableState {

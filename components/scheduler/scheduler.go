@@ -53,8 +53,6 @@ type Scheduler struct {
 	tweakables     scheduler.TweakablePolicies
 	specBuilder    *scheduler.SpecBuilder
 	cspec          *scheduler.CompiledSpec
-	nextTimeCache  *schedspb.NextTimeCache
-	uuidBatch      []string
 	frontendClient workflowservice.WorkflowServiceClient
 	historyClient  resource.HistoryClient
 
@@ -72,7 +70,7 @@ func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPo
 	return overlapPolicy
 }
 
-func (s *Scheduler) populateTransientFieldsIfAbsent(logger log.Logger, handler metrics.Handler, frontendClient workflowservice.WorkflowServiceClient, historyClient resource.HistoryClient) {
+func (s *Scheduler) populateTransientFieldsIfAbsent(logger log.Logger, handler metrics.Handler, specBuilder *scheduler.SpecBuilder, frontendClient workflowservice.WorkflowServiceClient, historyClient resource.HistoryClient) {
 	if s.logger == nil {
 		s.logger = logger
 	}
@@ -86,9 +84,8 @@ func (s *Scheduler) populateTransientFieldsIfAbsent(logger log.Logger, handler m
 		s.historyClient = historyClient
 	}
 
-	s.nextTimeCache = nil
 	if s.cspec == nil {
-		s.specBuilder = scheduler.NewSpecBuilder()
+		s.specBuilder = specBuilder
 		cspec, err := s.specBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
 		if err != nil {
 			if s.logger != nil {
@@ -148,41 +145,6 @@ func (s *Scheduler) identity() string {
 	return fmt.Sprintf("temporal-scheduler-%s-%s", s.Args.State.Namespace, s.Args.State.ScheduleId)
 }
 
-func (s *Scheduler) newUUIDString() string {
-	if len(s.uuidBatch) == 0 {
-		s.uuidBatch = make([]string, 10)
-		for i := range s.uuidBatch {
-			s.uuidBatch[i] = uuid.NewString()
-		}
-	}
-	next := s.uuidBatch[0]
-	s.uuidBatch = s.uuidBatch[1:]
-	return next
-}
-
-func (s *Scheduler) fillNextTimeCache(start time.Time) {
-	s.nextTimeCache = &schedspb.NextTimeCache{
-		Version:      int64(s.tweakables.Version),
-		StartTime:    timestamppb.New(start),
-		NextTimes:    make([]int64, 0, s.tweakables.NextTimeCacheV2Size),
-		NominalTimes: make([]int64, 0, s.tweakables.NextTimeCacheV2Size),
-	}
-	for t := start; len(s.nextTimeCache.NextTimes) < s.tweakables.NextTimeCacheV2Size; {
-		next := s.cspec.GetNextTime(s.jitterSeed(), t)
-		if next.Next.IsZero() {
-			s.nextTimeCache.Completed = true
-			break
-		}
-		// Only include this if it's not equal to Next, otherwise default to Next
-		if !next.Nominal.Equal(next.Next) {
-			s.nextTimeCache.NominalTimes = s.nextTimeCache.NominalTimes[0:len(s.nextTimeCache.NextTimes)]
-			s.nextTimeCache.NominalTimes = append(s.nextTimeCache.NominalTimes, int64(next.Nominal.Sub(start)))
-		}
-		s.nextTimeCache.NextTimes = append(s.nextTimeCache.NextTimes, int64(next.Next.Sub(start)))
-		t = next.Next
-	}
-}
-
 func searchCache(cache *schedspb.NextTimeCache, after time.Time) (scheduler.GetNextTimeResult, bool) {
 	// The cache covers a contiguous time range so we can do a linear search in it.
 	start := cache.StartTime.AsTime()
@@ -204,30 +166,6 @@ func searchCache(cache *schedspb.NextTimeCache, after time.Time) (scheduler.GetN
 	return scheduler.GetNextTimeResult{}, false
 }
 
-func (s *Scheduler) getNextTime(after time.Time) scheduler.GetNextTimeResult {
-	// Asking for a time before the cache, need to refill.
-	// Also if version changed (so we can fix a bug immediately).
-	if s.nextTimeCache == nil ||
-		after.Before(s.nextTimeCache.StartTime.AsTime()) {
-		s.fillNextTimeCache(after)
-	}
-
-	// We may need up to three tries: the first is in the cache as it exists now,
-	// the second is refilled from cacheBase, and the third is if cacheBase was set
-	// too far in the past, we ignore it and fill the cache from after.
-	for try := 1; try <= 3; try++ {
-		if res, ok := searchCache(s.nextTimeCache, after); ok {
-			return res
-		}
-		// Otherwise refill from base
-		s.fillNextTimeCache(after)
-	}
-
-	// This should never happen unless there's a bug.
-	s.logger.Error("getNextTime: time not found in cache", tag.NewTimeTag("after", after))
-	return scheduler.GetNextTimeResult{}
-}
-
 func (s *Scheduler) bufferWorkflowStart(nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
 	s.logger.Debug("bufferWorkflowStart", tag.NewTimeTag("start-time", nominalTime), tag.NewTimeTag("actual-start-time", actualTime),
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
@@ -243,6 +181,10 @@ func (s *Scheduler) bufferWorkflowStart(nominalTime, actualTime time.Time, overl
 		OverlapPolicy: overlapPolicy,
 		Manual:        manual,
 	})
+}
+
+func (s *Scheduler) getNextTime(after time.Time) scheduler.GetNextTimeResult {
+	return s.cspec.GetNextTime(s.jitterSeed(), after)
 }
 
 func (s *Scheduler) processTimeRange(
@@ -394,30 +336,28 @@ func (s *Scheduler) startWorkflow(
 	}
 
 	// TODO(Tianyu): Add callback here
-	req := &schedspb.StartWorkflowRequest{
-		Request: &workflowservice.StartWorkflowExecutionRequest{
-			WorkflowId:               workflowID,
-			WorkflowType:             newWorkflow.WorkflowType,
-			TaskQueue:                newWorkflow.TaskQueue,
-			Input:                    newWorkflow.Input,
-			WorkflowExecutionTimeout: newWorkflow.WorkflowExecutionTimeout,
-			WorkflowRunTimeout:       newWorkflow.WorkflowRunTimeout,
-			WorkflowTaskTimeout:      newWorkflow.WorkflowTaskTimeout,
-			Identity:                 s.identity(),
-			RequestId:                s.newUUIDString(),
-			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			RetryPolicy:              newWorkflow.RetryPolicy,
-			Memo:                     newWorkflow.Memo,
-			// TODO(Tianyu): Search is not implemented for now
-			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: nil},
-			Header:               newWorkflow.Header,
-			LastCompletionResult: lastCompletionResult,
-			ContinuedFailure:     continuedFailure,
-			Namespace:            s.Args.State.Namespace,
-		},
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:               workflowID,
+		WorkflowType:             newWorkflow.WorkflowType,
+		TaskQueue:                newWorkflow.TaskQueue,
+		Input:                    newWorkflow.Input,
+		WorkflowExecutionTimeout: newWorkflow.WorkflowExecutionTimeout,
+		WorkflowRunTimeout:       newWorkflow.WorkflowRunTimeout,
+		WorkflowTaskTimeout:      newWorkflow.WorkflowTaskTimeout,
+		Identity:                 s.identity(),
+		RequestId:                uuid.NewString(),
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		RetryPolicy:              newWorkflow.RetryPolicy,
+		Memo:                     newWorkflow.Memo,
+		// TODO(Tianyu): Search is not implemented for now
+		SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: nil},
+		Header:               newWorkflow.Header,
+		LastCompletionResult: lastCompletionResult,
+		ContinuedFailure:     continuedFailure,
+		Namespace:            s.Args.State.Namespace,
 	}
 
-	res, err := s.frontendClient.StartWorkflowExecution(context.Background(), req.Request)
+	res, err := s.frontendClient.StartWorkflowExecution(context.Background(), req)
 	if err != nil {
 		// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 		return nil, err
@@ -481,7 +421,7 @@ func (s *Scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 			// only set WorkflowId so we cancel the latest, but restricted by FirstExecutionRunId
 			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
 			Identity:            s.identity(),
-			RequestId:           s.newUUIDString(),
+			RequestId:           uuid.NewString(),
 			FirstExecutionRunId: ex.RunId,
 			Reason:              "cancelled by schedule overlap policy",
 		},

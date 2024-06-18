@@ -57,6 +57,7 @@ type (
 	TaskExecutorOptions struct {
 		metricsHandler metrics.Handler
 		logger         log.Logger
+		specBuilder    *scheduler.SpecBuilder
 		frontendClient workflowservice.WorkflowServiceClient
 		historyClient  resource.HistoryClient
 	}
@@ -95,7 +96,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 			return err
 		}
 
-		s.populateTransientFieldsIfAbsent(e.options.logger, e.options.metricsHandler, e.options.frontendClient, e.options.historyClient)
+		s.populateTransientFieldsIfAbsent(e.options.logger, e.options.metricsHandler, e.options.specBuilder, e.options.frontendClient, e.options.historyClient)
 
 		if s.Args.State.LastProcessedTime == nil {
 			// log these as json since it's more readable than the Go representation
@@ -110,7 +111,6 @@ func (e taskExecutor) executeSchedulerRunTask(
 		t1 := timestamp.TimeValue(s.Args.State.LastProcessedTime)
 		t2 := time.Now()
 		if t2.Before(t1) {
-			// Time went backwards. Currently this can only happen across a continue-as-new boundary.
 			s.logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
 			t2 = t1
 		}

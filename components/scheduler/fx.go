@@ -24,10 +24,12 @@ package scheduler
 
 import (
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
-	"go.uber.org/fx"
 )
 
 var Module = fx.Module(
@@ -42,11 +44,13 @@ var Module = fx.Module(
 func TaskExecutorOptionsProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	specBuilder *scheduler.SpecBuilder,
 	frontendClient workflowservice.WorkflowServiceClient,
 	historyClient resource.HistoryClient) TaskExecutorOptions {
 	return TaskExecutorOptions{
 		logger:         logger,
 		metricsHandler: metricsHandler,
+		specBuilder:    specBuilder,
 		frontendClient: frontendClient,
 		historyClient:  historyClient,
 	}
