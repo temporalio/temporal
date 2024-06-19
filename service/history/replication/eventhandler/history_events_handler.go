@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
@@ -205,8 +204,7 @@ func (h *historyEventsHandlerImpl) handleLocalGeneratedEvent(
 		_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(mu.GetVersionHistories(), lastVersionHistoryItem)
 		// if mutable state is found, we expect it should have at least events to the last local generated event, otherwise it is a data lose
 		if err != nil {
-			h.logger.Error(fmt.Sprintf("Encountered data lose issue when handling local generated events, expected event: %v, version : %v", lastVersionHistoryItem.EventId, lastVersionHistoryItem.Version), tag.Error(err))
-			return err
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("Encountered data lose issue when handling local generated events, expected event: %v, version : %v", lastVersionHistoryItem.EventId, lastVersionHistoryItem.Version))
 		}
 		return nil
 	case *serviceerror.NotFound:

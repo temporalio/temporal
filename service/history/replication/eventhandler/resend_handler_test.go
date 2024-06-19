@@ -27,7 +27,6 @@ package eventhandler
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -36,7 +35,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -44,6 +42,8 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -76,6 +75,7 @@ type (
 		resendHandler  ResendHandler
 		engine         *shard.MockEngine
 		historyFetcher *MockHistoryPaginatedFetcher
+		importer       *MockEventImporter
 	}
 )
 
@@ -126,6 +126,7 @@ func (s *resendHandlerSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 	s.engine = shard.NewMockEngine(s.controller)
 	s.serializer = serialization.NewSerializer()
+	s.importer = NewMockEventImporter(s.controller)
 	s.resendHandler = NewResendHandler(
 		s.mockNamespaceCache,
 		s.mockClientBean,
@@ -135,6 +136,7 @@ func (s *resendHandlerSuite) SetupTest() {
 			return s.engine, nil
 		},
 		s.historyFetcher,
+		s.importer,
 		s.logger,
 		s.config,
 	)
@@ -144,102 +146,93 @@ func (s *resendHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *resendHandlerSuite) TestSendSingleWorkflowHistory() {
+type historyEventMatrixMatcher struct {
+	expected [][]*historypb.HistoryEvent
+}
+
+func (m *historyEventMatrixMatcher) Matches(x interface{}) bool {
+	actual, ok := x.([][]*historypb.HistoryEvent)
+	if !ok {
+		return false
+	}
+	if len(m.expected) != len(actual) {
+		return false
+	}
+	for i := range m.expected {
+		if len(m.expected[i]) != len(actual[i]) {
+			return false
+		}
+		for j := range m.expected[i] {
+			if m.expected[i][j].EventId != actual[i][j].EventId || m.expected[i][j].Version != actual[i][j].Version {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (m *historyEventMatrixMatcher) String() string {
+	return "matches history event matrix"
+}
+
+// NewHistoryEventMatrixMatcher creates a gomock Matcher for [][]*historypb.HistoryEvent
+func NewHistoryEventMatrixMatcher(expected [][]*historypb.HistoryEvent) gomock.Matcher {
+	return &historyEventMatrixMatcher{expected: expected}
+}
+
+func (s *resendHandlerSuite) TestResendHistoryEvents_NoRemoteEvents() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	startEventID := int64(123)
-	startEventVersion := int64(100)
-	token := []byte{1}
-	pageSize := defaultPageSize
+	endEventID := int64(12)
+	endEventVersion := int64(123)
+	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
+
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(123))
+	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 	eventBatch := []*historypb.HistoryEvent{
-		{
-			EventId:   2,
-			Version:   123,
-			EventTime: timestamppb.New(time.Now().UTC()),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		},
-		{
-			EventId:   3,
-			Version:   123,
-			EventTime: timestamppb.New(time.Now().UTC()),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		{EventId: 1, Version: 123},
+		{EventId: 2, Version: 123},
+	}
+	versionHistory := &historyspb.VersionHistory{
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 10, Version: 123},
 		},
 	}
-	blob := s.serializeEvents(eventBatch)
-	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		{
-			EventId: 1,
-			Version: 1,
-		},
-	}
-
-	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
+	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
+		return []*HistoryBatch{
+			{RawEventBatch: s.serializeEvents(eventBatch), VersionHistory: versionHistory},
+		}, nil, nil
+	})
+	s.historyFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		gomock.Any(),
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: s.namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			StartEventId:      startEventID,
-			StartEventVersion: startEventVersion,
-			EndEventId:        common.EmptyEventID,
-			EndEventVersion:   common.EmptyVersion,
-			MaximumPageSize:   pageSize,
-			NextPageToken:     nil,
-		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: []*commonpb.DataBlob{blob},
-		NextPageToken:  token,
-		VersionHistory: &historyspb.VersionHistory{
-			Items: versionHistoryItems,
-		},
-	}, nil)
-
-	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
-		gomock.Any(),
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: s.namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			StartEventId:      startEventID,
-			StartEventVersion: startEventVersion,
-			EndEventId:        common.EmptyEventID,
-			EndEventVersion:   common.EmptyVersion,
-			MaximumPageSize:   pageSize,
-			NextPageToken:     token,
-		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: []*commonpb.DataBlob{blob},
-		NextPageToken:  nil,
-		VersionHistory: &historyspb.VersionHistory{
-			Items: versionHistoryItems,
-		},
-	}, nil)
-
-	functionCalled := false
-
-	err := s.resendHandler.ResendHistoryEvents(
-		context.Background(),
-		cluster.TestCurrentClusterName,
+		cluster.TestAlternativeClusterName,
 		s.namespaceID,
 		workflowID,
 		runID,
-		startEventID,
-		startEventVersion,
 		common.EmptyEventID,
 		common.EmptyVersion,
+		int64(12),
+		int64(123),
+	).Return(fetcher)
+	err := s.resendHandler.ResendHistoryEvents(
+		context.Background(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		endEventID,
+		endEventVersion,
 	)
-	s.True(functionCalled)
-	s.Nil(err)
+	s.Error(err)
 }
 
-func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_Batching() {
+func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	startEventID := int64(123)
-	startEventVersion := int64(100)
-	pageSize := defaultPageSize
+	endEventID := int64(13)
+	endEventVersion := int64(123)
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
 
 	eventBatch0 := []*historypb.HistoryEvent{
@@ -262,71 +255,279 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_Batching() {
 		{EventId: 9, Version: 123},
 		{EventId: 10, Version: 123},
 	}
-	versionHistoryItems0 := []*historyspb.VersionHistoryItem{
-		{EventId: 1, Version: 1},
+	eventBatch5 := []*historypb.HistoryEvent{
+		{EventId: 11, Version: 123},
+		{EventId: 12, Version: 123},
 	}
-	versionHistoryItems1 := []*historyspb.VersionHistoryItem{
-		{EventId: 2, Version: 1},
+	versionHistory0 := &historyspb.VersionHistory{
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 10, Version: 123},
+		},
 	}
-
-	mockGetHistoryCall := func(events []*historypb.HistoryEvent, vh []*historyspb.VersionHistoryItem, inputToken []byte, returnToken []byte) {
-		blob := s.serializeEvents(events)
-		s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
-			gomock.Any(),
-			&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-				NamespaceId: s.namespaceID.String(),
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowID,
-					RunId:      runID,
-				},
-				StartEventId:      startEventID,
-				StartEventVersion: startEventVersion,
-				EndEventId:        common.EmptyEventID,
-				EndEventVersion:   common.EmptyVersion,
-				MaximumPageSize:   pageSize,
-				NextPageToken:     inputToken,
-			}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
-			HistoryBatches: []*commonpb.DataBlob{blob},
-			NextPageToken:  returnToken,
-			VersionHistory: &historyspb.VersionHistory{
-				Items: vh,
-			},
-		}, nil)
+	versionHistory1 := &historyspb.VersionHistory{
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 15, Version: 123},
+		},
 	}
-	token0 := []byte{0}
-	token1 := []byte{1}
-	token2 := []byte{2}
-	token3 := []byte{3}
-	mockGetHistoryCall(eventBatch0, versionHistoryItems0, nil, token0)
-	mockGetHistoryCall(eventBatch1, versionHistoryItems0, token0, token1)
-	mockGetHistoryCall(eventBatch2, versionHistoryItems0, token1, token2)
-	mockGetHistoryCall(eventBatch3, versionHistoryItems1, token2, token3)
-	mockGetHistoryCall(eventBatch4, versionHistoryItems1, token3, nil)
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1))
+	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
-	functionCallTimes := 0
-	var calledEvents [][]*historypb.HistoryEvent
+	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
+		return []*HistoryBatch{
+			{RawEventBatch: s.serializeEvents(eventBatch0), VersionHistory: versionHistory0},
+			{RawEventBatch: s.serializeEvents(eventBatch1), VersionHistory: versionHistory0},
+			{RawEventBatch: s.serializeEvents(eventBatch2), VersionHistory: versionHistory0},
+			{RawEventBatch: s.serializeEvents(eventBatch3), VersionHistory: versionHistory1},
+			{RawEventBatch: s.serializeEvents(eventBatch4), VersionHistory: versionHistory1},
+			{RawEventBatch: s.serializeEvents(eventBatch5), VersionHistory: versionHistory1},
+		}, nil, nil
+	})
 
-	err := s.resendHandler.ResendHistoryEvents(
-		context.Background(),
-		cluster.TestCurrentClusterName,
+	s.historyFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
+		gomock.Any(),
+		cluster.TestAlternativeClusterName,
 		s.namespaceID,
 		workflowID,
 		runID,
-		startEventID,
-		startEventVersion,
 		common.EmptyEventID,
 		common.EmptyVersion,
+		int64(13),
+		int64(123),
+	).Return(fetcher)
+
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+
+	gomock.InOrder(
+		s.engine.EXPECT().ReplicateHistoryEvents(
+			gomock.Any(),
+			workflowKey,
+			nil,
+			versionHistory0.Items,
+			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch0, eventBatch1}),
+			nil,
+			"",
+		).Times(1),
+		s.engine.EXPECT().ReplicateHistoryEvents(
+			gomock.Any(),
+			workflowKey,
+			nil,
+			versionHistory0.Items,
+			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch2}),
+			nil,
+			"",
+		).Times(1),
+		s.engine.EXPECT().ReplicateHistoryEvents(
+			gomock.Any(),
+			workflowKey,
+			nil,
+			versionHistory1.Items,
+			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch3, eventBatch4}),
+			nil,
+			"",
+		).Times(1),
+		s.engine.EXPECT().ReplicateHistoryEvents(
+			gomock.Any(),
+			workflowKey,
+			nil,
+			versionHistory1.Items,
+			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch5}),
+			nil,
+			"",
+		).Times(1),
+	)
+
+	err := s.resendHandler.ResendHistoryEvents(
+		context.Background(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		endEventID,
+		endEventVersion,
 	)
 	s.Nil(err)
-	s.Equal(3, functionCallTimes)
-	s.Equal(5, len(calledEvents))
-	eventId := int64(1)
-	for _, events := range calledEvents {
-		for _, event := range events {
-			event.EventId = eventId
-			eventId++
-		}
+}
+
+func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_LocalAndRemoteEvents() {
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	endEventID := int64(9)
+	endEventVersion := int64(124)
+	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
+
+	eventBatch0 := []*historypb.HistoryEvent{
+		{EventId: 1, Version: 123},
+		{EventId: 2, Version: 123},
 	}
+	eventBatch1 := []*historypb.HistoryEvent{
+		{EventId: 3, Version: 123},
+		{EventId: 4, Version: 123},
+	}
+	eventBatch2 := []*historypb.HistoryEvent{
+		{EventId: 5, Version: 123},
+		{EventId: 6, Version: 123},
+	}
+	eventBatch3 := []*historypb.HistoryEvent{
+		{EventId: 7, Version: 124},
+		{EventId: 8, Version: 124},
+	}
+	versionHistory := &historyspb.VersionHistory{
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 6, Version: 123},
+			{EventId: 10, Version: 124},
+		},
+	}
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(123))
+	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
+
+	fetcher0 := collection.NewPagingIterator(func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
+		return []*HistoryBatch{
+			{RawEventBatch: s.serializeEvents(eventBatch0), VersionHistory: versionHistory},
+			{RawEventBatch: s.serializeEvents(eventBatch1), VersionHistory: versionHistory},
+			{RawEventBatch: s.serializeEvents(eventBatch2), VersionHistory: versionHistory},
+			{RawEventBatch: s.serializeEvents(eventBatch3), VersionHistory: versionHistory},
+		}, nil, nil
+	})
+
+	fetcher1 := collection.NewPagingIterator(func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
+		return []*HistoryBatch{
+			{RawEventBatch: s.serializeEvents(eventBatch3), VersionHistory: versionHistory},
+		}, nil, nil
+	})
+
+	s.historyFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
+		gomock.Any(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		int64(9),
+		int64(124),
+	).Return(fetcher0).Times(1)
+
+	s.historyFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
+		gomock.Any(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		int64(6),
+		int64(123),
+		int64(9),
+		int64(124),
+	).Return(fetcher1).Times(1)
+
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+
+	s.importer.EXPECT().ImportHistoryEventsFromBeginning(
+		gomock.Any(),
+		cluster.TestAlternativeClusterName,
+		workflowKey,
+		int64(6),
+		int64(123),
+	).Return(nil)
+	s.engine.EXPECT().ReplicateHistoryEvents(
+		gomock.Any(),
+		workflowKey,
+		nil,
+		versionHistory.Items,
+		NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch3}),
+		nil,
+		"",
+	).Times(1)
+
+	err := s.resendHandler.ResendHistoryEvents(
+		context.Background(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		endEventID,
+		endEventVersion,
+	)
+	s.Nil(err)
+}
+
+func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_MixedVersionHistory_RemoteEventsOnly() {
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	endEventID := int64(9)
+	endEventVersion := int64(124)
+	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
+
+	eventBatch3 := []*historypb.HistoryEvent{
+		{EventId: 7, Version: 124},
+		{EventId: 8, Version: 124},
+	}
+	versionHistory := &historyspb.VersionHistory{
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 6, Version: 123},
+			{EventId: 10, Version: 124},
+		},
+	}
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(123))
+	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
+
+	fetcher0 := collection.NewPagingIterator(func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
+		return []*HistoryBatch{
+			{RawEventBatch: s.serializeEvents(eventBatch3), VersionHistory: versionHistory},
+		}, nil, nil
+	})
+
+	s.historyFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
+		gomock.Any(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		int64(6),
+		int64(123),
+		int64(9),
+		int64(124),
+	).Return(fetcher0).Times(1)
+
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+
+	s.engine.EXPECT().ReplicateHistoryEvents(
+		gomock.Any(),
+		workflowKey,
+		nil,
+		versionHistory.Items,
+		NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch3}),
+		nil,
+		"",
+	).Times(1)
+
+	err := s.resendHandler.ResendHistoryEvents(
+		context.Background(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		int64(6),
+		int64(123),
+		endEventID,
+		endEventVersion,
+	)
+	s.Nil(err)
 }
 
 func (s *resendHandlerSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {

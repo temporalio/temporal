@@ -301,7 +301,6 @@ func (e *ExecutableTaskImpl) Resend(
 	retryErr *serviceerrors.RetryReplication,
 	remainingAttempt int,
 ) (bool, error) {
-	println("xinwduan resending")
 	remainingAttempt--
 	if remainingAttempt < 0 {
 		e.Logger.Error("resend history attempts exceeded",

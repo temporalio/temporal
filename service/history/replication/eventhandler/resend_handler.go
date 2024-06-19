@@ -28,6 +28,7 @@ package eventhandler
 
 import (
 	"context"
+	"fmt"
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -81,6 +82,7 @@ func NewResendHandler(
 	clusterMetadata cluster.Metadata,
 	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error),
 	remoteHistoryFetcher HistoryPaginatedFetcher,
+	importer EventImporter,
 	logger log.Logger,
 	config *configs.Config,
 ) ResendHandler {
@@ -90,6 +92,7 @@ func NewResendHandler(
 		serializer:           serializer,
 		engineProvider:       historyEngineProvider,
 		remoteHistoryFetcher: remoteHistoryFetcher,
+		eventImporter:        importer,
 		logger:               logger,
 		clusterMetadata:      clusterMetadata,
 		config:               config,
@@ -149,7 +152,7 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 
 	// most common case: no need to handle local portion
 	if len(localVersionHistory) == 0 || startEventID >= localVersionHistory[len(localVersionHistory)-1].EventId {
-		return r.resendRemoteEvents(
+		return r.replicateRemoteGeneratedEvents(
 			ctx,
 			namespaceID,
 			workflowID,
@@ -161,10 +164,10 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 
 	if startEventID != common.EmptyEventID {
 		// make sure resend is requesting from the first event when requesting local generated portion
-		return serviceerror.NewInvalidArgument("Invalid Resend Request.")
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid Resend Request: expecting to resend from first event for local generated portion, but startEventID is %v", startEventID))
 	}
 	lastLocalItem := localVersionHistory[len(localVersionHistory)-1]
-	err = r.resendLocalGeneratedHistoryEvents(ctx, remoteClusterName, namespaceID, workflowID, runID, lastLocalItem.EventId, lastLocalItem.EventId)
+	err = r.resendLocalGeneratedHistoryEvents(ctx, remoteClusterName, namespaceID, workflowID, runID, lastLocalItem.EventId, lastLocalItem.Version)
 	if err != nil {
 		return err
 	}
@@ -209,9 +212,9 @@ func (r *resendHandlerImpl) resendRemoteGeneratedHistoryEvents(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	startEventID int64, // inclusive
+	startEventID int64, // exclusive
 	startEventVersion int64,
-	endEventID int64, // inclusive
+	endEventID int64, // exclusive
 	endEventVersion int64,
 ) error {
 	historyEventIterator := r.remoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
@@ -224,10 +227,10 @@ func (r *resendHandlerImpl) resendRemoteGeneratedHistoryEvents(
 		startEventVersion,
 		endEventID,
 		endEventVersion)
-	return r.resendRemoteEvents(ctx, namespaceID, workflowID, runID, nil, historyEventIterator)
+	return r.replicateRemoteGeneratedEvents(ctx, namespaceID, workflowID, runID, nil, historyEventIterator)
 }
 
-func (r *resendHandlerImpl) resendRemoteEvents(
+func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -239,14 +242,17 @@ func (r *resendHandlerImpl) resendRemoteEvents(
 	if err != nil {
 		return err
 	}
-	events, err := r.serializer.DeserializeEvents(headBatch.RawEventBatch)
-	if err != nil {
-		return err
-	}
 	var eventsBatch [][]*historypb.HistoryEvent
 	var versionHistory []*historyspb.VersionHistoryItem
-	eventsBatch = append(eventsBatch, events)
-	versionHistory = headBatch.VersionHistory.GetItems()
+	if headBatch != nil {
+		events, err := r.serializer.DeserializeEvents(headBatch.RawEventBatch)
+		if err != nil {
+			return err
+		}
+		eventsBatch = append(eventsBatch, events)
+		versionHistory = headBatch.VersionHistory.GetItems()
+	}
+
 	applyFn := func() error {
 		err := engine.ReplicateHistoryEvents(
 			ctx,

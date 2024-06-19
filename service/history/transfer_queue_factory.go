@@ -144,6 +144,14 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MatchingRawClient,
 		f.VisibilityManager,
 	)
+	eventImporter := eventhandler.NewEventImporter(
+		f.RemoteHistoryFetcher,
+		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
+			return shardContext.GetEngine(ctx)
+		},
+		f.Serializer,
+		logger,
+	)
 	resendHandler := eventhandler.NewResendHandler(
 		f.NamespaceRegistry,
 		f.ClientBean,
@@ -152,9 +160,10 @@ func (f *transferQueueFactory) CreateQueue(
 		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
 			return shardContext.GetEngine(ctx)
 		},
-		f.Config.StandbyTaskReReplicationContextTimeout,
 		f.RemoteHistoryFetcher,
+		eventImporter,
 		logger,
+		f.Config,
 	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
