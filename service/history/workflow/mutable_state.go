@@ -76,6 +76,11 @@ var emptyTasks = []tasks.Task{}
 
 type stateMachineDefinition struct{}
 
+// TODO: Remove this implementation once transition history is fully implemented.
+func (s stateMachineDefinition) CompareState(any, any) (int, error) {
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for workflow mutable state")
+}
+
 func (stateMachineDefinition) Deserialize([]byte) (any, error) {
 	return nil, serviceerror.NewUnimplemented("workflow mutable state persistence is not supported in the HSM framework")
 }
@@ -83,11 +88,6 @@ func (stateMachineDefinition) Deserialize([]byte) (any, error) {
 // Serialize is a noop as Deserialize is not supported.
 func (stateMachineDefinition) Serialize(any) ([]byte, error) {
 	return nil, nil
-}
-
-func (stateMachineDefinition) CompareState(_, _ any) (int, error) {
-	// TODO: remove this implementation once transition history is fully implemented
-	return 0, serviceerror.NewUnimplemented("CompareState not implemented for workflow mutable state")
 }
 
 func (stateMachineDefinition) Type() string {

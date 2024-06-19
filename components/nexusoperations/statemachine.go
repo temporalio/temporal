@@ -47,6 +47,10 @@ const (
 
 	// CancelationMachineType is a unique type identifier for the Cancelation state machine.
 	CancelationMachineType = "nexusoperations.Cancelation"
+
+	// A marker for the first return value from a progress() that indicates the machine is in a terminal state.
+	// TODO: Remove this once transition history is fully implemented.
+	terminalStage = 3
 )
 
 // CancelationMachineKey is a fixed key for the cancelation machine as a child of the operation machine.
@@ -202,16 +206,34 @@ func (operationMachineDefinition) Serialize(state any) ([]byte, error) {
 	return nil, fmt.Errorf("invalid operation provided: %v", state) // nolint:goerr113
 }
 
+// CompareState compares the progress of two Operation state machines to determine whether to sync machine state while
+// processing a replication task.
+// TODO: Remove this implementation once transition history is fully implemented.
 func (operationMachineDefinition) CompareState(state1, state2 any) (int, error) {
-	// TODO: remove this implementation once transition history is fully implemented
-	return 0, serviceerror.NewUnimplemented("CompareState not implemented for nexus operation")
-}
-
-func RegisterStateMachines(r *hsm.Registry) error {
-	if err := r.RegisterMachine(operationMachineDefinition{}); err != nil {
-		return err
+	o1, ok := state1.(Operation)
+	if !ok {
+		return 0, fmt.Errorf("%w: expected state1 to be a Operation instance, got %v", hsm.ErrIncompatibleType, state1)
 	}
-	return r.RegisterMachine(cancelationMachineDefinition{})
+	o2, ok := state2.(Operation)
+	if !ok {
+		return 0, fmt.Errorf("%w: expected state2 to be a Operation instance, got %v", hsm.ErrIncompatibleType, state2)
+	}
+
+	stage1, attempts1, err := o1.progress()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get progress for state1: %w", err)
+	}
+	stage2, attempts2, err := o2.progress()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get progress for state2: %w", err)
+	}
+	if stage1 != stage2 {
+		return stage2 - stage1, nil
+	}
+	if stage1 == terminalStage && o1.State() != o2.State() {
+		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", o1.State(), o2.State()))
+	}
+	return int(attempts2 - attempts1), nil
 }
 
 // CompletionSource is an enum specifying where an operation completion originated from.
@@ -446,6 +468,30 @@ func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, er
 	})
 }
 
+// TODO: Remove this implementation once transition history is fully implemented.
+func (o Operation) progress() (int, int32, error) {
+	switch o.State() {
+	case enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED:
+		return 0, 0, serviceerror.NewInvalidArgument("uninitialized operation state")
+	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
+		return 1, o.GetAttempt() * 2, nil
+	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
+		// We've made slightly more progress if we transitioned from scheduled to backing off.
+		return 1, o.GetAttempt()*2 + 1, nil
+	case enumsspb.NEXUS_OPERATION_STATE_STARTED:
+		return 2, 0, nil
+	case enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT,
+		enumsspb.NEXUS_OPERATION_STATE_FAILED,
+		enumsspb.NEXUS_OPERATION_STATE_CANCELED,
+		enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED:
+		// Consider any terminal state as "max progress", we'll rely on last update namespace failover version to break
+		// the tie when comparing two states.
+		return terminalStage, 0, nil
+	default:
+		return 0, 0, serviceerror.NewInvalidArgument("unknown operation state")
+	}
+}
+
 type cancelationMachineDefinition struct{}
 
 func (cancelationMachineDefinition) Deserialize(d []byte) (any, error) {
@@ -460,13 +506,38 @@ func (cancelationMachineDefinition) Serialize(state any) ([]byte, error) {
 	return nil, fmt.Errorf("invalid cancelation provided: %v", state) // nolint:goerr113
 }
 
-func (cancelationMachineDefinition) CompareState(state1, state2 any) (int, error) {
-	// TODO: remove this implementation once transition history is fully implemented
-	return 0, serviceerror.NewUnimplemented("CompareState not implemented for nexus operation cancelation")
-}
-
 func (cancelationMachineDefinition) Type() string {
 	return CancelationMachineType
+}
+
+// CompareState compares the progress of two Cancelation state machines to determine whether to sync machine state while
+// processing a replication task.
+// TODO: Remove this implementation once transition history is fully implemented.
+func (cancelationMachineDefinition) CompareState(state1, state2 any) (int, error) {
+	c1, ok := state1.(Cancelation)
+	if !ok {
+		return 0, fmt.Errorf("%w: expected state1 to be a Cancelation instance, got %v", hsm.ErrIncompatibleType, state1)
+	}
+	c2, ok := state2.(Cancelation)
+	if !ok {
+		return 0, fmt.Errorf("%w: expected state2 to be a Cancelation instance, got %v", hsm.ErrIncompatibleType, state2)
+	}
+
+	stage1, attempts1, err := c1.progress()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get progress for state1: %w", err)
+	}
+	stage2, attempts2, err := c2.progress()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get progress for state2: %w", err)
+	}
+	if stage1 != stage2 {
+		return stage2 - stage1, nil
+	}
+	if stage1 == terminalStage && c1.State() != c2.State() {
+		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", c1.State(), c2.State()))
+	}
+	return int(attempts2 - attempts1), nil
 }
 
 // Cancelation state machine for canceling an operation.
@@ -509,6 +580,25 @@ func (c Cancelation) output(node *hsm.Node) (hsm.TransitionOutput, error) {
 		return hsm.TransitionOutput{}, err
 	}
 	return hsm.TransitionOutput{Tasks: tasks}, nil
+}
+
+// TODO: Remove this implementation once transition history is fully implemented.
+func (c Cancelation) progress() (int, int32, error) {
+	switch c.State() {
+	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED:
+		return 0, 0, serviceerror.NewInvalidArgument("uninitialized cancelation state")
+	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
+		return 1, c.GetAttempt() * 2, nil
+	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
+		// We've made slightly more progress if we transitioned from scheduled to backing off.
+		return 1, c.GetAttempt()*2 + 1, nil
+	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED:
+		// Consider any terminal state as "max progress", we'll rely on last update namespace failover version to break
+		// the tie when comparing two states.
+		return terminalStage, 0, nil
+	default:
+		return 0, 0, serviceerror.NewInvalidArgument("unknown cancelation state")
+	}
 }
 
 // EventCancelationScheduled is triggered when cancelation is meant to be scheduled for the first time - immediately
@@ -609,3 +699,10 @@ var TransitionCancelationSucceeded = hsm.NewTransition(
 		return c.output(event.Node)
 	},
 )
+
+func RegisterStateMachines(r *hsm.Registry) error {
+	if err := r.RegisterMachine(operationMachineDefinition{}); err != nil {
+		return err
+	}
+	return r.RegisterMachine(cancelationMachineDefinition{})
+}

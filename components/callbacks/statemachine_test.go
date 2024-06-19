@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/service/history/hsm"
 )
 
 func TestValidTransitions(t *testing.T) {
@@ -126,4 +127,82 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert no additional tasks are generated
 	require.Equal(t, 0, len(out.Tasks))
+}
+
+func TestCompareState(t *testing.T) {
+	reg := hsm.NewRegistry()
+	require.NoError(t, callbacks.RegisterStateMachine(reg))
+	def, ok := reg.Machine(callbacks.StateMachineType)
+	require.True(t, ok)
+
+	cases := []struct {
+		name                 string
+		s1, s2               enumsspb.CallbackState
+		attempts1, attempts2 int32
+		sign                 int
+		expectError          bool
+	}{
+		{
+			name: "standby < scheduled",
+			s1:   enumsspb.CALLBACK_STATE_STANDBY,
+			s2:   enumsspb.CALLBACK_STATE_SCHEDULED,
+			sign: 1,
+		},
+		{
+			name:        "succeeded not comparable to failed",
+			s1:          enumsspb.CALLBACK_STATE_SUCCEEDED,
+			s2:          enumsspb.CALLBACK_STATE_FAILED,
+			expectError: true,
+		},
+		{
+			name: "backing off < failed",
+			s1:   enumsspb.CALLBACK_STATE_BACKING_OFF,
+			s2:   enumsspb.CALLBACK_STATE_FAILED,
+			sign: 1,
+		},
+		{
+			name: "backing off > scheduled",
+			s1:   enumsspb.CALLBACK_STATE_BACKING_OFF,
+			s2:   enumsspb.CALLBACK_STATE_SCHEDULED,
+			sign: -1,
+		},
+		{
+			name:      "backing off < scheduled with greater attempt",
+			s1:        enumsspb.CALLBACK_STATE_BACKING_OFF,
+			s2:        enumsspb.CALLBACK_STATE_SCHEDULED,
+			attempts2: 1,
+			sign:      1,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			s1 := callbacks.Callback{
+				CallbackInfo: &persistencespb.CallbackInfo{
+					State:   tc.s1,
+					Attempt: tc.attempts1,
+				},
+			}
+			s2 := callbacks.Callback{
+				CallbackInfo: &persistencespb.CallbackInfo{
+					State:   tc.s2,
+					Attempt: tc.attempts2,
+				},
+			}
+			res, err := def.CompareState(s1, s2)
+			if tc.expectError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if tc.sign == 0 {
+				require.Equal(t, 0, res)
+			} else if tc.sign > 0 {
+				require.Greater(t, res, 0)
+			} else {
+				require.Greater(t, 0, res)
+			}
+		})
+	}
 }

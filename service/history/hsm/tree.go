@@ -64,13 +64,11 @@ type StateMachineDefinition interface {
 	Serialize(any) ([]byte, error)
 	// Deserialize a state machine from bytes.
 	Deserialize([]byte) (any, error)
-	// CompareState compares two state objects.
-	// It should return 0 if the states are equal,
-	// 1 if the first state is considered newer,
-	// -1 if the second state is considered newer.
-	// TODO: Remove this method and implementations once transition history is fully implemented.
-	// For now, we have to rely on each component to tell the framework which state is newer and
-	// if sync state can overwrite the states in the standby cluster.
+	// CompareState compares two state objects. It should return 0 if the states are equal, a positive number if the
+	// first state is considered newer, a negative number if the second state is considered newer.
+	// TODO: Remove this method and implementations once transition history is fully implemented. For now, we have to
+	// rely on each component to tell the framework which state is newer and if sync state can overwrite the states in
+	// the standby cluster.
 	CompareState(any, any) (int, error)
 }
 
