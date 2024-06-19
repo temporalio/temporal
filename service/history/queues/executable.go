@@ -687,11 +687,11 @@ func (e *executableImpl) GetDestination() string {
 }
 
 // StateMachineTaskType returns the embedded task's state machine task type if it exists. Defaults to 0.
-func (e *executableImpl) StateMachineTaskType() int32 {
+func (e *executableImpl) StateMachineTaskType() string {
 	if t, ok := e.Task.(tasks.HasStateMachineTaskType); ok {
 		return t.StateMachineTaskType()
 	}
-	return 0
+	return ""
 }
 
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
@@ -801,15 +801,20 @@ func EstimateTaskMetricTag(
 type CircuitBreakerExecutable struct {
 	Executable
 	cb circuitbreaker.TwoStepCircuitBreaker
+
+	metricsHandler metrics.Handler
 }
 
 func NewCircuitBreakerExecutable(
 	e Executable,
 	cb circuitbreaker.TwoStepCircuitBreaker,
+	metricsHandler metrics.Handler,
 ) *CircuitBreakerExecutable {
 	return &CircuitBreakerExecutable{
 		Executable: e,
 		cb:         cb,
+
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -818,6 +823,7 @@ func NewCircuitBreakerExecutable(
 func (e *CircuitBreakerExecutable) Execute() error {
 	doneCb, err := e.cb.Allow()
 	if err != nil {
+		metrics.CircuitBreakerExecutableBlocked.With(e.metricsHandler).Record(1)
 		return err
 	}
 

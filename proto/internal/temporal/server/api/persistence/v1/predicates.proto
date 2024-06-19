@@ -39,7 +39,7 @@ message Predicate {
         NamespaceIdPredicateAttributes namespace_id_predicate_attributes = 7;
         TaskTypePredicateAttributes task_type_predicate_attributes = 8;
         DestinationPredicateAttributes destination_predicate_attributes = 9;
-        StateMachineTaskTypePredicateAttributes state_machine_task_type_predicate_attributes = 10;
+        OutboundTaskGroupPredicateAttributes outbound_task_group_predicate_attributes = 10;
     }
 }
 
@@ -73,7 +73,7 @@ message DestinationPredicateAttributes {
     repeated string destinations = 1;
 }
 
-message StateMachineTaskTypePredicateAttributes {
-    repeated int32 task_types = 1;
+message OutboundTaskGroupPredicateAttributes {
+    repeated string groups = 1;
 }
 

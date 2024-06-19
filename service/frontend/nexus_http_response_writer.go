@@ -20,62 +20,48 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package hsmtest
+package frontend
 
 import (
-	"encoding/json"
-	"fmt"
-
-	"go.temporal.io/server/service/history/hsm"
+	"net/http"
 )
 
-const TaskType = "test-task-type-name"
-
-var (
-	errInvalidTaskType = fmt.Errorf("invalid task type")
+const (
+	// The Failure-Source header is used to indicate from where the Nexus failure originated.
+	nexusFailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
+	// failureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
+	failureSourceWorker = "worker"
 )
 
-type Task struct {
-	kind         hsm.TaskKind
-	IsConcurrent bool
+// nexusHTTPResponseWriter is a wrapper for http.ResponseWriter that appends headers set on a nexusContext
+// before writing any response.
+type nexusHTTPResponseWriter struct {
+	writer http.ResponseWriter
+	nc     *nexusContext
 }
 
-func NewTask(
-	kind hsm.TaskKind,
-	concurrent bool,
-) *Task {
-	return &Task{
-		kind:         kind,
-		IsConcurrent: concurrent,
+func newNexusHTTPResponseWriter(writer http.ResponseWriter, nc *nexusContext) http.ResponseWriter {
+	return &nexusHTTPResponseWriter{
+		writer: writer,
+		nc:     nc,
 	}
 }
 
-func (t *Task) Type() string {
-	return TaskType
+func (w *nexusHTTPResponseWriter) Header() http.Header {
+	return w.writer.Header()
 }
 
-func (t *Task) Kind() hsm.TaskKind {
-	return t.kind
+func (w *nexusHTTPResponseWriter) Write(data []byte) (int, error) {
+	return w.writer.Write(data)
 }
 
-func (t *Task) Concurrent() bool {
-	return t.IsConcurrent
-}
-
-type TaskSerializer struct{}
-
-func (s TaskSerializer) Serialize(t hsm.Task) ([]byte, error) {
-	if t.Type() != TaskType {
-		return nil, errInvalidTaskType
+func (w *nexusHTTPResponseWriter) WriteHeader(statusCode int) {
+	h := w.writer.Header()
+	for key, val := range w.nc.responseHeaders {
+		if val != "" {
+			h.Set(key, val)
+		}
 	}
-	return json.Marshal(t)
-}
 
-func (s TaskSerializer) Deserialize(b []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	var t Task
-	if err := json.Unmarshal(b, &t); err != nil {
-		return nil, err
-	}
-	t.kind = kind
-	return &t, nil
+	w.writer.WriteHeader(statusCode)
 }

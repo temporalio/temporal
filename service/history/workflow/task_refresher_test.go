@@ -99,8 +99,8 @@ func (s *taskRefresherSuite) SetupTest() {
 
 func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 
-	stateMachineDef := hsmtest.NewDefinition(10)
-	err := s.stateMachineRegistry.RegisterTaskSerializer(hsmtest.TaskTypeID, hsmtest.TaskSerializer{})
+	stateMachineDef := hsmtest.NewDefinition("test")
+	err := s.stateMachineRegistry.RegisterTaskSerializer(hsmtest.TaskType, hsmtest.TaskSerializer{})
 	s.NoError(err)
 	err = s.stateMachineRegistry.RegisterMachine(stateMachineDef)
 	s.NoError(err)
@@ -111,11 +111,11 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	}
 
 	hsmRoot := s.mutableState.HSM()
-	child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
+	child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
 	s.NoError(err)
-	_, err = child1.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_1_1"}, hsmtest.NewData(hsmtest.State2))
+	_, err = child1.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1_1"}, hsmtest.NewData(hsmtest.State2))
 	s.NoError(err)
-	_, err = hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type().ID, ID: "child_2"}, hsmtest.NewData(hsmtest.State3))
+	_, err = hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_2"}, hsmtest.NewData(hsmtest.State3))
 	s.NoError(err)
 	// Clear the dirty flag so we can test it later.
 	hsmRoot.ClearTransactionState()
