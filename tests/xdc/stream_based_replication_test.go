@@ -169,6 +169,18 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 ) []*commonpb.WorkflowExecution {
 	executions := []*commonpb.WorkflowExecution{}
 	s.generator.Reset()
+	isCloseEvent := func(event *historypb.HistoryEvent) bool {
+		eventType := event.GetEventType()
+		if eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
+			return true
+		}
+		return false
+	}
 	var runID string
 	for _, version := range versions {
 		workflowID := "xdc-stream-replication-test" + uuid.New()
@@ -184,12 +196,8 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 			for _, event := range events {
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
-			lastEventType := historyEvents.Events[len(historyEvents.Events)-1].GetEventType()
-			switch lastEventType {
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+			if isCloseEvent(historyEvents.Events[len(historyEvents.Events)-1]) {
 				break ImportLoop
-			default:
 			}
 			historyBatch = append(historyBatch, historyEvents)
 		}
