@@ -68,6 +68,8 @@ var (
 	ErrActivityTaskNotCancelRequested = serviceerror.NewInvalidArgument("unable to mark activity as canceled without activity being request canceled first")
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
 	ErrWorkflowCompleted = serviceerror.NewNotFound("workflow execution already completed")
+	// ErrWorkflowZombie is the error to indicate workflow execution is in zombie state and cannot be updated
+	ErrWorkflowZombie = serviceerror.NewNotFound("workflow execution is in zombie state cannot be updated")
 	// ErrWorkflowExecutionNotFound is the error to indicate workflow execution does not exist
 	ErrWorkflowExecutionNotFound = serviceerror.NewNotFound("workflow execution not found")
 	// ErrWorkflowParent is the error to parent execution is given and mismatch

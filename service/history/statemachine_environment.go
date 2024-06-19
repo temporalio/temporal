@@ -315,9 +315,26 @@ func (e *stateMachineEnvironment) getValidatedMutableState(
 	return wfCtx, release, ms, nil
 }
 
+func (e *stateMachineEnvironment) validateNotZombieWorkflow(
+	ms workflow.MutableState,
+	accessType hsm.AccessType,
+) error {
+	// need to specifically check for zombie workflows here instead of workflow running
+	// or not since zombie workflows are considered as not running but closed workflow
+	// can still be updated
+	if accessType == hsm.AccessWrite &&
+		ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return consts.ErrWorkflowZombie
+	}
+	return nil
+}
+
 func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
 	wfCtx, release, ms, err := e.getValidatedMutableState(
 		ctx, ref.WorkflowKey, func(ms workflow.MutableState, potentialStaleState bool) error {
+			if err := e.validateNotZombieWorkflow(ms, accessType); err != nil {
+				return err
+			}
 			return e.validateStateMachineRef(ms, ref, potentialStaleState)
 		},
 	)
