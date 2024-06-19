@@ -29,15 +29,9 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-var (
-	TaskTypeTimer = hsm.TaskType{
-		ID:   1,
-		Name: "dummy.Immediate",
-	}
-	TaskTypeImmediate = hsm.TaskType{
-		ID:   2,
-		Name: "dummy.Timer",
-	}
+const (
+	TaskTypeTimer     = "dummy.Immediate"
+	TaskTypeImmediate = "dummy.Timer"
 )
 
 type ImmediateTask struct {
@@ -46,7 +40,7 @@ type ImmediateTask struct {
 
 var _ hsm.Task = ImmediateTask{}
 
-func (ImmediateTask) Type() hsm.TaskType {
+func (ImmediateTask) Type() string {
 	return TaskTypeImmediate
 }
 
@@ -77,7 +71,7 @@ type TimerTask struct {
 
 var _ hsm.Task = TimerTask{}
 
-func (TimerTask) Type() hsm.TaskType {
+func (TimerTask) Type() string {
 	return TaskTypeTimer
 }
 
@@ -104,10 +98,10 @@ func (TimerTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {
 	if err := reg.RegisterTaskSerializer(
-		TaskTypeImmediate.ID,
+		TaskTypeImmediate,
 		ImmediateTaskSerializer{},
 	); err != nil {
 		return err
 	}
-	return reg.RegisterTaskSerializer(TaskTypeTimer.ID, TimerTaskSerializer{})
+	return reg.RegisterTaskSerializer(TaskTypeTimer, TimerTaskSerializer{})
 }

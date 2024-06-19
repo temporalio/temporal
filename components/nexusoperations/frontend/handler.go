@@ -234,7 +234,9 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
-	forwardReq.Header = r.HTTPRequest.Header.Clone()
+	if r.HTTPRequest.Header != nil {
+		forwardReq.Header = r.HTTPRequest.Header.Clone()
+	}
 	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
 
 	resp, err := client.Do(forwardReq)
@@ -265,10 +267,17 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
-	return &nexus.HandlerError{
+	handlerErr := &nexus.HandlerError{
 		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
 		Failure: &failure,
 	}
+
+	if handlerErr.Type == nexus.HandlerErrorTypeInternal && resp.StatusCode != http.StatusInternalServerError {
+		h.Logger.Warn("received unknown status code on Nexus client unexpected response error", tag.Value(resp.StatusCode))
+		handlerErr.Failure.Message = "internal error"
+	}
+
+	return handlerErr
 }
 
 // readAndReplaceBody reads the response body in its entirety and closes it, and then replaces the original response
@@ -299,6 +308,7 @@ type requestContext struct {
 	cleanupFunctions              []func(error)
 	requestStartTime              time.Time
 	outcomeTag                    metrics.Tag
+	forwarded                     bool
 }
 
 func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {
@@ -335,7 +345,11 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 		*errPtr = err
 	}
 	if *errPtr == nil {
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
+		if c.forwarded {
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarded"))
+		} else {
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
+		}
 	} else if c.outcomeTag != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
 	} else {
@@ -404,9 +418,9 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 		notActiveErr := serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
 		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header) {
 			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarded"))
+			c.forwarded = true
 			var forwardStartTime time.Time
-			c.metricsHandlerForInterceptors, forwardStartTime = c.RedirectionInterceptor.BeforeCall(apiName)
+			c.metricsHandlerForInterceptors, forwardStartTime = c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 				c.RedirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})

@@ -194,25 +194,6 @@ func AdaptAuthorizeError(err error) error {
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
 }
 
-func HandlerErrorFromClientError(err error) error {
-	var unexpectedRespErr *nexus.UnexpectedResponseError
-	if errors.As(err, &unexpectedRespErr) {
-		failure := unexpectedRespErr.Failure
-		if unexpectedRespErr.Failure == nil {
-			failure = &nexus.Failure{
-				Message: unexpectedRespErr.Error(),
-			}
-		}
-		return &nexus.HandlerError{
-			Type:    HandlerErrorTypeFromHTTPStatus(unexpectedRespErr.Response.StatusCode),
-			Failure: failure,
-		}
-	}
-
-	// Let the nexus SDK handle this for us (log and convert to an internal error).
-	return err
-}
-
 func HandlerErrorTypeFromHTTPStatus(statusCode int) nexus.HandlerErrorType {
 	switch statusCode {
 	case http.StatusBadRequest:
@@ -231,8 +212,6 @@ func HandlerErrorTypeFromHTTPStatus(statusCode int) nexus.HandlerErrorType {
 		return nexus.HandlerErrorTypeNotImplemented
 	case http.StatusServiceUnavailable:
 		return nexus.HandlerErrorTypeUnavailable
-	case nexus.StatusDownstreamError:
-		return nexus.HandlerErrorTypeDownstreamError
 	case nexus.StatusDownstreamTimeout:
 		return nexus.HandlerErrorTypeDownstreamTimeout
 	default:

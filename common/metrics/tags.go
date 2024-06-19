@@ -25,10 +25,12 @@
 package metrics
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/locks"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
@@ -92,6 +94,10 @@ func (v *tagImpl) Key() string {
 
 func (v *tagImpl) Value() string {
 	return v.value
+}
+
+func (v *tagImpl) String() string {
+	return fmt.Sprintf("tag{key: %q, value: %q}", v.key, v.value)
 }
 
 // NamespaceTag returns a new namespace tag. For timers, this also ensures that we
@@ -308,6 +314,10 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
 }
 
+func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
+	return &tagImpl{key: resourceExhaustedScopeTag, value: scope.String()}
+}
+
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return &tagImpl{key: serviceName, value: string(value)}
 }
@@ -326,6 +336,10 @@ func StringTag(key string, value string) Tag {
 
 func CacheTypeTag(value string) Tag {
 	return &tagImpl{key: CacheTypeTagName, value: value}
+}
+
+func PriorityTag(value locks.Priority) Tag {
+	return &tagImpl{key: PriorityTagName, value: strconv.Itoa(int(value))}
 }
 
 // ReasonString is just a string but the special type is defined here to remind callers of ReasonTag to limit the

@@ -176,7 +176,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
@@ -277,7 +277,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
@@ -335,9 +335,6 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 }
 
 func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyToActive() {
-	// TODO: enable test once Nexus replication work is complete
-	s.T().SkipNow()
-
 	ctx := tests.NewContext()
 	ns := s.createNexusRequestForwardingNamespace()
 	taskQueue := fmt.Sprintf("%v-%v", "test-task-queue", uuid.New())
@@ -452,17 +449,6 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 
 	// Fail over to switch active and passive clusters.
 	s.failoverNamespace(ctx, ns)
-
-	// TODO: remove once replication changes are merged
-	// Manipulate the token to fix namespace failover version.
-	gen := &cnexus.CallbackTokenGenerator{}
-	decodedToken, err := cnexus.DecodeCallbackToken(callbackToken)
-	s.NoError(err)
-	completionToken, err := gen.DecodeCompletion(decodedToken)
-	s.NoError(err)
-	completionToken.Ref.MutableStateNamespaceFailoverVersion++
-	callbackToken, err = gen.Tokenize(completionToken)
-	s.NoError(err)
 
 	// Send a valid - successful completion request to now standby cluster.
 	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
