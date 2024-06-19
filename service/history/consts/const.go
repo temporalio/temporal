@@ -26,6 +26,7 @@ package consts
 
 import (
 	"errors"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -69,7 +70,7 @@ var (
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
 	ErrWorkflowCompleted = serviceerror.NewNotFound("workflow execution already completed")
 	// ErrWorkflowZombie is the error to indicate workflow execution is in zombie state and cannot be updated
-	ErrWorkflowZombie = serviceerror.NewNotFound("workflow execution is in zombie state cannot be updated")
+	ErrWorkflowZombie = fmt.Errorf("%w: zombie workflow cannot be updated", ErrStaleReference)
 	// ErrWorkflowExecutionNotFound is the error to indicate workflow execution does not exist
 	ErrWorkflowExecutionNotFound = serviceerror.NewNotFound("workflow execution not found")
 	// ErrWorkflowParent is the error to parent execution is given and mismatch
