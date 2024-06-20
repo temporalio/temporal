@@ -1828,6 +1828,40 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	s.Equal(2, len(info.StateMachineTimers))
 }
 
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_ZombieWorkflow() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	startedEvent, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId:  s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{},
+		},
+	)
+	s.Nil(err)
+	mutableState.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+
+	timerTask := &tasks.StateMachineTimerTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: s.now,
+		TaskID:              s.mustGenerateTaskID(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.ErrorIs(resp.ExecutionErr, consts.ErrWorkflowZombie)
+}
+
 func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 	ms workflow.MutableState,
 	lastEventID int64,
