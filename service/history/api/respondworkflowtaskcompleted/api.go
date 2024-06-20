@@ -176,12 +176,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" && !ms.IsStickyTaskQueueSet() {
+	assignedBuildId := ms.GetAssignedBuildId()
+	wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
+	if assignedBuildId != "" && !ms.IsStickyTaskQueueSet() {
 		// Worker versioning is used, make sure the task was completed by the right build ID, unless we're using a
 		// sticky queue in which case Matching will not send the build ID until old versioning is cleaned up
 		// TODO: remove !ms.IsStickyTaskQueueSet() from above condition after old WV cleanup [cleanup-old-wv]
 		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
-		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 		if wftCompletedBuildId != wftStartedBuildId {
 			workflowLease.GetReleaseFn()(nil)
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId))
@@ -278,7 +279,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		metrics.CompleteWorkflowTaskWithStickyEnabledCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-		ms.SetStickyTaskQueue(request.StickyAttributes.WorkerTaskQueue.GetName(), request.StickyAttributes.GetScheduleToStartTimeout())
+		if assignedBuildId == "" || assignedBuildId == wftCompletedBuildId {
+			// For versioned workflows, only set sticky queue if the WFT is completed by the WF's current build ID.
+			// It is possible that the WF has been redirected to another build ID since this WFT started, in that case
+			// we should not set sticky queue of the old build ID and keep the normal queue to let Matching send the
+			// next WFT to the right build ID.
+			ms.SetStickyTaskQueue(request.StickyAttributes.WorkerTaskQueue.GetName(), request.StickyAttributes.GetScheduleToStartTimeout())
+		}
 	}
 
 	var (

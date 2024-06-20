@@ -279,19 +279,34 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		}
 
 		versioningData := userData.GetData().GetVersioningData()
+		buildId := pollMetadata.workerVersionCapabilities.GetBuildId()
+		if buildId == "" {
+			return nil, false, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
+		}
 
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// In the sticky case we always use the unversioned queue
 			// For the old API, we may kick off this worker if there's a newer one.
-			versionSetUsed, err = checkVersionForStickyPoll(versioningData, pollMetadata.workerVersionCapabilities)
+			oldVersioning, err := checkVersionForStickyPoll(versioningData, pollMetadata.workerVersionCapabilities)
+			if err != nil {
+				return nil, false, err
+			}
+
+			if !oldVersioning {
+				activeRules := getActiveRedirectRules(versioningData.GetRedirectRules())
+				terminalBuildId := findTerminalBuildId(buildId, activeRules)
+				if terminalBuildId != buildId {
+					return nil, false, serviceerror.NewNewerBuildExists(terminalBuildId)
+				}
+			}
+			// We set return true for all sticky tasks until old versioning is cleaned up.
+			// this value is used by matching_engine for deciding if it should pass the worker build ID
+			// to history in the recordStart call or not. We don't need to pass build ID for sticky
+			// tasks as no redirect happen in a sticky queue.
+			versionSetUsed = true
 		} else {
 			// default queue should stay alive even if requests go to other queues
 			pm.defaultQueue.MarkAlive()
-
-			buildId := pollMetadata.workerVersionCapabilities.GetBuildId()
-			if buildId == "" {
-				return nil, false, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
-			}
 
 			var versionSet string
 			if versioningData.GetVersionSets() != nil {

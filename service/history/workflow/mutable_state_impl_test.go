@@ -407,6 +407,28 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
 }
 
+func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	sticky := &taskqueuepb.TaskQueue{Name: "sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		sticky,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
+	s.ErrorAs(err, &expectedErr)
+	s.Equal("b1", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+}
+
 // creates a mutable state with first WFT completed on Build ID "b1"
 func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *taskqueuepb.TaskQueue) {
 	version := int64(12)
