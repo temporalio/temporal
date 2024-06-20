@@ -383,7 +383,7 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 				Ref: &persistence.StateMachineRef{
 					Path: []*persistence.StateMachineKey{
 						{
-							Type: rand.Int31(),
+							Type: "some-type",
 							Id:   "some-id",
 						},
 					},
@@ -391,7 +391,7 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 					MutableStateTransitionCount:          rand.Int63(),
 					MachineTransitionCount:               rand.Int63(),
 				},
-				Type: rand.Int31(),
+				Type: "some-type",
 				Data: []byte{},
 			},
 		},

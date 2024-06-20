@@ -33,8 +33,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/service/history/shard"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -236,9 +234,6 @@ func (e *ExecutableTaskImpl) Reschedule() {
 }
 
 func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
-	if shard.IsShardOwnershipLostError(err) {
-		return false
-	}
 	switch err.(type) {
 	case *serviceerror.InvalidArgument, *serviceerror.DataLoss:
 		return false
@@ -283,11 +278,13 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 			now.Sub(e.taskCreationTime),
 			metrics.OperationTag(e.metricsTag),
 			nsTag,
+			metrics.SourceClusterTag(e.sourceClusterName),
 		)
 		metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
 			e.taskReceivedTime.Sub(e.taskCreationTime),
 			metrics.OperationTag(e.metricsTag),
 			nsTag,
+			metrics.SourceClusterTag(e.sourceClusterName),
 		)
 	}
 	// TODO consider emit attempt metrics

@@ -33,19 +33,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/namespace"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/tests"
 )
@@ -82,7 +79,7 @@ func (s *NexusRequestForwardingSuite) TearDownSuite() {
 // Only tests dispatch by namespace+task_queue.
 // TODO: Add test cases for dispatch by endpoint ID once endpoints support replication.
 func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToActive() {
-	ns := s.createNexusRequestForwardingNamespace()
+	ns := s.createGlobalNamespace()
 
 	testCases := []struct {
 		name      string
@@ -156,7 +153,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+				require.Equal(t, "worker", unexpectedError.Response.Header.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
@@ -218,7 +216,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 // Only tests dispatch by namespace+task_queue.
 // TODO: Add test cases for dispatch by endpoint ID once endpoints support replication.
 func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToActive() {
-	ns := s.createNexusRequestForwardingNamespace()
+	ns := s.createGlobalNamespace()
 
 	testCases := []struct {
 		name      string
@@ -257,7 +255,8 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+				require.Equal(t, "worker", unexpectedError.Response.Header.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
@@ -348,29 +347,6 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, front
 	}
 
 	s.NoError(err)
-}
-
-func (s *NexusRequestForwardingSuite) createNexusRequestForwardingNamespace() string {
-	ctx := tests.NewContext()
-	ns := fmt.Sprintf("%v-%v", "test-namespace", uuid.New())
-
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        ns,
-		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
-	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, regReq)
-	s.NoError(err)
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		// Wait for namespace record to be replicated and loaded into memory.
-		_, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
-		assert.NoError(t, err)
-	}, 15*time.Second, 500*time.Millisecond)
-
-	return ns
 }
 
 func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest.CapturedRecording, ns string, method string, expectedOutcome string) {

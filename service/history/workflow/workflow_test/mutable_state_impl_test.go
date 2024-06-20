@@ -152,7 +152,15 @@ func (c *mutationTestCase) startWFT(
 		t.Fatal(err)
 	}
 
-	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "", nil, nil)
+	_, wft, err = ms.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		wft.RequestID,
+		wft.TaskQueue,
+		"",
+		nil,
+		nil,
+		false,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,6 +231,7 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 	clusterMetadata.EXPECT().ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(),
 		nsEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	clusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
 	executionManager := shardContext.Resource.ExecutionMgr
 	executionManager.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
@@ -457,6 +466,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				"---",
 				nil,
 				nil,
+				false,
 			)
 			require.NoError(t, err)
 			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{

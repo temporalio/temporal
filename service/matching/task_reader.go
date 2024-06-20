@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -160,7 +161,7 @@ dispatchLoop:
 					// Don't log here if encounters missing user data error when dispatch a versioned task.
 					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
-				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
+				util.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
 			return ctx.Err()
 		case <-ctx.Done():
@@ -202,7 +203,7 @@ Loop:
 				if common.IsResourceExhausted(err) {
 					tr.reEnqueueAfterDelay(taskReaderThrottleRetryDelay)
 				} else {
-					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff())
+					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff(err))
 				}
 				continue Loop
 			}
