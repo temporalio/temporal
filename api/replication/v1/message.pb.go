@@ -648,6 +648,7 @@ func (x *WorkflowReplicationMessages) GetPriority() v1.TaskPriority {
 	return v1.TaskPriority(0)
 }
 
+// TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic
 type ReplicationTaskInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
