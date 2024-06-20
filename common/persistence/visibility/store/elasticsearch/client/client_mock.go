@@ -656,51 +656,6 @@ func (m *MockIntegrationTestsClient) EXPECT() *MockIntegrationTestsClientMockRec
 	return m.recorder
 }
 
-// CreateIndex mocks base method.
-func (m *MockIntegrationTestsClient) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateIndex", ctx, index, body)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateIndex indicates an expected call of CreateIndex.
-func (mr *MockIntegrationTestsClientMockRecorder) CreateIndex(ctx, index, body interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIndex", reflect.TypeOf((*MockIntegrationTestsClient)(nil).CreateIndex), ctx, index, body)
-}
-
-// DeleteIndex mocks base method.
-func (m *MockIntegrationTestsClient) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteIndex", ctx, indexName)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DeleteIndex indicates an expected call of DeleteIndex.
-func (mr *MockIntegrationTestsClientMockRecorder) DeleteIndex(ctx, indexName interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteIndex", reflect.TypeOf((*MockIntegrationTestsClient)(nil).DeleteIndex), ctx, indexName)
-}
-
-// IndexExists mocks base method.
-func (m *MockIntegrationTestsClient) IndexExists(ctx context.Context, indexName string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IndexExists", ctx, indexName)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IndexExists indicates an expected call of IndexExists.
-func (mr *MockIntegrationTestsClientMockRecorder) IndexExists(ctx, indexName interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexExists", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IndexExists), ctx, indexName)
-}
-
 // IndexGetSettings mocks base method.
 func (m *MockIntegrationTestsClient) IndexGetSettings(ctx context.Context, indexName string) (map[string]*v7.IndicesGetSettingsResponse, error) {
 	m.ctrl.T.Helper()

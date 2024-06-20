@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -329,9 +330,12 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		return err
 	}
 
-	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
-	if err != nil {
-		return err
+	var wfCloseTime *time.Time
+	if mutableState != nil && !mutableState.IsWorkflowExecutionRunning() {
+		*wfCloseTime, err = mutableState.GetWorkflowCloseTime(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	release(nil)
@@ -341,7 +345,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
-		CloseTime:   &wfCloseTime,
+		CloseTime:   wfCloseTime,
 	}
 	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task
