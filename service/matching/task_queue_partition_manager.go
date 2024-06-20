@@ -299,8 +299,8 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 					return nil, false, serviceerror.NewNewerBuildExists(terminalBuildId)
 				}
 			}
-			// We set return true for all sticky tasks until old versioning is cleaned up.
-			// this value is used by matching_engine for deciding if it should pass the worker build ID
+			// We set versionSetUsed to true for all sticky tasks until old versioning is cleaned up.
+			// this value is used by matching_engine to decide if it should pass the worker build ID
 			// to history in the recordStart call or not. We don't need to pass build ID for sticky
 			// tasks as no redirect happen in a sticky queue.
 			versionSetUsed = true
