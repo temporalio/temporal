@@ -44,7 +44,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -85,14 +84,6 @@ func (s *NexusRequestForwardingSuite) SetupSuite() {
 
 func (s *NexusRequestForwardingSuite) SetupTest() {
 	s.setupTest()
-	s.cluster1.GetHost().OverrideDCValue(
-		s.T(),
-		nexusoperations.CallbackURLTemplate,
-		"http://"+s.cluster1.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
-	s.cluster2.GetHost().OverrideDCValue(
-		s.T(),
-		nexusoperations.CallbackURLTemplate,
-		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 }
 
 func (s *NexusRequestForwardingSuite) TearDownSuite() {
@@ -335,6 +326,16 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 }
 
 func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyToActive() {
+	// Override templates to always return passive cluster in callback URL
+	s.cluster1.GetHost().OverrideDCValue(
+		s.T(),
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+	s.cluster2.GetHost().OverrideDCValue(
+		s.T(),
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+
 	ctx := tests.NewContext()
 	ns := s.createNexusRequestForwardingNamespace()
 	taskQueue := fmt.Sprintf("%v-%v", "test-task-queue", uuid.New())
@@ -447,15 +448,12 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 		return err == nil && len(resp.PendingNexusOperations) > 0
 	}, 5*time.Second, 500*time.Millisecond)
 
-	// Fail over to switch active and passive clusters.
-	s.failoverNamespace(ctx, ns)
-
-	// Send a valid - successful completion request to now standby cluster.
+	// Send a valid - successful completion request to standby cluster.
 	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: cnexus.PayloadSerializer,
 	})
 	s.NoError(err)
-	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), s.cluster1, publicCallbackUrl, completion, callbackToken)
+	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), s.cluster2, publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusOK, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "request_forwarded"})
@@ -476,8 +474,8 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "error_not_found"})
 
-	// Poll now active cluster and verify the completion is recorded and triggers workflow progress.
-	pollResp, err = feClient2.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	// Poll active cluster and verify the completion is recorded and triggers workflow progress.
+	pollResp, err = feClient1.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: ns,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -491,7 +489,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	})
 	s.Greater(completedEventIdx, 0)
 
-	_, err = feClient2.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = feClient1.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -616,20 +614,4 @@ func (s *NexusRequestForwardingSuite) mustToPayload(v any) *commonpb.Payload {
 	payload, err := conv.ToPayload(v)
 	s.NoError(err)
 	return payload
-}
-
-func (s *NexusRequestForwardingSuite) failoverNamespace(ctx context.Context, ns string) {
-	_, err := s.cluster1.GetFrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: ns,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			ActiveClusterName: s.clusterNames[1],
-		},
-	})
-	s.NoError(err)
-
-	// Wait until failover is complete
-	s.Eventually(func() bool {
-		cached, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
-		return err == nil && cached.ActiveInCluster(s.clusterNames[1])
-	}, 10*time.Second, 1*time.Second)
 }

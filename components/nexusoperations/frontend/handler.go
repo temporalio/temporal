@@ -251,7 +251,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
-	if resp.StatusCode < 300 {
+	if resp.StatusCode == http.StatusOK {
 		return nil
 	}
 
@@ -415,16 +415,15 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 
 	// Redirect if current cluster is passive for this namespace.
 	if !c.namespace.ActiveInCluster(c.ClusterMetadata.GetCurrentClusterName()) {
-		notActiveErr := serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
 		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header) {
-			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			c.forwarded = true
 			var forwardStartTime time.Time
 			c.metricsHandlerForInterceptors, forwardStartTime = c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 				c.RedirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
-			return notActiveErr
+			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
+			return serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
 		}
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_inactive_forwarding_disabled"))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
