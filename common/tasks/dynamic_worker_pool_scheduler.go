@@ -116,6 +116,13 @@ func (pool *DynamicWorkerPoolScheduler) TrySubmit(task Runnable) bool {
 		enqueued := pool.tryEnqueueLocked(task)
 		pool.mu.Unlock()
 		pool.wg.Done()
+		if enqueued {
+			metrics.DynamicWorkerPoolSchedulerEnqueuedTasks.With(pool.metricsHandler).
+				Record(1)
+		} else {
+			metrics.DynamicWorkerPoolSchedulerRejectedTasks.With(pool.metricsHandler).
+				Record(1)
+		}
 		return enqueued
 	}
 	pool.runningGoroutines++
@@ -140,6 +147,8 @@ func (pool *DynamicWorkerPoolScheduler) executeUntilBufferEmpty(task Runnable) {
 		}
 		task = nextTask
 		pool.mu.Unlock()
+		metrics.DynamicWorkerPoolSchedulerDequeuedTasks.With(pool.metricsHandler).
+			Record(1)
 	}
 }
 
