@@ -336,7 +336,7 @@ BackfillLoop:
 
 		if historyBlob.nodeID <= lastBatchNodeID {
 			// The history batch already in DB.
-			if len(sortedAncestors) > 0 {
+			if len(sortedAncestors) > sortedAncestorsIdx {
 				currentAncestor := sortedAncestors[sortedAncestorsIdx]
 
 				if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
