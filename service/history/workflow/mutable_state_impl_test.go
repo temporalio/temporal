@@ -634,8 +634,8 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}
 	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Zero(sanitizedMutableState.executionInfo.TaskGenerationShardClockTimestamp)
-	err = mutableState.HSM().Walk(func(node *hsm.Node) error {
-		s.Equal(1, node.InternalRepr().TransitionCount)
+	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
+		s.Equal(int64(1), node.InternalRepr().TransitionCount)
 		return nil
 	})
 	s.NoError(err)
