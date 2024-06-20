@@ -127,6 +127,8 @@ var (
 	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
 	// ErrMissingSignalInitiatedEvent indicates missing workflow signal initiated event
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
+	// ErrMissingCloseTimeInfo indicates missing closeTime info (closeTime is nil)
+	ErrMissingCloseTimeInfo = serviceerror.NewInternal("unable to get close time info")
 
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
@@ -1363,7 +1365,7 @@ func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time
 		return completionEvent.GetEventTime().AsTime(), nil
 	}
 	if ms.executionInfo.CloseTime == nil {
-		return time.Time{}, fmt.Errorf("closeTime is nil for the workflow ID: %v in mutable state", ms.executionInfo.WorkflowId)
+		return time.Time{}, ErrMissingCloseTimeInfo
 	}
 	return ms.executionInfo.CloseTime.AsTime(), nil
 }
