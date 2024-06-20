@@ -171,6 +171,10 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 	if err != nil {
 		return err
 	}
+	// no remote portion to resend
+	if endEventID == localVersionHistory[len(localVersionHistory)-1].EventId+1 {
+		return nil
+	}
 	return r.resendRemoteGeneratedHistoryEvents(
 		ctx,
 		remoteClusterName,
