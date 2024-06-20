@@ -170,6 +170,21 @@ func GetArchivalTaskTypeTagValue(
 	}
 }
 
+func GetOutboundTaskTypeTagValue(task tasks.Task, isActive bool) string {
+	var prefix string
+	if isActive {
+		prefix = "Active"
+	} else {
+		prefix = "Standby"
+	}
+
+	outbound, ok := task.(*tasks.StateMachineOutboundTask)
+	if !ok {
+		return prefix + "UnknownOutbound"
+	}
+	return prefix + "." + outbound.StateMachineTaskType()
+}
+
 func getTaskTypeTagValue(
 	executable Executable,
 	isActive bool,
@@ -190,6 +205,8 @@ func getTaskTypeTagValue(
 		return GetVisibilityTaskTypeTagValue(task)
 	case tasks.CategoryArchival:
 		return GetArchivalTaskTypeTagValue(task)
+	case tasks.CategoryOutbound:
+		return GetOutboundTaskTypeTagValue(task, isActive)
 	default:
 		return task.GetType().String()
 	}
