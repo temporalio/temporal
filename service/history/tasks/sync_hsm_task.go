@@ -36,10 +36,6 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-
-		// TODO: we can probably store last event version history item here.
-		// When converting the task in the source cluster,
-		// if that item is not on the current branch, the task can be dropped.
 	}
 )
 

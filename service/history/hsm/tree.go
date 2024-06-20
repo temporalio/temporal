@@ -46,7 +46,7 @@ var ErrStateMachineAlreadyExists = errors.New("state machine already exists")
 // ErrIncompatibleType is returned when trying to cast a state machine's data to a type that it is incompatible with.
 var ErrIncompatibleType = errors.New("state machine data was cast into an incompatible type")
 
-// ErrInitialTransitionMismatch is returned when the initial failover version or transition count of a node does not match the incoming node upon sync
+// ErrInitialTransitionMismatch is returned when the initial failover version or transition count of a node does not match the incoming node upon sync.
 var ErrInitialTransitionMismatch = errors.New("node initial failover version or transition count mismatch")
 
 // Key is used for looking up a state machine in a [Node].
@@ -384,6 +384,13 @@ func (n *Node) InternalRepr() *persistencespb.StateMachineNode {
 // Sync updates the current node with the incoming node if state in the incoming node is newer.
 // Meant to be used by the framework, **not** by components.
 func (n *Node) Sync(incomingNode *Node) (bool, error) {
+	incomingInternalRepr := incomingNode.InternalRepr()
+
+	if n.persistence.InitialNamespaceFailoverVersion != incomingInternalRepr.InitialNamespaceFailoverVersion ||
+		n.persistence.InitialMutableStateTransitionCount != incomingInternalRepr.InitialMutableStateTransitionCount {
+		return false, ErrInitialTransitionMismatch
+	}
+
 	currentState, err := MachineData[any](n)
 	if err != nil {
 		return false, err
@@ -395,13 +402,6 @@ func (n *Node) Sync(incomingNode *Node) (bool, error) {
 
 	if result, err := n.definition.CompareState(currentState, incomingState); err != nil || result >= 0 {
 		return false, err
-	}
-
-	incomingInternalRepr := incomingNode.InternalRepr()
-
-	if n.persistence.InitialNamespaceFailoverVersion != incomingInternalRepr.InitialNamespaceFailoverVersion ||
-		n.persistence.InitialMutableStateTransitionCount != incomingInternalRepr.InitialMutableStateTransitionCount {
-		return false, ErrInitialTransitionMismatch
 	}
 
 	n.persistence.Data = incomingInternalRepr.Data

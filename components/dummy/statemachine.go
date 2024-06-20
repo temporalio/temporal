@@ -89,7 +89,7 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 }
 
 func (stateMachineDefinition) CompareState(s1, s2 any) (int, error) {
-	// TODO: remove this implementation once transition history is fully implemented
+	// This is just a dummy used in tests, CompareState is not used.
 	return 0, serviceerror.NewUnimplemented("CompareState not implemented for dummy state machine")
 }
 
