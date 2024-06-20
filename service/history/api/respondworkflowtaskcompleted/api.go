@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 
-	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -398,24 +397,22 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
-		var wtFailedEventID int64
-		ms, wtFailedEventID, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
+		ms, _, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
 		wtFailedShouldCreateNewTask = true
 		newMutableState = nil
 
-		if wtFailedCause.workflowFailure != nil {
-			// Flush buffer event before failing the workflow
+		if wtFailedCause.workflowTerminationReason != nil {
+			// Flush buffer event before terminating the workflow
 			ms.FlushBufferedEvents()
 
-			attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
-				Failure: wtFailedCause.workflowFailure,
-			}
-			if _, err := ms.AddFailWorkflowEvent(wtFailedEventID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
+			if err := workflow.TerminateWorkflow(ms, wtFailedCause.workflowTerminationReason.Message, nil,
+				consts.IdentityHistoryService, false); err != nil {
 				return nil, err
 			}
+
 			wtFailedShouldCreateNewTask = false
 		}
 	}
