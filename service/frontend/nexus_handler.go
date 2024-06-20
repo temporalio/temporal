@@ -568,32 +568,13 @@ func handlerErrorFromClientError(err error, logger log.Logger) (string, error) {
 				Message: unexpectedRespErr.Error(),
 			}
 		}
+
 		handlerErr := &nexus.HandlerError{
+			Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(unexpectedRespErr.Response.StatusCode),
 			Failure: failure,
 		}
-
-		switch unexpectedRespErr.Response.StatusCode {
-		case http.StatusBadRequest:
-			handlerErr.Type = nexus.HandlerErrorTypeBadRequest
-		case http.StatusUnauthorized:
-			handlerErr.Type = nexus.HandlerErrorTypeUnauthenticated
-		case http.StatusForbidden:
-			handlerErr.Type = nexus.HandlerErrorTypeUnauthorized
-		case http.StatusNotFound:
-			handlerErr.Type = nexus.HandlerErrorTypeNotFound
-		case http.StatusTooManyRequests:
-			handlerErr.Type = nexus.HandlerErrorTypeResourceExhausted
-		case http.StatusInternalServerError:
-			handlerErr.Type = nexus.HandlerErrorTypeInternal
-		case http.StatusNotImplemented:
-			handlerErr.Type = nexus.HandlerErrorTypeNotImplemented
-		case http.StatusServiceUnavailable:
-			handlerErr.Type = nexus.HandlerErrorTypeUnavailable
-		case nexus.StatusDownstreamTimeout:
-			handlerErr.Type = nexus.HandlerErrorTypeDownstreamTimeout
-		default:
+		if handlerErr.Type == nexus.HandlerErrorTypeInternal && unexpectedRespErr.Response.StatusCode != http.StatusInternalServerError {
 			logger.Warn("received unknown status code on Nexus client unexpected response error", tag.Value(unexpectedRespErr.Response.StatusCode))
-			handlerErr.Type = nexus.HandlerErrorTypeInternal
 			handlerErr.Failure.Message = "internal error"
 		}
 
