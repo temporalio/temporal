@@ -166,9 +166,12 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		request.StateMachineNode.Children,
 		mutableState,
 	)
+	if err != nil {
+		return false, err
+	}
 
 	synced := false
-	incomingHSM.Walk(func(incomingNode *hsm.Node) error {
+	if err := incomingHSM.Walk(func(incomingNode *hsm.Node) error {
 
 		if incomingNode.Parent == nil {
 			// skip root which is the entire mutable state
@@ -196,7 +199,9 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 
 		synced = synced || currentNodeSynced
 		return nil
-	})
+	}); err != nil {
+		return false, err
+	}
 
 	return synced, nil
 }
