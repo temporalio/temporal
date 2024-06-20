@@ -801,15 +801,20 @@ func EstimateTaskMetricTag(
 type CircuitBreakerExecutable struct {
 	Executable
 	cb circuitbreaker.TwoStepCircuitBreaker
+
+	metricsHandler metrics.Handler
 }
 
 func NewCircuitBreakerExecutable(
 	e Executable,
 	cb circuitbreaker.TwoStepCircuitBreaker,
+	metricsHandler metrics.Handler,
 ) *CircuitBreakerExecutable {
 	return &CircuitBreakerExecutable{
 		Executable: e,
 		cb:         cb,
+
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -818,6 +823,7 @@ func NewCircuitBreakerExecutable(
 func (e *CircuitBreakerExecutable) Execute() error {
 	doneCb, err := e.cb.Allow()
 	if err != nil {
+		metrics.CircuitBreakerExecutableBlocked.With(e.metricsHandler).Record(1)
 		return err
 	}
 

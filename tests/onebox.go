@@ -378,6 +378,10 @@ func (c *temporalImpl) WorkerGRPCServiceAddress() string {
 	}
 }
 
+func (c *temporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
+	c.dcClient.OverrideValue(t, setting, value)
+}
+
 func (c *temporalImpl) GetAdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }

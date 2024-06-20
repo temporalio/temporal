@@ -614,7 +614,8 @@ func TestClear(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, err := upd.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
+		_, err := upd.WaitLifecycleStage(
+			context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 2*time.Second)
 		require.Equal(t, update.WorkflowUpdateAbortedErr, err)
 	}()
 
