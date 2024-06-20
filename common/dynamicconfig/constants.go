@@ -1841,6 +1841,12 @@ state. The total size is determined by the sum of the size, in bytes, of each Hi
 		5*time.Minute,
 		`ShardUpdateMinInterval is the minimal time interval which the shard info can be updated`,
 	)
+	ShardFirstUpdateInterval = NewGlobalDurationSetting(
+		"history.shardFirstUpdateInterval",
+		10*time.Second,
+		`ShardFirstUpdateInterval is the time interval after which the first shard info update will happen.
+		It should be smaller than ShardUpdateMinInterval`,
+	)
 	ShardUpdateMinTasksCompleted = NewGlobalIntSetting(
 		"history.shardUpdateMinTasksCompleted",
 		1000,
