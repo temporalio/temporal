@@ -46,6 +46,9 @@ var ErrStateMachineAlreadyExists = errors.New("state machine already exists")
 // ErrIncompatibleType is returned when trying to cast a state machine's data to a type that it is incompatible with.
 var ErrIncompatibleType = errors.New("state machine data was cast into an incompatible type")
 
+// ErrInitialTransitionMismatch is returned when the initial failover version or transition count of a node does not match the incoming node upon sync.
+var ErrInitialTransitionMismatch = errors.New("node initial failover version or transition count mismatch")
+
 // Key is used for looking up a state machine in a [Node].
 type Key struct {
 	// Type of the state machine.
@@ -61,6 +64,14 @@ type StateMachineDefinition interface {
 	Serialize(any) ([]byte, error)
 	// Deserialize a state machine from bytes.
 	Deserialize([]byte) (any, error)
+	// CompareState compares two state objects.
+	// It should return 0 if the states are equal,
+	// 1 if the first state is considered newer,
+	// -1 if the second state is considered newer.
+	// TODO: Remove this method and implementations once transition history is fully implemented.
+	// For now, we have to rely on each component to tell the framework which state is newer and
+	// if sync state can overwrite the states in the standby cluster.
+	CompareState(any, any) (int, error)
 }
 
 // cachedMachine contains deserialized data and state for a state machine in a [Node].
@@ -370,6 +381,54 @@ func (n *Node) InternalRepr() *persistencespb.StateMachineNode {
 	return n.persistence
 }
 
+// Sync updates the current node with the incoming node if state in the incoming node is newer.
+// Meant to be used by the framework, **not** by components.
+func (n *Node) Sync(incomingNode *Node) (bool, error) {
+	incomingInternalRepr := incomingNode.InternalRepr()
+
+	if n.persistence.InitialNamespaceFailoverVersion != incomingInternalRepr.InitialNamespaceFailoverVersion ||
+		n.persistence.InitialMutableStateTransitionCount != incomingInternalRepr.InitialMutableStateTransitionCount {
+		return false, ErrInitialTransitionMismatch
+	}
+
+	currentState, err := MachineData[any](n)
+	if err != nil {
+		return false, err
+	}
+	incomingState, err := MachineData[any](incomingNode)
+	if err != nil {
+		return false, err
+	}
+
+	if result, err := n.definition.CompareState(currentState, incomingState); err != nil || result >= 0 {
+		return false, err
+	}
+
+	n.persistence.Data = incomingInternalRepr.Data
+	// do not sync children, we are just syncing the current node
+	// do not sync transitionCount, that is cluster local information
+
+	// force reload data
+	n.cache.dataLoaded = false
+
+	// reuse MachineTransition for
+	// - marking the node as dirty
+	// - generate transition outputs (tasks)
+	// - update transition count
+	if err = MachineTransition(n, func(taskRegenerator TaskRegenerator) (TransitionOutput, error) {
+		tasks, err := taskRegenerator.RegenerateTasks(n)
+		return TransitionOutput{
+			Tasks: tasks,
+		}, err
+	}); err != nil {
+		return false, err
+	}
+
+	// sync LastUpdateMutableStateTransitionCount last as MachineTransition can't correctly handle it.
+	n.persistence.LastUpdateMutableStateTransitionCount = incomingInternalRepr.LastUpdateMutableStateTransitionCount
+	return true, nil
+}
+
 // MachineTransition runs the given transitionFn on a machine's data for the given key.
 // It updates the state machine's metadata and marks the entry as dirty in the node's cache.
 // If the transition fails, the changes are rolled back and no state is mutated.
@@ -384,7 +443,11 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	prevMSTransitionCount := n.persistence.LastUpdateMutableStateTransitionCount
 	// The transition count for the backend is only incremented before the current transaction is closed but it is
 	// monotonically increasing so we can safely assume that incrementing by 1 here is safe.
-	n.persistence.LastUpdateMutableStateTransitionCount = n.backend.TransitionCount() + 1
+	currentMutableStateTransitionCount := n.backend.TransitionCount()
+	if currentMutableStateTransitionCount != 0 {
+		// only update when transition history is enabled.
+		n.persistence.LastUpdateMutableStateTransitionCount = n.backend.TransitionCount() + 1
+	}
 	// Rollback on error
 	defer func() {
 		if retErr != nil {

@@ -85,6 +85,11 @@ func (stateMachineDefinition) Serialize(any) ([]byte, error) {
 	return nil, nil
 }
 
+func (stateMachineDefinition) CompareState(_, _ any) (int, error) {
+	// TODO: remove this implementation once transition history is fully implemented
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for workflow mutable state")
+}
+
 func (stateMachineDefinition) Type() string {
 	return StateMachineType
 }

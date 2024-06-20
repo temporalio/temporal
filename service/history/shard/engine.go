@@ -34,12 +34,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common/definition"
-
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -92,6 +92,7 @@ type (
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
 		SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error
+		SyncHSM(ctx context.Context, request *SyncHSMRequest) error
 		GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
@@ -137,5 +138,14 @@ type (
 			minInclusiveTaskID int64,
 			maxExclusiveTaskID int64,
 		) (collection.Iterator[tasks.Task], error)
+	}
+)
+
+type (
+	SyncHSMRequest struct {
+		definition.WorkflowKey
+
+		StateMachineNode    *persistencespb.StateMachineNode
+		EventVersionHistory *historyspb.VersionHistory
 	}
 )

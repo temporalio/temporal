@@ -27,6 +27,8 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -98,6 +100,11 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 		return proto.Marshal(state.HsmSchedulerState)
 	}
 	return nil, fmt.Errorf("invalid scheduler state provided: %v", state) // nolint:goerr113
+}
+
+func (stateMachineDefinition) CompareState(s1, s2 any) (int, error) {
+	// TODO: remove this implementation once transition history is fully implemented
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for scheduler")
 }
 
 func RegisterStateMachine(r *hsm.Registry) error {

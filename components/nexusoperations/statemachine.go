@@ -31,6 +31,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -48,8 +49,8 @@ const (
 	CancelationMachineType = "nexusoperations.Cancelation"
 )
 
-	// CancelationMachineKey is a fixed key for the cancelation machine as a child of the operation machine.
-var	CancelationMachineKey = hsm.Key{Type: CancelationMachineType, ID: ""}
+// CancelationMachineKey is a fixed key for the cancelation machine as a child of the operation machine.
+var CancelationMachineKey = hsm.Key{Type: CancelationMachineType, ID: ""}
 
 // MachineCollection creates a new typed [statemachines.Collection] for operations.
 func MachineCollection(tree *hsm.Node) hsm.Collection[Operation] {
@@ -199,6 +200,11 @@ func (operationMachineDefinition) Serialize(state any) ([]byte, error) {
 		return proto.Marshal(state.NexusOperationInfo)
 	}
 	return nil, fmt.Errorf("invalid operation provided: %v", state) // nolint:goerr113
+}
+
+func (operationMachineDefinition) CompareState(state1, state2 any) (int, error) {
+	// TODO: remove this implementation once transition history is fully implemented
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for nexus operation")
 }
 
 func RegisterStateMachines(r *hsm.Registry) error {
@@ -452,6 +458,11 @@ func (cancelationMachineDefinition) Serialize(state any) ([]byte, error) {
 		return proto.Marshal(state.NexusOperationCancellationInfo)
 	}
 	return nil, fmt.Errorf("invalid cancelation provided: %v", state) // nolint:goerr113
+}
+
+func (cancelationMachineDefinition) CompareState(state1, state2 any) (int, error) {
+	// TODO: remove this implementation once transition history is fully implemented
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for nexus operation cancelation")
 }
 
 func (cancelationMachineDefinition) Type() string {
