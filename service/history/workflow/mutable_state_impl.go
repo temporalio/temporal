@@ -1362,7 +1362,9 @@ func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time
 		}
 		return completionEvent.GetEventTime().AsTime(), nil
 	}
-
+	if ms.executionInfo.CloseTime == nil {
+		return time.Time{}, fmt.Errorf("closeTime is nil for the workflow ID: %v in mutable state", ms.executionInfo.WorkflowId)
+	}
 	return ms.executionInfo.CloseTime.AsTime(), nil
 }
 
