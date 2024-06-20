@@ -50,11 +50,11 @@ type (
 
 		// TODO (alex): move this to some admin client (and join with IntegrationTestsClient)
 		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
+		WaitForYellowStatus(ctx context.Context, index string) (string, error)
+		GetMapping(ctx context.Context, index string) (map[string]string, error)
 		IndexExists(ctx context.Context, indexName string) (bool, error)
 		CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error)
 		DeleteIndex(ctx context.Context, indexName string) (bool, error)
-		WaitForYellowStatus(ctx context.Context, index string) (string, error)
-		GetMapping(ctx context.Context, index string) (map[string]string, error)
 		CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error)
 
 		OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error)
@@ -72,9 +72,6 @@ type (
 	}
 
 	IntegrationTestsClient interface {
-		IndexExists(ctx context.Context, indexName string) (bool, error)
-		CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error)
-		DeleteIndex(ctx context.Context, indexName string) (bool, error)
 		IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error)
 		IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error)
 		IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error)

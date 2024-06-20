@@ -337,6 +337,9 @@ func (c *clientImpl) GetDateFieldType() string {
 }
 
 func (c *clientImpl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
+	if body == nil {
+		body = make(map[string]interface{})
+	}
 	resp, err := c.esClient.CreateIndex(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err

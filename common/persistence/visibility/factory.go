@@ -41,10 +41,10 @@ import (
 
 type VisibilityStoreFactory interface {
 	NewVisibilityStore(
-		nsRegistry namespace.Registry,
 		cfg config.CustomDatastoreConfig,
 		saProvider searchattribute.Provider,
 		saMapperProvider searchattribute.MapperProvider,
+		nsRegistry namespace.Registry,
 		r resolver.ServiceResolver,
 		logger log.Logger,
 		metricsHandler metrics.Handler,
@@ -262,10 +262,10 @@ func newVisibilityStoreFromDataStoreConfig(
 		)
 	} else if dsConfig.CustomDataStoreConfig != nil {
 		visStore, err = customVisibilityStoreFactory.NewVisibilityStore(
-			namespaceRegistry,
 			*dsConfig.CustomDataStoreConfig,
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
+			namespaceRegistry,
 			persistenceResolver,
 			logger,
 			metricsHandler,

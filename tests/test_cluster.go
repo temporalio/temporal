@@ -334,7 +334,6 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 		if err != nil {
 			return err
 		}
-
 		return esClient.Ping(ctx)
 	}
 
@@ -410,7 +409,7 @@ func waitForYellowStatus(esClient esclient.IntegrationTestsClient, index string)
 }
 
 func deleteIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
+	esClient, err := esclient.NewClient(esConfig, nil, logger)
 	if err != nil {
 		return err
 	}
