@@ -102,6 +102,7 @@ type (
 
 		// Generate tasks for any updated state machines on mutable state.
 		// Looks up machine definition in the provided registry.
+		// Must be called **after** updating transition history for the current transition
 		GenerateDirtySubStateMachineTasks(stateMachineRegistry *hsm.Registry) error
 	}
 
@@ -303,6 +304,9 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 		}
 		for _, output := range pao.Outputs {
 			for _, task := range output.Tasks {
+				// since this method is called after transition history is updated for the current transition,
+				// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
+				// to the last versioned transition in StateMachineRef
 				if err := generateSubStateMachineTask(
 					r.mutableState,
 					stateMachineRegistry,
@@ -827,23 +831,26 @@ func generateSubStateMachineTask(
 		}
 	}
 	// Only set transition count if a task is non-concurrent.
+	var machineLastUpdateVersionedTransition *persistencespb.VersionedTransition
 	transitionCount := int64(0)
-	machineLastUpdateMutableStateTransitionCount := int64(0)
 	if !task.Concurrent() {
+		machineLastUpdateVersionedTransition = node.InternalRepr().GetLastUpdateVersionedTransition()
 		transitionCount = node.InternalRepr().GetTransitionCount()
-		machineLastUpdateMutableStateTransitionCount = node.InternalRepr().GetLastUpdateMutableStateTransitionCount()
+	}
+
+	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+	var currentVersionedTransition *persistencespb.VersionedTransition
+	if len(transitionHistory) > 0 {
+		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
 	}
 
 	taskInfo := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
-			Path: ppath,
-
-			MachineInitialNamespaceFailoverVersion:       node.InternalRepr().GetInitialNamespaceFailoverVersion(),
-			MachineInitialMutableStateTransitionCount:    node.InternalRepr().GetInitialMutableStateTransitionCount(),
-			MutableStateNamespaceFailoverVersion:         mutableState.GetCurrentVersion(),
-			MutableStateTransitionCount:                  mutableState.TransitionCount(),
-			MachineTransitionCount:                       transitionCount,
-			MachineLastUpdateMutableStateTransitionCount: machineLastUpdateMutableStateTransitionCount,
+			Path:                                 ppath,
+			MutableStateVersionedTransition:      currentVersionedTransition,
+			MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
+			MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
+			MachineTransitionCount:               transitionCount,
 		},
 		Type: task.Type(),
 		Data: data,

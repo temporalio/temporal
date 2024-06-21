@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 )
@@ -47,8 +48,8 @@ func (b *backend) GetCurrentVersion() int64 {
 	return 1
 }
 
-func (b *backend) TransitionCount() int64 {
-	return 2
+func (b *backend) NextTransitionCount() int64 {
+	return 3
 }
 
 func (b *backend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
@@ -266,25 +267,21 @@ func TestNode_Sync_NodeMatches(t *testing.T) {
 		name          string
 		currentState  hsmtest.State
 		incomingState hsmtest.State
-		synced        bool
 	}{
 		{
 			name:          "same state",
 			currentState:  hsmtest.State1,
 			incomingState: hsmtest.State1,
-			synced:        false,
 		},
 		{
 			name:          "current state newer",
 			currentState:  hsmtest.State4,
 			incomingState: hsmtest.State2,
-			synced:        false,
 		},
 		{
 			name:          "incoming state newer",
 			currentState:  hsmtest.State1,
 			incomingState: hsmtest.State3,
-			synced:        true,
 		},
 	}
 
@@ -298,76 +295,70 @@ func TestNode_Sync_NodeMatches(t *testing.T) {
 
 			currentNodeTransitionCount := currentNode.InternalRepr().TransitionCount
 
-			synced, err := currentNode.Sync(incomingNode)
+			err = currentNode.Sync(incomingNode)
 			require.NoError(t, err)
-			require.Equal(t, tc.synced, synced)
 
-			if synced {
-				incomingData, err := def1.Serialize(hsmtest.NewData(tc.incomingState))
-				require.NoError(t, err)
-				require.Equal(t, incomingData, currentNode.InternalRepr().Data)
-				require.Equal(t, incomingNode.InternalRepr().LastUpdateMutableStateTransitionCount, currentNode.InternalRepr().LastUpdateMutableStateTransitionCount)
-				require.Equal(t, currentNodeTransitionCount+1, currentNode.InternalRepr().TransitionCount)
+			incomingData, err := def1.Serialize(hsmtest.NewData(tc.incomingState))
+			require.NoError(t, err)
+			require.Equal(t, incomingData, currentNode.InternalRepr().Data)
+			protorequire.ProtoEqual(t, incomingNode.InternalRepr().LastUpdateVersionedTransition, currentNode.InternalRepr().LastUpdateVersionedTransition)
+			require.Equal(t, currentNodeTransitionCount+1, currentNode.InternalRepr().TransitionCount)
 
-				paos := currentNode.Outputs()
-				require.Len(t, paos, 1)
-				pao := paos[0]
-				require.Equal(t, currentNode.Path(), pao.Path)
-				require.Len(t, pao.Outputs, 1)
-				require.Len(t, pao.Outputs[0].Tasks, 2)
-			} else {
-				currentData, err := def1.Serialize(hsmtest.NewData(tc.currentState))
-				require.NoError(t, err)
-				require.Equal(t, currentData, currentNode.InternalRepr().Data)
-				require.False(t, currentNode.Dirty())
-			}
+			paos := currentNode.Outputs()
+			require.Len(t, paos, 1)
+			pao := paos[0]
+			require.Equal(t, currentNode.Path(), pao.Path)
+			require.Len(t, pao.Outputs, 1)
+			require.Len(t, pao.Outputs[0].Tasks, 2)
+
 		})
 	}
 }
 
 func TestNode_Sync_NodeNotMatches(t *testing.T) {
-	currentNodeInitialVersion := int64(100)
-	currentNodeInitialMSTransitionCount := int64(23)
+	currentInitialVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 100,
+		TransitionCount:          23,
+	}
 
 	testCases := []struct {
-		name                          string
-		incomingNodeInitialVersion    int64
-		incomingNodeMSTransitionCount int64
+		name                               string
+		incomingInitialVersionedTransition *persistencespb.VersionedTransition
 	}{
 		{
 			name: "initial failover version mismatch",
-
-			incomingNodeInitialVersion:    int64(200),
-			incomingNodeMSTransitionCount: currentNodeInitialMSTransitionCount,
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 200,
+				TransitionCount:          currentInitialVersionedTransition.TransitionCount,
+			},
 		},
 		{
 			name: "initial ms transition count mismatch",
-
-			incomingNodeInitialVersion:    currentNodeInitialVersion,
-			incomingNodeMSTransitionCount: int64(29),
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: currentInitialVersionedTransition.NamespaceFailoverVersion,
+				TransitionCount:          29,
+			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 
-			initNode := func(initialVersion, initialMSTransitionCount int64) *hsm.Node {
+			initNode := func(initialVersionedTransition *persistencespb.VersionedTransition) *hsm.Node {
 				node, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
 				require.NoError(t, err)
 
-				node.InternalRepr().InitialNamespaceFailoverVersion = initialVersion
-				node.InternalRepr().InitialMutableStateTransitionCount = initialMSTransitionCount
+				node.InternalRepr().InitialVersionedTransition = initialVersionedTransition
 
 				return node
 			}
 
-			currentNode := initNode(currentNodeInitialVersion, currentNodeInitialMSTransitionCount)
-			incomingNode := initNode(tc.incomingNodeInitialVersion, tc.incomingNodeMSTransitionCount)
+			currentNode := initNode(currentInitialVersionedTransition)
+			incomingNode := initNode(tc.incomingInitialVersionedTransition)
 
-			_, err := currentNode.Sync(incomingNode)
+			err := currentNode.Sync(incomingNode)
 			require.ErrorIs(t, err, hsm.ErrInitialTransitionMismatch)
 		})
-
 	}
 }
 
@@ -401,7 +392,7 @@ func TestMachineTransition(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "test")
 	require.Equal(t, int64(0), root.InternalRepr().TransitionCount)
-	require.Equal(t, int64(0), root.InternalRepr().LastUpdateMutableStateTransitionCount)
+	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{}, root.InternalRepr().LastUpdateVersionedTransition)
 	d, err := hsm.MachineData[*hsmtest.Data](root)
 	require.NoError(t, err)
 	// Got the pre-mutation value back.
@@ -414,9 +405,10 @@ func TestMachineTransition(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), root.InternalRepr().TransitionCount)
-	// 3 = 2 - which is a constant returned by our test backend - and an increment of 1 to account for backend
-	// incrementing its own transition count at the end of a transaction.
-	require.Equal(t, int64(3), root.InternalRepr().LastUpdateMutableStateTransitionCount)
+	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 1,
+		TransitionCount:          3,
+	}, root.InternalRepr().LastUpdateVersionedTransition)
 	d, err = hsm.MachineData[*hsmtest.Data](root)
 	require.NoError(t, err)
 	require.Equal(t, hsmtest.State2, d.State())

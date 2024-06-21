@@ -409,9 +409,19 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 							Id:   "some-id",
 						},
 					},
-					MutableStateNamespaceFailoverVersion: rand.Int63(),
-					MutableStateTransitionCount:          rand.Int63(),
-					MachineTransitionCount:               rand.Int63(),
+					MutableStateVersionedTransition: &persistence.VersionedTransition{
+						NamespaceFailoverVersion: rand.Int63(),
+						TransitionCount:          rand.Int63(),
+					},
+					MachineInitialVersionedTransition: &persistence.VersionedTransition{
+						NamespaceFailoverVersion: rand.Int63(),
+						TransitionCount:          rand.Int63(),
+					},
+					MachineLastUpdateVersionedTransition: &persistence.VersionedTransition{
+						NamespaceFailoverVersion: rand.Int63(),
+						TransitionCount:          rand.Int63(),
+					},
+					MachineTransitionCount: rand.Int63(),
 				},
 				Type: "some-type",
 				Data: []byte{},
@@ -437,11 +447,10 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 
 func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	task := &tasks.StateMachineTimerTask{
-		WorkflowKey:                 s.workflowKey,
-		VisibilityTimestamp:         time.Now().UTC(),
-		TaskID:                      rand.Int63(),
-		Version:                     rand.Int63(),
-		MutableStateTransitionCount: rand.Int63(),
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
 	}
 
 	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())

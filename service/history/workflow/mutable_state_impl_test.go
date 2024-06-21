@@ -1074,7 +1074,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		TransitionHistory: []*persistencespb.VersionedTransition{
 			{
 				NamespaceFailoverVersion: failoverVersion,
-				MaxTransitionCount:       1024,
+				TransitionCount:          1024,
 			},
 		},
 	}

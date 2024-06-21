@@ -161,7 +161,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithTransitionHistory/StalenessCheckFailure",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
+				mutableStateVersonedTransition := ref.StateMachineRef.MutableStateVersionedTransition
+				ref.StateMachineRef.MutableStateVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: mutableStateVersonedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          mutableStateVersonedTransition.TransitionCount,
+				}
 			},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleState)
@@ -171,7 +175,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CanBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MachineInitialNamespaceFailoverVersion++
+				machineInitialVersonedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
+				ref.StateMachineRef.MachineInitialVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: machineInitialVersonedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
+				}
 			},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleState)
@@ -181,7 +189,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CannotBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MachineInitialNamespaceFailoverVersion++
+				machineInitialVersonedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
+				ref.StateMachineRef.MachineInitialVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: machineInitialVersonedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
+				}
 				ref.TaskID = tasks.MaximumKey.TaskID
 			},
 			assertOutcome: func(t *testing.T, err error) {
@@ -223,7 +235,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithTransitionHistory/MachineLastUpdateTransitionInequality",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MachineLastUpdateMutableStateTransitionCount++
+				machineLastUpdateVersionedTransition := ref.StateMachineRef.MachineLastUpdateVersionedTransition
+				ref.StateMachineRef.MachineLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: machineLastUpdateVersionedTransition.NamespaceFailoverVersion,
+					TransitionCount:          machineLastUpdateVersionedTransition.TransitionCount + 1,
+				}
 			},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)

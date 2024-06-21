@@ -111,7 +111,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	ms.EXPECT().TransitionCount().Return(int64(1)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
 	scheduleHandler, ok := chReg.Handler(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION)
 	require.True(t, ok)
 	cancelHandler, ok := chReg.Handler(enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION)
