@@ -99,7 +99,12 @@ func (d Definition) Serialize(s any) ([]byte, error) {
 	return []byte(t.state), nil
 }
 
-func (d Definition) CompareState(s1, s2 any) (int, error) {
+// Type implements hsm.StateMachineDefinition.
+func (d Definition) Type() string {
+	return d.typeName
+}
+
+func (d Definition) CompareState(s1 any, s2 any) (int, error) {
 	t1, ok := s1.(*Data)
 	if !ok {
 		return 0, errInvalidStateType
@@ -111,9 +116,4 @@ func (d Definition) CompareState(s1, s2 any) (int, error) {
 	}
 
 	return strings.Compare(string(t1.State()), string(t2.State())), nil
-}
-
-// Type implements hsm.StateMachineDefinition.
-func (d Definition) Type() string {
-	return d.typeName
 }

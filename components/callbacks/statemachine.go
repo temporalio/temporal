@@ -40,8 +40,14 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-// StateMachineType is a unique type identifier for this state machine.
-var StateMachineType = "callbacks.Callback"
+const (
+	// StateMachineType is a unique type identifier for this state machine.
+	StateMachineType = "callbacks.Callback"
+
+	// A marker for the first return value from a progress() that indicates the machine is in a terminal state.
+	// TODO: Remove this once transition history is fully implemented.
+	terminalStage = 3
+)
 
 // MachineCollection creates a new typed [statemachines.Collection] for callbacks.
 func MachineCollection(tree *hsm.Node) hsm.Collection[Callback] {
@@ -114,6 +120,27 @@ func (c Callback) output() (hsm.TransitionOutput, error) {
 	return hsm.TransitionOutput{Tasks: tasks}, err
 }
 
+// TODO: Remove this implementation once transition history is fully implemented.
+func (c Callback) progress() (int, int32, error) {
+	switch c.State() {
+	case enumsspb.CALLBACK_STATE_UNSPECIFIED:
+		return 0, 0, serviceerror.NewInvalidArgument("uninitialized callback state")
+	case enumsspb.CALLBACK_STATE_STANDBY:
+		return 1, 0, nil
+	case enumsspb.CALLBACK_STATE_SCHEDULED:
+		return 2, c.GetAttempt() * 2, nil
+	case enumsspb.CALLBACK_STATE_BACKING_OFF:
+		// We've made slightly more progress if we transitioned from scheduled to backing off.
+		return 2, c.GetAttempt()*2 + 1, nil
+	case enumsspb.CALLBACK_STATE_FAILED, enumsspb.CALLBACK_STATE_SUCCEEDED:
+		// Consider any terminal state as "max progress", we'll rely on last update namespace failover version to break
+		// the tie when comparing two states.
+		return terminalStage, 0, nil
+	default:
+		return 0, 0, serviceerror.NewInvalidArgument("unknown callback state")
+	}
+}
+
 type stateMachineDefinition struct{}
 
 func (stateMachineDefinition) Type() string {
@@ -135,9 +162,34 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	return nil, fmt.Errorf("invalid callback provided: %v", state) // nolint:goerr113
 }
 
+// CompareState compares the progress of two Callback state machines to determine whether to sync machine state while
+// processing a replication task.
+// TODO: Remove this implementation once transition history is fully implemented.
 func (stateMachineDefinition) CompareState(state1, state2 any) (int, error) {
-	// TODO: remove this implementation once transition history is fully implemented
-	return 0, serviceerror.NewUnimplemented("CompareState not implemented for callbacks")
+	cb1, ok := state1.(Callback)
+	if !ok {
+		return 0, fmt.Errorf("%w: expected state1 to be a Callback instance, got %v", hsm.ErrIncompatibleType, state1)
+	}
+	cb2, ok := state2.(Callback)
+	if !ok {
+		return 0, fmt.Errorf("%w: expected state2 to be a Callback instance, got %v", hsm.ErrIncompatibleType, state2)
+	}
+
+	stage1, attempts1, err := cb1.progress()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get progress for state1: %w", err)
+	}
+	stage2, attempts2, err := cb2.progress()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get progress for state2: %w", err)
+	}
+	if stage1 != stage2 {
+		return stage2 - stage1, nil
+	}
+	if stage1 == terminalStage && cb1.State() != cb2.State() {
+		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", cb1.State(), cb2.State()))
+	}
+	return int(attempts2 - attempts1), nil
 }
 
 func RegisterStateMachine(r *hsm.Registry) error {
