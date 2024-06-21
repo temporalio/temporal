@@ -63,18 +63,11 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	var taskType string
-	ref, smt, err := stateMachineTask(e.shardContext, task)
-	if err != nil {
-		taskType = "ActiveUnknownOutbound"
-	} else {
-		taskType = "Active." + smt.Type()
-	}
-
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
 	)
+	taskType := queues.GetOutboundTaskTypeTagValue(task, true)
 	respond := func(err error) queues.ExecuteResponse {
 		metricsTags := []metrics.Tag{
 			namespaceTag,
@@ -88,6 +81,11 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		}
 	}
 
+	ref, smt, err := stateMachineTask(e.shardContext, task)
+	if err != nil {
+		return respond(err)
+	}
+
 	// We don't want to execute outbound tasks when handing over a namespace to avoid starting work that may not be
 	// committed and cause duplicate requests.
 	// We check namespace handover state **once** when processing is started. Outbound tasks may take up to 10
@@ -97,10 +95,6 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		// TODO: Move this logic to queues.Executable when metrics tags don't need
 		// to be returned from task executor. Also check the standby queue logic.
 		return respond(consts.ErrNamespaceHandover)
-	}
-
-	if err != nil {
-		return respond(err)
 	}
 
 	if err := validateTaskByClock(e.shardContext, task); err != nil {

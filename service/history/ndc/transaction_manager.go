@@ -189,7 +189,7 @@ func NewTransactionManager(
 			logger,
 		),
 		eventsReapplier: eventsReapplier,
-		logger:          log.With(logger, tag.ComponentHistoryReplicator),
+		logger:          logger,
 
 		createMgr: nil,
 		updateMgr: nil,

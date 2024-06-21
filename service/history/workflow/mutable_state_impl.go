@@ -473,6 +473,14 @@ func NewSanitizedMutableState(
 	// Timer tasks are generated locally, do not sync them.
 	mutableState.executionInfo.StateMachineTimers = nil
 	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 0
+	if err := mutableState.HSM().Walk(func(node *hsm.Node) error {
+		// Node TransitionCount is cluster local information used for detecting staleness.
+		// Reset it to 1 since we are creating a new mutable state.
+		node.InternalRepr().TransitionCount = 1
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
@@ -2365,12 +2373,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueue.BuildIdRedirectInfo,
+	skipVersioningCheck bool,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
@@ -2464,7 +2473,14 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 ) (int64, error) {
 	assignedBuildId := ms.GetAssignedBuildId()
 	redirectCounter := ms.GetExecutionInfo().GetBuildIdRedirectCounter()
-	if !startedWorkerStamp.GetUseVersioning() || startedWorkerStamp.GetBuildId() == assignedBuildId {
+
+	if !startedWorkerStamp.GetUseVersioning() && assignedBuildId != "" && ms.HasCompletedAnyWorkflowTask() {
+		// We don't allow moving from versioned to unversioned once the wf has completed the first WFT.
+		// If this happens, it must be a stale task.
+		return 0, serviceerrors.NewObsoleteDispatchBuildId("versioned workflow's task cannot be dispatched to unversioned workers")
+	}
+
+	if startedWorkerStamp.GetBuildId() == assignedBuildId {
 		// dispatch build ID is the same as wf assigned build ID, hence noop.
 		return redirectCounter, nil
 	}
@@ -2474,7 +2490,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 		// Workflow hs already completed tasks but no redirect or a redirect based on a wrong assigned build ID is
 		// reported. This must be a task backlogged on an old build ID. rejecting this task, there should be another
 		// task scheduled on the right build ID.
-		return 0, serviceerrors.NewObsoleteDispatchBuildId()
+		return 0, serviceerrors.NewObsoleteDispatchBuildId("dispatch build ID is not the workflow's current build ID")
 	}
 
 	if assignedBuildId == "" && !ms.HasCompletedAnyWorkflowTask() {
@@ -5391,6 +5407,11 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 		ms.syncActivityToReplicationTask(transactionPolicy)...,
 	)
 
+	ms.InsertTasks[tasks.CategoryReplication] = append(
+		ms.InsertTasks[tasks.CategoryReplication],
+		ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches)...,
+	)
+
 	if transactionPolicy == TransactionPolicyPassive &&
 		len(ms.InsertTasks[tasks.CategoryReplication]) > 0 {
 		return serviceerror.NewInternal("should not generate replication task when close transaction as passive")
@@ -5530,6 +5551,32 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 			)
 		}
 		return nil
+	case TransactionPolicyPassive:
+		return emptyTasks
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+	}
+}
+
+func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
+	transactionPolicy TransactionPolicy,
+	eventBatches [][]*historypb.HistoryEvent,
+) []tasks.Task {
+	switch transactionPolicy {
+	case TransactionPolicyActive:
+		// HSM().Dirty() implies Nexus is enabled
+		// We also assume that - for the time being - if events were generated in a transaction,
+		// all HSM node updates are a result of applying those events.
+		// The passive cluster will transition the HSM when applying the events.
+		if ms.HSM().Dirty() && len(eventBatches) == 0 && ms.generateReplicationTask() {
+			return []tasks.Task{
+				&tasks.SyncHSMTask{
+					WorkflowKey: ms.GetWorkflowKey(),
+					// TaskID and VisibilityTimestamp are set by shard
+				},
+			}
+		}
+		return emptyTasks
 	case TransactionPolicyPassive:
 		return emptyTasks
 	default:

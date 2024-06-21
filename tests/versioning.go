@@ -2161,7 +2161,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1.0")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)

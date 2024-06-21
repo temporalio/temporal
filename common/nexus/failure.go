@@ -24,6 +24,7 @@ package nexus
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -191,4 +192,29 @@ func AdaptAuthorizeError(err error) error {
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
 	}
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
+}
+
+func HandlerErrorTypeFromHTTPStatus(statusCode int) nexus.HandlerErrorType {
+	switch statusCode {
+	case http.StatusBadRequest:
+		return nexus.HandlerErrorTypeBadRequest
+	case http.StatusUnauthorized:
+		return nexus.HandlerErrorTypeUnauthenticated
+	case http.StatusForbidden:
+		return nexus.HandlerErrorTypeUnauthorized
+	case http.StatusNotFound:
+		return nexus.HandlerErrorTypeNotFound
+	case http.StatusTooManyRequests:
+		return nexus.HandlerErrorTypeResourceExhausted
+	case http.StatusInternalServerError:
+		return nexus.HandlerErrorTypeInternal
+	case http.StatusNotImplemented:
+		return nexus.HandlerErrorTypeNotImplemented
+	case http.StatusServiceUnavailable:
+		return nexus.HandlerErrorTypeUnavailable
+	case nexus.StatusDownstreamTimeout:
+		return nexus.HandlerErrorTypeDownstreamTimeout
+	default:
+		return nexus.HandlerErrorTypeInternal
+	}
 }

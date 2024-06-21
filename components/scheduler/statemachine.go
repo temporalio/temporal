@@ -26,6 +26,9 @@ import (
 	"fmt"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
+	"time"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -153,6 +156,14 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 		return proto.Marshal(state.HsmSchedulerState)
 	}
 	return nil, fmt.Errorf("invalid scheduler state provided: %v", state) // nolint:goerr113
+}
+
+// CompareState is required for the temporary state sync solution to work.
+// Once transition history based replication is implemented, we won't need this method any more.
+// That will likely come before we productionize the HSM based scheduler, but if it doesn't, this method will need to be
+// implemented.
+func (s stateMachineDefinition) CompareState(any, any) (int, error) {
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for the scheduler state machine")
 }
 
 func RegisterStateMachine(r *hsm.Registry) error {
