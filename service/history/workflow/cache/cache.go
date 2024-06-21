@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -87,6 +88,10 @@ type (
 		cache.Cache
 
 		nonUserContextLockTimeout time.Duration
+	}
+	cacheItem struct {
+		ctx       workflow.Context
+		finalizer *common.Finalizer
 	}
 
 	NewCacheFn func(config *configs.Config, handler metrics.Handler) Cache
@@ -244,7 +249,8 @@ func (c *CacheImpl) Put(
 	handler metrics.Handler,
 ) (workflow.Context, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	existing, err := c.PutIfNotExist(cacheKey, workflowCtx)
+	item := &cacheItem{ctx: workflowCtx, finalizer: shardContext.GetFinalizer()}
+	existing, err := c.PutIfNotExist(cacheKey, item)
 	if err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
 		return nil, err
@@ -263,8 +269,12 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
-	if !cacheHit {
+	item, cacheHit := c.Get(cacheKey).(*cacheItem)
+
+	var workflowCtx workflow.Context
+	if cacheHit {
+		workflowCtx = item.ctx
+	} else {
 		metrics.CacheMissCounter.With(handler).Record(1)
 		workflowCtx = workflow.NewContext(
 			shardContext.GetConfig(),
@@ -416,6 +426,20 @@ func (c *CacheImpl) validateWorkflowID(
 	}
 
 	return nil
+}
+
+func (c *cacheItem) OnPut() {
+	wfKey := c.ctx.GetWorkflowKey()
+	c.finalizer.Register(wfKey.String(), func(ctx context.Context) {
+		c.ctx.Lock(ctx, workflow.LockPriorityHigh)
+		defer c.ctx.Unlock(workflow.LockPriorityHigh)
+		c.ctx.Clear()
+	})
+}
+
+func (c *cacheItem) OnEvict() {
+	wfKey := c.ctx.GetWorkflowKey()
+	c.finalizer.Deregister(wfKey.String())
 }
 
 func GetCurrentRunID(

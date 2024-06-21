@@ -32,6 +32,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -720,4 +721,12 @@ func TestCache_ItemSizeChangeBeforeRelease(t *testing.T) {
 	cache.Release(key1)
 	// Cache should have evicted entry1 to bring cache size under max limit.
 	assert.Equal(t, 2, cache.Size())
+}
+
+func TestCache_InvokePutCallback(t *testing.T) {
+	t.Fail()
+}
+
+func TestCache_InvokeEvictCallback(t *testing.T) {
+	t.Fail()
 }

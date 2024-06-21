@@ -118,6 +118,7 @@ type (
 		engineFactory       EngineFactory
 		engineFuture        *future.FutureImpl[Engine]
 		queueMetricEmitter  sync.Once
+		finalizer           *common.Finalizer
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -337,6 +338,10 @@ func (s *ContextImpl) GenerateTaskID() (int64, error) {
 	defer s.wUnlock()
 
 	return s.generateTaskIDLocked()
+}
+
+func (s *ContextImpl) GetFinalizer() *common.Finalizer {
+	return s.finalizer
 }
 
 func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
@@ -1472,6 +1477,8 @@ func (s *ContextImpl) FinishStop() {
 	// an Engine here, we won't ever have one.
 	_ = s.transition(contextRequestFinishStop{})
 
+	s.finalizer.Run(5 * time.Second) // TODO: configurable
+
 	// use a context that we know is cancelled so that this doesn't block
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 
@@ -2075,6 +2082,7 @@ func newContext(
 		ioConcurrency = 1
 	}
 
+	taggedLogger := log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity))
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
@@ -2084,7 +2092,8 @@ func newContext(
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
-		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
+		finalizer:               common.NewFinalizer(taggedLogger),
+		contextTaggedLogger:     taggedLogger,
 		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:           factory,
 		persistenceShardManager: persistenceShardManager,
