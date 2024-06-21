@@ -34,12 +34,12 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/api/common/v1"
-	history "go.temporal.io/api/history/v1"
-	history0 "go.temporal.io/server/api/history/v1"
-	historyservice "go.temporal.io/server/api/historyservice/v1"
-	repication "go.temporal.io/server/api/replication/v1"
-	workflow "go.temporal.io/server/api/workflow/v1"
+	v1 "go.temporal.io/api/common/v1"
+	v10 "go.temporal.io/api/history/v1"
+	v11 "go.temporal.io/server/api/history/v1"
+	v12 "go.temporal.io/server/api/historyservice/v1"
+	v13 "go.temporal.io/server/api/replication/v1"
+	v14 "go.temporal.io/server/api/workflow/v1"
 	collection "go.temporal.io/server/common/collection"
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
@@ -84,10 +84,10 @@ func (mr *MockEngineMockRecorder) AddSpeculativeWorkflowTaskTimeoutTask(task int
 }
 
 // AddTasks mocks base method.
-func (m *MockEngine) AddTasks(ctx context.Context, request *historyservice.AddTasksRequest) (*historyservice.AddTasksResponse, error) {
+func (m *MockEngine) AddTasks(ctx context.Context, request *v12.AddTasksRequest) (*v12.AddTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddTasks", ctx, request)
-	ret0, _ := ret[0].(*historyservice.AddTasksResponse)
+	ret0, _ := ret[0].(*v12.AddTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -99,10 +99,10 @@ func (mr *MockEngineMockRecorder) AddTasks(ctx, request interface{}) *gomock.Cal
 }
 
 // ConvertReplicationTask mocks base method.
-func (m *MockEngine) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*repication.ReplicationTask, error) {
+func (m *MockEngine) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*v13.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConvertReplicationTask", ctx, task)
-	ret0, _ := ret[0].(*repication.ReplicationTask)
+	ret0, _ := ret[0].(*v13.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -114,10 +114,10 @@ func (mr *MockEngineMockRecorder) ConvertReplicationTask(ctx, task interface{}) 
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockEngine) DeleteWorkflowExecution(ctx context.Context, deleteRequest *historyservice.DeleteWorkflowExecutionRequest) (*historyservice.DeleteWorkflowExecutionResponse, error) {
+func (m *MockEngine) DeleteWorkflowExecution(ctx context.Context, deleteRequest *v12.DeleteWorkflowExecutionRequest) (*v12.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, deleteRequest)
-	ret0, _ := ret[0].(*historyservice.DeleteWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.DeleteWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -129,10 +129,10 @@ func (mr *MockEngineMockRecorder) DeleteWorkflowExecution(ctx, deleteRequest int
 }
 
 // DescribeMutableState mocks base method.
-func (m *MockEngine) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (*historyservice.DescribeMutableStateResponse, error) {
+func (m *MockEngine) DescribeMutableState(ctx context.Context, request *v12.DescribeMutableStateRequest) (*v12.DescribeMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DescribeMutableState", ctx, request)
-	ret0, _ := ret[0].(*historyservice.DescribeMutableStateResponse)
+	ret0, _ := ret[0].(*v12.DescribeMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -144,10 +144,10 @@ func (mr *MockEngineMockRecorder) DescribeMutableState(ctx, request interface{})
 }
 
 // DescribeWorkflowExecution mocks base method.
-func (m *MockEngine) DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+func (m *MockEngine) DescribeWorkflowExecution(ctx context.Context, request *v12.DescribeWorkflowExecutionRequest) (*v12.DescribeWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DescribeWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.DescribeWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.DescribeWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -159,10 +159,10 @@ func (mr *MockEngineMockRecorder) DescribeWorkflowExecution(ctx, request interfa
 }
 
 // ExecuteMultiOperation mocks base method.
-func (m *MockEngine) ExecuteMultiOperation(ctx context.Context, request *historyservice.ExecuteMultiOperationRequest) (*historyservice.ExecuteMultiOperationResponse, error) {
+func (m *MockEngine) ExecuteMultiOperation(ctx context.Context, request *v12.ExecuteMultiOperationRequest) (*v12.ExecuteMultiOperationResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecuteMultiOperation", ctx, request)
-	ret0, _ := ret[0].(*historyservice.ExecuteMultiOperationResponse)
+	ret0, _ := ret[0].(*v12.ExecuteMultiOperationResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -174,10 +174,10 @@ func (mr *MockEngineMockRecorder) ExecuteMultiOperation(ctx, request interface{}
 }
 
 // GenerateLastHistoryReplicationTasks mocks base method.
-func (m *MockEngine) GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+func (m *MockEngine) GenerateLastHistoryReplicationTasks(ctx context.Context, request *v12.GenerateLastHistoryReplicationTasksRequest) (*v12.GenerateLastHistoryReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", ctx, request)
-	ret0, _ := ret[0].(*historyservice.GenerateLastHistoryReplicationTasksResponse)
+	ret0, _ := ret[0].(*v12.GenerateLastHistoryReplicationTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -189,10 +189,10 @@ func (mr *MockEngineMockRecorder) GenerateLastHistoryReplicationTasks(ctx, reque
 }
 
 // GetDLQMessages mocks base method.
-func (m *MockEngine) GetDLQMessages(ctx context.Context, messagesRequest *historyservice.GetDLQMessagesRequest) (*historyservice.GetDLQMessagesResponse, error) {
+func (m *MockEngine) GetDLQMessages(ctx context.Context, messagesRequest *v12.GetDLQMessagesRequest) (*v12.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDLQMessages", ctx, messagesRequest)
-	ret0, _ := ret[0].(*historyservice.GetDLQMessagesResponse)
+	ret0, _ := ret[0].(*v12.GetDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -204,10 +204,10 @@ func (mr *MockEngineMockRecorder) GetDLQMessages(ctx, messagesRequest interface{
 }
 
 // GetDLQReplicationMessages mocks base method.
-func (m *MockEngine) GetDLQReplicationMessages(ctx context.Context, taskInfos []*repication.ReplicationTaskInfo) ([]*repication.ReplicationTask, error) {
+func (m *MockEngine) GetDLQReplicationMessages(ctx context.Context, taskInfos []*v13.ReplicationTaskInfo) ([]*v13.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDLQReplicationMessages", ctx, taskInfos)
-	ret0, _ := ret[0].([]*repication.ReplicationTask)
+	ret0, _ := ret[0].([]*v13.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -219,10 +219,10 @@ func (mr *MockEngineMockRecorder) GetDLQReplicationMessages(ctx, taskInfos inter
 }
 
 // GetMutableState mocks base method.
-func (m *MockEngine) GetMutableState(ctx context.Context, request *historyservice.GetMutableStateRequest) (*historyservice.GetMutableStateResponse, error) {
+func (m *MockEngine) GetMutableState(ctx context.Context, request *v12.GetMutableStateRequest) (*v12.GetMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMutableState", ctx, request)
-	ret0, _ := ret[0].(*historyservice.GetMutableStateResponse)
+	ret0, _ := ret[0].(*v12.GetMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -234,10 +234,10 @@ func (mr *MockEngineMockRecorder) GetMutableState(ctx, request interface{}) *gom
 }
 
 // GetReplicationMessages mocks base method.
-func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*repication.ReplicationMessages, error) {
+func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*v13.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
-	ret0, _ := ret[0].(*repication.ReplicationMessages)
+	ret0, _ := ret[0].(*v13.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -249,10 +249,10 @@ func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, pollingCluster, ac
 }
 
 // GetReplicationStatus mocks base method.
-func (m *MockEngine) GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error) {
+func (m *MockEngine) GetReplicationStatus(ctx context.Context, request *v12.GetReplicationStatusRequest) (*v12.ShardReplicationStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationStatus", ctx, request)
-	ret0, _ := ret[0].(*historyservice.ShardReplicationStatus)
+	ret0, _ := ret[0].(*v12.ShardReplicationStatus)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -279,10 +279,10 @@ func (mr *MockEngineMockRecorder) GetReplicationTasksIter(ctx, pollingCluster, m
 }
 
 // GetWorkflowExecutionHistory mocks base method.
-func (m *MockEngine) GetWorkflowExecutionHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+func (m *MockEngine) GetWorkflowExecutionHistory(ctx context.Context, request *v12.GetWorkflowExecutionHistoryRequest) (*v12.GetWorkflowExecutionHistoryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistory", ctx, request)
-	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryResponse)
+	ret0, _ := ret[0].(*v12.GetWorkflowExecutionHistoryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -294,10 +294,10 @@ func (mr *MockEngineMockRecorder) GetWorkflowExecutionHistory(ctx, request inter
 }
 
 // GetWorkflowExecutionHistoryReverse mocks base method.
-func (m *MockEngine) GetWorkflowExecutionHistoryReverse(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryReverseRequest) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error) {
+func (m *MockEngine) GetWorkflowExecutionHistoryReverse(ctx context.Context, request *v12.GetWorkflowExecutionHistoryReverseRequest) (*v12.GetWorkflowExecutionHistoryReverseResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistoryReverse", ctx, request)
-	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryReverseResponse)
+	ret0, _ := ret[0].(*v12.GetWorkflowExecutionHistoryReverseResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -309,10 +309,10 @@ func (mr *MockEngineMockRecorder) GetWorkflowExecutionHistoryReverse(ctx, reques
 }
 
 // GetWorkflowExecutionRawHistory mocks base method.
-func (m *MockEngine) GetWorkflowExecutionRawHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryRequest) (*historyservice.GetWorkflowExecutionRawHistoryResponse, error) {
+func (m *MockEngine) GetWorkflowExecutionRawHistory(ctx context.Context, request *v12.GetWorkflowExecutionRawHistoryRequest) (*v12.GetWorkflowExecutionRawHistoryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistory", ctx, request)
-	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionRawHistoryResponse)
+	ret0, _ := ret[0].(*v12.GetWorkflowExecutionRawHistoryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -324,10 +324,10 @@ func (mr *MockEngineMockRecorder) GetWorkflowExecutionRawHistory(ctx, request in
 }
 
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
-func (m *MockEngine) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryV2Request) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+func (m *MockEngine) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *v12.GetWorkflowExecutionRawHistoryV2Request) (*v12.GetWorkflowExecutionRawHistoryV2Response, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistoryV2", ctx, request)
-	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionRawHistoryV2Response)
+	ret0, _ := ret[0].(*v12.GetWorkflowExecutionRawHistoryV2Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -339,10 +339,10 @@ func (mr *MockEngineMockRecorder) GetWorkflowExecutionRawHistoryV2(ctx, request 
 }
 
 // ImportWorkflowExecution mocks base method.
-func (m *MockEngine) ImportWorkflowExecution(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest) (*historyservice.ImportWorkflowExecutionResponse, error) {
+func (m *MockEngine) ImportWorkflowExecution(ctx context.Context, request *v12.ImportWorkflowExecutionRequest) (*v12.ImportWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ImportWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.ImportWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.ImportWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -354,10 +354,10 @@ func (mr *MockEngineMockRecorder) ImportWorkflowExecution(ctx, request interface
 }
 
 // IsActivityTaskValid mocks base method.
-func (m *MockEngine) IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (*historyservice.IsActivityTaskValidResponse, error) {
+func (m *MockEngine) IsActivityTaskValid(ctx context.Context, request *v12.IsActivityTaskValidRequest) (*v12.IsActivityTaskValidResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsActivityTaskValid", ctx, request)
-	ret0, _ := ret[0].(*historyservice.IsActivityTaskValidResponse)
+	ret0, _ := ret[0].(*v12.IsActivityTaskValidResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -369,10 +369,10 @@ func (mr *MockEngineMockRecorder) IsActivityTaskValid(ctx, request interface{}) 
 }
 
 // IsWorkflowTaskValid mocks base method.
-func (m *MockEngine) IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (*historyservice.IsWorkflowTaskValidResponse, error) {
+func (m *MockEngine) IsWorkflowTaskValid(ctx context.Context, request *v12.IsWorkflowTaskValidRequest) (*v12.IsWorkflowTaskValidResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsWorkflowTaskValid", ctx, request)
-	ret0, _ := ret[0].(*historyservice.IsWorkflowTaskValidResponse)
+	ret0, _ := ret[0].(*v12.IsWorkflowTaskValidResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -384,10 +384,10 @@ func (mr *MockEngineMockRecorder) IsWorkflowTaskValid(ctx, request interface{}) 
 }
 
 // ListTasks mocks base method.
-func (m *MockEngine) ListTasks(ctx context.Context, request *historyservice.ListTasksRequest) (*historyservice.ListTasksResponse, error) {
+func (m *MockEngine) ListTasks(ctx context.Context, request *v12.ListTasksRequest) (*v12.ListTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListTasks", ctx, request)
-	ret0, _ := ret[0].(*historyservice.ListTasksResponse)
+	ret0, _ := ret[0].(*v12.ListTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -399,10 +399,10 @@ func (mr *MockEngineMockRecorder) ListTasks(ctx, request interface{}) *gomock.Ca
 }
 
 // MergeDLQMessages mocks base method.
-func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error) {
+func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *v12.MergeDLQMessagesRequest) (*v12.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MergeDLQMessages", ctx, messagesRequest)
-	ret0, _ := ret[0].(*historyservice.MergeDLQMessagesResponse)
+	ret0, _ := ret[0].(*v12.MergeDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -438,10 +438,10 @@ func (mr *MockEngineMockRecorder) NotifyNewTasks(tasks interface{}) *gomock.Call
 }
 
 // PollMutableState mocks base method.
-func (m *MockEngine) PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (*historyservice.PollMutableStateResponse, error) {
+func (m *MockEngine) PollMutableState(ctx context.Context, request *v12.PollMutableStateRequest) (*v12.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PollMutableState", ctx, request)
-	ret0, _ := ret[0].(*historyservice.PollMutableStateResponse)
+	ret0, _ := ret[0].(*v12.PollMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -453,10 +453,10 @@ func (mr *MockEngineMockRecorder) PollMutableState(ctx, request interface{}) *go
 }
 
 // PollWorkflowExecutionUpdate mocks base method.
-func (m *MockEngine) PollWorkflowExecutionUpdate(ctx context.Context, request *historyservice.PollWorkflowExecutionUpdateRequest) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+func (m *MockEngine) PollWorkflowExecutionUpdate(ctx context.Context, request *v12.PollWorkflowExecutionUpdateRequest) (*v12.PollWorkflowExecutionUpdateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PollWorkflowExecutionUpdate", ctx, request)
-	ret0, _ := ret[0].(*historyservice.PollWorkflowExecutionUpdateResponse)
+	ret0, _ := ret[0].(*v12.PollWorkflowExecutionUpdateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -468,10 +468,10 @@ func (mr *MockEngineMockRecorder) PollWorkflowExecutionUpdate(ctx, request inter
 }
 
 // PurgeDLQMessages mocks base method.
-func (m *MockEngine) PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) (*historyservice.PurgeDLQMessagesResponse, error) {
+func (m *MockEngine) PurgeDLQMessages(ctx context.Context, messagesRequest *v12.PurgeDLQMessagesRequest) (*v12.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PurgeDLQMessages", ctx, messagesRequest)
-	ret0, _ := ret[0].(*historyservice.PurgeDLQMessagesResponse)
+	ret0, _ := ret[0].(*v12.PurgeDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -483,10 +483,10 @@ func (mr *MockEngineMockRecorder) PurgeDLQMessages(ctx, messagesRequest interfac
 }
 
 // QueryWorkflow mocks base method.
-func (m *MockEngine) QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error) {
+func (m *MockEngine) QueryWorkflow(ctx context.Context, request *v12.QueryWorkflowRequest) (*v12.QueryWorkflowResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryWorkflow", ctx, request)
-	ret0, _ := ret[0].(*historyservice.QueryWorkflowResponse)
+	ret0, _ := ret[0].(*v12.QueryWorkflowResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -498,7 +498,7 @@ func (mr *MockEngineMockRecorder) QueryWorkflow(ctx, request interface{}) *gomoc
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID namespace.ID, workflowID, runID string, events []*history.HistoryEvent) error {
+func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID namespace.ID, workflowID, runID string, events []*v10.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, namespaceUUID, workflowID, runID, events)
 	ret0, _ := ret[0].(error)
@@ -512,7 +512,7 @@ func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, namespaceUUID, workflowID, 
 }
 
 // RebuildMutableState mocks base method.
-func (m *MockEngine) RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution) error {
+func (m *MockEngine) RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution *v1.WorkflowExecution) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RebuildMutableState", ctx, namespaceUUID, execution)
 	ret0, _ := ret[0].(error)
@@ -526,10 +526,10 @@ func (mr *MockEngineMockRecorder) RebuildMutableState(ctx, namespaceUUID, execut
 }
 
 // RecordActivityTaskHeartbeat mocks base method.
-func (m *MockEngine) RecordActivityTaskHeartbeat(ctx context.Context, request *historyservice.RecordActivityTaskHeartbeatRequest) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
+func (m *MockEngine) RecordActivityTaskHeartbeat(ctx context.Context, request *v12.RecordActivityTaskHeartbeatRequest) (*v12.RecordActivityTaskHeartbeatResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecordActivityTaskHeartbeat", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RecordActivityTaskHeartbeatResponse)
+	ret0, _ := ret[0].(*v12.RecordActivityTaskHeartbeatResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -541,10 +541,10 @@ func (mr *MockEngineMockRecorder) RecordActivityTaskHeartbeat(ctx, request inter
 }
 
 // RecordActivityTaskStarted mocks base method.
-func (m *MockEngine) RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error) {
+func (m *MockEngine) RecordActivityTaskStarted(ctx context.Context, request *v12.RecordActivityTaskStartedRequest) (*v12.RecordActivityTaskStartedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecordActivityTaskStarted", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RecordActivityTaskStartedResponse)
+	ret0, _ := ret[0].(*v12.RecordActivityTaskStartedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -556,10 +556,10 @@ func (mr *MockEngineMockRecorder) RecordActivityTaskStarted(ctx, request interfa
 }
 
 // RecordChildExecutionCompleted mocks base method.
-func (m *MockEngine) RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (*historyservice.RecordChildExecutionCompletedResponse, error) {
+func (m *MockEngine) RecordChildExecutionCompleted(ctx context.Context, request *v12.RecordChildExecutionCompletedRequest) (*v12.RecordChildExecutionCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecordChildExecutionCompleted", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RecordChildExecutionCompletedResponse)
+	ret0, _ := ret[0].(*v12.RecordChildExecutionCompletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -571,10 +571,10 @@ func (mr *MockEngineMockRecorder) RecordChildExecutionCompleted(ctx, request int
 }
 
 // RecordWorkflowTaskStarted mocks base method.
-func (m *MockEngine) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+func (m *MockEngine) RecordWorkflowTaskStarted(ctx context.Context, request *v12.RecordWorkflowTaskStartedRequest) (*v12.RecordWorkflowTaskStartedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecordWorkflowTaskStarted", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RecordWorkflowTaskStartedResponse)
+	ret0, _ := ret[0].(*v12.RecordWorkflowTaskStartedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -586,7 +586,7 @@ func (mr *MockEngineMockRecorder) RecordWorkflowTaskStarted(ctx, request interfa
 }
 
 // RefreshWorkflowTasks mocks base method.
-func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution) error {
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *v1.WorkflowExecution) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution)
 	ret0, _ := ret[0].(error)
@@ -600,10 +600,10 @@ func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execu
 }
 
 // RemoveSignalMutableState mocks base method.
-func (m *MockEngine) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) (*historyservice.RemoveSignalMutableStateResponse, error) {
+func (m *MockEngine) RemoveSignalMutableState(ctx context.Context, request *v12.RemoveSignalMutableStateRequest) (*v12.RemoveSignalMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveSignalMutableState", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RemoveSignalMutableStateResponse)
+	ret0, _ := ret[0].(*v12.RemoveSignalMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -615,7 +615,7 @@ func (mr *MockEngineMockRecorder) RemoveSignalMutableState(ctx, request interfac
 }
 
 // ReplicateEventsV2 mocks base method.
-func (m *MockEngine) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+func (m *MockEngine) ReplicateEventsV2(ctx context.Context, request *v12.ReplicateEventsV2Request) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateEventsV2", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -629,7 +629,7 @@ func (mr *MockEngineMockRecorder) ReplicateEventsV2(ctx, request interface{}) *g
 }
 
 // ReplicateHistoryEvents mocks base method.
-func (m *MockEngine) ReplicateHistoryEvents(ctx context.Context, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, historyEvents [][]*history.HistoryEvent, newEvents []*history.HistoryEvent, newRunID string) error {
+func (m *MockEngine) ReplicateHistoryEvents(ctx context.Context, workflowKey definition.WorkflowKey, baseExecutionInfo *v14.BaseExecutionInfo, versionHistoryItems []*v11.VersionHistoryItem, historyEvents [][]*v10.HistoryEvent, newEvents []*v10.HistoryEvent, newRunID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateHistoryEvents", ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 	ret0, _ := ret[0].(error)
@@ -643,7 +643,7 @@ func (mr *MockEngineMockRecorder) ReplicateHistoryEvents(ctx, workflowKey, baseE
 }
 
 // ReplicateWorkflowState mocks base method.
-func (m *MockEngine) ReplicateWorkflowState(ctx context.Context, request *historyservice.ReplicateWorkflowStateRequest) error {
+func (m *MockEngine) ReplicateWorkflowState(ctx context.Context, request *v12.ReplicateWorkflowStateRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowState", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -657,10 +657,10 @@ func (mr *MockEngineMockRecorder) ReplicateWorkflowState(ctx, request interface{
 }
 
 // RequestCancelWorkflowExecution mocks base method.
-func (m *MockEngine) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
+func (m *MockEngine) RequestCancelWorkflowExecution(ctx context.Context, request *v12.RequestCancelWorkflowExecutionRequest) (*v12.RequestCancelWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RequestCancelWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RequestCancelWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.RequestCancelWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -672,10 +672,10 @@ func (mr *MockEngineMockRecorder) RequestCancelWorkflowExecution(ctx, request in
 }
 
 // ResetStickyTaskQueue mocks base method.
-func (m *MockEngine) ResetStickyTaskQueue(ctx context.Context, resetRequest *historyservice.ResetStickyTaskQueueRequest) (*historyservice.ResetStickyTaskQueueResponse, error) {
+func (m *MockEngine) ResetStickyTaskQueue(ctx context.Context, resetRequest *v12.ResetStickyTaskQueueRequest) (*v12.ResetStickyTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetStickyTaskQueue", ctx, resetRequest)
-	ret0, _ := ret[0].(*historyservice.ResetStickyTaskQueueResponse)
+	ret0, _ := ret[0].(*v12.ResetStickyTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -687,10 +687,10 @@ func (mr *MockEngineMockRecorder) ResetStickyTaskQueue(ctx, resetRequest interfa
 }
 
 // ResetWorkflowExecution mocks base method.
-func (m *MockEngine) ResetWorkflowExecution(ctx context.Context, request *historyservice.ResetWorkflowExecutionRequest) (*historyservice.ResetWorkflowExecutionResponse, error) {
+func (m *MockEngine) ResetWorkflowExecution(ctx context.Context, request *v12.ResetWorkflowExecutionRequest) (*v12.ResetWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.ResetWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.ResetWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -702,10 +702,10 @@ func (mr *MockEngineMockRecorder) ResetWorkflowExecution(ctx, request interface{
 }
 
 // RespondActivityTaskCanceled mocks base method.
-func (m *MockEngine) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (*historyservice.RespondActivityTaskCanceledResponse, error) {
+func (m *MockEngine) RespondActivityTaskCanceled(ctx context.Context, request *v12.RespondActivityTaskCanceledRequest) (*v12.RespondActivityTaskCanceledResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskCanceled", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RespondActivityTaskCanceledResponse)
+	ret0, _ := ret[0].(*v12.RespondActivityTaskCanceledResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -717,10 +717,10 @@ func (mr *MockEngineMockRecorder) RespondActivityTaskCanceled(ctx, request inter
 }
 
 // RespondActivityTaskCompleted mocks base method.
-func (m *MockEngine) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (*historyservice.RespondActivityTaskCompletedResponse, error) {
+func (m *MockEngine) RespondActivityTaskCompleted(ctx context.Context, request *v12.RespondActivityTaskCompletedRequest) (*v12.RespondActivityTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskCompleted", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RespondActivityTaskCompletedResponse)
+	ret0, _ := ret[0].(*v12.RespondActivityTaskCompletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -732,10 +732,10 @@ func (mr *MockEngineMockRecorder) RespondActivityTaskCompleted(ctx, request inte
 }
 
 // RespondActivityTaskFailed mocks base method.
-func (m *MockEngine) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (*historyservice.RespondActivityTaskFailedResponse, error) {
+func (m *MockEngine) RespondActivityTaskFailed(ctx context.Context, request *v12.RespondActivityTaskFailedRequest) (*v12.RespondActivityTaskFailedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskFailed", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RespondActivityTaskFailedResponse)
+	ret0, _ := ret[0].(*v12.RespondActivityTaskFailedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -747,10 +747,10 @@ func (mr *MockEngineMockRecorder) RespondActivityTaskFailed(ctx, request interfa
 }
 
 // RespondWorkflowTaskCompleted mocks base method.
-func (m *MockEngine) RespondWorkflowTaskCompleted(ctx context.Context, request *historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
+func (m *MockEngine) RespondWorkflowTaskCompleted(ctx context.Context, request *v12.RespondWorkflowTaskCompletedRequest) (*v12.RespondWorkflowTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondWorkflowTaskCompleted", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RespondWorkflowTaskCompletedResponse)
+	ret0, _ := ret[0].(*v12.RespondWorkflowTaskCompletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -762,7 +762,7 @@ func (mr *MockEngineMockRecorder) RespondWorkflowTaskCompleted(ctx, request inte
 }
 
 // RespondWorkflowTaskFailed mocks base method.
-func (m *MockEngine) RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) error {
+func (m *MockEngine) RespondWorkflowTaskFailed(ctx context.Context, request *v12.RespondWorkflowTaskFailedRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondWorkflowTaskFailed", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -776,7 +776,7 @@ func (mr *MockEngineMockRecorder) RespondWorkflowTaskFailed(ctx, request interfa
 }
 
 // ScheduleWorkflowTask mocks base method.
-func (m *MockEngine) ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) error {
+func (m *MockEngine) ScheduleWorkflowTask(ctx context.Context, request *v12.ScheduleWorkflowTaskRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ScheduleWorkflowTask", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -790,10 +790,10 @@ func (mr *MockEngineMockRecorder) ScheduleWorkflowTask(ctx, request interface{})
 }
 
 // SignalWithStartWorkflowExecution mocks base method.
-func (m *MockEngine) SignalWithStartWorkflowExecution(ctx context.Context, request *historyservice.SignalWithStartWorkflowExecutionRequest) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
+func (m *MockEngine) SignalWithStartWorkflowExecution(ctx context.Context, request *v12.SignalWithStartWorkflowExecutionRequest) (*v12.SignalWithStartWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignalWithStartWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.SignalWithStartWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.SignalWithStartWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -805,10 +805,10 @@ func (mr *MockEngineMockRecorder) SignalWithStartWorkflowExecution(ctx, request 
 }
 
 // SignalWorkflowExecution mocks base method.
-func (m *MockEngine) SignalWorkflowExecution(ctx context.Context, request *historyservice.SignalWorkflowExecutionRequest) (*historyservice.SignalWorkflowExecutionResponse, error) {
+func (m *MockEngine) SignalWorkflowExecution(ctx context.Context, request *v12.SignalWorkflowExecutionRequest) (*v12.SignalWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignalWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.SignalWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.SignalWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -832,10 +832,10 @@ func (mr *MockEngineMockRecorder) Start() *gomock.Call {
 }
 
 // StartWorkflowExecution mocks base method.
-func (m *MockEngine) StartWorkflowExecution(ctx context.Context, request *historyservice.StartWorkflowExecutionRequest) (*historyservice.StartWorkflowExecutionResponse, error) {
+func (m *MockEngine) StartWorkflowExecution(ctx context.Context, request *v12.StartWorkflowExecutionRequest) (*v12.StartWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.StartWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.StartWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -888,7 +888,7 @@ func (mr *MockEngineMockRecorder) SubscribeReplicationNotification() *gomock.Cal
 }
 
 // SyncActivities mocks base method.
-func (m *MockEngine) SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error {
+func (m *MockEngine) SyncActivities(ctx context.Context, request *v12.SyncActivitiesRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncActivities", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -902,7 +902,7 @@ func (mr *MockEngineMockRecorder) SyncActivities(ctx, request interface{}) *gomo
 }
 
 // SyncActivity mocks base method.
-func (m *MockEngine) SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error {
+func (m *MockEngine) SyncActivity(ctx context.Context, request *v12.SyncActivityRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncActivity", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -915,8 +915,22 @@ func (mr *MockEngineMockRecorder) SyncActivity(ctx, request interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncActivity", reflect.TypeOf((*MockEngine)(nil).SyncActivity), ctx, request)
 }
 
+// SyncHSM mocks base method.
+func (m *MockEngine) SyncHSM(ctx context.Context, request *SyncHSMRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncHSM", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SyncHSM indicates an expected call of SyncHSM.
+func (mr *MockEngineMockRecorder) SyncHSM(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncHSM", reflect.TypeOf((*MockEngine)(nil).SyncHSM), ctx, request)
+}
+
 // SyncShardStatus mocks base method.
-func (m *MockEngine) SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error {
+func (m *MockEngine) SyncShardStatus(ctx context.Context, request *v12.SyncShardStatusRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncShardStatus", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -930,10 +944,10 @@ func (mr *MockEngineMockRecorder) SyncShardStatus(ctx, request interface{}) *gom
 }
 
 // TerminateWorkflowExecution mocks base method.
-func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *v12.TerminateWorkflowExecutionRequest) (*v12.TerminateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TerminateWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.TerminateWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.TerminateWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -957,10 +971,10 @@ func (mr *MockEngineMockRecorder) UnsubscribeReplicationNotification(arg0 interf
 }
 
 // UpdateWorkflowExecution mocks base method.
-func (m *MockEngine) UpdateWorkflowExecution(ctx context.Context, request *historyservice.UpdateWorkflowExecutionRequest) (*historyservice.UpdateWorkflowExecutionResponse, error) {
+func (m *MockEngine) UpdateWorkflowExecution(ctx context.Context, request *v12.UpdateWorkflowExecutionRequest) (*v12.UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.UpdateWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v12.UpdateWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -972,10 +986,10 @@ func (mr *MockEngineMockRecorder) UpdateWorkflowExecution(ctx, request interface
 }
 
 // VerifyChildExecutionCompletionRecorded mocks base method.
-func (m *MockEngine) VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+func (m *MockEngine) VerifyChildExecutionCompletionRecorded(ctx context.Context, request *v12.VerifyChildExecutionCompletionRecordedRequest) (*v12.VerifyChildExecutionCompletionRecordedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "VerifyChildExecutionCompletionRecorded", ctx, request)
-	ret0, _ := ret[0].(*historyservice.VerifyChildExecutionCompletionRecordedResponse)
+	ret0, _ := ret[0].(*v12.VerifyChildExecutionCompletionRecordedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -987,7 +1001,7 @@ func (mr *MockEngineMockRecorder) VerifyChildExecutionCompletionRecorded(ctx, re
 }
 
 // VerifyFirstWorkflowTaskScheduled mocks base method.
-func (m *MockEngine) VerifyFirstWorkflowTaskScheduled(ctx context.Context, request *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error {
+func (m *MockEngine) VerifyFirstWorkflowTaskScheduled(ctx context.Context, request *v12.VerifyFirstWorkflowTaskScheduledRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "VerifyFirstWorkflowTaskScheduled", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -1024,10 +1038,10 @@ func (m *MockReplicationStream) EXPECT() *MockReplicationStreamMockRecorder {
 }
 
 // ConvertReplicationTask mocks base method.
-func (m *MockReplicationStream) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*repication.ReplicationTask, error) {
+func (m *MockReplicationStream) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*v13.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConvertReplicationTask", ctx, task)
-	ret0, _ := ret[0].(*repication.ReplicationTask)
+	ret0, _ := ret[0].(*v13.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

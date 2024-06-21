@@ -261,6 +261,116 @@ func TestNode_Walk(t *testing.T) {
 	require.Equal(t, 5, nodeCount)
 }
 
+func TestNode_Sync_NodeMatches(t *testing.T) {
+	testCases := []struct {
+		name          string
+		currentState  hsmtest.State
+		incomingState hsmtest.State
+		synced        bool
+	}{
+		{
+			name:          "same state",
+			currentState:  hsmtest.State1,
+			incomingState: hsmtest.State1,
+			synced:        false,
+		},
+		{
+			name:          "current state newer",
+			currentState:  hsmtest.State4,
+			incomingState: hsmtest.State2,
+			synced:        false,
+		},
+		{
+			name:          "incoming state newer",
+			currentState:  hsmtest.State1,
+			incomingState: hsmtest.State3,
+			synced:        true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			currentNode, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(tc.currentState), make(map[string]*persistencespb.StateMachineMap), &backend{})
+			require.NoError(t, err)
+
+			incomingNode, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(tc.incomingState), make(map[string]*persistencespb.StateMachineMap), &backend{})
+			require.NoError(t, err)
+
+			currentNodeTransitionCount := currentNode.InternalRepr().TransitionCount
+
+			synced, err := currentNode.Sync(incomingNode)
+			require.NoError(t, err)
+			require.Equal(t, tc.synced, synced)
+
+			if synced {
+				incomingData, err := def1.Serialize(hsmtest.NewData(tc.incomingState))
+				require.NoError(t, err)
+				require.Equal(t, incomingData, currentNode.InternalRepr().Data)
+				require.Equal(t, incomingNode.InternalRepr().LastUpdateMutableStateTransitionCount, currentNode.InternalRepr().LastUpdateMutableStateTransitionCount)
+				require.Equal(t, currentNodeTransitionCount+1, currentNode.InternalRepr().TransitionCount)
+
+				paos := currentNode.Outputs()
+				require.Len(t, paos, 1)
+				pao := paos[0]
+				require.Equal(t, currentNode.Path(), pao.Path)
+				require.Len(t, pao.Outputs, 1)
+				require.Len(t, pao.Outputs[0].Tasks, 2)
+			} else {
+				currentData, err := def1.Serialize(hsmtest.NewData(tc.currentState))
+				require.NoError(t, err)
+				require.Equal(t, currentData, currentNode.InternalRepr().Data)
+				require.False(t, currentNode.Dirty())
+			}
+		})
+	}
+}
+
+func TestNode_Sync_NodeNotMatches(t *testing.T) {
+	currentNodeInitialVersion := int64(100)
+	currentNodeInitialMSTransitionCount := int64(23)
+
+	testCases := []struct {
+		name                          string
+		incomingNodeInitialVersion    int64
+		incomingNodeMSTransitionCount int64
+	}{
+		{
+			name: "initial failover version mismatch",
+
+			incomingNodeInitialVersion:    int64(200),
+			incomingNodeMSTransitionCount: currentNodeInitialMSTransitionCount,
+		},
+		{
+			name: "initial ms transition count mismatch",
+
+			incomingNodeInitialVersion:    currentNodeInitialVersion,
+			incomingNodeMSTransitionCount: int64(29),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			initNode := func(initialVersion, initialMSTransitionCount int64) *hsm.Node {
+				node, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+				require.NoError(t, err)
+
+				node.InternalRepr().InitialNamespaceFailoverVersion = initialVersion
+				node.InternalRepr().InitialMutableStateTransitionCount = initialMSTransitionCount
+
+				return node
+			}
+
+			currentNode := initNode(currentNodeInitialVersion, currentNodeInitialMSTransitionCount)
+			incomingNode := initNode(tc.incomingNodeInitialVersion, tc.incomingNodeMSTransitionCount)
+
+			_, err := currentNode.Sync(incomingNode)
+			require.ErrorIs(t, err, hsm.ErrInitialTransitionMismatch)
+		})
+
+	}
+}
+
 func TestMachineData(t *testing.T) {
 	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)

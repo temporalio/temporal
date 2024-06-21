@@ -465,33 +465,33 @@ func (b *EventStore) emitOutOfOrderBufferedEvents(bufferedEvents []*historypb.Hi
 		switch event.GetEventType() {
 		// Activity.
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
-			if completeEventType, seenCompleted := completedActivities[event.GetEventId()]; seenCompleted {
+			if completeEventType, seenCompleted := completedActivities[event.GetActivityTaskStartedEventAttributes().GetScheduledEventId()]; seenCompleted {
 				metrics.OutOfOrderBufferedEventsCounter.With(b.metricsHandler).Record(1, metrics.OperationTag(completeEventType.String()))
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
-			completedActivities[event.GetActivityTaskCompletedEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedActivities[event.GetActivityTaskCompletedEventAttributes().GetScheduledEventId()] = event.GetEventType()
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
-			completedActivities[event.GetActivityTaskFailedEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedActivities[event.GetActivityTaskFailedEventAttributes().GetScheduledEventId()] = event.GetEventType()
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
-			completedActivities[event.GetActivityTaskTimedOutEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedActivities[event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId()] = event.GetEventType()
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
-			completedActivities[event.GetActivityTaskCanceledEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedActivities[event.GetActivityTaskCanceledEventAttributes().GetScheduledEventId()] = event.GetEventType()
 
 		// Child Workflow.
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
-			if completeEventType, seenCompleted := completedChildWorkflows[event.GetEventId()]; seenCompleted {
+			if completeEventType, seenCompleted := completedChildWorkflows[event.GetChildWorkflowExecutionStartedEventAttributes().GetInitiatedEventId()]; seenCompleted {
 				metrics.OutOfOrderBufferedEventsCounter.With(b.metricsHandler).Record(1, metrics.OperationTag(completeEventType.String()))
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
-			completedChildWorkflows[event.GetChildWorkflowExecutionCompletedEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedChildWorkflows[event.GetChildWorkflowExecutionCompletedEventAttributes().GetInitiatedEventId()] = event.GetEventType()
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
-			completedChildWorkflows[event.GetChildWorkflowExecutionFailedEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedChildWorkflows[event.GetChildWorkflowExecutionFailedEventAttributes().GetInitiatedEventId()] = event.GetEventType()
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
-			completedChildWorkflows[event.GetChildWorkflowExecutionTimedOutEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedChildWorkflows[event.GetChildWorkflowExecutionTimedOutEventAttributes().GetInitiatedEventId()] = event.GetEventType()
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
-			completedChildWorkflows[event.GetChildWorkflowExecutionCanceledEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedChildWorkflows[event.GetChildWorkflowExecutionCanceledEventAttributes().GetInitiatedEventId()] = event.GetEventType()
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
-			completedChildWorkflows[event.GetChildWorkflowExecutionTerminatedEventAttributes().GetStartedEventId()] = event.GetEventType()
+			completedChildWorkflows[event.GetChildWorkflowExecutionTerminatedEventAttributes().GetInitiatedEventId()] = event.GetEventType()
 
 		// Nexus Operation.
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED:

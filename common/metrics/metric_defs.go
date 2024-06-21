@@ -524,6 +524,8 @@ const (
 	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
 	SyncWorkflowStateTaskScope = "SyncWorkflowStateTask"
 	// SyncWatermarkScope is the scope used by closed workflow task replication processing
+	// SyncHSMTaskScope is the scope used by sync HSM replication task
+	SyncHSMTaskScope   = "SyncHSMTask"
 	SyncWatermarkScope = "SyncWatermark"
 	// NoopTaskScope is the scope used by noop task
 	NoopTaskScope = "NoopTask"
@@ -961,6 +963,9 @@ var (
 	CircuitBreakerExecutableBlocked         = NewCounterDef("circuit_breaker_executable_blocked")
 	DynamicWorkerPoolSchedulerBufferSize    = NewCounterDef("dynamic_worker_pool_scheduler_buffer_size")
 	DynamicWorkerPoolSchedulerActiveWorkers = NewCounterDef("dynamic_worker_pool_scheduler_active_workers")
+	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
+	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
+	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")

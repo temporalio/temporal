@@ -824,7 +824,8 @@ func (e *CircuitBreakerExecutable) Execute() error {
 	doneCb, err := e.cb.Allow()
 	if err != nil {
 		metrics.CircuitBreakerExecutableBlocked.With(e.metricsHandler).Record(1)
-		return err
+		// Return resource a exhausted error to ensure that this task is retried less aggressively and does not go to the DLQ.
+		return fmt.Errorf("%w: %w", serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "circuit breaker rejection"), err)
 	}
 
 	defer func() {
