@@ -39,7 +39,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/service/history/queues"
 )
 
 var Module = fx.Module(
@@ -87,7 +86,7 @@ func DefaultNexusTransportProvider() NexusTransportProvider {
 }
 
 type clientProviderCacheKey struct {
-	queues.NamespaceIDAndDestination
+	namespaceID, endpointID string
 	// URL is part of the cache key in case the service configuration is modified to use a new URL after caching the
 	// client for the service.
 	url string
@@ -102,22 +101,19 @@ func ClientProviderFactory(
 ) ClientProvider {
 	// TODO(bergundy): This should use an LRU or other form of cache that supports eviction.
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
-		transport := httpTransportProvider(key.NamespaceID, key.Destination)
+		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		return &http.Client{
 			Transport: ResponseSizeLimiter{transport},
 		}, nil
 	})
-	return func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
-		entry, err := endpointRegistry.GetByID(ctx, key.Destination)
-		if err != nil {
-			return nil, err
-		}
+	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
 		var url string
 		var httpClient *http.Client
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
-			httpClient, err = m.Get(clientProviderCacheKey{key, url})
+			var err error
+			httpClient, err = m.Get(clientProviderCacheKey{namespaceID, entry.Id, url})
 			if err != nil {
 				return nil, err
 			}
