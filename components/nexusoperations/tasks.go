@@ -87,7 +87,7 @@ func (TimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type InvocationTask struct {
-	Destination string
+	EndpointName string
 }
 
 var _ hsm.Task = InvocationTask{}
@@ -97,7 +97,7 @@ func (InvocationTask) Type() string {
 }
 
 func (t InvocationTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.Destination}
+	return hsm.TaskKindOutbound{Destination: t.EndpointName}
 }
 
 func (InvocationTask) Concurrent() bool {
@@ -108,7 +108,7 @@ type InvocationTaskSerializer struct{}
 
 func (InvocationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return InvocationTask{Destination: kind.Destination}, nil
+		return InvocationTask{EndpointName: kind.Destination}, nil
 	}
 	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
 }
@@ -149,7 +149,7 @@ func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type CancelationTask struct {
-	Destination string
+	EndpointName string
 }
 
 var _ hsm.Task = CancelationTask{}
@@ -159,7 +159,7 @@ func (CancelationTask) Type() string {
 }
 
 func (t CancelationTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.Destination}
+	return hsm.TaskKindOutbound{Destination: t.EndpointName}
 }
 
 func (CancelationTask) Concurrent() bool {
@@ -170,7 +170,7 @@ type CancelationTaskSerializer struct{}
 
 func (CancelationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return CancelationTask{Destination: kind.Destination}, nil
+		return CancelationTask{EndpointName: kind.Destination}, nil
 	}
 	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
 }

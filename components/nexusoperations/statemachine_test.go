@@ -120,7 +120,7 @@ func TestRegenerateTasks(t *testing.T) {
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
-				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).Destination, "endpoint-id")
+				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).EndpointName, "endpoint")
 				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
 			},
 		},
@@ -213,7 +213,7 @@ func TestRetry(t *testing.T) {
 	require.Equal(t, 1, len(oap[0].Outputs))
 	require.Equal(t, 1, len(oap[0].Outputs[0].Tasks))
 	invocationTask := oap[0].Outputs[0].Tasks[0].(nexusoperations.InvocationTask) // nolint:revive
-	require.Equal(t, "endpoint-id", invocationTask.Destination)
+	require.Equal(t, "endpoint", invocationTask.EndpointName)
 	op, err = hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
@@ -545,7 +545,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert cancelation task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	cbTask := out.Tasks[0].(nexusoperations.CancelationTask) // nolint:revive
-	require.Equal(t, "endpoint-id", cbTask.Destination)
+	require.Equal(t, "endpoint", cbTask.EndpointName)
 
 	// Store the pre-succeeded state to test Failed later
 	dup := nexusoperations.Cancelation{common.CloneProto(cancelation.NexusOperationCancellationInfo)}

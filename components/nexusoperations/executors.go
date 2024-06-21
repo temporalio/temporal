@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -57,7 +58,8 @@ var retryable4xxErrorTypes = []int{
 	http.StatusTooManyRequests,
 }
 
-type ClientProvider func(ctx context.Context, key queues.NamespaceIDAndDestination, service string) (*nexus.Client, error)
+// ClientProvider provides a nexus client for a given endpoint.
+type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error)
 
 type TaskExecutorOptions struct {
 	fx.In
@@ -115,7 +117,14 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	if _, err := e.EndpointRegistry.GetByID(ctx, task.Destination); err != nil {
+
+	args, err := e.loadOperationArgs(ctx, env, ref)
+	if err != nil {
+		return fmt.Errorf("failed to load operation args: %w", err)
+	}
+
+	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
+	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
@@ -126,11 +135,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 			})
 		}
 		return err
-	}
-
-	args, err := e.loadOperationArgs(ctx, env, ref)
-	if err != nil {
-		return fmt.Errorf("failed to load operation args: %w", err)
 	}
 
 	header := nexus.Header(args.header)
@@ -154,10 +158,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	client, err := e.ClientProvider(
 		ctx,
-		queues.NamespaceIDAndDestination{
-			NamespaceID: ref.WorkflowKey.GetNamespaceID(),
-			Destination: task.Destination,
-		},
+		ref.WorkflowKey.GetNamespaceID(),
+		endpoint,
 		args.service,
 	)
 	if err != nil {
@@ -183,7 +185,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+		e.Config.RequestTimeout(ns.Name().String(), task.EndpointName),
 	)
 	defer cancel()
 
@@ -200,7 +202,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(task.Destination)
+	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	outcomeTag := metrics.NexusOutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
 	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
 	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
@@ -246,6 +248,8 @@ type startArgs struct {
 	service                  string
 	operation                string
 	requestID                string
+	endpointName             string
+	endpointID               string
 	header                   map[string]string
 	payload                  *commonpb.Payload
 	namespaceFailoverVersion int64
@@ -262,6 +266,8 @@ func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment
 			return err
 		}
 
+		args.endpointName = operation.Endpoint
+		args.endpointID = operation.EndpointId
 		args.service = operation.Service
 		args.operation = operation.Operation
 		args.requestID = operation.RequestId
@@ -430,7 +436,14 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	if _, err := e.EndpointRegistry.GetByID(ctx, task.Destination); err != nil {
+
+	args, err := e.loadArgsForCancelation(ctx, env, ref)
+	if err != nil {
+		return fmt.Errorf("failed to load args: %w", err)
+	}
+
+	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
+	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveCancelationResult(ctx, env, ref, &nexus.UnexpectedResponseError{
@@ -443,16 +456,10 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		return err
 	}
 
-	args, err := e.loadArgsForCancelation(ctx, env, ref)
-	if err != nil {
-		return fmt.Errorf("failed to load args: %w", err)
-	}
 	client, err := e.ClientProvider(
 		ctx,
-		queues.NamespaceIDAndDestination{
-			NamespaceID: ref.WorkflowKey.NamespaceID,
-			Destination: task.Destination,
-		},
+		ref.WorkflowKey.NamespaceID,
+		endpoint,
 		args.service,
 	)
 	if err != nil {
@@ -465,7 +472,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+		e.Config.RequestTimeout(ns.Name().String(), task.EndpointName),
 	)
 	defer cancel()
 
@@ -475,7 +482,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	methodTag := metrics.NexusMethodTag("CancelOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(task.Destination)
+	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	statusCodeTag := metrics.NexusOutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
 	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
 	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
@@ -494,7 +501,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 }
 
 type cancelArgs struct {
-	service, operation, operationID string
+	service, operation, operationID, endpointID, endpointName string
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -515,6 +522,8 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.service = op.Service
 		args.operation = op.Operation
 		args.operationID = op.OperationId
+		args.endpointID = op.EndpointId
+		args.endpointName = op.Endpoint
 		return nil
 	})
 	return
@@ -564,6 +573,33 @@ func (e taskExecutor) executeCancelationBackoffTask(env hsm.Environment, node *h
 			Node: node,
 		})
 	})
+}
+
+func (e taskExecutor) extractEndpointNameFromOperation(ctx context.Context, env hsm.Environment, ref hsm.Ref, getOpNode func(*hsm.Node) *hsm.Node) (endpoint string, err error) {
+	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
+		op, err := hsm.MachineData[Operation](getOpNode(n))
+		if err != nil {
+			return err
+		}
+		endpoint = op.Endpoint
+		return nil
+	})
+	return
+}
+
+// lookupEndpint gets an endpoint from the registry, preferring to look up by ID and falling back to name lookup.
+// The fallback is a temporary workaround for not implementing endpoint replication, and endpoint ID being a UUID set by
+// the system. We try to get the endpoint by name to support cases where an operator manually created an endpoint with
+// the same name in two replicas.
+func (e taskExecutor) lookupEndpoint(ctx context.Context, namespaceID namespace.ID, endpointID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
+	entry, err := e.EndpointRegistry.GetByID(ctx, endpointID)
+	if err != nil {
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			return e.EndpointRegistry.GetByName(ctx, namespaceID, endpointName)
+		}
+		return nil, err
+	}
+	return entry, nil
 }
 
 func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
