@@ -471,6 +471,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 		scheduleToStartTimeout = tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
 	}
 
+	isSpeculative := workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -479,9 +480,10 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
+		InMemory:            isSpeculative,
 	}
 
-	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+	if isSpeculative {
 		// If WT is still speculative, create task in in-memory task queue.
 		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
 	}
@@ -499,7 +501,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
 ) error {
-
 	workflowTask := r.mutableState.GetWorkflowTaskByID(
 		workflowTaskScheduledEventID,
 	)
@@ -507,6 +508,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
+	isSpeculative := workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -515,11 +517,13 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
-	}
-	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+		InMemory:            isSpeculative,
 	}
 
+	if isSpeculative {
+		// If WT is speculative, create task in in-memory task queue.
+		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+	}
 	r.mutableState.AddTasks(wttt)
 
 	return nil
