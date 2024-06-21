@@ -818,7 +818,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.NoError(err)
 
 	// MS should have the correct build ID
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
 
 	// update latest build to v2
@@ -844,7 +843,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.waitForChan(ctx, failedTask)
 
 	// After scheduling the second time, now MS should be assigned to v2
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v2, true, "", "", []string{v1})
 
 	// update latest build to v3
@@ -875,7 +873,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.waitForChan(ctx, timedoutTask)
 
 	// After scheduling the third time, now MS should be assigned to v3
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v3, true, "", "", []string{v1, v2})
 
 	wf3 := func(ctx workflow.Context) (string, error) {
@@ -949,7 +946,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.waitForChan(ctx, failedTask)
 
 	// MS should have the correct build ID
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
 
 	// v2 times out the task
@@ -1456,7 +1452,6 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		expectedStampBuildId = v1
 	}
 	// MS should have the correct build ID
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, expectedStampBuildId, "", nil)
 
 	// v11 times out the task
@@ -1495,7 +1490,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	s.waitForChan(ctx, timedoutTask)
 	s.waitForChan(ctx, timedoutTask)
 	s.waitForChan(ctx, timedoutTask)
-	// After scheduling the second time, now MS should be assigned to v2
+	// After scheduling the second time, now MS should be assigned to v11
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, expectedStampBuildId, "", []string{v1})
 
 	// v12 can process the task
@@ -5002,7 +4997,7 @@ func getCurrentDefault(res *workflowservice.GetWorkerBuildIdCompatibilityRespons
 	return curMajorSet.GetBuildIds()[len(curMajorSet.GetBuildIds())-1]
 }
 
-// Periodically checks a WF and unblocks when it is assigned to the given build ID
+// waitForWorkflowBuildId periodically checks a WF execution and unblocks when it is assigned to the given build ID.
 func (s *VersioningIntegSuite) waitForWorkflowBuildId(
 	ctx context.Context,
 	wfId string,
@@ -5022,6 +5017,13 @@ func (s *VersioningIntegSuite) waitForWorkflowBuildId(
 	)
 }
 
+// validateWorkflowBuildIds gets the specified workflow execution from visibility and validates that the BuildIds
+// SearchAttribute has the expected characteristics.
+//   - expectedBuildId: the currently-assigned build id for the workflow execution (only present in newVersioning)
+//   - expectedStampBuildId: the most recent version of a worker that processed a task for that workflow execution
+//
+// If expectedBuildId != "" and newVersioning == true, this function first calls s.waitForWorkflowBuildId to prevent
+// race conditions due to the visibility update delay.
 func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 	ctx context.Context,
 	wfId string,
@@ -5032,6 +5034,10 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 	expectedInheritedBuildId string,
 	extraSearchAttrBuildIds []string,
 ) {
+	if expectedBuildId != "" && newVersioning {
+		s.waitForWorkflowBuildId(ctx, wfId, runId, expectedBuildId)
+	}
+
 	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, wfId, runId)
 	s.NoError(err)
 	saPayload := dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"]
@@ -5060,7 +5066,7 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 			s.Nil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())
 		}
 		if newVersioning {
-			s.Equal(expectedBuildId, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+			s.Equal(expectedBuildId, dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) // TODO
 			s.Equal(2+len(extraSearchAttrBuildIds), len(searchAttr))
 			s.Equal(worker_versioning.AssignedBuildIdSearchAttribute(expectedBuildId), searchAttr[0])
 			s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
