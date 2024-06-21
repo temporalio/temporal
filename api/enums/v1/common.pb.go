@@ -165,7 +165,7 @@ const (
 	SCHEDULER_STATE_UNSPECIFIED SchedulerState = 0
 	// Scheduler is waiting to be activated after the specified amount of time.
 	SCHEDULER_STATE_WAITING SchedulerState = 1
-	// Scheduler is actively executing logic
+	// Scheduler is actively executing logic.
 	SCHEDULER_STATE_EXECUTING SchedulerState = 2
 )
 
