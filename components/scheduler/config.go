@@ -23,7 +23,6 @@
 package scheduler
 
 import (
-	"go.temporal.io/server/common/dynamicconfig"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
