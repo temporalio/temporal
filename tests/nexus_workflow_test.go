@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/frontend/configs"
 )
 
@@ -387,10 +388,14 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	taskQueue := s.randomizeStr(s.T().Name())
 	endpointName := s.randomizeStr(s.T().Name())
 
+	testClusterInfo, err := s.engine.GetClusterInfo(ctx, &workflowservice.GetClusterInfoRequest{})
+	s.NoError(err)
+
 	var callbackToken, publicCallbackUrl string
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get(callbacks.CallbackSourceHeader))
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
 			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
@@ -399,7 +404,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	listenAddr := nexustest.AllocListenAddress(s.T())
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-	_, err := s.operatorClient.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+	_, err = s.operatorClient.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: endpointName,
 			Target: &nexuspb.EndpointTarget{

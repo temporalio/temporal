@@ -111,16 +111,16 @@ func (e taskExecutor) executeInvocationTask(
 	defer cancel()
 
 	request, err := nexus.NewCompletionHTTPRequest(callCtx, args.url, args.completion)
+	if err != nil {
+		return queues.NewUnprocessableTaskError(
+			fmt.Sprintf("failed to construct Nexus request: %v", err),
+		)
+	}
 	if request.Header == nil {
 		request.Header = make(http.Header)
 	}
 	for k, v := range args.header {
 		request.Header.Set(k, v)
-	}
-	if err != nil {
-		return queues.NewUnprocessableTaskError(
-			fmt.Sprintf("failed to construct Nexus request: %v", err),
-		)
 	}
 
 	caller := e.CallerProvider(queues.NamespaceIDAndDestination{
