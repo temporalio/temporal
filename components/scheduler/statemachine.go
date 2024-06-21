@@ -24,10 +24,11 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
-	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
