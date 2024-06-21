@@ -2477,7 +2477,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 	if !startedWorkerStamp.GetUseVersioning() && assignedBuildId != "" && ms.HasCompletedAnyWorkflowTask() {
 		// We don't allow moving from versioned to unversioned once the wf has completed the first WFT.
 		// If this happens, it must be a stale task.
-		return 0, serviceerrors.NewObsoleteDispatchBuildId()
+		return 0, serviceerrors.NewObsoleteDispatchBuildId("versioned workflow's task cannot be dispatched to unversioned workers")
 	}
 
 	if startedWorkerStamp.GetBuildId() == assignedBuildId {
@@ -2490,7 +2490,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 		// Workflow hs already completed tasks but no redirect or a redirect based on a wrong assigned build ID is
 		// reported. This must be a task backlogged on an old build ID. rejecting this task, there should be another
 		// task scheduled on the right build ID.
-		return 0, serviceerrors.NewObsoleteDispatchBuildId()
+		return 0, serviceerrors.NewObsoleteDispatchBuildId("dispatch build ID is not the workflow's current build ID")
 	}
 
 	if assignedBuildId == "" && !ms.HasCompletedAnyWorkflowTask() {

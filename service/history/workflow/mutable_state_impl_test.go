@@ -45,6 +45,8 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
+	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -276,6 +278,204 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
+}
+
+func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	e, wft, err := s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		worker_versioning.StampForBuildId("b2"),
+		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		false,
+	)
+	s.NoError(err)
+	s.Equal("b2", wft.BuildId)
+	s.Equal("b2", e.GetWorkflowTaskStartedEventAttributes().GetWorkerVersion().GetBuildId())
+	s.Equal("b2", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(1), wft.BuildIdRedirectCounter)
+	s.Equal(int64(1), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+}
+
+func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		worker_versioning.StampForBuildId("b2"),
+		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b0"},
+		false,
+	)
+	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
+	s.ErrorAs(err, &expectedErr)
+	s.Equal("b1", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+}
+
+func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		worker_versioning.StampForBuildId("b2"),
+		nil,
+		false,
+	)
+	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
+	s.ErrorAs(err, &expectedErr)
+	s.Equal("b1", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+}
+
+func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		false,
+	)
+	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
+	s.ErrorAs(err, &expectedErr)
+	s.Equal("b1", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+}
+
+func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	sticky := &taskqueuepb.TaskQueue{Name: "sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	s.mutableState.SetStickyTaskQueue(sticky.Name, durationpb.New(time.Second))
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	e, wft, err := s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		sticky,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.Equal("", wft.BuildId)
+	s.Equal("", e.GetWorkflowTaskStartedEventAttributes().GetWorkerVersion().GetBuildId())
+	s.Equal("b1", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(0), wft.BuildIdRedirectCounter)
+	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+}
+
+func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	sticky := &taskqueuepb.TaskQueue{Name: "sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	s.mutableState.SetStickyTaskQueue(sticky.Name, durationpb.New(time.Second))
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		&taskqueuepb.TaskQueue{Name: "another-sticky-tq"},
+		"",
+		nil,
+		nil,
+		false,
+	)
+	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
+	s.ErrorAs(err, &expectedErr)
+	s.Equal("b1", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+}
+
+func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	sticky := &taskqueuepb.TaskQueue{Name: "sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		sticky,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
+	s.ErrorAs(err, &expectedErr)
+	s.Equal("b1", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+}
+
+// creates a mutable state with first WFT completed on Build ID "b1"
+func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *taskqueuepb.TaskQueue) {
+	version := int64(12)
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	e, wft, err := s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		worker_versioning.StampForBuildId("b1"),
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.Equal("b1", wft.BuildId)
+	s.Equal("b1", e.GetWorkflowTaskStartedEventAttributes().GetWorkerVersion().GetBuildId())
+	s.Equal("b1", s.mutableState.GetAssignedBuildId())
+	s.Equal(int64(0), wft.BuildIdRedirectCounter)
+	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		WorkflowTaskCompletionLimits{
+			MaxResetPoints:              10,
+			MaxSearchAttributeValueSize: 1024,
+		},
+	)
+	s.NoError(err)
 }
 
 func (s *mutableStateSuite) TestChecksum() {
