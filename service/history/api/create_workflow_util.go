@@ -103,7 +103,8 @@ func NewWorkflowWithSignal(
 		}
 
 		// Key ID is left empty as the scheduler machine is a singleton.
-		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerhsm.NewScheduler(&args))
+		tweakables := shard.GetConfig().HsmSchedulerTweakables()
+		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerhsm.NewScheduler(&args, &tweakables))
 		if err != nil {
 			return nil, err
 		}

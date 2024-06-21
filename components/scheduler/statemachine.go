@@ -25,13 +25,21 @@ package scheduler
 import (
 	"fmt"
 	enumspb "go.temporal.io/api/enums/v1"
+	schedpb "go.temporal.io/api/schedule/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+type Scheduler struct {
+	*schedspb.HsmSchedulerState
+	// cspec is not serialized as part of the state and created on demand per scheduler by the executor
+	cspec *scheduler.CompiledSpec
+}
 
 // Unique type identifier for this state machine.
 const StateMachineType = "scheduler.Scheduler"
@@ -42,15 +50,68 @@ func MachineCollection(tree *hsm.Node) hsm.Collection[*Scheduler] {
 }
 
 // NewScheduler creates a new scheduler in the WAITING state from given params.
-func NewScheduler(args *schedspb.StartScheduleArgs) *Scheduler {
+func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *HsmTweakables) *Scheduler {
 	result := &Scheduler{
 		HsmSchedulerState: &schedspb.HsmSchedulerState{
 			Args:     args,
 			HsmState: enumsspb.SCHEDULER_STATE_WAITING,
 		},
 	}
-	result.ensureFields()
+	if result.Args.Schedule == nil {
+		result.Args.Schedule = &schedpb.Schedule{}
+	}
+	if result.Args.Schedule.Spec == nil {
+		result.Args.Schedule.Spec = &schedpb.ScheduleSpec{}
+	}
+	if result.Args.Schedule.Action == nil {
+		result.Args.Schedule.Action = &schedpb.ScheduleAction{}
+	}
+	if result.Args.Schedule.Policies == nil {
+		result.Args.Schedule.Policies = &schedpb.SchedulePolicies{}
+	}
+
+	result.Args.Schedule.Policies.OverlapPolicy = result.resolveOverlapPolicy(result.Args.Schedule.Policies.OverlapPolicy)
+	result.Args.Schedule.Policies.CatchupWindow = durationpb.New(result.getCatchupWindow(tweakables))
+
+	if result.Args.Schedule.State == nil {
+		result.Args.Schedule.State = &schedpb.ScheduleState{}
+	}
+	if result.Args.Info == nil {
+		result.Args.Info = &schedpb.ScheduleInfo{}
+	}
+	if result.Args.State == nil {
+		result.Args.State = &schedspb.InternalState{}
+	}
 	return result
+}
+
+func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
+	if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
+		overlapPolicy = s.Args.Schedule.Policies.OverlapPolicy
+	}
+	if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
+		overlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
+	}
+	return overlapPolicy
+}
+
+func (s *Scheduler) getCatchupWindow(tweakables *HsmTweakables) time.Duration {
+	cw := s.Args.Schedule.Policies.CatchupWindow
+	if cw == nil {
+		return tweakables.DefaultCatchupWindow
+	}
+	if cw.AsDuration() < tweakables.MinCatchupWindow {
+		return tweakables.MinCatchupWindow
+	}
+	return cw.AsDuration()
+}
+
+func (s *Scheduler) jitterSeed() string {
+	return fmt.Sprintf("%s-%s", s.Args.State.NamespaceId, s.Args.State.ScheduleId)
+}
+
+func (s *Scheduler) identity() string {
+	return fmt.Sprintf("temporal-scheduler-%s-%s", s.Args.State.Namespace, s.Args.State.ScheduleId)
 }
 
 func (s *Scheduler) State() enumsspb.SchedulerState {
@@ -58,7 +119,7 @@ func (s *Scheduler) State() enumsspb.SchedulerState {
 }
 
 func (s *Scheduler) SetState(state enumsspb.SchedulerState) {
-	s.HsmState = state
+	s.HsmSchedulerState.HsmState = state
 }
 
 func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
@@ -84,7 +145,6 @@ func (stateMachineDefinition) Deserialize(d []byte) (any, error) {
 	}
 	return &Scheduler{
 		HsmSchedulerState: state,
-		tweakables:        scheduler.CurrentTweakablePolicies,
 	}, nil
 }
 

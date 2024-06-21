@@ -5983,14 +5983,6 @@ func (ms *MutableStateImpl) createCallerError(
 	return serviceerror.NewInvalidArgument(msg)
 }
 
-func (ms *MutableStateImpl) GetLogger() log.Logger {
-	return ms.logger
-}
-
-func (ms *MutableStateImpl) GetMetricsHandler() metrics.Handler {
-	return ms.metricsHandler
-}
-
 func (ms *MutableStateImpl) logInfo(msg string, tags ...tag.Tag) {
 	tags = append(tags, tag.WorkflowID(ms.executionInfo.WorkflowId))
 	tags = append(tags, tag.WorkflowRunID(ms.executionState.RunId))

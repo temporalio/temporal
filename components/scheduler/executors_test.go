@@ -38,12 +38,14 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/components/callbacks"
@@ -52,7 +54,6 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/scheduler"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type fakeEnv struct {
@@ -89,7 +90,7 @@ func TestProcessScheduleWaitTask(t *testing.T) {
 			ScheduleId:    "myschedule",
 			ConflictToken: 1,
 		},
-	})
+	}, &schedulerhsm.DefaultHsmTweakables)
 
 	node, err := root.AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerHsm)
 	require.NoError(t, err)
@@ -137,7 +138,7 @@ func TestProcessScheduleRunTask(t *testing.T) {
 			ScheduleId:    "myschedule",
 			ConflictToken: 1,
 		},
-	})
+	}, &schedulerhsm.DefaultHsmTweakables)
 	schedulerHsm.HsmState = enumsspb.SCHEDULER_STATE_EXECUTING
 	schedulerHsm.Args.State.LastProcessedTime = timestamppb.New(time.Now().Add(-5 * time.Minute))
 
@@ -164,7 +165,9 @@ func TestProcessScheduleRunTask(t *testing.T) {
 		SpecBuilder:    scheduler.NewSpecBuilder(),
 		FrontendClient: frontendClientMock,
 		HistoryClient:  nil,
-	}, &schedulerhsm.Config{}))
+	}, &schedulerhsm.Config{
+		Tweakables: dynamicconfig.GetTypedPropertyFn[schedulerhsm.HsmTweakables](schedulerhsm.DefaultHsmTweakables),
+	}))
 
 	err = reg.ExecuteImmediateTask(
 		context.Background(),

@@ -24,6 +24,9 @@ package scheduler
 
 import (
 	"go.temporal.io/server/common/dynamicconfig"
+	"time"
+
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceBoolSetting(
@@ -31,9 +34,35 @@ var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceBoolSetting(
 	false,
 	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
 
+const (
+	RecentActionCount = 10
+)
+
+type HsmTweakables struct {
+	DefaultCatchupWindow  time.Duration // Default for catchup window
+	MinCatchupWindow      time.Duration // Minimum for catchup window
+	MaxBufferSize         int           // MaxBufferSize limits the number of buffered starts and backfills
+	BackfillsPerIteration int           // How many backfilled actions to take per iteration (implies rate limit since min sleep is 1s)
+}
+
+var DefaultHsmTweakables = HsmTweakables{
+	DefaultCatchupWindow:  365 * 24 * time.Hour,
+	MinCatchupWindow:      10 * time.Second,
+	MaxBufferSize:         1000,
+	BackfillsPerIteration: 10,
+}
+
+var CurrentHsmTweakables = dynamicconfig.NewGlobalTypedSetting[HsmTweakables](
+	"scheduler.hsm-tweakables",
+	DefaultHsmTweakables,
+	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
+
 type Config struct {
+	Tweakables dynamicconfig.TypedPropertyFn[HsmTweakables]
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
-	return &Config{}
+	return &Config{
+		Tweakables: CurrentHsmTweakables.Get(dc),
+	}
 }
