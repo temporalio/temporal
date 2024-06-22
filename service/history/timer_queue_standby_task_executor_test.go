@@ -1740,7 +1740,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_StaleStateMachine() {
-	// TODO: fix this test
 	reg := s.mockShard.StateMachineRegistry()
 	s.NoError(dummy.RegisterStateMachine(reg))
 	s.NoError(dummy.RegisterTaskSerializers(reg))
@@ -1795,13 +1794,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 			Path: []*persistencespb.StateMachineKey{
 				{Type: dummy.StateMachineType, Id: "dummy"},
 			},
-			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: 1,
-				TransitionCount:          0,
-			},
+			MutableStateVersionedTransition: nil,
 			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
 				NamespaceFailoverVersion: 1,
-				TransitionCount:          2,
+				TransitionCount:          0,
 			},
 			MachineLastUpdateVersionedTransition: nil,
 			MachineTransitionCount:               0,

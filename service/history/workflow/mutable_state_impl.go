@@ -783,7 +783,7 @@ func (ms *MutableStateImpl) NextTransitionCount() int64 {
 	hist := ms.executionInfo.TransitionHistory
 	if len(hist) == 0 {
 		// it is possible that this is the first transition and
-		// transition history has been updated yet.
+		// transition history has not been updated yet.
 		return 1
 	}
 	return hist[len(hist)-1].TransitionCount + 1

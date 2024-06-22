@@ -145,6 +145,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 		name                    string
 		enableTransitionHistory bool
 		mutateRef               func(*hsm.Ref)
+		mutateNode              func(*hsm.Node)
 		assertOutcome           func(*testing.T, error)
 	}{
 		{
@@ -153,6 +154,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateRef: func(ref *hsm.Ref) {
 				ref.TaskID = 1
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -167,6 +169,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 					TransitionCount:          mutableStateVersonedTransition.TransitionCount,
 				}
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleState)
 			},
@@ -181,6 +184,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
 				}
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleState)
 			},
@@ -196,6 +200,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 				}
 				ref.TaskID = tasks.MaximumKey.TaskID
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -206,6 +211,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.Path[0].Id = "not-found"
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -216,6 +222,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.Path[0].Id = "not-found"
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleState)
 			},
@@ -227,6 +234,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 				ref.StateMachineRef.Path[0].Id = "not-found"
 				ref.TaskID = tasks.MaximumKey.TaskID
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -241,6 +249,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 					TransitionCount:          machineLastUpdateVersionedTransition.TransitionCount + 1,
 				}
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -251,6 +260,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.MachineTransitionCount++
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -260,6 +270,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.NoError(t, err)
 			},
@@ -269,8 +280,45 @@ func TestValidateStateMachineRef(t *testing.T) {
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.NoError(t, err)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/NodeRebuilt/MachineTransitionInequality",
+			enableTransitionHistory: true,
+			mutateRef: func(ref *hsm.Ref) {
+				// this validates we fallback to the validation logic without transition history
+				ref.StateMachineRef.MachineTransitionCount++
+			},
+			mutateNode: func(node *hsm.Node) {
+				initialVersionedTransition := node.InternalRepr().InitialVersionedTransition
+				node.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: initialVersionedTransition.NamespaceFailoverVersion,
+					TransitionCount:          0, // transition history disabled when re-creating the node
+				}
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleReference)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/NodeTransitioned/MachineTransitionInequality",
+			enableTransitionHistory: true,
+			mutateRef: func(ref *hsm.Ref) {
+				// this validates we fallback to the validation logic without transition history
+				ref.StateMachineRef.MachineTransitionCount++
+			},
+			mutateNode: func(node *hsm.Node) {
+				lastUpdateVersionedTransition := node.InternalRepr().LastUpdateVersionedTransition
+				node.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: lastUpdateVersionedTransition.NamespaceFailoverVersion,
+					TransitionCount:          0, // transition history disabled when node transitioned.
+				}
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
 		},
 	}
@@ -295,7 +343,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 				WorkflowKey:     taskWorkflowKey(task),
 				StateMachineRef: cbt.Info.Ref,
 			}
+			node, err := mutableState.HSM().Child(ref.StateMachinePath())
+			require.NoError(t, err)
+			tc.mutateNode(node)
 			tc.mutateRef(&ref)
+
 			err = exec.validateStateMachineRef(mutableState, ref, true)
 			tc.assertOutcome(t, err)
 		})

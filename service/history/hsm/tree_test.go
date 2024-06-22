@@ -183,15 +183,29 @@ func TestNode_Path(t *testing.T) {
 }
 
 func TestNode_AddChild(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	nodeBackend := &backend{}
+
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), nodeBackend)
 	require.NoError(t, err)
 
 	_, err = root.AddChild(hsm.Key{Type: "not-found", ID: "dont-care"}, "data")
 	require.ErrorIs(t, err, hsm.ErrNotRegistered)
+
 	_, err = root.AddChild(hsm.Key{Type: def1.Type(), ID: "dont-care"}, "data")
 	require.ErrorContains(t, err, "invalid state type")
-	_, err = root.AddChild(hsm.Key{Type: def1.Type(), ID: "id"}, hsmtest.NewData(hsmtest.State1))
+
+	childNode, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "id"}, hsmtest.NewData(hsmtest.State1))
 	require.NoError(t, err)
+	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: nodeBackend.GetCurrentVersion(),
+		TransitionCount:          nodeBackend.NextTransitionCount(),
+	}, childNode.InternalRepr().InitialVersionedTransition)
+	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: nodeBackend.GetCurrentVersion(),
+		TransitionCount:          nodeBackend.NextTransitionCount(),
+	}, childNode.InternalRepr().LastUpdateVersionedTransition)
+	require.Equal(t, int64(0), childNode.InternalRepr().TransitionCount)
+
 	_, err = root.AddChild(hsm.Key{Type: def1.Type(), ID: "id"}, hsmtest.NewData(hsmtest.State1))
 	require.ErrorIs(t, err, hsm.ErrStateMachineAlreadyExists)
 }
@@ -262,40 +276,105 @@ func TestNode_Walk(t *testing.T) {
 	require.Equal(t, 5, nodeCount)
 }
 
-func TestNode_Sync_NodeMatches(t *testing.T) {
+func TestNode_Sync(t *testing.T) {
+	currentState := hsmtest.State2
+	currentInitialVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 100,
+		TransitionCount:          23,
+	}
+	currentLastUpdateVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 100,
+		TransitionCount:          25,
+	}
+	incomingLastUpdateVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 200,
+		TransitionCount:          50,
+	}
+
 	testCases := []struct {
-		name          string
-		currentState  hsmtest.State
-		incomingState hsmtest.State
+		name                               string
+		incomingInitialVersionedTransition *persistencespb.VersionedTransition
+		incomingState                      hsmtest.State
+		expectedErr                        error
 	}{
 		{
-			name:          "same state",
-			currentState:  hsmtest.State1,
+			name: "NodeMisMatch/InitialVersionMismatch",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 200,
+				TransitionCount:          23,
+			},
 			incomingState: hsmtest.State1,
+			expectedErr:   hsm.ErrInitialTransitionMismatch,
 		},
 		{
-			name:          "current state newer",
-			currentState:  hsmtest.State4,
-			incomingState: hsmtest.State2,
+			name: "NodeMismatch/InitialTransitionCountMismatch",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 100,
+				TransitionCount:          32,
+			},
+			incomingState: hsmtest.State1,
+			expectedErr:   hsm.ErrInitialTransitionMismatch,
 		},
 		{
-			name:          "incoming state newer",
-			currentState:  hsmtest.State1,
+			name: "NodeMatch/TransitionHistoryDisabled",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 100,
+				// transition history disabled for incoming node,
+				// should only compare initial failover version
+				TransitionCount: 0,
+			},
+			incomingState: hsmtest.State1,
+			expectedErr:   nil,
+		},
+		{
+			name: "NodeMatch/SyncNewerState",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 100,
+				TransitionCount:          23,
+			},
 			incomingState: hsmtest.State3,
+			expectedErr:   nil,
+		},
+		{
+			name: "NodeMatch/SyncOlderState",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 100,
+				TransitionCount:          23,
+			},
+			// Sync method() is force sync and can sync to older state.
+			incomingState: hsmtest.State1,
+			expectedErr:   nil,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			currentNode, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(tc.currentState), make(map[string]*persistencespb.StateMachineMap), &backend{})
-			require.NoError(t, err)
 
-			incomingNode, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(tc.incomingState), make(map[string]*persistencespb.StateMachineMap), &backend{})
-			require.NoError(t, err)
+			initNode := func(
+				state hsmtest.State,
+				initialVersionedTransition *persistencespb.VersionedTransition,
+				lastUpdateVersionedTransition *persistencespb.VersionedTransition,
+			) *hsm.Node {
+				node, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(state), make(map[string]*persistencespb.StateMachineMap), &backend{})
+				require.NoError(t, err)
+
+				node.InternalRepr().InitialVersionedTransition = initialVersionedTransition
+				node.InternalRepr().LastUpdateVersionedTransition = lastUpdateVersionedTransition
+
+				return node
+			}
+
+			currentNode := initNode(currentState, currentInitialVersionedTransition, currentLastUpdateVersionedTransition)
+			incomingNode := initNode(tc.incomingState, tc.incomingInitialVersionedTransition, incomingLastUpdateVersionedTransition)
 
 			currentNodeTransitionCount := currentNode.InternalRepr().TransitionCount
 
-			err = currentNode.Sync(incomingNode)
+			err := currentNode.Sync(incomingNode)
+			if tc.expectedErr != nil {
+				require.ErrorIs(t, err, tc.expectedErr)
+				return
+			}
+
 			require.NoError(t, err)
 
 			incomingData, err := def1.Serialize(hsmtest.NewData(tc.incomingState))
@@ -310,54 +389,6 @@ func TestNode_Sync_NodeMatches(t *testing.T) {
 			require.Equal(t, currentNode.Path(), pao.Path)
 			require.Len(t, pao.Outputs, 1)
 			require.Len(t, pao.Outputs[0].Tasks, 2)
-
-		})
-	}
-}
-
-func TestNode_Sync_NodeNotMatches(t *testing.T) {
-	currentInitialVersionedTransition := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: 100,
-		TransitionCount:          23,
-	}
-
-	testCases := []struct {
-		name                               string
-		incomingInitialVersionedTransition *persistencespb.VersionedTransition
-	}{
-		{
-			name: "initial failover version mismatch",
-			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: 200,
-				TransitionCount:          currentInitialVersionedTransition.TransitionCount,
-			},
-		},
-		{
-			name: "initial ms transition count mismatch",
-			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: currentInitialVersionedTransition.NamespaceFailoverVersion,
-				TransitionCount:          29,
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-
-			initNode := func(initialVersionedTransition *persistencespb.VersionedTransition) *hsm.Node {
-				node, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
-				require.NoError(t, err)
-
-				node.InternalRepr().InitialVersionedTransition = initialVersionedTransition
-
-				return node
-			}
-
-			currentNode := initNode(currentInitialVersionedTransition)
-			incomingNode := initNode(tc.incomingInitialVersionedTransition)
-
-			err := currentNode.Sync(incomingNode)
-			require.ErrorIs(t, err, hsm.ErrInitialTransitionMismatch)
 		})
 	}
 }
