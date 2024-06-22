@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -381,14 +382,14 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	s.Equal(int64(4), response.NextEventId)
 
 	// long poll, new event happen before long poll timeout
-	go asycWorkflowUpdate(time.Second * 2)
+	go asycWorkflowUpdate(time.Second)
 	start := time.Now().UTC()
 	pollResponse, err := s.mockHistoryEngine.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
 		Execution:           &execution,
 		ExpectedNextEventId: 4,
 	})
-	s.True(time.Now().UTC().After(start.Add(time.Second * 1)))
+	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.Nil(err)
 	s.Equal(int64(5), pollResponse.GetNextEventId())
 	waitGroup.Wait()
@@ -397,7 +398,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	ctx := context.Background()
 
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 		RunId:      tests.RunID,
 	}
@@ -412,7 +413,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 		execution.GetRunId(),
 		log.NewTestLogger(),
 	)
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wfMs := workflow.TestCloneToProto(ms)
@@ -424,41 +425,37 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	asyncBranchTokenUpdate := func(delay time.Duration) {
 		timer := time.NewTimer(delay)
 		<-timer.C
-		newExecution := &commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.RunId,
-		}
-		ms.GetExecutionInfo().GetVersionHistories()
 		s.mockHistoryEngine.eventNotifier.NotifyNewHistoryEvent(events.NewNotification(
-			"tests.NamespaceID",
-			newExecution,
+			ms.GetWorkflowKey().NamespaceID,
+			execution,
 			int64(1),
 			int64(0),
-			int64(4),
+			int64(12),
 			int64(1),
 			enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			ms.GetExecutionInfo().GetVersionHistories()))
+			ms.GetExecutionInfo().GetVersionHistories()),
+		)
 	}
 
 	// return immediately, since the expected next event ID appears
 	response0, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
-		Execution:           &execution,
+		Execution:           execution,
 		ExpectedNextEventId: 3,
 	})
 	s.Nil(err)
 	s.Equal(int64(4), response0.GetNextEventId())
 
 	// long poll, new event happen before long poll timeout
-	go asyncBranchTokenUpdate(time.Second * 2)
+	go asyncBranchTokenUpdate(time.Second)
 	start := time.Now().UTC()
 	response1, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
-		Execution:           &execution,
+		Execution:           execution,
 		ExpectedNextEventId: 10,
 	})
-	s.True(time.Now().UTC().After(start.Add(time.Second * 1)))
+	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.Nil(err)
 	s.Equal(response0.GetCurrentBranchToken(), response1.GetCurrentBranchToken())
 }
@@ -482,6 +479,8 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	// right now the next event ID is 4
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
+
+	s.mockShard.GetConfig().LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Second)
 
 	// long poll, no event happen after long poll timeout
 	response, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
