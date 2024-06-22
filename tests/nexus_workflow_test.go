@@ -519,7 +519,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 
 	// Request fails if the state machine reference is stale.
 	staleToken := common.CloneProto(completionToken)
-	staleToken.Ref.MachineInitialNamespaceFailoverVersion += 1
+	staleToken.Ref.MachineInitialVersionedTransition.NamespaceFailoverVersion++
 	callbackToken, err = gen.Tokenize(staleToken)
 	s.NoError(err)
 
