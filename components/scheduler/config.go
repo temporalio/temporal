@@ -52,7 +52,7 @@ var DefaultHsmTweakables = HsmTweakables{
 }
 
 var CurrentHsmTweakables = dynamicconfig.NewGlobalTypedSetting[HsmTweakables](
-	"scheduler.hsm-tweakables",
+	"component.scheduler.tweakables",
 	DefaultHsmTweakables,
 	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
 
