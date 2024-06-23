@@ -58,7 +58,7 @@ func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *HsmTweakables) *
 	result := &Scheduler{
 		HsmSchedulerState: &schedspb.HsmSchedulerState{
 			Args:     args,
-			HsmState: enumsspb.SCHEDULER_STATE_WAITING,
+			State: enumsspb.SCHEDULER_STATE_WAITING,
 		},
 	}
 	if result.Args.Schedule == nil {
