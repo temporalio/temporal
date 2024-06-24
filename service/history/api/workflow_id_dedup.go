@@ -122,7 +122,6 @@ func resolveDuplicateWorkflowStart(
 	nsName := namespaceEntry.Name().String()
 	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval(nsName)
 
-	//minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval()
 	now := shardContext.GetTimeSource().Now().UTC()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
