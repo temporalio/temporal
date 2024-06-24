@@ -24,7 +24,6 @@ package scheduler
 
 import (
 	"fmt"
-	"go.temporal.io/server/common/util"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -34,6 +33,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
