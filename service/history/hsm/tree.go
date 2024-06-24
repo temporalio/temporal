@@ -31,10 +31,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/proto"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/service/history/consts"
-	"google.golang.org/protobuf/proto"
 )
 
 // ErrStateMachineNotFound is returned when looking up a non-existing state machine in a [Node] or a [Collection].
@@ -95,8 +96,8 @@ type NodeBackend interface {
 	LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 	// GetCurrentVersion returns the current namespace failover version.
 	GetCurrentVersion() int64
-	// TransitionCount returns the current state transition count from the state transition history.
-	TransitionCount() int64
+	// NextTransitionCount returns the current state transition count from the state transition history.
+	NextTransitionCount() int64
 }
 
 // EventIDFromToken gets the event ID associated with an event load token.
@@ -139,8 +140,11 @@ func NewRoot(registry *Registry, t string, data any, children map[string]*persis
 		definition: def,
 		registry:   registry,
 		persistence: &persistencespb.StateMachineNode{
-			Children: children,
-			Data:     serialized,
+			Children:                      children,
+			Data:                          serialized,
+			InitialVersionedTransition:    &persistencespb.VersionedTransition{},
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{},
+			TransitionCount:               0,
 		},
 		cache: &cachedMachine{
 			dataLoaded: true,
@@ -278,17 +282,25 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	nextVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+		// The transition count for the backend is only incremented when closing the current transaction,
+		// but any change to state machine node is a state transtion,
+		// so we can safely using next transition count here is safe.
+		TransitionCount: n.backend.NextTransitionCount(),
+	}
 	node := &Node{
 		Key:        key,
 		Parent:     n,
 		definition: def,
 		registry:   n.registry,
 		persistence: &persistencespb.StateMachineNode{
-			Children:                              make(map[string]*persistencespb.StateMachineMap),
-			Data:                                  serialized,
-			InitialNamespaceFailoverVersion:       n.backend.GetCurrentVersion(),
-			InitialMutableStateTransitionCount:    n.backend.TransitionCount(),
-			LastUpdateMutableStateTransitionCount: n.backend.TransitionCount(),
+			Children:                      make(map[string]*persistencespb.StateMachineMap),
+			Data:                          serialized,
+			InitialVersionedTransition:    nextVersionedTransition,
+			LastUpdateVersionedTransition: nextVersionedTransition,
+			TransitionCount:               0,
 		},
 		cache: &cachedMachine{
 			dataLoaded: true,
@@ -379,27 +391,40 @@ func (n *Node) InternalRepr() *persistencespb.StateMachineNode {
 	return n.persistence
 }
 
-// Sync updates the current node with the incoming node if state in the incoming node is newer.
+// CompareState compare current node state with the incoming node state.
+// Returns 0 if the states are equal,
+// a positive number if the current state is considered newer,
+// a negative number if the incoming state is considered newer.
 // Meant to be used by the framework, **not** by components.
-func (n *Node) Sync(incomingNode *Node) (bool, error) {
-	incomingInternalRepr := incomingNode.InternalRepr()
-
-	if n.persistence.InitialNamespaceFailoverVersion != incomingInternalRepr.InitialNamespaceFailoverVersion ||
-		n.persistence.InitialMutableStateTransitionCount != incomingInternalRepr.InitialMutableStateTransitionCount {
-		return false, ErrInitialTransitionMismatch
-	}
-
+// TODO: remove once transition history is enabled.
+func (n *Node) CompareState(incomingNode *Node) (int, error) {
 	currentState, err := MachineData[any](n)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	incomingState, err := MachineData[any](incomingNode)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
+	return n.definition.CompareState(currentState, incomingState)
+}
 
-	if result, err := n.definition.CompareState(currentState, incomingState); err != nil || result >= 0 {
-		return false, err
+// Sync updates the state of the current node to that of the incoming node.
+// Meant to be used by the framework, **not** by components.
+func (n *Node) Sync(incomingNode *Node) error {
+	incomingInternalRepr := incomingNode.InternalRepr()
+
+	currentInitialVersionedTransition := n.InternalRepr().InitialVersionedTransition
+	incomingInitialVersionedTransition := incomingNode.InternalRepr().InitialVersionedTransition
+	if currentInitialVersionedTransition.NamespaceFailoverVersion !=
+		incomingInitialVersionedTransition.NamespaceFailoverVersion {
+		return ErrInitialTransitionMismatch
+	}
+	if currentInitialVersionedTransition.TransitionCount != 0 &&
+		incomingInitialVersionedTransition.TransitionCount != 0 &&
+		currentInitialVersionedTransition.TransitionCount !=
+			incomingInitialVersionedTransition.TransitionCount {
+		return ErrInitialTransitionMismatch
 	}
 
 	n.persistence.Data = incomingInternalRepr.Data
@@ -413,18 +438,18 @@ func (n *Node) Sync(incomingNode *Node) (bool, error) {
 	// - marking the node as dirty
 	// - generate transition outputs (tasks)
 	// - update transition count
-	if err = MachineTransition(n, func(taskRegenerator TaskRegenerator) (TransitionOutput, error) {
+	if err := MachineTransition(n, func(taskRegenerator TaskRegenerator) (TransitionOutput, error) {
 		tasks, err := taskRegenerator.RegenerateTasks(n)
 		return TransitionOutput{
 			Tasks: tasks,
 		}, err
 	}); err != nil {
-		return false, err
+		return err
 	}
 
-	// sync LastUpdateMutableStateTransitionCount last as MachineTransition can't correctly handle it.
-	n.persistence.LastUpdateMutableStateTransitionCount = incomingInternalRepr.LastUpdateMutableStateTransitionCount
-	return true, nil
+	// sync LastUpdateVersionedTransition last as MachineTransition can't correctly handle it.
+	n.persistence.LastUpdateVersionedTransition = incomingInternalRepr.LastUpdateVersionedTransition
+	return nil
 }
 
 // MachineTransition runs the given transitionFn on a machine's data for the given key.
@@ -438,19 +463,19 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	// Update the transition counts before applying the transition function in case the transition function needs to
 	// generate references to this node.
 	n.persistence.TransitionCount++
-	prevMSTransitionCount := n.persistence.LastUpdateMutableStateTransitionCount
-	// The transition count for the backend is only incremented before the current transaction is closed but it is
-	// monotonically increasing so we can safely assume that incrementing by 1 here is safe.
-	currentMutableStateTransitionCount := n.backend.TransitionCount()
-	if currentMutableStateTransitionCount != 0 {
-		// only update when transition history is enabled.
-		n.persistence.LastUpdateMutableStateTransitionCount = n.backend.TransitionCount() + 1
+	prevLastUpdatedVersionedTransition := n.persistence.LastUpdateVersionedTransition
+	n.persistence.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+		// The transition count for the backend is only incremented when closing the current transaction,
+		// but any change to state machine node is a state transtion,
+		// so we can safely using next transition count here is safe.
+		TransitionCount: n.backend.NextTransitionCount(),
 	}
 	// Rollback on error
 	defer func() {
 		if retErr != nil {
 			n.persistence.TransitionCount--
-			n.persistence.LastUpdateMutableStateTransitionCount = prevMSTransitionCount
+			n.persistence.LastUpdateVersionedTransition = prevLastUpdatedVersionedTransition
 			// Force reloading data.
 			n.cache.dataLoaded = false
 		}

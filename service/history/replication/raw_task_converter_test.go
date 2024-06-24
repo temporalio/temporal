@@ -967,7 +967,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 		VersionHistories: versionHistories,
 	}).AnyTimes()
 	s.mutableState.EXPECT().GetCurrentVersion().Return(version).AnyTimes()
-	s.mutableState.EXPECT().TransitionCount().Return(int64(0)).AnyTimes()
+	s.mutableState.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes()
 
 	reg := s.shardContext.StateMachineRegistry()
 	err := workflow.RegisterStateMachine(reg)

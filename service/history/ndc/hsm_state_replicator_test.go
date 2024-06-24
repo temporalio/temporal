@@ -272,9 +272,14 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_LocalEventVersionSuperSet() {
 						"child1": {
 							// despite local has more events, incoming state could still be newer for a certain node
 							// and state should be synced
-							Data:                            []byte(hsmtest.State3),
-							InitialNamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
-							TransitionCount:                 50,
+							Data: []byte(hsmtest.State3),
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+							},
+							TransitionCount: 50,
 						},
 					},
 				},
@@ -341,11 +346,185 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateStale() {
 				s.stateMachineDef.Type(): {
 					MachinesById: map[string]*persistencespb.StateMachineNode{
 						"child1": {
-							// despite local has more events, incoming state could still be newer for a certain node
-							// and state should be synced
-							Data:                            []byte(hsmtest.State1),
-							InitialNamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
-							TransitionCount:                 50,
+							Data: []byte(hsmtest.State1), // stale state
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+							},
+							TransitionCount: 50,
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionStale() {
+	persistedState := s.buildWorkflowMutableState()
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: s.workflowKey.NamespaceID,
+		WorkflowID:  s.workflowKey.WorkflowID,
+		RunID:       s.workflowKey.RunID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).Times(1)
+
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode: &persistencespb.StateMachineNode{
+			Children: map[string]*persistencespb.StateMachineMap{
+				s.stateMachineDef.Type(): {
+					MachinesById: map[string]*persistencespb.StateMachineNode{
+						"child1": {
+							Data: []byte(hsmtest.State3), // newer state
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								// smaller than current node last updated version
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 50,
+							},
+							TransitionCount: 50,
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransitionStale() {
+	persistedState := s.buildWorkflowMutableState()
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: s.workflowKey.NamespaceID,
+		WorkflowID:  s.workflowKey.WorkflowID,
+		RunID:       s.workflowKey.RunID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).Times(1)
+
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode: &persistencespb.StateMachineNode{
+			Children: map[string]*persistencespb.StateMachineMap{
+				s.stateMachineDef.Type(): {
+					MachinesById: map[string]*persistencespb.StateMachineNode{
+						"child1": {
+							Data: []byte(hsmtest.State3), // newer state
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								// smaller than current node last update transition count
+								TransitionCount: 49,
+							},
+							TransitionCount: 50,
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionNewer() {
+	persistedState := s.buildWorkflowMutableState()
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: s.workflowKey.NamespaceID,
+		WorkflowID:  s.workflowKey.WorkflowID,
+		RunID:       s.workflowKey.RunID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).Times(1)
+
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
+		UpdateMutableStateStats: persistence.MutableStateStatistics{
+			HistoryStatistics: &persistence.HistoryStatistics{},
+		},
+	}, nil).Times(1)
+
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode: &persistencespb.StateMachineNode{
+			Children: map[string]*persistencespb.StateMachineMap{
+				s.stateMachineDef.Type(): {
+					MachinesById: map[string]*persistencespb.StateMachineNode{
+						"child1": {
+							Data: []byte(hsmtest.State1), // state stale
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								// newer than current node last update version
+								// should sync despite state is older than the current node
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 200,
+							},
+							TransitionCount: 50,
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransitionNewer() {
+	persistedState := s.buildWorkflowMutableState()
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: s.workflowKey.NamespaceID,
+		WorkflowID:  s.workflowKey.WorkflowID,
+		RunID:       s.workflowKey.RunID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).Times(1)
+
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
+		UpdateMutableStateStats: persistence.MutableStateStatistics{
+			HistoryStatistics: &persistence.HistoryStatistics{},
+		},
+	}, nil).Times(1)
+
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode: &persistencespb.StateMachineNode{
+			Children: map[string]*persistencespb.StateMachineMap{
+				s.stateMachineDef.Type(): {
+					MachinesById: map[string]*persistencespb.StateMachineNode{
+						"child1": {
+							Data: []byte(hsmtest.State3),
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								// higher transition count
+								TransitionCount: 51,
+							},
+							TransitionCount: 50,
 						},
 					},
 				},
@@ -400,9 +579,14 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowOpen() 
 				s.stateMachineDef.Type(): {
 					MachinesById: map[string]*persistencespb.StateMachineNode{
 						"child1": {
-							Data:                            []byte(hsmtest.State3),
-							InitialNamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
-							TransitionCount:                 50,
+							Data: []byte(hsmtest.State3),
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+							},
+							TransitionCount: 50,
 						},
 					},
 				},
@@ -447,9 +631,14 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowZombie(
 				s.stateMachineDef.Type(): {
 					MachinesById: map[string]*persistencespb.StateMachineNode{
 						"child1": {
-							Data:                            []byte(hsmtest.State3),
-							InitialNamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
-							TransitionCount:                 50,
+							Data: []byte(hsmtest.State3),
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+							},
+							TransitionCount: 50,
 						},
 					},
 				},
@@ -498,9 +687,14 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 				s.stateMachineDef.Type(): {
 					MachinesById: map[string]*persistencespb.StateMachineNode{
 						"child1": {
-							Data:                            []byte(hsmtest.State3),
-							InitialNamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
-							TransitionCount:                 50,
+							Data: []byte(hsmtest.State3),
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+							},
+							TransitionCount: 50,
 						},
 					},
 				},
@@ -534,9 +728,16 @@ func (s *hsmStateReplicatorSuite) buildWorkflowMutableState() *persistencespb.Wo
 			s.stateMachineDef.Type(): {
 				MachinesById: map[string]*persistencespb.StateMachineNode{
 					"child1": {
-						Data:                            []byte(hsmtest.State2),
-						InitialNamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
-						TransitionCount:                 23,
+						Data: []byte(hsmtest.State2),
+						InitialVersionedTransition: &persistencespb.VersionedTransition{
+							NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							TransitionCount:          10,
+						},
+						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+							NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+							TransitionCount:          50,
+						},
+						TransitionCount: 23,
 					},
 				},
 			},
