@@ -26,6 +26,7 @@ package ndc
 
 import (
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -181,29 +182,45 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		incomingNodePath := incomingNode.Path()
 		currentNode, err := currentHSM.Child(incomingNodePath)
 		if err != nil {
-			// we already done history resend before, node should always be found
-			// and node creation always associated with an event right now
-			// TODO: support node creation without event
+			// 1. Already done history resend if needed before,
+			// and node creation today always associated with an event
+			// 2. Node deletion is not supported right now.
+			// Based on 1 and 2, node should always be found here.
 			return err
 		}
 
-		if incomingNode.InternalRepr().InitialNamespaceFailoverVersion !=
-			currentNode.InternalRepr().InitialNamespaceFailoverVersion {
-			return nil
-		}
-
-		currentNodeSynced, err := currentNode.Sync(incomingNode)
-		if err != nil {
+		if shouldSyncNode, err := r.shouldSyncNode(currentNode, incomingNode); err != nil || !shouldSyncNode {
+			if err != nil && errors.Is(err, hsm.ErrInitialTransitionMismatch) {
+				return nil
+			}
 			return err
 		}
 
-		synced = synced || currentNodeSynced
-		return nil
+		synced = true
+		return currentNode.Sync(incomingNode)
 	}); err != nil {
 		return false, err
 	}
 
 	return synced, nil
+}
+
+func (r *HSMStateReplicatorImpl) shouldSyncNode(
+	currentNode, incomingNode *hsm.Node,
+) (bool, error) {
+	currentLastUpdated := currentNode.InternalRepr().LastUpdateVersionedTransition
+	incomingLastUpdated := incomingNode.InternalRepr().LastUpdateVersionedTransition
+
+	if currentLastUpdated.TransitionCount != 0 && incomingLastUpdated.TransitionCount != 0 {
+		return workflow.CompareVersionedTransition(currentLastUpdated, incomingLastUpdated) < 0, nil
+	}
+
+	if currentLastUpdated.NamespaceFailoverVersion == incomingLastUpdated.NamespaceFailoverVersion {
+		result, err := currentNode.CompareState(incomingNode)
+		return result < 0, err
+	}
+
+	return currentLastUpdated.NamespaceFailoverVersion < incomingLastUpdated.NamespaceFailoverVersion, nil
 }
 
 func (r *HSMStateReplicatorImpl) compareVersionHistory(

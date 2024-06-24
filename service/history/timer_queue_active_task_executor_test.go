@@ -1861,7 +1861,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	)
 	s.NoError(err)
 	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
-	ms.EXPECT().TransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
 	ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
@@ -1878,8 +1878,12 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	// Invalid reference, should be dropped.
 	invalidTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
-			MutableStateNamespaceFailoverVersion:   1,
-			MachineInitialNamespaceFailoverVersion: 2,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 1,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
 		},
 		Type: dummy.TaskTypeTimer,
 	}
@@ -1888,8 +1892,12 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 			Path: []*persistencespb.StateMachineKey{
 				{Type: dummy.StateMachineType, Id: "dummy"},
 			},
-			MutableStateNamespaceFailoverVersion:   2,
-			MachineInitialNamespaceFailoverVersion: 2,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
 		},
 		Type: dummy.TaskTypeTimer,
 	}
