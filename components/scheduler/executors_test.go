@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/components/callbacks"
 	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/history/hsm"
@@ -100,7 +101,6 @@ func TestProcessScheduleWaitTask(t *testing.T) {
 	require.NoError(t, schedulerhsm.RegisterExecutor(
 		reg,
 		schedulerhsm.TaskExecutorOptions{},
-		&schedulerhsm.Config{},
 	))
 
 	err = reg.ExecuteTimerTask(
@@ -159,14 +159,22 @@ func TestProcessScheduleRunTask(t *testing.T) {
 		return &workflowservice.StartWorkflowExecutionResponse{}, nil
 	}).Times(1)
 
+	namespaceRegistry := namespace.NewMockRegistry(ctrl)
+	namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("mynsid")).Return(
+		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "myns"}, nil, false, nil, 0), nil)
+
+	config := &schedulerhsm.Config{
+		Tweakables:       dynamicconfig.GetTypedPropertyFnFilteredByNamespaceID[schedulerhsm.HsmTweakables](schedulerhsm.DefaultHsmTweakables),
+		ExecutionTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespaceID(time.Second * 10),
+	}
 	require.NoError(t, schedulerhsm.RegisterExecutor(reg, schedulerhsm.TaskExecutorOptions{
-		MetricsHandler: metrics.NoopMetricsHandler,
-		Logger:         log.NewNoopLogger(),
-		SpecBuilder:    scheduler.NewSpecBuilder(),
-		FrontendClient: frontendClientMock,
-		HistoryClient:  nil,
-	}, &schedulerhsm.Config{
-		Tweakables: dynamicconfig.GetTypedPropertyFn[schedulerhsm.HsmTweakables](schedulerhsm.DefaultHsmTweakables),
+		MetricsHandler:    metrics.NoopMetricsHandler,
+		Logger:            log.NewNoopLogger(),
+		SpecBuilder:       scheduler.NewSpecBuilder(),
+		FrontendClient:    frontendClientMock,
+		HistoryClient:     nil,
+		NamespaceRegistry: namespaceRegistry,
+		Config:            config,
 	}))
 
 	err = reg.ExecuteImmediateTask(
@@ -182,7 +190,7 @@ func TestProcessScheduleRunTask(t *testing.T) {
 					},
 				},
 			}},
-		schedulerhsm.SchedulerActivateTask{Destination: "myns"},
+		schedulerhsm.SchedulerActivateTask{},
 	)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.SCHEDULER_STATE_WAITING, schedulerHsm.HsmState)

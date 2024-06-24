@@ -25,6 +25,8 @@ package scheduler
 import (
 	"cmp"
 	"context"
+	"fmt"
+	"go.temporal.io/server/common/namespace"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,28 +53,25 @@ import (
 type (
 	TaskExecutorOptions struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		SpecBuilder    *scheduler.SpecBuilder
-		FrontendClient workflowservice.WorkflowServiceClient
-		HistoryClient  resource.HistoryClient
+		MetricsHandler    metrics.Handler
+		Logger            log.Logger
+		SpecBuilder       *scheduler.SpecBuilder
+		FrontendClient    workflowservice.WorkflowServiceClient
+		HistoryClient     resource.HistoryClient
+		NamespaceRegistry namespace.Registry
+		Config            *Config
 	}
 
 	taskExecutor struct {
-		options TaskExecutorOptions
-		config  *Config
+		TaskExecutorOptions
 	}
 )
 
 func RegisterExecutor(
 	registry *hsm.Registry,
 	executorOptions TaskExecutorOptions,
-	config *Config,
 ) error {
-	exec := taskExecutor{
-		options: executorOptions,
-		config:  config,
-	}
+	exec := taskExecutor{executorOptions}
 	if err := hsm.RegisterTimerExecutor(
 		registry,
 		exec.executeSchedulerWaitTask); err != nil {
@@ -100,18 +99,38 @@ func (e taskExecutor) executeSchedulerRunTask(
 	ref hsm.Ref,
 	task SchedulerActivateTask,
 ) error {
-	s, err := e.copySchedulerState(ctx, env, ref)
+	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
+	if err != nil {
+		return fmt.Errorf("failed to get namespace by ID: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, e.Config.ExecutionTimeout(ref.WorkflowKey.NamespaceID))
+	defer cancel()
+
+	var s Scheduler
+	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		if err := node.CheckRunning(); err != nil {
+			return err
+		}
+		sched, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		// Ensure that this is copy, so later (stateful) processing does not update state machine without protection
+		s = *sched
+		return err
+	})
 	if err != nil {
 		return err
 	}
-
-	tweakables := e.config.Tweakables(s.Args.State.Namespace)
+	// Update in case namespace was renamed since creation
+	s.Args.State.Namespace = ns.Name().String()
+	tweakables := e.Config.Tweakables(s.Args.State.NamespaceId)
 
 	if s.cspec == nil {
-		cspec, err := e.options.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
+		cspec, err := e.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
 		if err != nil {
-			if e.options.Logger != nil {
-				e.options.Logger.Error("Invalid schedule", tag.Error(err))
+			if e.Logger != nil {
+				e.Logger.Error("Invalid schedule", tag.Error(err))
 			}
 			s.cspec = nil
 			return err
@@ -123,7 +142,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 		// log these as json since it's more readable than the Go representation
 		specJson, _ := protojson.Marshal(s.Args.Schedule.Spec)
 		policiesJson, _ := protojson.Marshal(s.Args.Schedule.Policies)
-		e.options.Logger.Info("Starting schedule", tag.NewStringTag("spec", string(specJson)), tag.NewStringTag("policies", string(policiesJson)))
+		e.Logger.Info("Starting schedule", tag.NewStringTag("spec", string(specJson)), tag.NewStringTag("policies", string(policiesJson)))
 		s.Args.State.LastProcessedTime = timestamppb.Now()
 		s.Args.State.ConflictToken = scheduler.InitialConflictToken
 		s.Args.Info.CreateTime = s.Args.State.LastProcessedTime
@@ -132,7 +151,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 	t1 := timestamp.TimeValue(s.Args.State.LastProcessedTime)
 	t2 := time.Now()
 	if t2.Before(t1) {
-		e.options.Logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
+		e.Logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
 		t2 = t1
 	}
 	nextWakeup, lastAction := e.processTimeRange(
@@ -173,32 +192,13 @@ func (e taskExecutor) executeSchedulerRunTask(
 			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
 		})
 	})
-
-}
-
-func (e taskExecutor) copySchedulerState(ctx context.Context,
-	env hsm.Environment,
-	ref hsm.Ref) (s Scheduler, err error) {
-	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		if err := node.CheckRunning(); err != nil {
-			return err
-		}
-		sched, err := hsm.MachineData[*Scheduler](node)
-		if err != nil {
-			return err
-		}
-		// Ensure that this is copy, so later (stateful) processing does not update state machine without protection
-		s = *sched
-		return err
-	})
-	return
 }
 
 func (e taskExecutor) processBuffer(ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
 	s *Scheduler) (tryAgain bool, err error) {
-	e.options.Logger.Debug("processBuffer", tag.NewInt("buffer", len(s.Args.State.BufferedStarts)), tag.NewInt("running", len(s.Args.Info.RunningWorkflows)))
+	e.Logger.Debug("processBuffer", tag.NewInt("buffer", len(s.Args.State.BufferedStarts)), tag.NewInt("running", len(s.Args.Info.RunningWorkflows)))
 	tryAgain = false
 
 	// Make sure we have something to start. If not, we can clear the buffer.
@@ -223,10 +223,10 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 	s.Args.Info.OverlapSkipped += action.OverlapSkipped
 
 	for _, start := range allStarts {
-		result, err := e.startWorkflow(s, ctx, start, req)
-		metricsWithTag := e.options.MetricsHandler.WithTags(metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
+		result, err := e.startWorkflow(ctx, s, start, req)
+		metricsWithTag := e.MetricsHandler.WithTags(metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 		if err != nil {
-			e.options.Logger.Error("Failed to start workflow", tag.NewErrorTag(err))
+			e.Logger.Error("Failed to start workflow", tag.NewErrorTag(err))
 			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Record(1)
 			// TODO: we could put this back in the buffer and retry (after a delay) up until
 			// the catchup window. of course, it's unlikely that this workflow would be making
@@ -241,22 +241,22 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 	// Terminate or cancel if required (terminate overrides cancel if both are present)
 	if action.NeedTerminate {
 		for _, ex := range s.Args.Info.RunningWorkflows {
-			e.terminateWorkflow(s, ctx, ex)
+			e.terminateWorkflow(ctx, s, ex)
 		}
 	} else if action.NeedCancel {
 		for _, ex := range s.Args.Info.RunningWorkflows {
-			e.cancelWorkflow(s, ctx, ex)
+			e.cancelWorkflow(ctx, s, ex)
 		}
 	}
 	return
 }
 
 func (e taskExecutor) bufferWorkflowStart(s *Scheduler, tweakables *HsmTweakables, nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
-	e.options.Logger.Debug("bufferWorkflowStart", tag.NewTimeTag("start-time", nominalTime), tag.NewTimeTag("actual-start-time", actualTime),
+	e.Logger.Debug("bufferWorkflowStart", tag.NewTimeTag("start-time", nominalTime), tag.NewTimeTag("actual-start-time", actualTime),
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 	if tweakables.MaxBufferSize > 0 && len(s.Args.State.BufferedStarts) >= tweakables.MaxBufferSize {
-		e.options.Logger.Warn("Buffer too large", tag.NewTimeTag("start-time", nominalTime), tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
-		e.options.MetricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(1)
+		e.Logger.Warn("Buffer too large", tag.NewTimeTag("start-time", nominalTime), tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
+		e.MetricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(1)
 		s.Args.Info.BufferDropped += 1
 		return
 	}
@@ -280,7 +280,7 @@ func (e taskExecutor) processTimeRange(
 	manual bool,
 	limit *int,
 ) (time.Time, time.Time) {
-	e.options.Logger.Debug("processTimeRange", tag.NewTimeTag("start", start), tag.NewTimeTag("end", end),
+	e.Logger.Debug("processTimeRange", tag.NewTimeTag("start", start), tag.NewTimeTag("end", end),
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 
 	if s.cspec == nil {
@@ -298,8 +298,8 @@ func (e taskExecutor) processTimeRange(
 			continue
 		}
 		if !manual && end.Sub(next.Next) > catchupWindow {
-			e.options.Logger.Warn("Schedule missed catchup window", tag.NewTimeTag("now", end), tag.NewTimeTag("time", next.Next))
-			e.options.MetricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
+			e.Logger.Warn("Schedule missed catchup window", tag.NewTimeTag("now", end), tag.NewTimeTag("time", next.Next))
+			e.MetricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 			s.Args.Info.MissedCatchupWindow++
 			continue
 		}
@@ -346,8 +346,8 @@ func (e taskExecutor) processBackfills(s *Scheduler, tweakables *HsmTweakables) 
 }
 
 func (e taskExecutor) startWorkflow(
-	s *Scheduler,
 	ctx context.Context,
+	s *Scheduler,
 	start *schedspb.BufferedStart,
 	newWorkflow *workflowpb.NewWorkflowExecutionInfo,
 ) (*schedpb.ScheduleActionResult, error) {
@@ -386,7 +386,7 @@ func (e taskExecutor) startWorkflow(
 		Namespace:            s.Args.State.Namespace,
 	}
 
-	res, err := e.options.FrontendClient.StartWorkflowExecution(ctx, req)
+	res, err := e.FrontendClient.StartWorkflowExecution(ctx, req)
 	if err != nil {
 		// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 		// TODO(Tianyu): On failure, need to figure out how HSM-based implementation should retry, as we can no longer rely on automatic activity retries.
@@ -399,7 +399,7 @@ func (e taskExecutor) startWorkflow(
 	if !start.Manual {
 		// record metric only for _scheduled_ actions, not trigger/backfill, otherwise it's not meaningful
 		desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
-		e.options.MetricsHandler.Timer(metrics.ScheduleActionDelay.Name()).Record(now.Sub(desiredTime.AsTime()))
+		e.MetricsHandler.Timer(metrics.ScheduleActionDelay.Name()).Record(now.Sub(desiredTime.AsTime()))
 	}
 
 	return &schedpb.ScheduleActionResult{
@@ -412,8 +412,9 @@ func (e taskExecutor) startWorkflow(
 	}, nil
 }
 
-func (e taskExecutor) terminateWorkflow(s *Scheduler,
+func (e taskExecutor) terminateWorkflow(
 	ctx context.Context,
+	s *Scheduler,
 	ex *commonpb.WorkflowExecution) {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	// TODO(Tianyu): hardcoded wait time
@@ -431,18 +432,19 @@ func (e taskExecutor) terminateWorkflow(s *Scheduler,
 			FirstExecutionRunId: ex.RunId,
 		},
 	}
-	_, err := e.options.HistoryClient.TerminateWorkflowExecution(workflowCtx, rreq)
+	_, err := e.HistoryClient.TerminateWorkflowExecution(workflowCtx, rreq)
 
 	// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 	// TODO(Tianyu): On failure, need to figure out how HSM-based implementation should retry, as we can no longer rely on automatic activity retries.
 	if err != nil {
-		e.options.Logger.Error("terminate workflow failed", tag.WorkflowID(ex.WorkflowId), tag.Error(err))
-		e.options.MetricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
+		e.Logger.Error("terminate workflow failed", tag.WorkflowID(ex.WorkflowId), tag.Error(err))
+		e.MetricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 	}
 }
 
-func (e taskExecutor) cancelWorkflow(s *Scheduler,
+func (e taskExecutor) cancelWorkflow(
 	ctx context.Context,
+	s *Scheduler,
 	ex *commonpb.WorkflowExecution) {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	// TODO(Tianyu): hardcoded wait time
@@ -461,14 +463,14 @@ func (e taskExecutor) cancelWorkflow(s *Scheduler,
 			Reason:              "cancelled by schedule overlap policy",
 		},
 	}
-	_, err := e.options.HistoryClient.RequestCancelWorkflowExecution(workflowCtx, rreq)
+	_, err := e.HistoryClient.RequestCancelWorkflowExecution(workflowCtx, rreq)
 	// Note: cancellation has completed (or failed) here but the workflow might take time
 	// to close since a cancel is only a request.
 	// If this failed, that's okay, we'll try it again the next time we try to take an action.
 	// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 	// TODO(Tianyu): On failure, need to figure out how HSM-based implementation should retry, as we can no longer rely on automatic activity retries.
 	if err != nil {
-		e.options.Logger.Error("cancelling workflow failed", tag.WorkflowID(ex.WorkflowId), tag.Error(err))
-		e.options.MetricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
+		e.Logger.Error("cancelling workflow failed", tag.WorkflowID(ex.WorkflowId), tag.Error(err))
+		e.MetricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 	}
 }

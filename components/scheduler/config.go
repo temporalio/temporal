@@ -28,7 +28,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceBoolSetting(
+var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceIDBoolSetting(
 	"scheduler.use-experimental-hsm-scheduler",
 	false,
 	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
@@ -51,17 +51,25 @@ var DefaultHsmTweakables = HsmTweakables{
 	BackfillsPerIteration: 10,
 }
 
-var CurrentHsmTweakables = dynamicconfig.NewNamespaceTypedSetting[HsmTweakables](
+var CurrentHsmTweakables = dynamicconfig.NewNamespaceIDTypedSetting[HsmTweakables](
 	"component.scheduler.tweakables",
 	DefaultHsmTweakables,
 	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
 
+var ExecutionTimeout = dynamicconfig.NewNamespaceIDDurationSetting(
+	"component.scheduler.execution-timeout",
+	time.Second*10,
+	`ExecutionTimeout is the timeout for executing a single scheduler run.`,
+)
+
 type Config struct {
-	Tweakables dynamicconfig.TypedPropertyFnWithNamespaceFilter[HsmTweakables]
+	Tweakables       dynamicconfig.TypedPropertyFnWithNamespaceIDFilter[HsmTweakables]
+	ExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Tweakables: CurrentHsmTweakables.Get(dc),
+		Tweakables:       CurrentHsmTweakables.Get(dc),
+		ExecutionTimeout: ExecutionTimeout.Get(dc),
 	}
 }

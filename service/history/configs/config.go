@@ -353,8 +353,8 @@ type Config struct {
 
 	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFn
 
-	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFn[schedulerhsm.HsmTweakables]
+	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFnWithNamespaceIDFilter[schedulerhsm.HsmTweakables]
 }
 
 // NewConfig returns new service config with default values
