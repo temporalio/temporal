@@ -303,7 +303,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				fmt.Sprintf(
 					"binary %v is marked as bad deployment",
 					request.GetBinaryChecksum())),
-			nil)
+			false)
 	} else {
 		namespace := namespaceEntry.Name()
 		workflowSizeChecker := newWorkflowSizeChecker(
@@ -404,11 +404,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		wtFailedShouldCreateNewTask = true
 		newMutableState = nil
 
-		if wtFailedCause.workflowTerminationReason != nil {
+		if wtFailedCause.terminateWorkflow {
 			// Flush buffer event before terminating the workflow
 			ms.FlushBufferedEvents()
 
-			if err := workflow.TerminateWorkflow(ms, wtFailedCause.workflowTerminationReason.Message, nil,
+			if err := workflow.TerminateWorkflow(ms, wtFailedCause.causeErr.Error(), nil,
 				consts.IdentityHistoryService, false); err != nil {
 				return nil, err
 			}
