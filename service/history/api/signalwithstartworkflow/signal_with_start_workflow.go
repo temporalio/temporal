@@ -34,6 +34,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
@@ -156,11 +157,19 @@ func createWorkflowMutationFunction(
 	currentMutableState := currentWorkflowLease.GetMutableState()
 	currentExecutionState := currentMutableState.GetExecutionState()
 	currentWorkflowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
+
+	// It is unclear if currentExecutionState.RunId is the same as
+	// currentWorkflowLease.GetContext().GetWorkflowKey().RunID
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: currentWorkflowLease.GetContext().GetWorkflowKey().NamespaceID,
+		WorkflowID:  currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
+		RunID:       currentExecutionState.RunId,
+	}
+
 	workflowMutationFunc, err := api.ResolveDuplicateWorkflowID(
 		shardContext,
-		currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
+		workflowKey,
 		newRunID,
-		currentExecutionState.RunId,
 		currentExecutionState.State,
 		currentExecutionState.Status,
 		currentExecutionState.CreateRequestId,
