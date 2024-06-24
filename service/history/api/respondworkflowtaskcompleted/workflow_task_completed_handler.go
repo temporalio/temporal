@@ -103,9 +103,9 @@ type (
 	}
 
 	workflowTaskFailedCause struct {
-		failedCause               enumspb.WorkflowTaskFailedCause
-		causeErr                  error
-		workflowTerminationReason *failurepb.Failure
+		failedCause       enumspb.WorkflowTaskFailedCause
+		causeErr          error
+		terminateWorkflow bool // when true, this task failure should be considered terminal to its workflow
 	}
 
 	workflowTaskResponseMutation func(
@@ -348,7 +348,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		err := ch(ctx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
 		var failWFTErr workflow.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
-			if failWFTErr.FailWorkflow {
+			if failWFTErr.TerminateWorkflow {
 				return nil, handler.terminateWorkflow(failWFTErr.Cause, failWFTErr)
 			}
 			return nil, handler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
@@ -1444,9 +1444,9 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTask(
 	handler.workflowTaskFailedCause = newWorkflowTaskFailedCause(
 		failedCause,
 		causeErr,
-		nil)
+		false)
 	handler.stopProcessing = true
-	// NOTE: failWorkflowTask always return nil.
+	// NOTE: failWorkflowTask always returns nil.
 	//  It is important to clear returned error if WT needs to be failed to properly add WTFailed event.
 	//  Handler will rely on stopProcessing flag and workflowTaskFailedCause field.
 	return nil
@@ -1460,20 +1460,20 @@ func (handler *workflowTaskCompletedHandler) terminateWorkflow(
 	handler.workflowTaskFailedCause = newWorkflowTaskFailedCause(
 		failedCause,
 		causeErr,
-		failure.NewServerFailure(causeErr.Error(), true))
+		true)
 	handler.stopProcessing = true
-	// NOTE: failWorkflow always return nil.
+	// NOTE: terminateWorkflow always returns nil.
 	//  It is important to clear returned error if WT needs to be failed to properly add WTFailed and FailWorkflow events.
 	//  Handler will rely on stopProcessing flag and workflowTaskFailedCause field.
 	return nil
 }
 
-func newWorkflowTaskFailedCause(failedCause enumspb.WorkflowTaskFailedCause, causeErr error, workflowTerminationReason *failurepb.Failure) *workflowTaskFailedCause {
+func newWorkflowTaskFailedCause(failedCause enumspb.WorkflowTaskFailedCause, causeErr error, terminatesWorkflow bool) *workflowTaskFailedCause {
 
 	return &workflowTaskFailedCause{
-		failedCause:               failedCause,
-		causeErr:                  causeErr,
-		workflowTerminationReason: workflowTerminationReason,
+		failedCause:       failedCause,
+		causeErr:          causeErr,
+		terminateWorkflow: terminatesWorkflow,
 	}
 }
 
