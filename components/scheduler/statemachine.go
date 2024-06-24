@@ -24,6 +24,7 @@ package scheduler
 
 import (
 	"fmt"
+	"go.temporal.io/server/common/util"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -48,45 +49,40 @@ type Scheduler struct {
 // Unique type identifier for this state machine.
 const StateMachineType = "scheduler.Scheduler"
 
-// MachineCollection creates a new typed [statemachines.Collection] for callbacks.
-func MachineCollection(tree *hsm.Node) hsm.Collection[*Scheduler] {
-	return hsm.NewCollection[*Scheduler](tree, StateMachineType)
-}
-
 // NewScheduler creates a new scheduler in the WAITING state from given params.
 func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *HsmTweakables) *Scheduler {
-	result := &Scheduler{
+	s := &Scheduler{
 		HsmSchedulerState: &schedspb.HsmSchedulerState{
 			Args:     args,
-			State: enumsspb.SCHEDULER_STATE_WAITING,
+			HsmState: enumsspb.SCHEDULER_STATE_WAITING,
 		},
 	}
-	if result.Args.Schedule == nil {
-		result.Args.Schedule = &schedpb.Schedule{}
+	if s.Args.Schedule == nil {
+		s.Args.Schedule = &schedpb.Schedule{}
 	}
-	if result.Args.Schedule.Spec == nil {
-		result.Args.Schedule.Spec = &schedpb.ScheduleSpec{}
+	if s.Args.Schedule.Spec == nil {
+		s.Args.Schedule.Spec = &schedpb.ScheduleSpec{}
 	}
-	if result.Args.Schedule.Action == nil {
-		result.Args.Schedule.Action = &schedpb.ScheduleAction{}
+	if s.Args.Schedule.Action == nil {
+		s.Args.Schedule.Action = &schedpb.ScheduleAction{}
 	}
-	if result.Args.Schedule.Policies == nil {
-		result.Args.Schedule.Policies = &schedpb.SchedulePolicies{}
+	if s.Args.Schedule.Policies == nil {
+		s.Args.Schedule.Policies = &schedpb.SchedulePolicies{}
 	}
 
-	result.Args.Schedule.Policies.OverlapPolicy = result.resolveOverlapPolicy(result.Args.Schedule.Policies.OverlapPolicy)
-	result.Args.Schedule.Policies.CatchupWindow = durationpb.New(result.getCatchupWindow(tweakables))
+	s.Args.Schedule.Policies.OverlapPolicy = s.resolveOverlapPolicy(s.Args.Schedule.Policies.OverlapPolicy)
+	s.Args.Schedule.Policies.CatchupWindow = durationpb.New(s.catchupWindow(tweakables))
 
-	if result.Args.Schedule.State == nil {
-		result.Args.Schedule.State = &schedpb.ScheduleState{}
+	if s.Args.Schedule.State == nil {
+		s.Args.Schedule.State = &schedpb.ScheduleState{}
 	}
-	if result.Args.Info == nil {
-		result.Args.Info = &schedpb.ScheduleInfo{}
+	if s.Args.Info == nil {
+		s.Args.Info = &schedpb.ScheduleInfo{}
 	}
-	if result.Args.State == nil {
-		result.Args.State = &schedspb.InternalState{}
+	if s.Args.State == nil {
+		s.Args.State = &schedspb.InternalState{}
 	}
-	return result
+	return s
 }
 
 func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
@@ -99,15 +95,24 @@ func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPo
 	return overlapPolicy
 }
 
-func (s *Scheduler) getCatchupWindow(tweakables *HsmTweakables) time.Duration {
+func (s *Scheduler) catchupWindow(tweakables *HsmTweakables) time.Duration {
 	cw := s.Args.Schedule.Policies.CatchupWindow
 	if cw == nil {
 		return tweakables.DefaultCatchupWindow
 	}
-	if cw.AsDuration() < tweakables.MinCatchupWindow {
+	cwDuration := cw.AsDuration()
+	if cwDuration < tweakables.MinCatchupWindow {
 		return tweakables.MinCatchupWindow
 	}
-	return cw.AsDuration()
+	return cwDuration
+}
+
+func (s *Scheduler) recordAction(result *schedpb.ScheduleActionResult, nonOverlapping bool) {
+	s.Args.Info.ActionCount++
+	s.Args.Info.RecentActions = util.SliceTail(append(s.Args.Info.RecentActions, result), RecentActionCount)
+	if nonOverlapping && result.StartWorkflowResult != nil {
+		s.Args.Info.RunningWorkflows = append(s.Args.Info.RunningWorkflows, result.StartWorkflowResult)
+	}
 }
 
 func (s *Scheduler) jitterSeed() string {
@@ -131,7 +136,8 @@ func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	case enumsspb.SCHEDULER_STATE_WAITING:
 		return []hsm.Task{SchedulerWaitTask{Deadline: s.NextInvocationTime.AsTime()}}, nil
 	case enumsspb.SCHEDULER_STATE_EXECUTING:
-		return []hsm.Task{SchedulerActivateTask{Destination: s.Args.State.Namespace}}, nil
+		// This task is done locally and do not need a destination
+		return []hsm.Task{SchedulerActivateTask{}}, nil
 	}
 	return nil, nil
 }

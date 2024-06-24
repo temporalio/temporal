@@ -33,7 +33,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
-	"go.temporal.io/server/common/util"
 	"go.uber.org/fx"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -62,11 +61,6 @@ type (
 	taskExecutor struct {
 		options TaskExecutorOptions
 		config  *Config
-	}
-
-	startWorkflowResult struct {
-		result         *schedpb.ScheduleActionResult
-		nonOverlapping bool
 	}
 )
 
@@ -106,15 +100,60 @@ func (e taskExecutor) executeSchedulerRunTask(
 	ref hsm.Ref,
 	task SchedulerActivateTask,
 ) error {
-
-	nextWakeup, s, err := e.runSchedulingLogic(ctx, env, ref)
+	s, err := e.copySchedulerState(ctx, env, ref)
 	if err != nil {
 		return err
 	}
+
+	tweakables := e.config.Tweakables(s.Args.State.Namespace)
+
+	if s.cspec == nil {
+		cspec, err := e.options.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
+		if err != nil {
+			if e.options.Logger != nil {
+				e.options.Logger.Error("Invalid schedule", tag.Error(err))
+			}
+			s.cspec = nil
+			return err
+		}
+		s.cspec = cspec
+	}
+
+	if s.Args.State.LastProcessedTime == nil {
+		// log these as json since it's more readable than the Go representation
+		specJson, _ := protojson.Marshal(s.Args.Schedule.Spec)
+		policiesJson, _ := protojson.Marshal(s.Args.Schedule.Policies)
+		e.options.Logger.Info("Starting schedule", tag.NewStringTag("spec", string(specJson)), tag.NewStringTag("policies", string(policiesJson)))
+		s.Args.State.LastProcessedTime = timestamppb.Now()
+		s.Args.State.ConflictToken = scheduler.InitialConflictToken
+		s.Args.Info.CreateTime = s.Args.State.LastProcessedTime
+	}
+
+	t1 := timestamp.TimeValue(s.Args.State.LastProcessedTime)
+	t2 := time.Now()
+	if t2.Before(t1) {
+		e.options.Logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
+		t2 = t1
+	}
+	nextWakeup, lastAction := e.processTimeRange(
+		&s,
+		&tweakables,
+		t1, t2,
+		// resolve this to the schedule's policy as late as possible
+		enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+		false,
+		nil,
+	)
+
+	s.Args.State.LastProcessedTime = timestamppb.New(lastAction)
+	s.NextInvocationTime = timestamppb.New(nextWakeup)
+	// process backfills if we have any too
+	e.processBackfills(&s, &tweakables)
+
 	// try starting workflows in the buffer
 	// nolint:revive
 	for {
-		hasNext, err := e.processBuffer(ctx, env, ref, s)
+		hasNext, err := e.processBuffer(ctx, env, ref, &s)
 		if err != nil {
 			return err
 		}
@@ -124,12 +163,12 @@ func (e taskExecutor) executeSchedulerRunTask(
 	}
 
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		s, err := hsm.MachineData[*Scheduler](node)
+		sPtr, err := hsm.MachineData[*Scheduler](node)
 		if err != nil {
 			return err
 		}
-		s.NextInvocationTime = timestamppb.New(nextWakeup)
-
+		// Copy outside scheduler, which has been updated, to the state machine
+		*sPtr = s
 		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
 			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
 		})
@@ -137,59 +176,20 @@ func (e taskExecutor) executeSchedulerRunTask(
 
 }
 
-func (e taskExecutor) runSchedulingLogic(ctx context.Context,
+func (e taskExecutor) copySchedulerState(ctx context.Context,
 	env hsm.Environment,
-	ref hsm.Ref) (nextWakeup time.Time, s *Scheduler, err error) {
-	err = env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err = node.CheckRunning(); err != nil {
+	ref hsm.Ref) (s Scheduler, err error) {
+	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		s, err = hsm.MachineData[*Scheduler](node)
+		sched, err := hsm.MachineData[*Scheduler](node)
 		if err != nil {
 			return err
 		}
-
-		if s.cspec == nil {
-			cspec, err := e.options.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
-			if err != nil {
-				if e.options.Logger != nil {
-					e.options.Logger.Error("Invalid schedule", tag.Error(err))
-				}
-				s.cspec = nil
-				return err
-			}
-			s.cspec = cspec
-		}
-
-		if s.Args.State.LastProcessedTime == nil {
-			// log these as json since it's more readable than the Go representation
-			specJson, _ := protojson.Marshal(s.Args.Schedule.Spec)
-			policiesJson, _ := protojson.Marshal(s.Args.Schedule.Policies)
-			e.options.Logger.Info("Starting schedule", tag.NewStringTag("spec", string(specJson)), tag.NewStringTag("policies", string(policiesJson)))
-			s.Args.State.LastProcessedTime = timestamppb.Now()
-			s.Args.State.ConflictToken = scheduler.InitialConflictToken
-			s.Args.Info.CreateTime = s.Args.State.LastProcessedTime
-		}
-
-		t1 := timestamp.TimeValue(s.Args.State.LastProcessedTime)
-		t2 := time.Now()
-		if t2.Before(t1) {
-			e.options.Logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
-			t2 = t1
-		}
-		var lastAction time.Time
-		nextWakeup, lastAction = e.processTimeRange(
-			s,
-			t1, t2,
-			// resolve this to the schedule's policy as late as possible
-			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
-			false,
-			nil,
-		)
-		s.Args.State.LastProcessedTime = timestamppb.New(lastAction)
-		// process backfills if we have any too
-		e.processBackfills(s)
-		return nil
+		// Ensure that this is copy, so later (stateful) processing does not update state machine without protection
+		s = *sched
+		return err
 	})
 	return
 }
@@ -219,11 +219,11 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 	if action.NonOverlappingStart != nil {
 		allStarts = append(allStarts, action.NonOverlappingStart)
 	}
-
-	results := make([]startWorkflowResult, len(allStarts))
+	s.Args.State.BufferedStarts = action.NewBuffer
+	s.Args.Info.OverlapSkipped += action.OverlapSkipped
 
 	for _, start := range allStarts {
-		result, err := e.startWorkflow(s, start, req)
+		result, err := e.startWorkflow(s, ctx, start, req)
 		metricsWithTag := e.options.MetricsHandler.WithTags(metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 		if err != nil {
 			e.options.Logger.Error("Failed to start workflow", tag.NewErrorTag(err))
@@ -235,42 +235,25 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 			continue
 		}
 		metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Record(1)
-
-		results = append(results, startWorkflowResult{
-			result:         result,
-			nonOverlapping: start == action.NonOverlappingStart,
-		})
+		s.recordAction(result, start == action.NonOverlappingStart)
 	}
 
 	// Terminate or cancel if required (terminate overrides cancel if both are present)
 	if action.NeedTerminate {
 		for _, ex := range s.Args.Info.RunningWorkflows {
-			e.terminateWorkflow(s, ex)
+			e.terminateWorkflow(s, ctx, ex)
 		}
 	} else if action.NeedCancel {
 		for _, ex := range s.Args.Info.RunningWorkflows {
-			e.cancelWorkflow(s, ex)
+			e.cancelWorkflow(s, ctx, ex)
 		}
-	}
-
-	err = env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		s.Args.State.BufferedStarts = action.NewBuffer
-		s.Args.Info.OverlapSkipped += action.OverlapSkipped
-		for _, r := range results {
-			e.recordAction(s, r.result, r.nonOverlapping)
-		}
-		return nil
-	})
-	if err != nil {
-		return
 	}
 	return
 }
 
-func (e taskExecutor) bufferWorkflowStart(s *Scheduler, nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
+func (e taskExecutor) bufferWorkflowStart(s *Scheduler, tweakables *HsmTweakables, nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
 	e.options.Logger.Debug("bufferWorkflowStart", tag.NewTimeTag("start-time", nominalTime), tag.NewTimeTag("actual-start-time", actualTime),
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
-	tweakables := e.config.Tweakables()
 	if tweakables.MaxBufferSize > 0 && len(s.Args.State.BufferedStarts) >= tweakables.MaxBufferSize {
 		e.options.Logger.Warn("Buffer too large", tag.NewTimeTag("start-time", nominalTime), tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 		e.options.MetricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(1)
@@ -291,6 +274,7 @@ func (e taskExecutor) getNextTime(s *Scheduler, after time.Time) scheduler.GetNe
 
 func (e taskExecutor) processTimeRange(
 	s *Scheduler,
+	tweakables *HsmTweakables,
 	start, end time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
@@ -298,12 +282,11 @@ func (e taskExecutor) processTimeRange(
 ) (time.Time, time.Time) {
 	e.options.Logger.Debug("processTimeRange", tag.NewTimeTag("start", start), tag.NewTimeTag("end", end),
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
-	tweakables := e.config.Tweakables()
 
 	if s.cspec == nil {
 		return time.Time{}, end
 	}
-	catchupWindow := s.getCatchupWindow(&tweakables)
+	catchupWindow := s.catchupWindow(tweakables)
 
 	lastAction := start
 	var next scheduler.GetNextTimeResult
@@ -320,7 +303,7 @@ func (e taskExecutor) processTimeRange(
 			s.Args.Info.MissedCatchupWindow++
 			continue
 		}
-		e.bufferWorkflowStart(s, next.Nominal, next.Next, overlapPolicy, manual)
+		e.bufferWorkflowStart(s, tweakables, next.Nominal, next.Next, overlapPolicy, manual)
 		lastAction = next.Next
 
 		if limit != nil {
@@ -332,8 +315,7 @@ func (e taskExecutor) processTimeRange(
 	return next.Next, lastAction
 }
 
-func (e taskExecutor) processBackfills(s *Scheduler) {
-	tweakables := e.config.Tweakables()
+func (e taskExecutor) processBackfills(s *Scheduler, tweakables *HsmTweakables) {
 
 	limit := tweakables.BackfillsPerIteration
 
@@ -346,6 +328,7 @@ func (e taskExecutor) processBackfills(s *Scheduler) {
 		endTime := timestamp.TimeValue(bfr.GetEndTime())
 		next, _ := e.processTimeRange(
 			s,
+			tweakables,
 			startTime,
 			endTime,
 			bfr.GetOverlapPolicy(),
@@ -362,16 +345,9 @@ func (e taskExecutor) processBackfills(s *Scheduler) {
 	}
 }
 
-func (e taskExecutor) recordAction(s *Scheduler, result *schedpb.ScheduleActionResult, nonOverlapping bool) {
-	s.Args.Info.ActionCount++
-	s.Args.Info.RecentActions = util.SliceTail(append(s.Args.Info.RecentActions, result), RecentActionCount)
-	if nonOverlapping && result.StartWorkflowResult != nil {
-		s.Args.Info.RunningWorkflows = append(s.Args.Info.RunningWorkflows, result.StartWorkflowResult)
-	}
-}
-
 func (e taskExecutor) startWorkflow(
 	s *Scheduler,
+	ctx context.Context,
 	start *schedspb.BufferedStart,
 	newWorkflow *workflowpb.NewWorkflowExecutionInfo,
 ) (*schedpb.ScheduleActionResult, error) {
@@ -410,7 +386,7 @@ func (e taskExecutor) startWorkflow(
 		Namespace:            s.Args.State.Namespace,
 	}
 
-	res, err := e.options.FrontendClient.StartWorkflowExecution(context.Background(), req)
+	res, err := e.options.FrontendClient.StartWorkflowExecution(ctx, req)
 	if err != nil {
 		// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 		// TODO(Tianyu): On failure, need to figure out how HSM-based implementation should retry, as we can no longer rely on automatic activity retries.
@@ -436,10 +412,12 @@ func (e taskExecutor) startWorkflow(
 	}, nil
 }
 
-func (e taskExecutor) terminateWorkflow(s *Scheduler, ex *commonpb.WorkflowExecution) {
+func (e taskExecutor) terminateWorkflow(s *Scheduler,
+	ctx context.Context,
+	ex *commonpb.WorkflowExecution) {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	// TODO(Tianyu): hardcoded wait time
-	workflowCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	workflowCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	rreq := &historyservice.TerminateWorkflowExecutionRequest{
@@ -463,10 +441,12 @@ func (e taskExecutor) terminateWorkflow(s *Scheduler, ex *commonpb.WorkflowExecu
 	}
 }
 
-func (e taskExecutor) cancelWorkflow(s *Scheduler, ex *commonpb.WorkflowExecution) {
+func (e taskExecutor) cancelWorkflow(s *Scheduler,
+	ctx context.Context,
+	ex *commonpb.WorkflowExecution) {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	// TODO(Tianyu): hardcoded wait time
-	workflowCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	workflowCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	rreq := &historyservice.RequestCancelWorkflowExecutionRequest{

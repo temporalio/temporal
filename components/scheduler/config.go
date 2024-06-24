@@ -51,13 +51,13 @@ var DefaultHsmTweakables = HsmTweakables{
 	BackfillsPerIteration: 10,
 }
 
-var CurrentHsmTweakables = dynamicconfig.NewGlobalTypedSetting[HsmTweakables](
+var CurrentHsmTweakables = dynamicconfig.NewNamespaceTypedSetting[HsmTweakables](
 	"component.scheduler.tweakables",
 	DefaultHsmTweakables,
 	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
 
 type Config struct {
-	Tweakables dynamicconfig.TypedPropertyFn[HsmTweakables]
+	Tweakables dynamicconfig.TypedPropertyFnWithNamespaceFilter[HsmTweakables]
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
