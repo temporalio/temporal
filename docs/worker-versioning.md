@@ -6,7 +6,7 @@ and APIs related to it. If you are using old Worker Versioning APIs please migra
 to the new APIs using the process [outlined in a later section](#migrating-from-version-sets).
 
 **Note 2:** Worker Versioning is still in [Pre-Release](https://docs.temporal.io/evaluate/release-stages#pre-release) 
-stage and not recommended for production usage. Future breaking changes may be made in deemed necessary.
+stage and not recommended for production usage. Future breaking changes may be made if deemed necessary.
 
 ## What is Worker Versioning?
 Worker Versioning simplifies the process of deploying changes to [Worker Programs](https://docs.temporal.io/workers#worker-program). 
@@ -57,7 +57,8 @@ Here is a guide for typical usage of Worker Versioning.
 Worker Versioning needs to be enabled from server
 before being able to run versioned workers or update the rules. To enable Worker Versioning
 set the following dynamic configs to `true`: `frontend.workerVersioningRuleAPIs`,
-`frontend.workerVersioningWorkflowAPIs`. Both configs are per Task Queue.
+`frontend.workerVersioningWorkflowAPIs`. Both configs allow configuration globally,
+per Namespace, or per Task Queue.
 
 Temporal Cloud users should open ticket against the support team to get added to the early release.
 
@@ -130,8 +131,8 @@ of each Task Queue.
 There are two types of rules: _Build ID Assignment rules_ and _Compatible Build ID Redirect rules_.
 
 ### Assignment Rules
-Assignment rules are used to assign a Build ID for a new execution when it starts. Its primary
-use case is to specify the latest Build ID, but it has powerful features for gradual rollout
+Assignment rules are used to assign a Build ID for a new execution when it starts. Their primary
+use case is to specify the latest Build ID, but they have powerful features for gradual rollout
 of a new Build ID.
 
 Once a Build ID is assigned to a Workflow Execution, and it completes its first Workflow Task,
@@ -219,7 +220,7 @@ To migrate your existing Task Queue, follow the normal procedure as if you upgra
 one Build ID to another.
 
 The only limitation is that, as of now, redirect rules with unversioned source is not 
-supported. Hence, if you want to redirect you long-running unversioned Workflows to a 
+supported. Hence, if you want to redirect your long-running unversioned Workflows to a 
 Build ID that is not possible. (This may change in the future.)
 
 ### Migrating from Version Sets
