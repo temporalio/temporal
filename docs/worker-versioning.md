@@ -185,7 +185,9 @@ Executions ran on now-decommissioned Build IDs:
 
 Redirect rules can be chained.
 
-### Build ID reacahbility
+### Build ID Reachability
+Temporal Server can help you decide when to safely decommission workers of an old Build ID
+by providing *Task Reachability* status for that Build ID.
 
 The reachability status can be one of the following:
 - **REACHABLE:** Build ID may be used by new workflows or activities (base on versioning 
@@ -199,8 +201,10 @@ any existing execution within the retention period.
 
 #### Caveats:
 - Task Reachability is eventually consistent; there may be a delay until it converges to the most
-accurate value but it is designed in a way to take the more conservative side until it converges.
-For example REACHABLE is more conservative than CLOSED_WORKFLOWS_ONLY.
+accurate value. The delay should not normally increase more than a few minutes. The reachability 
+status is designed in a way to take the more conservative side until it converges.
+For example, we may report REACHABLE for a minute even though the actual status is CLOSED_WORKFLOWS_ONLY, 
+but not vice versa. Hence, it's safe to rely on Reachability status for shutting down old workers. 
 
 - Future activities who inherit their workflow's Build ID but not its Task Queue will not be
 accounted for reachability as server cannot know if they'll happen as they do not use
