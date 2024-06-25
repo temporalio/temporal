@@ -396,7 +396,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get(nexusoperations.NexusCallbackSourceHeader))
+			s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
 			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
