@@ -605,7 +605,7 @@ func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 
 func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	// set ContinueAsNew min interval to 5s
-	s.mockConfig.ContinueAsNewMinInterval = func(namespace string) time.Duration {
+	s.mockConfig.WorkflowIdReuseMinimalInterval = func(namespace string) time.Duration {
 		return 5 * time.Second
 	}
 

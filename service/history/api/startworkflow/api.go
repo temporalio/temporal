@@ -379,11 +379,17 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		return nil, err
 	}
 
+	workflowKey := definition.NewWorkflowKey(
+		s.namespace.ID().String(),
+		workflowID,
+		currentWorkflowConditionFailed.RunID,
+	)
+
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
-		workflowID,
+		workflowKey,
+		s.namespace,
 		creationParams.runID,
-		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
 		currentWorkflowConditionFailed.RequestID,
