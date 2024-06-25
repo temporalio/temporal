@@ -32,14 +32,15 @@ import (
 	"go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestAddChild(t *testing.T) {
@@ -616,26 +617,32 @@ func TestOperationCompareState(t *testing.T) {
 			name: "started < succeeded",
 			s1:   enumsspb.NEXUS_OPERATION_STATE_STARTED,
 			s2:   enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED,
-			sign: 1,
+			sign: -1,
+		},
+		{
+			name: "started = started",
+			s1:   enumsspb.NEXUS_OPERATION_STATE_STARTED,
+			s2:   enumsspb.NEXUS_OPERATION_STATE_STARTED,
+			sign: 0,
 		},
 		{
 			name: "backing off < failed",
 			s1:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
 			s2:   enumsspb.NEXUS_OPERATION_STATE_FAILED,
-			sign: 1,
+			sign: -1,
 		},
 		{
-			name: "backing off > scheduled",
-			s1:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
-			s2:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
-			sign: -1,
+			name: "scheduled > backing off",
+			s1:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+			s2:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			sign: 1,
 		},
 		{
 			name:      "backing off < scheduled with greater attempt",
 			s1:        enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
 			s2:        enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
 			attempts2: 1,
-			sign:      1,
+			sign:      -1,
 		},
 	}
 	for _, tc := range cases {
@@ -693,20 +700,26 @@ func TestCancelationCompareState(t *testing.T) {
 			name: "backing off < failed",
 			s1:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
 			s2:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
-			sign: 1,
+			sign: -1,
 		},
 		{
-			name: "backing off > scheduled",
+			name: "backing off = backing off",
 			s1:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
-			s2:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
-			sign: -1,
+			s2:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
+			sign: 0,
+		},
+		{
+			name: "scheduled > backing off",
+			s1:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
+			s2:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
+			sign: 1,
 		},
 		{
 			name:      "backing off < scheduled with greater attempt",
 			s1:        enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
 			s2:        enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
 			attempts2: 1,
-			sign:      1,
+			sign:      -1,
 		},
 	}
 
