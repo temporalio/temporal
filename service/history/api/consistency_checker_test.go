@@ -121,8 +121,8 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState, nil)
 
-	workflowLease, err := s.checker.getWorkflowLease(
-		ctx,
+	workflowLease, err := s.checker.GetWorkflowLease(
+		ctx, nil,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
 		workflow.LockPriorityHigh,
 	)

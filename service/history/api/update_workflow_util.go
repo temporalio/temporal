@@ -68,7 +68,7 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 	shardContext shard.Context,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
-	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistancyCheck(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		reqClock,
 		consistencyCheckFn,

@@ -53,7 +53,7 @@ func Invoke(
 	parentInitiatedID := request.ParentInitiatedId
 	parentInitiatedVersion := request.ParentInitiatedVersion
 
-	err = api.GetAndUpdateWorkflowWithConsistancyCheck(
+	err = api.GetAndUpdateWorkflowWithConsistencyCheck(
 		ctx,
 		request.Clock,
 		func(mutableState workflow.MutableState) bool {

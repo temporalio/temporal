@@ -29,7 +29,6 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 
@@ -112,16 +111,41 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	workflowKey definition.WorkflowKey,
 	lockPriority workflow.LockPriority,
 ) (WorkflowLease, error) {
+	return c.getWorkflowLeaseImpl(ctx, reqClock, nil, workflowKey, lockPriority)
+}
+
+// The code below should be used when custom workflow state validation is required.
+// If consistencyPredicate failed (thus detecting a stale workflow state)
+// workflow state will be cleared, and mutable state will be reloaded.
+func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLeaseWithConsistencyCheck(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	consistencyPredicate MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	lockPriority workflow.LockPriority,
+) (WorkflowLease, error) {
+
+	return c.getWorkflowLeaseImpl(ctx, reqClock, consistencyPredicate, workflowKey, lockPriority)
+}
+
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	consistencyPredicate MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	lockPriority workflow.LockPriority,
+) (WorkflowLease, error) {
 	if err := c.clockConsistencyCheck(reqClock); err != nil {
 		return nil, err
 	}
 
 	if len(workflowKey.RunID) != 0 {
-		return c.getWorkflowLease(ctx, workflowKey, lockPriority)
+		return c.getWorkflowLease(ctx, consistencyPredicate, workflowKey, lockPriority)
 	}
 
 	return c.getCurrentWorkflowContext(
 		ctx,
+		nil,
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
 		lockPriority,
@@ -155,36 +179,9 @@ func (c *WorkflowConsistencyCheckerImpl) clockConsistencyCheck(
 	}
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
-	ctx context.Context,
-	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
-) (WorkflowLease, error) {
-	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		c.shardContext,
-		namespace.ID(workflowKey.NamespaceID),
-		&commonpb.WorkflowExecution{
-			WorkflowId: workflowKey.WorkflowID,
-			RunId:      workflowKey.RunID,
-		},
-		lockPriority,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
-	if err != nil {
-		release(err)
-		return nil, err
-	}
-
-	return NewWorkflowLease(wfContext, release, mutableState), nil
-}
-
 func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	ctx context.Context,
+	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
 	workflowID string,
 	lockPriority workflow.LockPriority,
@@ -199,8 +196,12 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		return nil, err
 	}
 	workflowLease, err := c.getWorkflowLease(
-		ctx, definition.NewWorkflowKey(namespaceID, workflowID, runID), lockPriority,
+		ctx,
+		consistencyPredicate,
+		definition.NewWorkflowKey(namespaceID, workflowID, runID),
+		lockPriority,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -222,59 +223,12 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	return nil, consts.ErrLocateCurrentWorkflowExecution
 }
 
-// The code below is an old implementation of GetWorkflowLease
-// It should be avoided. We should revisit the logic
-
-func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLeaseWithConsistancyCheck(
-	ctx context.Context,
-	reqClock *clockspb.VectorClock,
-	consistencyPredicate MutableStateConsistencyPredicate,
-	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
-) (WorkflowLease, error) {
-	if reqClock != nil {
-		currentClock := c.shardContext.CurrentVectorClock()
-		if vclock.Comparable(reqClock, currentClock) {
-			return c.getWorkflowLeaseValidatedByClock(
-				ctx,
-				reqClock,
-				currentClock,
-				workflowKey,
-				lockPriority,
-			)
-		}
-		// request vector clock cannot is not comparable with current shard vector clock
-		// use methods below
-	}
-
-	if len(workflowKey.RunID) != 0 {
-		return c.getWorkflowLeaseValidatedByCheck(
-			ctx,
-			consistencyPredicate,
-			workflowKey,
-			lockPriority,
-		)
-	}
-	return c.getCurrentWorkflowContextWithConsistencyCheck(
-		ctx,
-		consistencyPredicate,
-		workflowKey.NamespaceID,
-		workflowKey.WorkflowID,
-		lockPriority,
-	)
-}
-
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByCheck(
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 	ctx context.Context,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	lockPriority workflow.LockPriority,
 ) (WorkflowLease, error) {
-	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
-			"loadWorkflowContext encountered empty run ID: %v", workflowKey,
-		))
-	}
 
 	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -296,7 +250,8 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByCheck(
 		return nil, err
 	}
 
-	if consistencyPredicate(mutableState) {
+	// if consistencyPredicate is nill we assume it is not needed
+	if consistencyPredicate == nil || consistencyPredicate(mutableState) {
 		return NewWorkflowLease(wfContext, release, mutableState), nil
 	}
 	wfContext.Clear()
@@ -307,53 +262,6 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByCheck(
 		return nil, err
 	}
 	return NewWorkflowLease(wfContext, release, mutableState), nil
-}
-
-func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContextWithConsistencyCheck(
-	ctx context.Context,
-	consistencyPredicate MutableStateConsistencyPredicate,
-	namespaceID string,
-	workflowID string,
-	lockPriority workflow.LockPriority,
-) (WorkflowLease, error) {
-	runID, err := c.GetCurrentRunID(
-		ctx,
-		namespaceID,
-		workflowID,
-		lockPriority,
-	)
-	if err != nil {
-		return nil, err
-	}
-	workflowLease, err := c.getWorkflowLeaseValidatedByCheck(
-		ctx,
-		consistencyPredicate,
-		definition.NewWorkflowKey(namespaceID, workflowID, runID),
-		lockPriority,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
-		return workflowLease, nil
-	}
-
-	currentRunID, err := c.GetCurrentRunID(
-		ctx,
-		namespaceID,
-		workflowID,
-		lockPriority,
-	)
-	if err != nil {
-		workflowLease.GetReleaseFn()(err)
-		return nil, err
-	}
-	if currentRunID == workflowLease.GetContext().GetWorkflowKey().RunID {
-		return workflowLease, nil
-	}
-
-	workflowLease.GetReleaseFn()(nil)
-	return nil, consts.ErrLocateCurrentWorkflowExecution
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByClock(
