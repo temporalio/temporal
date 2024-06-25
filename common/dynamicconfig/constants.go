@@ -1391,12 +1391,6 @@ for the entire queue but only trigger a queue action to unload tasks. Ideally th
 limit should not be hit and task unloading should happen once critical count is exceeded. But
 since queue action is async, we need this hard limit.`,
 	)
-	ContinueAsNewMinInterval = NewNamespaceDurationSetting(
-		"history.continueAsNewMinInterval",
-		time.Second,
-		`ContinueAsNewMinInterval is the minimal interval between continue_as_new executions.
-This is needed to prevent tight loop continue_as_new spin. Default is 1s.`,
-	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
 		"history.taskSchedulerEnableRateLimiter",
@@ -2382,7 +2376,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
-	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
+	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"system.workflowIdReuseMinimalInterval",
 		1*time.Second,
 		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
