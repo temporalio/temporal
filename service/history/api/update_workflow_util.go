@@ -58,7 +58,7 @@ func GetAndUpdateWorkflowWithNew(
 	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
 }
 
-func GetAndUpdateWorkflowWithConsistancyCheck(
+func GetAndUpdateWorkflowWithConsistencyCheck(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
 	consistencyCheckFn MutableStateConsistencyPredicate,
