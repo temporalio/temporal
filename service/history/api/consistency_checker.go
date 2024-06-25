@@ -61,7 +61,7 @@ type (
 			lockPriority workflow.LockPriority,
 		) (WorkflowLease, error)
 
-		GetWorkflowLeaseWithConsistancyCheck(
+		GetWorkflowLeaseWithConsistencyCheck(
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
