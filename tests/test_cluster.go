@@ -241,12 +241,13 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
 	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
 		clusterInfo.ShardCount = options.HistoryConfig.NumHistoryShards
+		clusterInfo.ClusterID = uuid.New()
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
 				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
 				ClusterName:              clusterName,
-				ClusterId:                uuid.New(),
+				ClusterId:                clusterInfo.ClusterID,
 				IsConnectionEnabled:      clusterInfo.Enabled,
 				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
 				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
