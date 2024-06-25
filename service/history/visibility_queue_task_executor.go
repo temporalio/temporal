@@ -319,34 +319,17 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
-	if err != nil {
-		return err
-	}
-	defer func() { release(retError) }()
-
-	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
-	if err != nil {
-		return err
-	}
-
-	var wfCloseTime *time.Time
-	if mutableState != nil && !mutableState.IsWorkflowExecutionRunning() {
-		*wfCloseTime, err = mutableState.GetWorkflowCloseTime(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
-	release(nil)
-
 	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: namespace.ID(task.NamespaceID),
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
-		CloseTime:   wfCloseTime,
 	}
+
+	if task.WorkflowCloseTime != (time.Time{}) {
+		request.CloseTime = &task.WorkflowCloseTime
+	}
+
 	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task
 		// (which change workflow execution status by uploading new visibility record) will resurrect visibility record.

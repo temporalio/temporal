@@ -1383,6 +1383,7 @@ type VisibilityTaskInfo struct {
 	TaskId                int64                  `protobuf:"varint,6,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	VisibilityTime        *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
 	CloseVisibilityTaskId int64                  `protobuf:"varint,10,opt,name=close_visibility_task_id,json=closeVisibilityTaskId,proto3" json:"close_visibility_task_id,omitempty"`
+	WorkflowCloseTime 	  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=workflow_closetime,json=workflow_closetime,proto3" json:"workflow_closetime,omitempty"`
 }
 
 func (x *VisibilityTaskInfo) Reset() {
