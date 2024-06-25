@@ -25,6 +25,8 @@ package dummy
 import (
 	"encoding/json"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -84,6 +86,11 @@ func (stateMachineDefinition) Deserialize(d []byte) (any, error) {
 
 func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	return json.Marshal(state)
+}
+
+func (stateMachineDefinition) CompareState(s1, s2 any) (int, error) {
+	// This is just a dummy used in tests, CompareState is not used.
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for dummy state machine")
 }
 
 func RegisterStateMachine(r *hsm.Registry) error {

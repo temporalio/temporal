@@ -475,7 +475,8 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	// tasks and adding them to mutable state immediately.
 
 	// Task refresher is only meant for regenerating tasks that has been generated before,
-	// in previous state transitions, so we can use the last versioned transition here.
+	// in previous state transitions, so we can just call generateSubStateMachineTask
+	// which uses the last versioned transition.
 	// In replication case, task refresher should be called after applying the state from source
 	// cluster, which updated the transition history.
 

@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,33 +20,49 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package tasks
 
-package temporal.server.api.enums.v1;
+import (
+	"time"
 
-option go_package = "go.temporal.io/server/api/enums/v1;enums";
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/definition"
+)
 
-enum ReplicationTaskType {
-    REPLICATION_TASK_TYPE_UNSPECIFIED = 0;
-    REPLICATION_TASK_TYPE_NAMESPACE_TASK = 1;
-    REPLICATION_TASK_TYPE_HISTORY_TASK = 2;
-    REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK = 3;
-    REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK = 4;
-    REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK = 5;
-    REPLICATION_TASK_TYPE_HISTORY_V2_TASK = 6;
-    REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK = 7;
-    REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA = 8;
-    REPLICATION_TASK_TYPE_SYNC_HSM_TASK = 9;
+var _ Task = (*SyncHSMTask)(nil)
+
+type (
+	SyncHSMTask struct {
+		definition.WorkflowKey
+		VisibilityTimestamp time.Time
+		TaskID              int64
+	}
+)
+
+func (a *SyncHSMTask) GetKey() Key {
+	return NewImmediateKey(a.TaskID)
 }
 
-enum NamespaceOperation {
-    NAMESPACE_OPERATION_UNSPECIFIED = 0;
-    NAMESPACE_OPERATION_CREATE = 1;
-    NAMESPACE_OPERATION_UPDATE = 2;
+func (a *SyncHSMTask) GetTaskID() int64 {
+	return a.TaskID
 }
 
-enum ReplicationFlowControlCommand {
-    REPLICATION_FLOW_CONTROL_COMMAND_UNSPECIFIED = 0;
-    REPLICATION_FLOW_CONTROL_COMMAND_RESUME = 1;
-    REPLICATION_FLOW_CONTROL_COMMAND_PAUSE = 2;
+func (a *SyncHSMTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+func (a *SyncHSMTask) GetVisibilityTime() time.Time {
+	return a.VisibilityTimestamp
+}
+
+func (a *SyncHSMTask) SetVisibilityTime(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
+}
+
+func (a *SyncHSMTask) GetCategory() Category {
+	return CategoryReplication
+}
+
+func (a *SyncHSMTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM
 }
