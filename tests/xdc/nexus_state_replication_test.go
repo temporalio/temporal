@@ -242,7 +242,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 // 3. Terminate the workflow to trigger the callback. An error is injected to always fail the callback.
 // 4. Check the callback state changes are replicated to cluster2.
 // 5. Failover to cluster2 and unblock the callback by removing the injected error.
-// 6. Wait for the callback to complete on cluster2.
+// 6. Wait for the callback to complete on both clusters.
 func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	failCallback := atomic.NewBool(true)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -306,13 +306,16 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	// Unblock callback after failover.
 	failCallback.Store(false)
 
-	// Check callback can complete on cluster2 after failover.
-	s.waitCallback(ctx, sdkClient2, &commonpb.WorkflowExecution{
-		WorkflowId: tv.WorkflowID(),
-		RunId:      startResp.GetRunId(),
-	}, func(callback *workflow.CallbackInfo) bool {
-		return callback.State == enumspb.CALLBACK_STATE_SUCCEEDED
-	})
+	// Check callback can complete on cluster2 after failover,
+	// and succeeded state will be replicated back to cluster1.
+	for _, sdkClient := range []sdkclient.Client{sdkClient1, sdkClient2} {
+		s.waitCallback(ctx, sdkClient, &commonpb.WorkflowExecution{
+			WorkflowId: tv.WorkflowID(),
+			RunId:      startResp.GetRunId(),
+		}, func(callback *workflow.CallbackInfo) bool {
+			return callback.State == enumspb.CALLBACK_STATE_SUCCEEDED
+		})
+	}
 }
 
 func (s *NexusStateReplicationSuite) waitEvent(ctx context.Context, sdkClient sdkclient.Client, run sdkclient.WorkflowRun, eventType enumspb.EventType) {
