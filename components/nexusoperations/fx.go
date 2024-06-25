@@ -55,6 +55,8 @@ var Module = fx.Module(
 	fx.Invoke(RegisterExecutor),
 )
 
+const NexusCallbackSourceHeader = "Nexus-Callback-Source"
+
 func EndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	endpointManager persistence.NexusEndpointManager,
@@ -127,10 +129,17 @@ func ClientProviderFactory(
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
+		httpCaller := httpClient.Do
+		if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
+			httpCaller = func(r *http.Request) (*http.Response, error) {
+				r.Header.Set(NexusCallbackSourceHeader, clusterInfo.ClusterID)
+				return httpClient.Do(r)
+			}
+		}
 		return nexus.NewClient(nexus.ClientOptions{
 			BaseURL:    url,
 			Service:    service,
-			HTTPCaller: httpClient.Do,
+			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
 		})
 	}

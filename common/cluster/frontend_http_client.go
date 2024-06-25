@@ -43,6 +43,16 @@ type FrontendHTTPClient struct {
 	urlScheme string
 }
 
+// Host is the host:port pair of this HTTP client.
+func (c *FrontendHTTPClient) Host() string {
+	return c.address
+}
+
+// Scheme is the URL scheme of this HTTP client.
+func (c *FrontendHTTPClient) Scheme() string {
+	return c.urlScheme
+}
+
 // BaseURL is the scheme and address of this HTTP client.
 func (c *FrontendHTTPClient) BaseURL() string {
 	return c.urlScheme + "://" + c.address
