@@ -143,9 +143,9 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
 		return c.getWorkflowLease(ctx, consistencyPredicate, workflowKey, lockPriority)
 	}
 
-	return c.getCurrentWorkflowContext(
+	return c.getCurrentWorkflowLease(
 		ctx,
-		nil,
+		consistencyPredicate,
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
 		lockPriority,
@@ -179,7 +179,7 @@ func (c *WorkflowConsistencyCheckerImpl) clockConsistencyCheck(
 	}
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
+func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowLease(
 	ctx context.Context,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
@@ -257,48 +257,6 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 	wfContext.Clear()
 
 	mutableState, err = wfContext.LoadMutableState(ctx, c.shardContext)
-	if err != nil {
-		release(err)
-		return nil, err
-	}
-	return NewWorkflowLease(wfContext, release, mutableState), nil
-}
-
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByClock(
-	ctx context.Context,
-	reqClock *clockspb.VectorClock,
-	currentClock *clockspb.VectorClock,
-	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
-) (WorkflowLease, error) {
-	cmpResult, err := vclock.Compare(reqClock, currentClock)
-	if err != nil {
-		return nil, err
-	}
-	if cmpResult > 0 {
-		shardID := c.shardContext.GetShardID()
-		c.shardContext.UnloadForOwnershipLost()
-		return nil, &persistence.ShardOwnershipLostError{
-			ShardID: shardID,
-			Msg:     fmt.Sprintf("Shard: %v consistency check failed, reloading", shardID),
-		}
-	}
-
-	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		c.shardContext,
-		namespace.ID(workflowKey.NamespaceID),
-		&commonpb.WorkflowExecution{
-			WorkflowId: workflowKey.WorkflowID,
-			RunId:      workflowKey.RunID,
-		},
-		lockPriority,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
 	if err != nil {
 		release(err)
 		return nil, err
