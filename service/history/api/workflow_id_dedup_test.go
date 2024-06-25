@@ -82,11 +82,6 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 		&persistencespb.NamespaceConfig{},
 		"target_cluster",
 	)
-	mockNamespaceCache := mockShard.Resource.NamespaceCache
-	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
-
-	mockClusterMetadata := mockShard.Resource.ClusterMetadata
-	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("target_cluster").AnyTimes()
 
 	for _, tc := range testCases {
 		config.WorkflowIdReuseMinimalInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.gracePeriod)
@@ -95,7 +90,7 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 			WorkflowID:  "workflowID",
 			RunID:       "oldRunID",
 		}
-		_, err := resolveDuplicateWorkflowStart(mockShard, tc.currentWorkflowStart, workflowKey, "newRunID")
+		_, err := resolveDuplicateWorkflowStart(mockShard, tc.currentWorkflowStart, workflowKey, namespaceEntry, "newRunID")
 
 		if tc.expectError {
 			assert.Error(t, err)

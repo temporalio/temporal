@@ -388,6 +388,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
 		workflowKey,
+		s.namespace,
 		creationParams.runID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,

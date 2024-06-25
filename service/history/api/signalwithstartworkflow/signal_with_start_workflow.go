@@ -112,6 +112,7 @@ func startAndSignalWorkflow(
 	workflowMutationFn, err := createWorkflowMutationFunction(
 		shard,
 		currentWorkflowLease,
+		namespaceEntry,
 		runID,
 		signalWithStartRequest.GetWorkflowIdReusePolicy(),
 		signalWithStartRequest.GetWorkflowIdConflictPolicy(),
@@ -147,6 +148,7 @@ func startAndSignalWorkflow(
 func createWorkflowMutationFunction(
 	shardContext shard.Context,
 	currentWorkflowLease api.WorkflowLease,
+	namespaceEntry *namespace.Namespace,
 	newRunID string,
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	workflowIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
@@ -169,6 +171,7 @@ func createWorkflowMutationFunction(
 	workflowMutationFunc, err := api.ResolveDuplicateWorkflowID(
 		shardContext,
 		workflowKey,
+		namespaceEntry,
 		newRunID,
 		currentExecutionState.State,
 		currentExecutionState.Status,

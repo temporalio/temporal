@@ -56,6 +56,7 @@ var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
 func ResolveDuplicateWorkflowID(
 	shardContext shard.Context,
 	workflowKey definition.WorkflowKey,
+	namespaceEntry *namespace.Namespace,
 	newRunID string,
 	currentState enumsspb.WorkflowExecutionState,
 	currentStatus enumspb.WorkflowExecutionStatus,
@@ -75,7 +76,7 @@ func ResolveDuplicateWorkflowID(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			return nil, ErrUseCurrentExecution
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, workflowKey, newRunID)
+			return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, workflowKey, namespaceEntry, newRunID)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
 		}
@@ -112,13 +113,16 @@ func resolveDuplicateWorkflowStart(
 	shardContext shard.Context,
 	currentWorkflowStartTime time.Time,
 	workflowKey definition.WorkflowKey,
+	namespaceEntry *namespace.Namespace,
 	newRunID string,
 ) (UpdateWorkflowActionFunc, error) {
 
-	namespaceEntry, err := GetActiveNamespace(shardContext, namespace.ID(workflowKey.NamespaceID))
-	if err != nil {
-		return nil, err
+	if namespaceEntry == nil {
+		return nil, &serviceerror.Internal{
+			Message: fmt.Sprintf("Unknown namespace entry for %v.", workflowKey),
+		}
 	}
+
 	nsName := namespaceEntry.Name().String()
 	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval(nsName)
 
