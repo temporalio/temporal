@@ -136,7 +136,7 @@ func (c *WorkflowConsistencyCheckerImpl) clockConsistencyCheck(
 	}
 	currentClock := c.shardContext.CurrentVectorClock()
 	if !vclock.Comparable(reqClock, currentClock) {
-		// request vector clock cannot is not comparable with current shard vector clock
+		// request vector clock is not comparable with current shard vector clock
 		return nil
 	}
 
