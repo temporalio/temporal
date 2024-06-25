@@ -261,6 +261,10 @@ func newVisibilityStoreFromDataStoreConfig(
 			logger,
 		)
 	} else if dsConfig.CustomDataStoreConfig != nil {
+		if customVisibilityStoreFactory == nil {
+			logger.Fatal("custom visibility store factory must be defined")
+			return nil, nil
+		}
 		visStore, err = customVisibilityStoreFactory.NewVisibilityStore(
 			*dsConfig.CustomDataStoreConfig,
 			searchAttributesProvider,
