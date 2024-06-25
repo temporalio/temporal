@@ -35,7 +35,7 @@ import (
 )
 
 // Header key used to identify callbacks that originate from and target the same cluster.
-const CallbackSourceHeader = "Temporal-Callback-Source"
+const callbackSourceHeader = "source"
 
 var Module = fx.Module(
 	"component.callbacks",
@@ -54,22 +54,27 @@ func HTTPCallerProviderProvider(
 	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
 		return func(r *http.Request) (*http.Response, error) {
 			client := &http.Client{}
-			curClusterName := clusterMetadata.GetCurrentClusterName()
-			clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[curClusterName]
-			if !ok {
-				logger.Warn("HTTPCallerProviderProvider unable to get ClusterInformation for current cluster. Using default HTTP client.", tag.SourceCluster(curClusterName))
+
+			if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
 				return client.Do(r)
 			}
-			if r.Header.Get(CallbackSourceHeader) == clusterInfo.ClusterID {
-				internalClient, err := httpClientCache.Get(curClusterName)
-				if err != nil {
-					logger.Warn("HTTPCallerProviderProvider unable to get FrontendHTTPClient for current cluster. Using default HTTP client.", tag.SourceCluster(curClusterName))
-					return client.Do(r)
+
+			callbackSource := r.Header.Get(callbackSourceHeader)
+			for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
+				if callbackSource == clusterInfo.ClusterID {
+					internalClient, err := httpClientCache.Get(clusterName)
+					if err != nil {
+						logger.Warn("HTTPCallerProviderProvider unable to get FrontendHTTPClient for callback target cluster. Using default HTTP client.", tag.SourceCluster(clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(clusterName))
+						return client.Do(r)
+					}
+					r.URL.Scheme = internalClient.Scheme()
+					r.URL.Host = internalClient.Host()
+					r.Host = internalClient.Host()
+					return internalClient.Do(r)
 				}
-				r.URL.Scheme = internalClient.Scheme()
-				r.URL.Host = internalClient.Host()
-				return internalClient.Do(r)
 			}
+
+			logger.Warn("HTTPCallerProviderProvider unable to get ClusterInformation for callback target cluster. Using default HTTP client.", tag.SourceCluster(clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(callbackSource))
 			return client.Do(r)
 		}
 	})

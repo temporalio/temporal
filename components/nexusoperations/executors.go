@@ -43,13 +43,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -67,7 +65,6 @@ type TaskExecutorOptions struct {
 	fx.In
 
 	Config                 *Config
-	ClusterMetadata        cluster.Metadata
 	NamespaceRegistry      namespace.Registry
 	MetricsHandler         metrics.Handler
 	Logger                 log.Logger
@@ -186,11 +183,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
-	callerCluster, ok := e.ClusterMetadata.GetAllClusterInfo()[e.ClusterMetadata.GetCurrentClusterName()]
-	if !ok {
-		// log and throw error
-	}
-
 	callCtx, cancel := context.WithTimeout(
 		ctx,
 		e.Config.RequestTimeout(ns.Name().String(), task.EndpointName),
@@ -205,7 +197,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		RequestID:   args.requestID,
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
-			callbacks.CallbackSourceHeader:  callerCluster.ClusterID,
 		},
 	})
 

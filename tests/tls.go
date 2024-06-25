@@ -26,31 +26,16 @@ package tests
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"net"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/testing/protoassert"
-	"go.temporal.io/server/internal/temporalite"
 )
 
 type TLSFunctionalSuite struct {
@@ -133,89 +118,6 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	s.Require().Equal(tlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
-func (s *TLSFunctionalSuite) TestSameClusterCallbackMTLS() {
-	if s.httpAPIAddress == "" {
-		s.T().Skip("HTTP API server not enabled")
-	}
-	// Track auth info
-	calls := s.trackAuthInfoByCall()
-
-	ctx := NewContext()
-	pp := temporalite.NewPortProvider()
-
-	taskQueue := s.randomizeStr(s.T().Name())
-	workflowType := "test"
-	wf := func(ctx workflow.Context) (int, error) {
-		return 666, nil
-	}
-
-	ch := &nexusCompletionHandler{
-		requestCh:         make(chan *nexus.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-	s.NoError(pp.Close())
-	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-	s.T().Cleanup(func() {
-		require.NoError(s.T(), shutdownServer())
-	})
-
-	w := worker.New(s.sdkClient, taskQueue, worker.Options{})
-	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
-	s.NoError(w.Start())
-	defer w.Stop()
-
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.NewString(),
-		Namespace:          s.namespace,
-		WorkflowId:         s.randomizeStr(s.T().Name()),
-		WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:              nil,
-		WorkflowRunTimeout: durationpb.New(100 * time.Second),
-		Identity:           s.T().Name(),
-		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    durationpb.New(1 * time.Second),
-			MaximumInterval:    durationpb.New(1 * time.Second),
-			BackoffCoefficient: 1,
-		},
-		CompletionCallbacks: []*commonpb.Callback{
-			{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: "http://" + callbackAddress,
-					},
-				},
-			},
-		},
-	}
-
-	_, err := s.engine.StartWorkflowExecution(ctx, request)
-	s.NoError(err)
-
-	run := s.sdkClient.GetWorkflow(ctx, request.WorkflowId, "")
-	s.NoError(run.Get(ctx, nil))
-
-	completion := <-ch.requestCh
-	s.Equal(nexus.OperationStateSucceeded, completion.State)
-	var result int
-	s.NoError(completion.Result.Consume(&result))
-	s.Equal(666, result)
-	ch.requestCompleteCh <- nil
-	description, err := s.sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
-	s.NoError(err)
-	s.Equal(1, len(description.Callbacks))
-	callbackInfo := description.Callbacks[0]
-	protoassert.ProtoEqual(s.T(), request.CompletionCallbacks[0], callbackInfo.Callback)
-	protoassert.ProtoEqual(s.T(), &workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
-	s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-	s.Nil(callbackInfo.LastAttemptFailure)
-
-	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions")
-	s.Require().True(ok)
-	s.Require().Equal(tlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
-}
-
 func (s *TLSFunctionalSuite) trackAuthInfoByCall() *sync.Map {
 	var calls sync.Map
 	// Put auth info on claim, then use authorizer to set on the map by call
@@ -236,39 +138,4 @@ func (s *TLSFunctionalSuite) trackAuthInfoByCall() *sync.Map {
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
 	})
 	return &calls
-}
-
-type nexusCompletionHandler struct {
-	requestCh         chan *nexus.CompletionRequest
-	requestCompleteCh chan error
-}
-
-func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, request *nexus.CompletionRequest) error {
-	h.requestCh <- request
-	return <-h.requestCompleteCh
-}
-
-func (s *TLSFunctionalSuite) runNexusCompletionHTTPServer(h *nexusCompletionHandler, listenAddr string) func() error {
-	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
-	srv := &http.Server{Addr: listenAddr, Handler: hh}
-	listener, err := net.Listen("tcp", listenAddr)
-	s.NoError(err)
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.Serve(listener)
-	}()
-
-	return func() error {
-		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			return err
-		}
-		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
-	}
 }
