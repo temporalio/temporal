@@ -347,7 +347,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
-  6 WorkflowExecutionFailed`, historyEvents)
+  6 WorkflowExecutionTerminated`, historyEvents)
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
