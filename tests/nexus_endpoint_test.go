@@ -563,7 +563,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: malformed name",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: "\n```\n",
+					Name: "test_\n```\n",
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
