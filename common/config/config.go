@@ -521,7 +521,7 @@ type (
 		// HostPort is the host port to connect on. Host can be DNS name. See the above
 		// comment: in many situations you can leave this empty.
 		HostPort string `yaml:"hostPort"`
-		// HostPort is the HTTP host port to connect on. Host can be DNS name. See the above
+		// HTTPHostPort is the HTTP host port to connect on. Host can be DNS name. See the above
 		// comment: in many situations you can leave this empty.
 		HTTPHostPort string `yaml:"httpHostPort"`
 		// Force selection of either the "internode" or "frontend" TLS configs for these
