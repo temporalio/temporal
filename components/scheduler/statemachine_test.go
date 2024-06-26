@@ -56,7 +56,7 @@ func TestValidTransitions(t *testing.T) {
 			ScheduleId:    "myschedule",
 			ConflictToken: 1,
 		},
-	}, &scheduler.DefaultHsmTweakables)
+	}, &scheduler.DefaultTweakables)
 	out, err := scheduler.TransitionSchedulerActivate.Apply(schedulerHsm, scheduler.EventSchedulerActivate{})
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)

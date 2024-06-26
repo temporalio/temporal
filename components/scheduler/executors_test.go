@@ -91,7 +91,7 @@ func TestProcessScheduleWaitTask(t *testing.T) {
 			ScheduleId:    "myschedule",
 			ConflictToken: 1,
 		},
-	}, &schedulerhsm.DefaultHsmTweakables)
+	}, &schedulerhsm.DefaultTweakables)
 
 	node, err := root.AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerHsm)
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestProcessScheduleRunTask(t *testing.T) {
 			ScheduleId:    "myschedule",
 			ConflictToken: 1,
 		},
-	}, &schedulerhsm.DefaultHsmTweakables)
+	}, &schedulerhsm.DefaultTweakables)
 	schedulerHsm.HsmState = enumsspb.SCHEDULER_STATE_EXECUTING
 	schedulerHsm.Args.State.LastProcessedTime = timestamppb.New(time.Now().Add(-5 * time.Minute))
 
@@ -164,8 +164,8 @@ func TestProcessScheduleRunTask(t *testing.T) {
 		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "myns"}, nil, false, nil, 0), nil)
 
 	config := &schedulerhsm.Config{
-		Tweakables:       dynamicconfig.GetTypedPropertyFnFilteredByNamespaceID[schedulerhsm.HsmTweakables](schedulerhsm.DefaultHsmTweakables),
-		ExecutionTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespaceID(time.Second * 10),
+		Tweakables:       dynamicconfig.GetTypedPropertyFnFilteredByNamespace[schedulerhsm.Tweakables](schedulerhsm.DefaultTweakables),
+		ExecutionTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Second * 10),
 	}
 	require.NoError(t, schedulerhsm.RegisterExecutor(reg, schedulerhsm.TaskExecutorOptions{
 		MetricsHandler:    metrics.NoopMetricsHandler,

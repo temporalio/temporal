@@ -28,7 +28,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceIDBoolSetting(
+var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceBoolSetting(
 	"scheduler.use-experimental-hsm-scheduler",
 	false,
 	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
@@ -37,39 +37,39 @@ const (
 	RecentActionCount = 10
 )
 
-type HsmTweakables struct {
+type Tweakables struct {
 	DefaultCatchupWindow  time.Duration // Default for catchup window
 	MinCatchupWindow      time.Duration // Minimum for catchup window
 	MaxBufferSize         int           // MaxBufferSize limits the number of buffered starts and backfills
 	BackfillsPerIteration int           // How many backfilled actions to take per iteration (implies rate limit since min sleep is 1s)
 }
 
-var DefaultHsmTweakables = HsmTweakables{
+var DefaultTweakables = Tweakables{
 	DefaultCatchupWindow:  365 * 24 * time.Hour,
 	MinCatchupWindow:      10 * time.Second,
 	MaxBufferSize:         1000,
 	BackfillsPerIteration: 10,
 }
 
-var CurrentHsmTweakables = dynamicconfig.NewNamespaceIDTypedSetting[HsmTweakables](
+var CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting[Tweakables](
 	"component.scheduler.tweakables",
-	DefaultHsmTweakables,
+	DefaultTweakables,
 	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
 
-var ExecutionTimeout = dynamicconfig.NewNamespaceIDDurationSetting(
-	"component.scheduler.execution-timeout",
+var ExecutionTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"component.scheduler.executionTimeout",
 	time.Second*10,
-	`ExecutionTimeout is the timeout for executing a single scheduler run.`,
+	`ExecutionTimeout is the timeout for executing a single scheduler task.`,
 )
 
 type Config struct {
-	Tweakables       dynamicconfig.TypedPropertyFnWithNamespaceIDFilter[HsmTweakables]
-	ExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
+	Tweakables       dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
+	ExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Tweakables:       CurrentHsmTweakables.Get(dc),
+		Tweakables:       CurrentTweakables.Get(dc),
 		ExecutionTimeout: ExecutionTimeout.Get(dc),
 	}
 }

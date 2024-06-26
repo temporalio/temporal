@@ -25,9 +25,10 @@ package scheduler
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"time"
-
+	
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
@@ -38,6 +39,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -66,6 +68,8 @@ type (
 		TaskExecutorOptions
 	}
 )
+
+var ErrSchedulerConflict = errors.New("concurrent scheduler task execution detected, unable to update scheduler state")
 
 func RegisterExecutor(
 	registry *hsm.Registry,
@@ -103,20 +107,25 @@ func (e taskExecutor) executeSchedulerRunTask(
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, e.Config.ExecutionTimeout(ref.WorkflowKey.NamespaceID))
+	ctx, cancel := context.WithTimeout(ctx, e.Config.ExecutionTimeout(ns.Name().String()))
 	defer cancel()
 
 	var s Scheduler
+	var prevArgs *schedspb.HsmSchedulerState
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		sched, err := hsm.MachineData[*Scheduler](node)
+		prevS, err := hsm.MachineData[*Scheduler](node)
+		prevArgs = prevS.HsmSchedulerState
 		if err != nil {
 			return err
 		}
 		// Ensure that this is copy, so later (stateful) processing does not update state machine without protection
-		s = *sched
+		s = Scheduler{
+			HsmSchedulerState: common.CloneProto(prevS.HsmSchedulerState),
+			cspec:             prevS.cspec,
+		}
 		return err
 	})
 	if err != nil {
@@ -124,7 +133,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 	}
 	// Update in case namespace was renamed since creation
 	s.Args.State.Namespace = ns.Name().String()
-	tweakables := e.Config.Tweakables(s.Args.State.NamespaceId)
+	tweakables := e.Config.Tweakables(s.Args.State.Namespace)
 
 	if s.cspec == nil {
 		cspec, err := e.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
@@ -132,7 +141,6 @@ func (e taskExecutor) executeSchedulerRunTask(
 			if e.Logger != nil {
 				e.Logger.Error("Invalid schedule", tag.Error(err))
 			}
-			s.cspec = nil
 			return err
 		}
 		s.cspec = cspec
@@ -185,6 +193,10 @@ func (e taskExecutor) executeSchedulerRunTask(
 		sPtr, err := hsm.MachineData[*Scheduler](node)
 		if err != nil {
 			return err
+		}
+		// All updates should touch at least one of these two fields
+		if sPtr.HsmState != s.HsmState || sPtr.HsmSchedulerState != prevArgs {
+			return ErrSchedulerConflict
 		}
 		// Copy outside scheduler, which has been updated, to the state machine
 		*sPtr = s
@@ -251,7 +263,7 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 	return
 }
 
-func (e taskExecutor) bufferWorkflowStart(s *Scheduler, tweakables *HsmTweakables, nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
+func (e taskExecutor) bufferWorkflowStart(s *Scheduler, tweakables *Tweakables, nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
 	e.Logger.Debug("bufferWorkflowStart", tag.NewTimeTag("start-time", nominalTime), tag.NewTimeTag("actual-start-time", actualTime),
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 	if tweakables.MaxBufferSize > 0 && len(s.Args.State.BufferedStarts) >= tweakables.MaxBufferSize {
@@ -274,7 +286,7 @@ func (e taskExecutor) getNextTime(s *Scheduler, after time.Time) scheduler.GetNe
 
 func (e taskExecutor) processTimeRange(
 	s *Scheduler,
-	tweakables *HsmTweakables,
+	tweakables *Tweakables,
 	start, end time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
@@ -283,9 +295,6 @@ func (e taskExecutor) processTimeRange(
 	e.Logger.Debug("processTimeRange", tag.NewTimeTag("start", start), tag.NewTimeTag("end", end),
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 
-	if s.cspec == nil {
-		return time.Time{}, end
-	}
 	catchupWindow := s.catchupWindow(tweakables)
 
 	lastAction := start
@@ -315,7 +324,7 @@ func (e taskExecutor) processTimeRange(
 	return next.Next, lastAction
 }
 
-func (e taskExecutor) processBackfills(s *Scheduler, tweakables *HsmTweakables) {
+func (e taskExecutor) processBackfills(s *Scheduler, tweakables *Tweakables) {
 
 	limit := tweakables.BackfillsPerIteration
 
@@ -418,8 +427,6 @@ func (e taskExecutor) terminateWorkflow(
 	ex *commonpb.WorkflowExecution) {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	// TODO(Tianyu): hardcoded wait time
-	workflowCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
 
 	rreq := &historyservice.TerminateWorkflowExecutionRequest{
 		NamespaceId: s.Args.State.NamespaceId,
@@ -432,7 +439,7 @@ func (e taskExecutor) terminateWorkflow(
 			FirstExecutionRunId: ex.RunId,
 		},
 	}
-	_, err := e.HistoryClient.TerminateWorkflowExecution(workflowCtx, rreq)
+	_, err := e.HistoryClient.TerminateWorkflowExecution(ctx, rreq)
 
 	// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 	// TODO(Tianyu): On failure, need to figure out how HSM-based implementation should retry, as we can no longer rely on automatic activity retries.
@@ -447,10 +454,6 @@ func (e taskExecutor) cancelWorkflow(
 	s *Scheduler,
 	ex *commonpb.WorkflowExecution) {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
-	// TODO(Tianyu): hardcoded wait time
-	workflowCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	rreq := &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: s.Args.State.NamespaceId,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -463,7 +466,7 @@ func (e taskExecutor) cancelWorkflow(
 			Reason:              "cancelled by schedule overlap policy",
 		},
 	}
-	_, err := e.HistoryClient.RequestCancelWorkflowExecution(workflowCtx, rreq)
+	_, err := e.HistoryClient.RequestCancelWorkflowExecution(ctx, rreq)
 	// Note: cancellation has completed (or failed) here but the workflow might take time
 	// to close since a cancel is only a request.
 	// If this failed, that's okay, we'll try it again the next time we try to take an action.

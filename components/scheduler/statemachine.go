@@ -50,7 +50,7 @@ type Scheduler struct {
 const StateMachineType = "scheduler.Scheduler"
 
 // NewScheduler creates a new scheduler in the WAITING state from given params.
-func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *HsmTweakables) *Scheduler {
+func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *Tweakables) *Scheduler {
 	s := &Scheduler{
 		HsmSchedulerState: &schedspb.HsmSchedulerState{
 			Args:     args,
@@ -95,7 +95,7 @@ func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPo
 	return overlapPolicy
 }
 
-func (s *Scheduler) catchupWindow(tweakables *HsmTweakables) time.Duration {
+func (s *Scheduler) catchupWindow(tweakables *Tweakables) time.Duration {
 	cw := s.Args.Schedule.Policies.CatchupWindow
 	if cw == nil {
 		return tweakables.DefaultCatchupWindow
