@@ -25,10 +25,17 @@ package callbacks
 import (
 	"net/http"
 
-	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
+
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/service/history/queues"
 )
+
+// Header key used to identify callbacks that originate from and target the same cluster.
+const callbackSourceHeader = "source"
 
 var Module = fx.Module(
 	"component.callbacks",
@@ -39,11 +46,37 @@ var Module = fx.Module(
 	fx.Invoke(RegisterExecutor),
 )
 
-func HTTPCallerProviderProvider() HTTPCallerProvider {
+func HTTPCallerProviderProvider(
+	clusterMetadata cluster.Metadata,
+	httpClientCache *cluster.FrontendHTTPClientCache,
+	logger log.Logger,
+) HTTPCallerProvider {
 	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
-		// In the future, we'll want to inject headers and certs here.
-		client := &http.Client{}
-		return client.Do
+		return func(r *http.Request) (*http.Response, error) {
+			client := &http.Client{}
+
+			if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
+				return client.Do(r)
+			}
+
+			callbackSource := r.Header.Get(callbackSourceHeader)
+			for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
+				if callbackSource == clusterInfo.ClusterID {
+					internalClient, err := httpClientCache.Get(clusterName)
+					if err != nil {
+						logger.Warn("HTTPCallerProviderProvider unable to get FrontendHTTPClient for callback target cluster. Using default HTTP client.", tag.SourceCluster(clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(clusterName))
+						return client.Do(r)
+					}
+					r.URL.Scheme = internalClient.Scheme()
+					r.URL.Host = internalClient.Host()
+					r.Host = internalClient.Host()
+					return internalClient.Do(r)
+				}
+			}
+
+			logger.Warn("HTTPCallerProviderProvider unable to get ClusterInformation for callback target cluster. Using default HTTP client.", tag.SourceCluster(clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(callbackSource))
+			return client.Do(r)
+		}
 	})
 	return m.Get
 }

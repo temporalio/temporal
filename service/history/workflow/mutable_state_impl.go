@@ -2061,7 +2061,7 @@ func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.
 		interval += backoffDuration.AsDuration()
 	}
 	// minimal interval for continue as new to prevent tight continue as new loop
-	minInterval := ms.config.ContinueAsNewMinInterval(ms.namespaceEntry.Name().String())
+	minInterval := ms.config.WorkflowIdReuseMinimalInterval(ms.namespaceEntry.Name().String())
 	if interval < minInterval {
 		// enforce a minimal backoff
 		return durationpb.New(minInterval - lifetime)
