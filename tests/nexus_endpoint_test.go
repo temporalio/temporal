@@ -164,17 +164,18 @@ type MatchingSuite struct {
 }
 
 func (s *MatchingSuite) TestCreate() {
-	entry := s.createNexusEndpoint(s.T().Name())
+	endpointName := "test_matching_create_endpoint_name"
+	entry := s.createNexusEndpoint(endpointName)
 	s.Equal(int64(1), entry.Version)
 	s.NotNil(entry.Endpoint.Clock)
 	s.NotNil(entry.Endpoint.CreatedTime)
 	s.NotEmpty(entry.Id)
-	s.Equal(entry.Endpoint.Spec.Name, s.T().Name())
+	s.Equal(entry.Endpoint.Spec.Name, endpointName)
 	s.Equal(entry.Endpoint.Spec.Target.GetWorker().NamespaceId, s.getNamespaceID(s.namespace))
 
 	_, err := s.testCluster.GetMatchingClient().CreateNexusEndpoint(NewContext(), &matchingservice.CreateNexusEndpointRequest{
 		Spec: &persistencespb.NexusEndpointSpec{
-			Name: s.T().Name(),
+			Name: endpointName,
 			Target: &persistencespb.NexusEndpointTarget{
 				Variant: &persistencespb.NexusEndpointTarget_Worker_{
 					Worker: &persistencespb.NexusEndpointTarget_Worker{
@@ -190,7 +191,9 @@ func (s *MatchingSuite) TestCreate() {
 }
 
 func (s *MatchingSuite) TestUpdate() {
-	endpoint := s.createNexusEndpoint(s.T().Name())
+	endpointName := "test_update_endpoint_name"
+	updatedName := "updated_name"
+	endpoint := s.createNexusEndpoint(endpointName)
 	type testcase struct {
 		name      string
 		request   *matchingservice.UpdateNexusEndpointRequest
@@ -203,7 +206,7 @@ func (s *MatchingSuite) TestUpdate() {
 				Version: 1,
 				Id:      endpoint.Id,
 				Spec: &persistencespb.NexusEndpointSpec{
-					Name: "updated name",
+					Name: updatedName,
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
@@ -218,7 +221,7 @@ func (s *MatchingSuite) TestUpdate() {
 				s.NoError(err)
 				s.NotNil(resp.Entry)
 				s.Equal(int64(2), resp.Entry.Version)
-				s.Equal("updated name", resp.Entry.Endpoint.Spec.Name)
+				s.Equal(updatedName, resp.Entry.Endpoint.Spec.Name)
 				s.NotNil(resp.Entry.Endpoint.Clock)
 			},
 		},
@@ -228,7 +231,7 @@ func (s *MatchingSuite) TestUpdate() {
 				Version: 1,
 				Id:      "not-found",
 				Spec: &persistencespb.NexusEndpointSpec{
-					Name: "updated name",
+					Name: updatedName,
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
@@ -250,7 +253,7 @@ func (s *MatchingSuite) TestUpdate() {
 				Version: 1,
 				Id:      endpoint.Id,
 				Spec: &persistencespb.NexusEndpointSpec{
-					Name: "updated name",
+					Name: updatedName,
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
@@ -278,7 +281,8 @@ func (s *MatchingSuite) TestUpdate() {
 }
 
 func (s *MatchingSuite) TestDelete() {
-	endpoint := s.createNexusEndpoint("endpoint-to-delete-matching")
+	endpointName := "test_delete_endpoint_name"
+	endpoint := s.createNexusEndpoint(endpointName)
 	type testcase struct {
 		name       string
 		endpointID string
@@ -462,6 +466,7 @@ type OperatorSuite struct {
 }
 
 func (s *OperatorSuite) TestCreate() {
+	endpointName := "test_operator_create_endpoint_name"
 	type testcase struct {
 		name      string
 		request   *operatorservice.CreateNexusEndpointRequest
@@ -472,7 +477,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "valid create",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.T().Name(),
+					Name: endpointName,
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -484,12 +489,13 @@ func (s *OperatorSuite) TestCreate() {
 				},
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+				s.NoError(err)
 				s.NotNil(resp.Endpoint)
 				s.Equal(int64(1), resp.Endpoint.Version)
 				s.Nil(resp.Endpoint.LastModifiedTime)
 				s.NotNil(resp.Endpoint.CreatedTime)
 				s.NotEmpty(resp.Endpoint.Id)
-				s.Equal(resp.Endpoint.Spec.Name, s.T().Name())
+				s.Equal(resp.Endpoint.Spec.Name, endpointName)
 				s.Equal(resp.Endpoint.Spec.Target.GetWorker().Namespace, s.namespace)
 				s.Equal("/"+commonnexus.RouteDispatchNexusTaskByEndpoint.Path(resp.Endpoint.Id), resp.Endpoint.UrlPrefix)
 			},
@@ -498,7 +504,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: name already in use",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.T().Name(),
+					Name: endpointName,
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -577,7 +583,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: namespace unset",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -596,7 +602,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: namespace not found",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -616,7 +622,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: task queue unset",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -635,7 +641,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: task queue too long",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -655,7 +661,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: empty URL",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_External_{
 							External: &nexus.EndpointTarget_External{},
@@ -672,7 +678,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: URL too long",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_External_{
 							External: &nexus.EndpointTarget_External{
@@ -691,7 +697,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: URL invalid",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_External_{
 							External: &nexus.EndpointTarget_External{
@@ -710,7 +716,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: URL invalid scheme",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_External_{
 							External: &nexus.EndpointTarget_External{
@@ -729,7 +735,7 @@ func (s *OperatorSuite) TestCreate() {
 			name: "invalid: description too large",
 			request: &operatorservice.CreateNexusEndpointRequest{
 				Spec: &nexus.EndpointSpec{
-					Name: s.randomizeStr(s.T().Name()),
+					Name: s.randomizeStr(endpointName),
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -759,7 +765,9 @@ func (s *OperatorSuite) TestCreate() {
 }
 
 func (s *OperatorSuite) TestUpdate() {
-	endpoint := s.createNexusEndpoint(s.T().Name())
+	endpointName := "test_operator_update_endpoint_name"
+	updatedName := "updated_name"
+	endpoint := s.createNexusEndpoint(endpointName)
 	type testcase struct {
 		name      string
 		request   *operatorservice.UpdateNexusEndpointRequest
@@ -772,7 +780,7 @@ func (s *OperatorSuite) TestUpdate() {
 				Version: 1,
 				Id:      endpoint.Id,
 				Spec: &nexus.EndpointSpec{
-					Name: "updated name",
+					Name: updatedName,
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -787,7 +795,7 @@ func (s *OperatorSuite) TestUpdate() {
 				s.NoError(err)
 				s.NotNil(resp.Endpoint)
 				s.Equal(int64(2), resp.Endpoint.Version)
-				s.Equal("updated name", resp.Endpoint.Spec.Name)
+				s.Equal(updatedName, resp.Endpoint.Spec.Name)
 				s.NotNil(resp.Endpoint.LastModifiedTime)
 			},
 		},
@@ -797,7 +805,7 @@ func (s *OperatorSuite) TestUpdate() {
 				Version: 1,
 				Id:      "not-found",
 				Spec: &nexus.EndpointSpec{
-					Name: "updated name",
+					Name: updatedName,
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -819,7 +827,7 @@ func (s *OperatorSuite) TestUpdate() {
 				Version: 1,
 				Id:      endpoint.Id,
 				Spec: &nexus.EndpointSpec{
-					Name: "updated name",
+					Name: updatedName,
 					Target: &nexus.EndpointTarget{
 						Variant: &nexus.EndpointTarget_Worker_{
 							Worker: &nexus.EndpointTarget_Worker{
@@ -986,7 +994,8 @@ func (s *OperatorSuite) TestList() {
 }
 
 func (s *OperatorSuite) TestGet() {
-	endpoint := s.createNexusEndpoint(s.T().Name())
+	endpointName := "test_operator_get_endpoint_name"
+	endpoint := s.createNexusEndpoint(endpointName)
 
 	type testcase struct {
 		name      string
