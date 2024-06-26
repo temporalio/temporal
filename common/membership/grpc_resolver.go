@@ -61,7 +61,7 @@ func initializeBuilder(monitor Monitor) GRPCResolver {
 	return GRPCResolver{}
 }
 
-func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
+func MakeResolverURL(service primitives.ServiceName) string {
 	return fmt.Sprintf("%s://%s", grpcResolverScheme, string(service))
 }
 

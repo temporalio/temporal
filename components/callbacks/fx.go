@@ -23,10 +23,12 @@
 package callbacks
 
 import (
+	"fmt"
 	"net/http"
 
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
@@ -48,9 +50,14 @@ var Module = fx.Module(
 
 func HTTPCallerProviderProvider(
 	clusterMetadata cluster.Metadata,
-	httpClientCache *cluster.FrontendHTTPClientCache,
+	rpcFactory common.RPCFactory,
 	logger log.Logger,
-) HTTPCallerProvider {
+) (HTTPCallerProvider, error) {
+	internalClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
+	}
+
 	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
 		return func(r *http.Request) (*http.Response, error) {
 			client := &http.Client{}
@@ -60,23 +67,20 @@ func HTTPCallerProviderProvider(
 			}
 
 			callbackSource := r.Header.Get(callbackSourceHeader)
-			for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
+			for _, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
 				if callbackSource == clusterInfo.ClusterID {
-					internalClient, err := httpClientCache.Get(clusterName)
-					if err != nil {
-						logger.Warn("HTTPCallerProviderProvider unable to get FrontendHTTPClient for callback target cluster. Using default HTTP client.", tag.SourceCluster(clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(clusterName))
-						return client.Do(r)
-					}
-					r.URL.Scheme = internalClient.Scheme()
-					r.URL.Host = internalClient.Host()
-					r.Host = internalClient.Host()
+					r.URL.Scheme = internalClient.Scheme
+					r.URL.Host = internalClient.Address
+					r.Host = internalClient.Address
 					return internalClient.Do(r)
 				}
 			}
 
+			// TODO(bergundy): This is somewhat expected since callbacks can be routed to two separate deployments. For
+			// now we'll keep this log since we don't expect this setup to be common.
 			logger.Warn("HTTPCallerProviderProvider unable to get ClusterInformation for callback target cluster. Using default HTTP client.", tag.SourceCluster(clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(callbackSource))
 			return client.Do(r)
 		}
 	})
-	return m.Get
+	return m.Get, nil
 }
