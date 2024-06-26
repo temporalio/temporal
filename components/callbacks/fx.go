@@ -51,34 +51,50 @@ var Module = fx.Module(
 func HTTPCallerProviderProvider(
 	clusterMetadata cluster.Metadata,
 	rpcFactory common.RPCFactory,
+	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
 ) (HTTPCallerProvider, error) {
-	internalClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
+	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
 
 	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
-		return func(r *http.Request) (*http.Response, error) {
-			client := &http.Client{}
+		// Create this once and reuse for all outgoing requests.
+		// Note that this may not ever be used but it cheap enough to create and is better to avoid the complexities of
+		// lazily creating it.
+		client := &http.Client{}
 
+		return func(r *http.Request) (*http.Response, error) {
 			if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
 				return client.Do(r)
 			}
 
 			callbackSource := r.Header.Get(callbackSourceHeader)
-			for _, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
+			for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
 				if callbackSource == clusterInfo.ClusterID {
-					r.URL.Scheme = internalClient.Scheme
-					r.URL.Host = internalClient.Address
-					r.Host = internalClient.Address
-					return internalClient.Do(r)
+					var frontendClient *common.FrontendHTTPClient
+					if clusterMetadata.GetCurrentClusterName() == clusterName {
+						frontendClient = localClient
+					} else {
+						frontendClient, err = httpClientCache.Get(clusterName)
+						if err != nil {
+							logger.Warn(
+								"HTTPCallerProviderProvider unable to get FrontendHTTPClient for callback target cluster. Using default HTTP client.",
+								tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
+								tag.TargetCluster(clusterName),
+							)
+							return client.Do(r)
+						}
+					}
+					r.URL.Scheme = frontendClient.Scheme
+					r.URL.Host = frontendClient.Address
+					r.Host = frontendClient.Address
+					return frontendClient.Do(r)
 				}
 			}
 
-			// TODO(bergundy): This is somewhat expected since callbacks can be routed to two separate deployments. For
-			// now we'll keep this log since we don't expect this setup to be common.
-			logger.Warn("HTTPCallerProviderProvider unable to get ClusterInformation for callback target cluster. Using default HTTP client.", tag.SourceCluster(clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(callbackSource))
+			// We don't know this calling cluster, use the default client.
 			return client.Do(r)
 		}
 	})

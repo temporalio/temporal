@@ -344,7 +344,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func extractServiceFromURL(ustr string) (primitives.ServiceName, error) {
-	if !strings.HasPrefix(ustr, "membership://") {
+	if !strings.HasPrefix(ustr, membership.ResolverScheme+"://") {
 		return "", nil
 	}
 	u, err := url.Parse(ustr)
