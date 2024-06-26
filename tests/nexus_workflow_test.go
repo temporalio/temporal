@@ -60,7 +60,7 @@ import (
 func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
 	ctx := NewContext()
 	taskQueue := s.randomizeStr(s.T().Name())
-	endpointName := s.randomizeStr(s.T().Name())
+	endpointName := "test_cancelation_endpoint_name"
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -184,7 +184,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
 func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 	ctx := NewContext()
 	taskQueue := s.randomizeStr(s.T().Name())
-	endpointName := s.randomizeStr(s.T().Name())
+	endpointName := "test_sync_completion_endpoint_name"
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -284,7 +284,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion_LargePayload() {
 	ctx := NewContext()
 	taskQueue := s.randomizeStr(s.T().Name())
-	endpointName := s.randomizeStr("test_endpoint")
+	endpointName := "test_sync_completion_large_payload_endpoint_name"
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -387,7 +387,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion_LargePayload() 
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	ctx := NewContext()
 	taskQueue := s.randomizeStr(s.T().Name())
-	endpointName := s.randomizeStr(s.T().Name())
+	endpointName := "test_async_completion_endpoint_name"
 
 	testClusterInfo, err := s.engine.GetClusterInfo(ctx, &workflowservice.GetClusterInfoRequest{})
 	s.NoError(err)
@@ -602,7 +602,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncFailure() {
 	ctx := NewContext()
 	taskQueue := s.randomizeStr(s.T().Name())
-	endpointName := s.randomizeStr(s.T().Name())
+	endpointName := "test_async_failure_endpoint_name"
 
 	var callbackToken, publicCallbackUrl string
 
@@ -825,7 +825,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionInternalAuth() 
 
 	ctx := NewContext()
 	taskQueue := s.randomizeStr(s.T().Name())
-	endpointName := s.randomizeStr(s.T().Name())
+	endpointName := "test_async_completion_internal_auth_endpoint_name"
 
 	_, err := s.operatorClient.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
