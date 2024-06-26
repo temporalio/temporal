@@ -2822,7 +2822,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			SdkMetadata:                     true,
 			BuildIdBasedVersioning:          true,
 			CountGroupByExecutionStatus:     true,
-			Nexus:                           true,
+			Nexus:                           wh.config.EnableNexusAPIs(),
 		},
 	}, nil
 }
