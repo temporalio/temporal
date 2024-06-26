@@ -20,7 +20,11 @@ persistence:
                 keyspace: "{{ default .Env.KEYSPACE "temporal" }}"
                 user: "{{ default .Env.CASSANDRA_USER "" }}"
                 password: "{{ default .Env.CASSANDRA_PASSWORD "" }}"
-                allowedAuthenticators: "{{ default .Env.CASSANDRA_ALLOWED_AUTHENTICATORS "" }}"
+                {{- if .Env.CASSANDRA_ALLOWED_AUTHENTICATORS }}
+                allowedAuthenticators: {{ range split .Env.CASSANDRA_ALLOWED_AUTHENTICATORS "," }}
+                    - {{.}}
+                  {{- end }}
+                {{- end }}
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
                 maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "20" }}
                 tls:
