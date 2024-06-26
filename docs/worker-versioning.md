@@ -88,34 +88,16 @@ w := worker.New(c, "your_task_queue_name", workerOptions)
 ```
 //TODO OR:
 ```go
-func main() {
-	namespace := "versioning-test-env.temporal-dev"
-	hostPort := "host.docker.internal:7233"
-	c, err := client.Dial(
-		client.Options{
-			HostPort:  hostPort,
-			Namespace: namespace,
-		},
-	)
-	if err != nil {
-		log.Fatalln("Unable to create client", err)
-	}
-	defer c.Close()
+w := worker.New(
+        c, "my-tq", worker.Options{
+            UseBuildIDForVersioning: true,
+            BuildID:                 os.Getenv("BUILD_ID"),
+        },
+)
+w.RegisterWorkflowWithOptions(MyWorkflow, workflow.RegisterOptions{Name: "MyWorkflow"})
+w.RegisterActivity(MyActivity)
 
-	w := worker.New(
-		c, "my-tq", worker.Options{
-			UseBuildIDForVersioning: true,
-			BuildID:                 os.Getenv("BUILD_ID"),
-		},
-	)
-	w.RegisterWorkflowWithOptions(MyWorkflow, workflow.RegisterOptions{Name: "MyWorkflow"})
-	w.RegisterActivity(MyActivity)
-
-	err = w.Run(worker.InterruptCh())
-	if err != nil {
-		panic(err)
-	}
-}
+err = w.Run(worker.InterruptCh())
 ```
 
 #### 3. Deploy your first versioned worker
