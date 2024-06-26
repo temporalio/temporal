@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/callbacks"
@@ -146,7 +147,15 @@ func TestCompareState(t *testing.T) {
 			name: "standby < scheduled",
 			s1:   enumsspb.CALLBACK_STATE_STANDBY,
 			s2:   enumsspb.CALLBACK_STATE_SCHEDULED,
-			sign: 1,
+			sign: -1,
+		},
+		{
+			name:      "scheduled = scheduled",
+			s1:        enumsspb.CALLBACK_STATE_SCHEDULED,
+			s2:        enumsspb.CALLBACK_STATE_SCHEDULED,
+			attempts1: 2,
+			attempts2: 2,
+			sign:      0,
 		},
 		{
 			name:        "succeeded not comparable to failed",
@@ -158,20 +167,20 @@ func TestCompareState(t *testing.T) {
 			name: "backing off < failed",
 			s1:   enumsspb.CALLBACK_STATE_BACKING_OFF,
 			s2:   enumsspb.CALLBACK_STATE_FAILED,
-			sign: 1,
+			sign: -1,
 		},
 		{
-			name: "backing off > scheduled",
-			s1:   enumsspb.CALLBACK_STATE_BACKING_OFF,
-			s2:   enumsspb.CALLBACK_STATE_SCHEDULED,
-			sign: -1,
+			name: "scheduled > backing off",
+			s1:   enumsspb.CALLBACK_STATE_SCHEDULED,
+			s2:   enumsspb.CALLBACK_STATE_BACKING_OFF,
+			sign: 1,
 		},
 		{
 			name:      "backing off < scheduled with greater attempt",
 			s1:        enumsspb.CALLBACK_STATE_BACKING_OFF,
 			s2:        enumsspb.CALLBACK_STATE_SCHEDULED,
 			attempts2: 1,
-			sign:      1,
+			sign:      -1,
 		},
 	}
 

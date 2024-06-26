@@ -136,7 +136,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, consts.ErrDeserializingToken
 	}
 
-	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLease(
+	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		token.Clock,
 		func(mutableState workflow.MutableState) bool {
