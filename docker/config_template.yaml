@@ -22,7 +22,7 @@ persistence:
                 password: "{{ default .Env.CASSANDRA_PASSWORD "" }}"
                 {{- if .Env.CASSANDRA_ALLOWED_AUTHENTICATORS }}
                 allowedAuthenticators: {{ range split .Env.CASSANDRA_ALLOWED_AUTHENTICATORS "," }}
-                    - {{.}}
+                    - {{trim .}}
                   {{- end }}
                 {{- end }}
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
