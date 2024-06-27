@@ -60,6 +60,7 @@ type RPCFactory struct {
 
 	frontendURL       string
 	frontendHTTPURL   string
+	frontendHTTPPort  int
 	frontendTLSConfig *tls.Config
 
 	initListener       sync.Once
@@ -80,6 +81,7 @@ func NewFactory(
 	tlsProvider encryption.TLSConfigProvider,
 	frontendURL string,
 	frontendHTTPURL string,
+	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
 	clientInterceptors []grpc.UnaryClientInterceptor,
 	monitor membership.Monitor,
@@ -90,6 +92,7 @@ func NewFactory(
 		logger:             logger,
 		frontendURL:        frontendURL,
 		frontendHTTPURL:    frontendHTTPURL,
+		frontendHTTPPort:   frontendHTTPPort,
 		frontendTLSConfig:  frontendTLSConfig,
 		tlsFactory:         tlsProvider,
 		clientInterceptors: clientInterceptors,
@@ -299,7 +302,7 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		client.Transport = &roundTripper{
 			resolver:   r,
 			underlying: transport,
-			config:     d.config,
+			httpPort:   d.frontendHTTPPort,
 		}
 		address = "internal" // This will be replaced by the roundTripper
 	} else {
@@ -318,7 +321,7 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 type roundTripper struct {
 	resolver   membership.ServiceResolver
 	underlying http.RoundTripper
-	config     *config.RPC
+	httpPort   int
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -335,7 +338,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract port from frontend member: %w", err)
 	}
-	address := fmt.Sprintf("%s:%d", host, rt.config.HTTPPort)
+	address := fmt.Sprintf("%s:%d", host, rt.httpPort)
 
 	// Replace request's host.
 	req.URL.Host = address

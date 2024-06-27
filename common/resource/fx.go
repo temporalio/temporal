@@ -367,7 +367,7 @@ func SdkClientFactoryProvider(
 	resolver membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
-	frontendURL, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +394,7 @@ func RPCFactoryProvider(
 	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
 	svcCfg := cfg.Services[string(svcName)]
-	frontendURL, frontendHTTPURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -405,6 +405,7 @@ func RPCFactoryProvider(
 		tlsConfigProvider,
 		frontendURL,
 		frontendHTTPURL,
+		frontendHTTPPort,
 		frontendTLSConfig,
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
@@ -424,7 +425,7 @@ func getFrontendConnectionDetails(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver membership.GRPCResolver,
-) (string, string, *tls.Config, error) {
+) (string, string, int, *tls.Config, error) {
 	// To simplify the static config, we switch default values based on whether the config
 	// defines an "internal-frontend" service. The default for TLS config can be overridden
 	// with publicClient.forceTLSConfig, and the default for hostPort can be overridden by
@@ -452,7 +453,7 @@ func getFrontendConnectionDetails(
 		err = fmt.Errorf("invalid forceTLSConfig")
 	}
 	if err != nil {
-		return "", "", nil, fmt.Errorf("unable to load TLS configuration: %w", err)
+		return "", "", 0, nil, fmt.Errorf("unable to load TLS configuration: %w", err)
 	}
 
 	frontendURL := cfg.PublicClient.HostPort
@@ -473,5 +474,12 @@ func getFrontendConnectionDetails(
 
 	}
 
-	return frontendURL, frontendHTTPURL, frontendTLSConfig, nil
+	var frontendHTTPPort int
+	if hasIFE {
+		frontendHTTPPort = cfg.Services[string(primitives.InternalFrontendService)].RPC.HTTPPort
+	} else {
+		frontendHTTPPort = cfg.Services[string(primitives.FrontendService)].RPC.HTTPPort
+	}
+
+	return frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, nil
 }
