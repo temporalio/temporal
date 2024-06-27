@@ -109,7 +109,7 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): limit,
 		dynamicconfig.EnableNexus.Key():                                     true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
-		callbacks.EndpointConfigs.Key():                                     []any{map[string]any{"EndpointPattern": "*", "AllowInsecure": true}},
+		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 

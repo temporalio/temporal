@@ -4549,14 +4549,14 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
 	}
 	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
-		if cfg.EndpointRegex.MatchString(u.Host) {
+		if cfg.Regexp.MatchString(u.Host) {
 			if u.Scheme == "http" && !cfg.AllowInsecure {
-				return status.Errorf(codes.InvalidArgument, "invalid url: callback endpoint does not allow insecure connections: %v", u)
+				return status.Errorf(codes.InvalidArgument, "invalid url: callback address does not allow insecure connections: %v", u)
 			}
 			return nil
 		}
 	}
-	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback endpoint: %v", u)
+	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback address: %v", u)
 }
 
 type buildIdAndFlag interface {

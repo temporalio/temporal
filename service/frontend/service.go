@@ -194,7 +194,7 @@ type Config struct {
 	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackEndpointConfigs     dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.EndpointConfig]
+	CallbackEndpointConfigs     dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -304,7 +304,7 @@ func NewConfig(
 		CallbackURLMaxLength:        dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		CallbackHeaderMaxSize:       dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		MaxCallbacksPerWorkflow:     dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		CallbackEndpointConfigs:     callbacks.EndpointConfigs.Get(dc),
+		CallbackEndpointConfigs:     callbacks.AllowedAddresses.Get(dc),
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
