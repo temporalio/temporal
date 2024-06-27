@@ -22,25 +22,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+package tqid
 
-import enumspb "go.temporal.io/api/enums/v1"
+import (
+	"strconv"
+
+	"go.temporal.io/server/common/metrics"
+)
 
 func GetPerTaskQueueScope(
-	handler Handler,
+	handler metrics.Handler,
 	namespaceName string,
-	taskQueueName string,
-	taskQueueKind enumspb.TaskQueueKind,
-	include bool,
-) Handler {
-	var metricTaskQueueName string
-	switch taskQueueKind {
-	case enumspb.TASK_QUEUE_KIND_NORMAL:
-		metricTaskQueueName = taskQueueName
-	case enumspb.TASK_QUEUE_KIND_STICKY:
-		metricTaskQueueName = "__sticky__"
-	default:
-		metricTaskQueueName = unknownValue
+	taskQueue *TaskQueue,
+	taskQueueBreakdown bool,
+) metrics.Handler {
+	metricTaskQueueName := "__omitted__"
+	if taskQueueBreakdown {
+		metricTaskQueueName = taskQueue.Name()
 	}
-	return handler.WithTags(NamespaceTag(namespaceName), TaskQueueTag(metricTaskQueueName))
+	return handler.WithTags(
+		metrics.NamespaceTag(namespaceName),
+		metrics.TaskQueueTag(metricTaskQueueName),
+		metrics.TaskQueueTypeTag(taskQueue.TaskType()),
+	)
+}
+
+func GetPerTaskQueuePartitionScope(
+	handler metrics.Handler,
+	namespaceName string,
+	partition Partition,
+	taskQueueBreakdown bool,
+	partitionIDBreakdown bool,
+) metrics.Handler {
+	h := GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown)
+
+	var value string
+	if partition == nil {
+		value = "_unknown_"
+	} else if normalPartition, ok := partition.(*NormalPartition); ok {
+		if partitionIDBreakdown {
+			value = strconv.Itoa(normalPartition.PartitionId())
+		} else {
+			value = "__normal__"
+		}
+	} else {
+		value = "__sticky__"
+	}
+
+	return h.WithTags(metrics.PartitionTag(value))
 }

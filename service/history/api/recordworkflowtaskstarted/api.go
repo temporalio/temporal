@@ -32,6 +32,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -171,17 +172,17 @@ func Invoke(
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
-			taskQueue := workflowTask.TaskQueue
-			metrics.TaskScheduleToStartLatency.With(metrics.GetPerTaskQueueScope(
-				metricsScope,
-				namespaceName.String(),
-				taskQueue.GetName(),
-				taskQueue.GetKind(),
-				false,
-			),
-			).Record(workflowScheduleToStartLatency,
-				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-			)
+			tqPartition := tqid.UnsafePartitionFromProto(workflowTask.TaskQueue, req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			metrics.TaskScheduleToStartLatency.With(
+				tqid.GetPerTaskQueuePartitionScope(
+					metricsScope,
+					namespaceName.String(),
+					tqPartition,
+					// TODO: honor TQ config in here to possibly breakdown by TQ name
+					false,
+					false,
+				),
+			).Record(workflowScheduleToStartLatency)
 
 			resp, err = CreateRecordWorkflowTaskStartedResponse(
 				ctx,

@@ -1009,7 +1009,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
 	snap := scope.Snapshot()
-	syncCtr := snap.Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,task_type=Activity,taskqueue=makeToast,worker-build-id=_unversioned_"]
+	syncCtr := snap.Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker-build-id=__unversioned__"]
 	s.Equal(1, int(syncCtr.Value()))                        // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
@@ -2624,7 +2624,6 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 	s.True(ok)
 	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
 	s.TaskQueueMetricValidator(capture, 2, 0, 2, 2, 2, 2)
-
 }
 
 func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition() {
@@ -2649,7 +2648,6 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 	s.True(ok)
 	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
 	s.TaskQueueMetricValidator(capture, 2, 0, 2, 0, 2, 2)
-
 }
 
 func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {

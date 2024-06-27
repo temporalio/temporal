@@ -36,6 +36,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -273,6 +274,7 @@ func createTestTaskQueueManagerWithConfig(
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(controller, nsName)
 	me := createTestMatchingEngine(controller, testOpts.config, testOpts.matchingClientMock, registry)
+	me.metricsHandler = metricstest.NewCaptureHandler()
 	partition := testOpts.dbq.Partition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, nsName)
 	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, partition, tqConfig, me.logger, me.namespaceRegistry)
@@ -287,14 +289,14 @@ func createTestTaskQueueManagerWithConfig(
 
 func createTestTaskQueuePartitionManager(ns *namespace.Namespace, partition tqid.Partition, tqConfig *taskQueueConfig, me *matchingEngineImpl, userDataManager userDataManager) *taskQueuePartitionManagerImpl {
 	pm := &taskQueuePartitionManagerImpl{
-		engine:               me,
-		partition:            partition,
-		config:               tqConfig,
-		ns:                   ns,
-		logger:               me.logger,
-		matchingClient:       me.matchingRawClient,
-		taggedMetricsHandler: me.metricsHandler,
-		userDataManager:      userDataManager,
+		engine:          me,
+		partition:       partition,
+		config:          tqConfig,
+		ns:              ns,
+		logger:          me.logger,
+		matchingClient:  me.matchingRawClient,
+		metricsHandler:  me.metricsHandler,
+		userDataManager: userDataManager,
 	}
 
 	me.partitions[partition.Key()] = pm

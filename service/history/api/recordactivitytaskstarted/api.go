@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -122,20 +123,16 @@ func Invoke(
 
 			scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
 			namespaceName := namespaceEntry.Name()
-			taskQueueName := ai.GetTaskQueue()
-
+			taskQueue := tqid.UnsafeTaskQueueFamily(request.GetNamespaceId(), ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 			metrics.TaskScheduleToStartLatency.With(
-				metrics.GetPerTaskQueueScope(
+				tqid.GetPerTaskQueueScope(
 					taggedMetrics,
 					namespaceName.String(),
-					taskQueueName,
-					enumspb.TASK_QUEUE_KIND_NORMAL,
+					taskQueue,
+					// TODO: honor TQ config in here to possibly breakdown by TQ name
 					false,
 				),
-			).Record(
-				scheduleToStartLatency,
-				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-			)
+			).Record(scheduleToStartLatency)
 
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt

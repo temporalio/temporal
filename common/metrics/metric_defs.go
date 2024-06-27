@@ -46,7 +46,6 @@ const (
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
 	resourceExhaustedScopeTag   = "resource_exhausted_scope"
-	PartitionKindTagName        = "partition_kind"
 	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
 )

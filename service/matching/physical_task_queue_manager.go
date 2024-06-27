@@ -113,24 +113,26 @@ type (
 		UnloadFromPartitionManager(unloadCause)
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
+		// ShouldEmitGauges determines whether the gauge metrics should be emitted or not for this particular physical
+		// queue based on dynamic configs.
+		ShouldEmitGauges() bool
 	}
 
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
 	physicalTaskQueueManagerImpl struct {
-		status               int32
-		partitionMgr         *taskQueuePartitionManagerImpl
-		queue                *PhysicalTaskQueueKey
-		config               *taskQueueConfig
-		backlogMgr           *backlogManagerImpl
-		liveness             *liveness
-		matcher              *TaskMatcher // for matching a task producer with a poller
-		namespaceRegistry    namespace.Registry
-		logger               log.Logger
-		throttledLogger      log.ThrottledLogger
-		matchingClient       matchingservice.MatchingServiceClient
-		metricsHandler       metrics.Handler
-		clusterMeta          cluster.Metadata
-		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
+		status            int32
+		partitionMgr      *taskQueuePartitionManagerImpl
+		queue             *PhysicalTaskQueueKey
+		config            *taskQueueConfig
+		backlogMgr        *backlogManagerImpl
+		liveness          *liveness
+		matcher           *TaskMatcher // for matching a task producer with a poller
+		namespaceRegistry namespace.Registry
+		logger            log.Logger
+		throttledLogger   log.ThrottledLogger
+		matchingClient    matchingservice.MatchingServiceClient
+		clusterMeta       cluster.Metadata
+		metricsHandler    metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory              *pollerHistory
 		currentPolls               atomic.Int64
@@ -257,7 +259,7 @@ func newPhysicalTaskQueueManager(
 	if buildIdTagValue == "" {
 		buildIdTagValue = queue.BuildId()
 	}
-	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
+	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
 
@@ -266,13 +268,12 @@ func newPhysicalTaskQueueManager(
 		partitionMgr:               partitionMgr,
 		namespaceRegistry:          e.namespaceRegistry,
 		matchingClient:             e.matchingRawClient,
-		metricsHandler:             e.metricsHandler,
 		clusterMeta:                e.clusterMeta,
 		queue:                      queue,
 		logger:                     logger,
 		throttledLogger:            throttledLogger,
 		config:                     config,
-		taggedMetricsHandler:       taggedMetricsHandler,
+		metricsHandler:             taggedMetricsHandler,
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
 	}
@@ -305,7 +306,7 @@ func newPhysicalTaskQueueManager(
 			return nil, err
 		}
 	}
-	pqMgr.matcher = newTaskMatcher(config, fwdr, pqMgr.taggedMetricsHandler)
+	pqMgr.matcher = newTaskMatcher(config, fwdr, pqMgr.metricsHandler)
 	for _, opt := range opts {
 		opt(pqMgr)
 	}
@@ -323,7 +324,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.backlogMgr.Start()
 	c.logger.Info("", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
-	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
+	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
 }
 
@@ -341,7 +342,7 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	c.matcher.Stop()
 	c.liveness.Stop()
 	c.logger.Info("", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
-	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
+	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
 }
 
@@ -396,7 +397,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// If we didn't do this, the task would be rejected when we call RecordXTaskStarted on
 		// history, but this is more efficient.
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
-			c.taggedMetricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
 			task.finish(nil)
 			continue
 		}
@@ -433,7 +434,7 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 ) error {
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
 		task.finish(nil)
-		c.taggedMetricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
@@ -580,4 +581,10 @@ func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.
 
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
 	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
+}
+
+func (c *physicalTaskQueueManagerImpl) ShouldEmitGauges() bool {
+	return c.config.BreakdownMetricsByTaskQueue() &&
+		c.config.BreakdownMetricsByPartition() &&
+		(!c.queue.IsVersioned() || c.config.BreakdownMetricsByBuildID())
 }

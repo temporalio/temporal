@@ -143,6 +143,25 @@ func UnsafeTaskQueueFamily(namespaceId string, name string) *TaskQueueFamily {
 	return &TaskQueueFamily{namespace.ID(namespaceId), name}
 }
 
+// UnsafePartitionFromProto tries parsing proto using PartitionFromProto but if it fails still returns a Partition
+// object using the raw values in the proto.
+// This method should only be used in logs/metrics, not in the server logic.
+func UnsafePartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumspb.TaskQueueType) Partition {
+	p, err := PartitionFromProto(proto, namespaceId, taskType)
+	if err == nil {
+		return p
+	}
+	kind := proto.GetKind()
+	switch kind { //nolint:exhaustive
+	case enumspb.TASK_QUEUE_KIND_STICKY:
+		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), proto.GetNormalName()}, taskType}
+		return tq.StickyPartition(proto.GetName())
+	default:
+		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), proto.GetName()}, taskType}
+		return tq.RootPartition()
+	}
+}
+
 func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumspb.TaskQueueType) (Partition, error) {
 	baseName, partition, err := parseRpcName(proto.GetName())
 	if err != nil {

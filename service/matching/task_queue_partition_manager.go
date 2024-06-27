@@ -107,13 +107,13 @@ type (
 		// is delegated to the defaultQueue.
 		defaultQueue physicalTaskQueueManager
 		// used for non-sticky versioned queues (one for each version)
-		versionedQueues      map[string]physicalTaskQueueManager
-		versionedQueuesLock  sync.RWMutex // locks mutation of versionedQueues
-		userDataManager      userDataManager
-		logger               log.Logger
-		throttledLogger      log.ThrottledLogger
-		matchingClient       matchingservice.MatchingServiceClient
-		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
+		versionedQueues     map[string]physicalTaskQueueManager
+		versionedQueuesLock sync.RWMutex // locks mutation of versionedQueues
+		userDataManager     userDataManager
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		matchingClient      matchingservice.MatchingServiceClient
+		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 	}
 )
 
@@ -135,27 +135,27 @@ func newTaskQueuePartitionManager(
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName))
-	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
+	taggedMetricsHandler := tqid.GetPerTaskQueuePartitionScope(
 		e.metricsHandler.WithTags(
 			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-			metrics.TaskQueueTypeTag(partition.TaskType()),
-			metrics.PartitionTag(partition, tqConfig.BreakdownMetricsByPartition())),
+		),
 		nsName,
 		partition,
-		tqConfig.BreakdownMetricsByBuildID(),
+		tqConfig.BreakdownMetricsByTaskQueue(),
+		tqConfig.BreakdownMetricsByPartition(),
 	)
 
 	pm := &taskQueuePartitionManagerImpl{
-		engine:               e,
-		partition:            partition,
-		ns:                   ns,
-		config:               tqConfig,
-		logger:               logger,
-		throttledLogger:      throttledLogger,
-		matchingClient:       e.matchingRawClient,
-		taggedMetricsHandler: taggedMetricsHandler,
-		versionedQueues:      make(map[string]physicalTaskQueueManager),
-		userDataManager:      userDataManager,
+		engine:          e,
+		partition:       partition,
+		ns:              ns,
+		config:          tqConfig,
+		logger:          logger,
+		throttledLogger: throttledLogger,
+		matchingClient:  e.matchingRawClient,
+		metricsHandler:  taggedMetricsHandler,
+		versionedQueues: make(map[string]physicalTaskQueueManager),
+		userDataManager: userDataManager,
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
@@ -225,7 +225,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 
 	if pm.partition.IsRoot() && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
-		pm.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
+		pm.metricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
 	}
 
 	isActive, err := pm.isActiveInCluster()
@@ -832,10 +832,10 @@ func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueu
 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildPoll(buildId string) {
 	pm.logger.Warn("unknown build ID in poll", tag.BuildId(buildId))
-	pm.taggedMetricsHandler.Counter(metrics.UnknownBuildPollsCounter.Name()).Record(1)
+	pm.metricsHandler.Counter(metrics.UnknownBuildPollsCounter.Name()).Record(1)
 }
 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildTask(buildId string) {
 	pm.logger.Warn("unknown build ID in task", tag.BuildId(buildId))
-	pm.taggedMetricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
+	pm.metricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
 }

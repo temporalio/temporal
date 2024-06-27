@@ -208,8 +208,8 @@ func (db *taskQueueDB) UpdateState(
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
-		db.emitBacklogCountAndAge()
 	}
+	db.emitBacklogGauges()
 	return err
 }
 
@@ -348,12 +348,19 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
-// emitBacklogCountAndAge emits the approximateBacklogCount and the BacklogAge to the metrics handler.
-// It is called after persisting the updated BacklogCount in db
-func (db *taskQueueDB) emitBacklogCountAndAge() {
-	approximateBacklogCount := db.getApproximateBacklogCount()
-	backlogHeadAge := db.backlogMgr.taskReader.getBacklogHeadAge()
+// emitBacklogGauges emits the approximate_backlog_count, approximate_backlog_age_seconds, and the legacy
+// task_lag_per_tl gauges. For these gauges to be emitted, BreakdownMetricsByTaskQueue and BreakdownMetricsByPartition
+// should be enabled. Additionally, for versioned queues, BreakdownMetricsByBuildID should also be enabled.
+func (db *taskQueueDB) emitBacklogGauges() {
+	if db.backlogMgr.pqMgr.ShouldEmitGauges() {
+		approximateBacklogCount := db.getApproximateBacklogCount()
+		backlogHeadAge := db.backlogMgr.taskReader.getBacklogHeadAge()
+		db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
+		db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogAgeSeconds.Name()).Record(backlogHeadAge.Seconds())
 
-	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
-	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogAgeSeconds.Name()).Record(backlogHeadAge.Seconds())
+		// note: this metric is only an estimation for the lag.
+		// taskID in DB may not be continuous, especially when task list ownership changes.
+		maxReadLevel := db.backlogMgr.db.GetMaxReadLevel()
+		db.backlogMgr.metricsHandler.Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(maxReadLevel - db.ackLevel))
+	}
 }

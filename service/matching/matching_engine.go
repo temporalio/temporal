@@ -1923,20 +1923,19 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 }
 
 // Responsible for emitting and updating loaded_physical_task_queue_count metric
-func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueManagerImpl, delta int) {
-
+func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueueManagerImpl, delta int) {
 	// calculating versioned to be one of: “unversioned” or "buildId” or “versionSet”
 	versioned := "unversioned"
-	if buildID := pm.queue.BuildId(); buildID != "" {
+	if buildID := pqm.queue.BuildId(); buildID != "" {
 		versioned = "buildId"
-	} else if versionSet := pm.queue.VersionSet(); versionSet != "" {
+	} else if versionSet := pqm.queue.VersionSet(); versionSet != "" {
 		versioned = "versionSet"
 	}
 
 	physicalTaskQueueParameters := taskQueueCounterKey{
-		namespaceID:   pm.partitionMgr.Partition().NamespaceId(),
-		taskType:      pm.partitionMgr.Partition().TaskType(),
-		partitionType: pm.partitionMgr.Partition().Kind(),
+		namespaceID:   pqm.partitionMgr.Partition().NamespaceId(),
+		taskType:      pqm.partitionMgr.Partition().TaskType(),
+		partitionType: pqm.partitionMgr.Partition().Kind(),
 		versioned:     versioned,
 	}
 
@@ -1945,13 +1944,15 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueM
 	e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters] += delta
 	loadedPhysicalTaskQueueCounter := e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters]
 
-	pmImpl := pm.partitionMgr
-
-	e.metricsHandler.Gauge(metrics.LoadedPhysicalTaskQueueGauge.Name()).Record(
+	pm := pqm.partitionMgr
+	tqid.GetPerTaskQueuePartitionScope(
+		e.metricsHandler,
+		pm.ns.Name().String(),
+		pm.Partition(),
+		pqm.config.BreakdownMetricsByTaskQueue(),
+		pqm.config.BreakdownMetricsByPartition(),
+	).Gauge(metrics.LoadedPhysicalTaskQueueGauge.Name()).Record(
 		float64(loadedPhysicalTaskQueueCounter),
-		metrics.NamespaceTag(pmImpl.ns.Name().String()),
-		metrics.TaskTypeTag(physicalTaskQueueParameters.taskType.String()),
-		metrics.PartitionKindTag(physicalTaskQueueParameters.partitionType.String()),
 		metrics.VersionedTag(versioned),
 	)
 }
@@ -1959,7 +1960,6 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueM
 // Responsible for emitting and updating loaded_task_queue_family_count, loaded_task_queue_count and
 // loaded_task_queue_partition_count metrics
 func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitionManagerImpl, delta int) {
-
 	// each metric shall be accessed based on the mentioned parameters
 	taskQueueFamilyParameters := taskQueueCounterKey{
 		namespaceID: pm.Partition().NamespaceId(),
@@ -2003,15 +2003,18 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitio
 	metrics.LoadedTaskQueueGauge.With(e.metricsHandler).Record(
 		float64(loadedTaskQueueCounter),
 		metrics.NamespaceTag(pm.ns.Name().String()),
-		metrics.TaskTypeTag(taskQueueParameters.taskType.String()),
+		metrics.TaskQueueTypeTag(taskQueueParameters.taskType),
 	)
 
-	metrics.LoadedTaskQueuePartitionGauge.With(e.metricsHandler).Record(
-		float64(loadedTaskQueuePartitionCounter),
-		metrics.NamespaceTag(pm.ns.Name().String()),
-		metrics.TaskTypeTag(taskQueueParameters.taskType.String()),
-		metrics.PartitionKindTag(taskQueuePartitionParameters.partitionType.String()),
-	)
+	taggedHandler := tqid.GetPerTaskQueuePartitionScope(
+		e.metricsHandler,
+		pm.ns.Name().String(),
+		pm.Partition(),
+		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
+		false,
+		// we don't want breakdown by partition ID, only sticky vs normal breakdown.
+		false)
+	metrics.LoadedTaskQueuePartitionGauge.With(taggedHandler).Record(float64(loadedTaskQueuePartitionCounter))
 }
 
 // Populate the workflow task response based on context and scheduled/started events.

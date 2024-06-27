@@ -217,6 +217,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
 }
 
+// ShouldEmitGauges mocks base method.
+func (m *MockphysicalTaskQueueManager) ShouldEmitGauges() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ShouldEmitGauges")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ShouldEmitGauges indicates an expected call of ShouldEmitGauges.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) ShouldEmitGauges() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldEmitGauges", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ShouldEmitGauges))
+}
+
 // SpoolTask mocks base method.
 func (m *MockphysicalTaskQueueManager) SpoolTask(taskInfo *v11.TaskInfo) error {
 	m.ctrl.T.Helper()

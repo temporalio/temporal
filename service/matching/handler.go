@@ -29,8 +29,10 @@ import (
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
@@ -128,16 +130,20 @@ func (h *Handler) Stop() {
 }
 
 func (h *Handler) opMetricsHandler(
-	namespaceID namespace.ID,
+	namespaceID string,
 	taskQueue *taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
 	operation string,
 ) metrics.Handler {
-	return metrics.GetPerTaskQueueScope(
+	nsName := h.namespaceName(namespace.ID(namespaceID))
+	partition := tqid.UnsafePartitionFromProto(taskQueue, namespaceID, taskQueueType)
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), h.config, nsName)
+	return tqid.GetPerTaskQueuePartitionScope(
 		h.metricsHandler.WithTags(metrics.OperationTag(operation)),
-		h.namespaceName(namespaceID).String(),
-		taskQueue.GetName(),
-		taskQueue.GetKind(),
-		false,
+		nsName.String(),
+		partition,
+		tqConfig.BreakdownMetricsByTaskQueue(),
+		tqConfig.BreakdownMetricsByPartition(),
 	)
 }
 
@@ -149,8 +155,9 @@ func (h *Handler) AddActivityTask(
 	defer log.CapturePanic(h.logger, &retError)
 	startT := time.Now().UTC()
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		metrics.MatchingAddActivityTaskScope,
 	)
 
@@ -173,8 +180,9 @@ func (h *Handler) AddWorkflowTask(
 	defer log.CapturePanic(h.logger, &retError)
 	startT := time.Now().UTC()
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		metrics.MatchingAddWorkflowTaskScope,
 	)
 
@@ -196,8 +204,9 @@ func (h *Handler) PollActivityTaskQueue(
 ) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetPollRequest().GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		metrics.MatchingPollActivityTaskQueueScope,
 	)
 
@@ -223,8 +232,9 @@ func (h *Handler) PollWorkflowTaskQueue(
 ) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetPollRequest().GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
 
@@ -250,8 +260,9 @@ func (h *Handler) QueryWorkflow(
 ) (_ *matchingservice.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		metrics.MatchingQueryWorkflowScope,
 	)
 
@@ -269,8 +280,9 @@ func (h *Handler) RespondQueryTaskCompleted(
 ) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		metrics.MatchingRespondQueryTaskCompletedScope,
 	)
 
@@ -427,8 +439,9 @@ func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservic
 func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetRequest().GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
 
@@ -449,8 +462,9 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest) (_ *matchingservice.RespondNexusTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskCompletedScope,
 	)
 
@@ -460,8 +474,9 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest) (_ *matchingservice.RespondNexusTaskFailedResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
-		namespace.ID(request.GetNamespaceId()),
+		request.GetNamespaceId(),
 		request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskFailedScope,
 	)
 
