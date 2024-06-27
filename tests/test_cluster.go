@@ -327,20 +327,14 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
-	var esTestClient esclient.IntegrationTestsClient
-	var esClient esclient.Client
+	var esClient esclient.IntegrationTestsClient
 	op := func() error {
 		var err error
-		esTestClient, err = esclient.NewFunctionalTestsClient(esConfig, logger)
+		esClient, err = esclient.NewFunctionalTestsClient(esConfig, logger)
 		if err != nil {
 			return err
 		}
-		esClient, err = esclient.NewClient(esConfig, nil, logger)
-		if err != nil {
-			return err
-		}
-
-		return esTestClient.Ping(context.TODO())
+		return esClient.Ping(context.TODO())
 	}
 
 	err := backoff.ThrottleRetry(
@@ -372,7 +366,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	}
 	// Template name doesn't matter.
 	// This operation is idempotent and won't return an error even if template already exists.
-	_, err = esTestClient.IndexPutTemplate(context.Background(), "temporal_visibility_v1_template", string(template))
+	_, err = esClient.IndexPutTemplate(context.Background(), "temporal_visibility_v1_template", string(template))
 	if err != nil {
 		return err
 	}

@@ -25,8 +25,6 @@
 package visibility
 
 import (
-	"fmt"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -75,7 +73,6 @@ func NewManager(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
-	fmt.Println("saas-temporal: test: new manager called")
 	visibilityManager, err := newVisibilityManagerFromDataStoreConfig(
 		persistenceCfg.GetVisibilityStoreConfig(),
 		persistenceResolver,
@@ -244,7 +241,6 @@ func newVisibilityStoreFromDataStoreConfig(
 		err      error
 	)
 	if dsConfig.SQL != nil {
-		fmt.Println("saas-temporal: test: new sql visibilitystore called")
 		visStore, err = sql.NewSQLVisibilityStore(
 			*dsConfig.SQL,
 			persistenceResolver,
@@ -254,7 +250,6 @@ func newVisibilityStoreFromDataStoreConfig(
 			metricsHandler,
 		)
 	} else if dsConfig.Elasticsearch != nil {
-		fmt.Println("saas-temporal: test: new es visibilitystore called")
 		visStore, err = elasticsearch.NewVisibilityStore(
 			dsConfig.Elasticsearch,
 			esProcessorConfig,
@@ -266,7 +261,6 @@ func newVisibilityStoreFromDataStoreConfig(
 			logger,
 		)
 	} else if dsConfig.CustomDataStoreConfig != nil {
-		fmt.Println("saas-temporal: test: new custom visibilitystore called")
 		if customVisibilityStoreFactory == nil {
 			logger.Fatal("custom visibility store factory must be defined")
 			return nil, nil

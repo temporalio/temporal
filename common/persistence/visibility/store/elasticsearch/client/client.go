@@ -72,6 +72,7 @@ type (
 	}
 
 	IntegrationTestsClient interface {
+		Client
 		IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error)
 		IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error)
 		IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error)
