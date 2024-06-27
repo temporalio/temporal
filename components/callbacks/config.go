@@ -23,6 +23,10 @@
 package callbacks
 
 import (
+	"fmt"
+	"net/url"
+	"regexp"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/common/backoff"
@@ -47,9 +51,25 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
 
+var EndpointConfigs = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"component.callbacks.endpointConfig",
+	endpointConfigConverter,
+	[]EndpointConfig(nil),
+	`The per-namespace list of endpoints that are allowed for callbacks and options to use when making callback requests.
+Default is no configs, meaning all callbacks will be rejected. Any invalid configs are ignored.
+Each entry is a map with possible entries:
+	"EndpointPattern":string - (required) the host:port pattern this config applies to; * wildcards are supported
+	"AllowInsecure":bool - (optional, default=false) indicates whether https is required`)
+
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	RequestTimeout  dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy     func() backoff.RetryPolicy
+	EndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]EndpointConfig]
+}
+
+type EndpointConfig struct {
+	EndpointRegex *regexp.Regexp
+	AllowInsecure bool
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -64,5 +84,69 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		EndpointConfigs: EndpointConfigs.Get(dc),
 	}
+}
+
+func ValidateURLMatchesConfig(rawURL string, configs []EndpointConfig) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if !(u.Scheme == "http" || u.Scheme == "https") {
+		return fmt.Errorf("unknown scheme: %v", u)
+	}
+	for _, cfg := range configs {
+		if cfg.EndpointRegex.MatchString(u.Host) {
+			// Assumes that scheme has already been validated to be either http or https
+			if u.Scheme == "http" && !cfg.AllowInsecure {
+				return fmt.Errorf("callback endpoint does not allow insecure connections: %v", u)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("url does not match any configured callback endpoint: %v", u)
+}
+
+func endpointConfigConverter(val any) ([]EndpointConfig, error) {
+	type entry struct {
+		EndpointPattern string
+		AllowInsecure   bool
+	}
+	intermediate, err := dynamicconfig.ConvertStructure([]entry{})(val)
+	if err != nil {
+		return nil, err
+	}
+
+	var configs []EndpointConfig
+	for _, e := range intermediate {
+		if e.EndpointPattern == "" {
+			// Skip configs with missing / unparsable EndpointPattern
+			continue
+		}
+		re, err := regexp.Compile(endpointPatternToRegexp(e.EndpointPattern))
+		if err != nil {
+			// Skip configs with malformed EndpointPattern
+			continue
+		}
+		configs = append(configs, EndpointConfig{
+			EndpointRegex: re,
+			AllowInsecure: e.AllowInsecure,
+		})
+	}
+	return configs, nil
+}
+
+func endpointPatternToRegexp(pattern string) string {
+	var result strings.Builder
+	result.WriteString("^")
+	for i, literal := range strings.Split(pattern, "*") {
+		if i > 0 {
+			// Replace * with .*
+			result.WriteString(".*")
+		}
+		result.WriteString(regexp.QuoteMeta(literal))
+	}
+	result.WriteString("$")
+	return result.String()
 }

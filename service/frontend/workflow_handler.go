@@ -29,7 +29,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -92,6 +91,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
+	cb "go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -4509,9 +4509,9 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	}
 
 	for _, callback := range callbacks {
-		switch cb := callback.GetVariant().(type) {
+		switch variant := callback.GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
-			if len(cb.Nexus.GetUrl()) > wh.config.CallbackURLMaxLength(ns.String()) {
+			if len(variant.Nexus.GetUrl()) > wh.config.CallbackURLMaxLength(ns.String()) {
 				return status.Error(
 					codes.InvalidArgument,
 					fmt.Sprintf(
@@ -4520,17 +4520,13 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 					),
 				)
 			}
-			u, err := url.Parse(cb.Nexus.GetUrl())
-			if err != nil {
+
+			if err := cb.ValidateURLMatchesConfig(variant.Nexus.GetUrl(), wh.config.CallbackEndpointConfigs(ns.String())); err != nil {
 				return status.Errorf(codes.InvalidArgument, "invalid url: %v", err)
 			}
-			if !(u.Scheme == "http" || u.Scheme == "https") {
-				return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
-			}
-			// TODO: check in dynamic config that address is valid and that http is only accepted
-			// if "insecure" is allowed for address.
+
 			headerSize := 0
-			for k, v := range cb.Nexus.GetHeader() {
+			for k, v := range variant.Nexus.GetHeader() {
 				headerSize += len(k) + len(v)
 			}
 			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
@@ -4544,7 +4540,7 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 			}
 
 		default:
-			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
+			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", variant))
 		}
 	}
 	return nil
