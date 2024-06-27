@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 )
 
@@ -37,31 +38,10 @@ type tlsConfigProvider interface {
 	GetRemoteClusterClientConfig(hostname string) (*tls.Config, error)
 }
 
-type FrontendHTTPClient struct {
-	http.Client
-	address   string
-	urlScheme string
-}
-
-// Host is the host:port pair of this HTTP client.
-func (c *FrontendHTTPClient) Host() string {
-	return c.address
-}
-
-// Scheme is the URL scheme of this HTTP client.
-func (c *FrontendHTTPClient) Scheme() string {
-	return c.urlScheme
-}
-
-// BaseURL is the scheme and address of this HTTP client.
-func (c *FrontendHTTPClient) BaseURL() string {
-	return c.urlScheme + "://" + c.address
-}
-
 type FrontendHTTPClientCache struct {
 	metadata    Metadata
 	tlsProvider tlsConfigProvider
-	clients     *collection.FallibleOnceMap[string, *FrontendHTTPClient]
+	clients     *collection.FallibleOnceMap[string, *common.FrontendHTTPClient]
 }
 
 func NewFrontendHTTPClientCache(
@@ -78,11 +58,11 @@ func NewFrontendHTTPClientCache(
 }
 
 // Get returns a cached HttpClient if available, or constructs a new one for the given cluster name.
-func (c *FrontendHTTPClientCache) Get(targetClusterName string) (*FrontendHTTPClient, error) {
+func (c *FrontendHTTPClientCache) Get(targetClusterName string) (*common.FrontendHTTPClient, error) {
 	return c.clients.Get(targetClusterName)
 }
 
-func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) (*FrontendHTTPClient, error) {
+func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) (*common.FrontendHTTPClient, error) {
 	targetInfo, ok := c.metadata.GetAllClusterInfo()[targetClusterName]
 	if !ok {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find cluster metadata for cluster %s", targetClusterName))
@@ -110,10 +90,10 @@ func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) 
 		}
 	}
 
-	return &FrontendHTTPClient{
-		address:   targetInfo.HTTPAddress,
-		Client:    client,
-		urlScheme: urlScheme,
+	return &common.FrontendHTTPClient{
+		Address: targetInfo.HTTPAddress,
+		Scheme:  urlScheme,
+		Client:  client,
 	}, nil
 }
 

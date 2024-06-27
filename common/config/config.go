@@ -521,6 +521,9 @@ type (
 		// HostPort is the host port to connect on. Host can be DNS name. See the above
 		// comment: in many situations you can leave this empty.
 		HostPort string `yaml:"hostPort"`
+		// HTTPHostPort is the HTTP host port to connect on. Host can be DNS name. See the above
+		// comment: in many situations you can leave this empty.
+		HTTPHostPort string `yaml:"httpHostPort"`
 		// Force selection of either the "internode" or "frontend" TLS configs for these
 		// connections (only those two strings are valid).
 		ForceTLSConfig string `yaml:"forceTLSConfig"`
@@ -607,7 +610,7 @@ func (c *Config) Validate() error {
 	}
 
 	_, hasIFE := c.Services[string(primitives.InternalFrontendService)]
-	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "") {
+	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "" || c.PublicClient.HTTPHostPort != "") {
 		return fmt.Errorf("when using internal-frontend, publicClient must be empty")
 	}
 

@@ -187,6 +187,7 @@ type (
 	}
 
 	listenHostPort string
+	httpPort       int
 )
 
 // newTemporal returns an instance that hosts full temporal in one process
@@ -436,6 +437,10 @@ func (c *temporalImpl) startFrontend(
 		),
 		fx.Provide(c.frontendConfigProvider),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
+		fx.Provide(func() httpPort {
+			_, port := c.FrontendHTTPHostPort()
+			return httpPort(port)
+		}),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
@@ -536,6 +541,10 @@ func (c *temporalImpl) startHistory(
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
+			fx.Provide(func() httpPort {
+				_, port := c.FrontendHTTPHostPort()
+				return httpPort(port)
+			}),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
 			fx.Provide(c.newRPCFactory),
@@ -635,6 +644,10 @@ func (c *temporalImpl) startMatching(
 		),
 		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
+		fx.Provide(func() httpPort {
+			_, port := c.FrontendHTTPHostPort()
+			return httpPort(port)
+		}),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
 		static.MembershipModule(hostsByService),
@@ -729,6 +742,10 @@ func (c *temporalImpl) startWorker(
 		),
 		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
+		fx.Provide(func() httpPort {
+			_, port := c.FrontendHTTPHostPort()
+			return httpPort(port)
+		}),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
@@ -868,6 +885,8 @@ func (c *temporalImpl) newRPCFactory(
 	logger log.Logger,
 	grpcResolver membership.GRPCResolver,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	monitor membership.Monitor,
+	httpPort httpPort,
 ) (common.RPCFactory, error) {
 	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
 	if err != nil {
@@ -884,13 +903,15 @@ func (c *temporalImpl) newRPCFactory(
 		}
 	}
 	return rpc.NewFactory(
-		&config.RPC{BindOnIP: host, GRPCPort: port},
+		&config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)},
 		sn,
 		logger,
 		tlsConfigProvider,
-		grpcResolver.MakeURL(primitives.FrontendService),
+		membership.MakeResolverURL(primitives.FrontendService),
+		membership.MakeResolverURL(primitives.FrontendService),
 		frontendTLSConfig,
 		nil,
+		monitor,
 	), nil
 }
 
@@ -969,7 +990,7 @@ func sdkClientFactoryProvider(
 		}
 	}
 	return sdk.NewClientFactory(
-		resolver.MakeURL(primitives.FrontendService),
+		membership.MakeResolverURL(primitives.FrontendService),
 		tlsConfig,
 		metricsHandler,
 		logger,
