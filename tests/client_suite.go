@@ -1364,11 +1364,12 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	updateErrCh := make(chan error)
 	go func() {
 		handle, err := s.sdkClient.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
-			UpdateID:   tv.UpdateID(),
-			UpdateName: tv.HandlerName(),
-			WorkflowID: tv.WorkflowID(),
-			RunID:      tv.RunID(),
-			Args:       []interface{}{"update-value"},
+			UpdateID:     tv.UpdateID(),
+			UpdateName:   tv.HandlerName(),
+			WorkflowID:   tv.WorkflowID(),
+			RunID:        tv.RunID(),
+			Args:         []interface{}{"update-value"},
+			WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
 		})
 		updateErrCh <- err
 		updateHandleCh <- handle
