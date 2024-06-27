@@ -141,11 +141,11 @@ have been seen recently for this Build ID. Use the force option to disable this 
 ```
 
 ### 7. Wait until the old workers are not needed
-Now that all new workflow executions are assigned to the new Build ID, your old worker (that was running in step 0)
-will not receive any tasks from new workflow executions. Running workflow executions will send their outstanding
-tasks to workers with the version that the workflow execution is assigned to (barring other instructions via
-[Redirect Rules](#redirect-rules)), so in most cases, a worker is no longer needed after the reachability status
-transitions from `REACHABLE` to `CLOSED_WORKFLOWS_ONLY`.
+Check the reachability of your old version. Now that all new workflow executions are assigned to the new Build ID,
+your old worker (that was running in step 0) will not receive any tasks from new workflow executions. Running workflow
+executions will send their outstanding tasks to workers with the version that the workflow execution is assigned to 
+(barring other instructions via [Redirect Rules](#redirect-rules)), so in most cases, a worker is no longer needed 
+after the reachability status transitions from `REACHABLE` to `CLOSED_WORKFLOWS_ONLY`.
 
 ```shell
 temporal task-queue describe --task-queue my-tq --select-build-id $OLD_BUILD_ID --report-reachability
