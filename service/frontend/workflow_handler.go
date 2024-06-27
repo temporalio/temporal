@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -91,7 +92,6 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
-	cb "go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -4509,24 +4509,14 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	}
 
 	for _, callback := range callbacks {
-		switch variant := callback.GetVariant().(type) {
+		switch cb := callback.GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
-			if len(variant.Nexus.GetUrl()) > wh.config.CallbackURLMaxLength(ns.String()) {
-				return status.Error(
-					codes.InvalidArgument,
-					fmt.Sprintf(
-						"invalid url: url length longer than max length allowed of %d",
-						wh.config.CallbackURLMaxLength(ns.String()),
-					),
-				)
-			}
-
-			if err := cb.ValidateURLMatchesConfig(variant.Nexus.GetUrl(), wh.config.CallbackEndpointConfigs(ns.String())); err != nil {
-				return status.Errorf(codes.InvalidArgument, "invalid url: %v", err)
+			if err := wh.validateCallbackURL(ns, cb.Nexus.GetUrl()); err != nil {
+				return err
 			}
 
 			headerSize := 0
-			for k, v := range variant.Nexus.GetHeader() {
+			for k, v := range cb.Nexus.GetHeader() {
 				headerSize += len(k) + len(v)
 			}
 			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
@@ -4540,10 +4530,33 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 			}
 
 		default:
-			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", variant))
+			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
 		}
 	}
 	return nil
+}
+
+func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string) error {
+	if len(rawURL) > wh.config.CallbackURLMaxLength(ns.String()) {
+		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if !(u.Scheme == "http" || u.Scheme == "https") {
+		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
+	}
+	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
+		if cfg.EndpointRegex.MatchString(u.Host) {
+			if u.Scheme == "http" && !cfg.AllowInsecure {
+				return status.Errorf(codes.InvalidArgument, "invalid url: callback endpoint does not allow insecure connections: %v", u)
+			}
+			return nil
+		}
+	}
+	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback endpoint: %v", u)
 }
 
 type buildIdAndFlag interface {

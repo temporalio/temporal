@@ -23,8 +23,6 @@
 package callbacks
 
 import (
-	"fmt"
-	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -51,25 +49,9 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
 
-var EndpointConfigs = dynamicconfig.NewNamespaceTypedSettingWithConverter(
-	"component.callbacks.endpointConfig",
-	endpointConfigConverter,
-	[]EndpointConfig(nil),
-	`The per-namespace list of endpoints that are allowed for callbacks and options to use when making callback requests.
-Default is no configs, meaning all callbacks will be rejected. Any invalid configs are ignored.
-Each entry is a map with possible entries:
-	"EndpointPattern":string - (required) the host:port pattern this config applies to; * wildcards are supported
-	"AllowInsecure":bool - (optional, default=false) indicates whether https is required`)
-
 type Config struct {
-	RequestTimeout  dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy     func() backoff.RetryPolicy
-	EndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]EndpointConfig]
-}
-
-type EndpointConfig struct {
-	EndpointRegex *regexp.Regexp
-	AllowInsecure bool
+	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy    func() backoff.RetryPolicy
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -84,28 +66,22 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
-		EndpointConfigs: EndpointConfigs.Get(dc),
 	}
 }
 
-func ValidateURLMatchesConfig(rawURL string, configs []EndpointConfig) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return err
-	}
-	if !(u.Scheme == "http" || u.Scheme == "https") {
-		return fmt.Errorf("unknown scheme: %v", u)
-	}
-	for _, cfg := range configs {
-		if cfg.EndpointRegex.MatchString(u.Host) {
-			// Assumes that scheme has already been validated to be either http or https
-			if u.Scheme == "http" && !cfg.AllowInsecure {
-				return fmt.Errorf("callback endpoint does not allow insecure connections: %v", u)
-			}
-			return nil
-		}
-	}
-	return fmt.Errorf("url does not match any configured callback endpoint: %v", u)
+var EndpointConfigs = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"component.callbacks.endpointConfigs",
+	endpointConfigConverter,
+	[]EndpointConfig(nil),
+	`The per-namespace list of endpoints that are allowed for callbacks and options to use when making callback requests.
+Default is no configs, meaning all callbacks will be rejected. Any invalid configs are ignored.
+Each entry is a map with possible entries:
+	"EndpointPattern":string - (required) the host:port pattern this config applies to; * wildcards are supported
+	"AllowInsecure":bool - (optional, default=false) indicates whether https is required`)
+
+type EndpointConfig struct {
+	EndpointRegex *regexp.Regexp
+	AllowInsecure bool
 }
 
 func endpointConfigConverter(val any) ([]EndpointConfig, error) {

@@ -104,17 +104,6 @@ func (e taskExecutor) executeInvocationTask(
 		return err
 	}
 
-	if err = ValidateURLMatchesConfig(args.url, e.Config.EndpointConfigs(ns.Name().String())); err != nil {
-		return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-			return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
-				return TransitionFailed.Apply(callback, EventFailed{
-					Time: env.Now(),
-					Err:  err,
-				})
-			})
-		})
-	}
-
 	callCtx, cancel := context.WithTimeout(
 		ctx,
 		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
