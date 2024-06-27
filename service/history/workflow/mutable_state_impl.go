@@ -1364,9 +1364,6 @@ func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time
 		}
 		return completionEvent.GetEventTime().AsTime(), nil
 	}
-	if ms.executionInfo.CloseTime == nil {
-		return time.Time{}, ErrMissingCloseTimeInfo
-	}
 	return ms.executionInfo.CloseTime.AsTime(), nil
 }
 

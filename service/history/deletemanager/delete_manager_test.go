@@ -128,7 +128,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		},
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
-		time.Time{},
+		time.Unix(0, 0).UTC(),
 		&stage,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
@@ -169,7 +169,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		},
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
-		time.Time{},
+		time.Unix(0, 0).UTC(),
 		&stage,
 	).Return(serviceerror.NewInternal("test error"))
 
@@ -209,7 +209,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		},
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
-		time.Time{},
+		time.Unix(0, 0).UTC(),
 		&stage,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
