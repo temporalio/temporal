@@ -1328,7 +1328,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	}
 
 	workflowFn := func(ctx workflow.Context) error {
-		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(arg string) (string, error) {
+		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
 			return "my-update-result", nil
 		})
 		if err != nil {
