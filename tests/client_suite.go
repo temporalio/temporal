@@ -1328,7 +1328,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	}
 
 	workflowFn := func(ctx workflow.Context) error {
-		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(arg string) (string, error) {
+		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
 			return "my-update-result", nil
 		})
 		if err != nil {
@@ -1363,12 +1363,13 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	updateHandleCh := make(chan sdkclient.WorkflowUpdateHandle)
 	updateErrCh := make(chan error)
 	go func() {
-		handle, err := s.sdkClient.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
-			UpdateID:   tv.UpdateID(),
-			UpdateName: tv.HandlerName(),
-			WorkflowID: tv.WorkflowID(),
-			RunID:      tv.RunID(),
-			Args:       []interface{}{"update-value"},
+		handle, err := s.sdkClient.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
+			UpdateID:     tv.UpdateID(),
+			UpdateName:   tv.HandlerName(),
+			WorkflowID:   tv.WorkflowID(),
+			RunID:        tv.RunID(),
+			Args:         []interface{}{"update-value"},
+			WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
 		})
 		updateErrCh <- err
 		updateHandleCh <- handle
