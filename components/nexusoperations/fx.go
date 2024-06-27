@@ -24,6 +24,7 @@ package nexusoperations
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -31,6 +32,7 @@ import (
 	"go.uber.org/fx"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -99,8 +101,13 @@ func ClientProviderFactory(
 	endpointRegistry commonnexus.EndpointRegistry,
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
-	httpClientCache *cluster.FrontendHTTPClientCache,
-) ClientProvider {
+	rpcFactory common.RPCFactory,
+) (ClientProvider, error) {
+	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
+	}
+
 	// TODO(bergundy): This should use an LRU or other form of cache that supports eviction.
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
@@ -120,10 +127,6 @@ func ClientProviderFactory(
 				return nil, err
 			}
 		case *persistencespb.NexusEndpointTarget_Worker_:
-			cl, err := httpClientCache.Get(clusterMetadata.GetCurrentClusterName())
-			if err != nil {
-				return nil, err
-			}
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
 		default:
@@ -142,7 +145,7 @@ func ClientProviderFactory(
 			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
 		})
-	}
+	}, nil
 }
 
 func CallbackTokenGeneratorProvider() *commonnexus.CallbackTokenGenerator {

@@ -367,7 +367,7 @@ func SdkClientFactoryProvider(
 	resolver membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
-	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -391,9 +391,10 @@ func RPCFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
+	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
 	svcCfg := cfg.Services[string(svcName)]
-	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, frontendHTTPURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -403,10 +404,12 @@ func RPCFactoryProvider(
 		logger,
 		tlsConfigProvider,
 		frontendURL,
+		frontendHTTPURL,
 		frontendTLSConfig,
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},
+		monitor,
 	), nil
 }
 
@@ -421,7 +424,7 @@ func getFrontendConnectionDetails(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver membership.GRPCResolver,
-) (string, *tls.Config, error) {
+) (string, string, *tls.Config, error) {
 	// To simplify the static config, we switch default values based on whether the config
 	// defines an "internal-frontend" service. The default for TLS config can be overridden
 	// with publicClient.forceTLSConfig, and the default for hostPort can be overridden by
@@ -449,17 +452,26 @@ func getFrontendConnectionDetails(
 		err = fmt.Errorf("invalid forceTLSConfig")
 	}
 	if err != nil {
-		return "", nil, fmt.Errorf("unable to load TLS configuration: %w", err)
+		return "", "", nil, fmt.Errorf("unable to load TLS configuration: %w", err)
 	}
 
 	frontendURL := cfg.PublicClient.HostPort
 	if frontendURL == "" {
 		if hasIFE {
-			frontendURL = resolver.MakeURL(primitives.InternalFrontendService)
+			frontendURL = membership.MakeResolverURL(primitives.InternalFrontendService)
 		} else {
-			frontendURL = resolver.MakeURL(primitives.FrontendService)
+			frontendURL = membership.MakeResolverURL(primitives.FrontendService)
 		}
 	}
+	frontendHTTPURL := cfg.PublicClient.HTTPHostPort
+	if frontendHTTPURL == "" {
+		if hasIFE {
+			frontendHTTPURL = membership.MakeResolverURL(primitives.InternalFrontendService)
+		} else {
+			frontendHTTPURL = membership.MakeResolverURL(primitives.FrontendService)
+		}
 
-	return frontendURL, frontendTLSConfig, nil
+	}
+
+	return frontendURL, frontendHTTPURL, frontendTLSConfig, nil
 }
