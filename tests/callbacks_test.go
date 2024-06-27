@@ -189,7 +189,9 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.EnableNexus, true)
+	dc.OverrideValue(s.T(), callbacks.EndpointConfigs, []any{map[string]any{"EndpointPattern": "*", "AllowInsecure": true}})
 	defer dc.RemoveOverride(dynamicconfig.EnableNexus)
+	defer dc.RemoveOverride(callbacks.EndpointConfigs)
 
 	cases := []struct {
 		name       string
