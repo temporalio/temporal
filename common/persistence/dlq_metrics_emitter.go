@@ -36,12 +36,12 @@ import (
 )
 
 const (
-	emitDLQMetricsInterval = 1 * time.Hour
+	emitDLQMetricsInterval = 3 * time.Hour
 )
 
 // DLQMetricsEmitter emits the number of messages in DLQ in each task category.
 // This only has to be emitted from one history service instance. For this, DLQMetricsEmitter will only emit metrics
-// if the history service it currently run hosts shard 0.
+// if the history service it currently run hosts shard 1.
 type (
 	DLQMetricsEmitter struct {
 		status                  int32
@@ -138,11 +138,11 @@ func (s *DLQMetricsEmitter) getDLQList() ([]QueueInfo, error) {
 }
 
 // shouldEmitMetrics determines if DLQMetricsEmitter should emit metrics. It returns true only if this instance of
-// history service is hosting shard 0.
+// history service is hosting shard 1.
 func (s *DLQMetricsEmitter) shouldEmitMetrics() bool {
-	ownerInfo, err := s.historyServiceResolver.Lookup("0")
+	ownerInfo, err := s.historyServiceResolver.Lookup("1")
 	if err != nil {
-		s.logger.Error("Failed to get the history service hosting shard 0")
+		s.logger.Error("Failed to get the history service hosting shard 1")
 		return false
 	}
 
