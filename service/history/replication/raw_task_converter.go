@@ -222,6 +222,12 @@ func convertSyncHSMReplicationTask(
 			// HSM can be updated after workflow is completed
 			// so no check on workflow state here.
 
+			if mutableState.HasBufferedEvents() {
+				// we can't sync HSM when there's buffered events
+				// as current state could depend on those buffered events
+				return nil, nil
+			}
+
 			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 			if err != nil {
