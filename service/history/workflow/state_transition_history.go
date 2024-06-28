@@ -108,9 +108,11 @@ func TransitionHistoryStalenessCheck(
 // CompareVersionedTransition compares two VersionedTransition structs.
 // Returns -1 if a < b, 0 if a == b, 1 if a > b.
 //
-// A VersionedTransition  is considered less than another
+// A VersionedTransition is considered less than another
 // if its NamespaceFailoverVersion is less than the other's.
 // Or if the NamespaceFailoverVersion is the same, then the TransitionCount is compared.
+// Nil is considered the same as empty versioned transition with both fields set to 0,
+// thus smaller than any non-nil versioned transition.
 func CompareVersionedTransition(
 	a, b *persistencespb.VersionedTransition,
 ) int {

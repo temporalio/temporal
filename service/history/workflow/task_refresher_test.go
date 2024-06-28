@@ -30,7 +30,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
@@ -97,6 +99,8 @@ func (s *taskRefresherSuite) SetupTest() {
 	s.taskRefresher = NewTaskRefresher(s.mockShard, s.mockShard.GetLogger())
 }
 
+// TODO: add tests for all other methods in task refresher
+
 func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 
 	stateMachineDef := hsmtest.NewDefinition("test")
@@ -120,13 +124,36 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	// Clear the dirty flag so we can test it later.
 	hsmRoot.ClearTransactionState()
 
-	err = s.taskRefresher.refreshTasksForSubStateMachines(s.mutableState)
+	// mark all nodes dirty for setting last updated versioned transition
+	err = hsmRoot.Walk(func(node *hsm.Node) error {
+		if node.Parent == nil {
+			return nil
+		}
+		return hsm.MachineTransition(node, func(_ *hsmtest.Data) (hsm.TransitionOutput, error) {
+			return hsm.TransitionOutput{}, nil
+		})
+	})
 	s.NoError(err)
+	hsmRoot.ClearTransactionState()
 
+	err = s.taskRefresher.refreshTasksForSubStateMachines(s.mutableState, nil)
+	s.NoError(err)
 	refreshedTasks := s.mutableState.PopTasks()
 	s.Len(refreshedTasks[tasks.CategoryOutbound], 3)
 	s.Len(s.mutableState.GetExecutionInfo().StateMachineTimers, 3)
 	s.Len(refreshedTasks[tasks.CategoryTimer], 1)
+	// s.Len(refreshedTasks[tasks.CategoryTimer], 3)
+	// s.False(hsmRoot.Dirty())
 
+	err = s.taskRefresher.refreshTasksForSubStateMachines(
+		s.mutableState,
+		&persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+			TransitionCount:          4,
+		},
+	)
+	s.NoError(err)
+	refreshedTasks = s.mutableState.PopTasks()
+	s.Empty(refreshedTasks)
 	s.False(hsmRoot.Dirty())
 }

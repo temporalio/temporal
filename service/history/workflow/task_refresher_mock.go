@@ -33,6 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	v1 "go.temporal.io/server/api/persistence/v1"
 )
 
 // MockTaskRefresher is a mock of TaskRefresher interface.
@@ -58,16 +59,30 @@ func (m *MockTaskRefresher) EXPECT() *MockTaskRefresherMockRecorder {
 	return m.recorder
 }
 
-// RefreshTasks mocks base method.
-func (m *MockTaskRefresher) RefreshTasks(ctx context.Context, mutableState MutableState) error {
+// PartialRefresh mocks base method.
+func (m *MockTaskRefresher) PartialRefresh(arg0 context.Context, arg1 MutableState, arg2 *v1.VersionedTransition) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshTasks", ctx, mutableState)
+	ret := m.ctrl.Call(m, "PartialRefresh", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RefreshTasks indicates an expected call of RefreshTasks.
-func (mr *MockTaskRefresherMockRecorder) RefreshTasks(ctx, mutableState interface{}) *gomock.Call {
+// PartialRefresh indicates an expected call of PartialRefresh.
+func (mr *MockTaskRefresherMockRecorder) PartialRefresh(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockTaskRefresher)(nil).RefreshTasks), ctx, mutableState)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartialRefresh", reflect.TypeOf((*MockTaskRefresher)(nil).PartialRefresh), arg0, arg1, arg2)
+}
+
+// Refresh mocks base method.
+func (m *MockTaskRefresher) Refresh(arg0 context.Context, arg1 MutableState) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Refresh", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Refresh indicates an expected call of Refresh.
+func (mr *MockTaskRefresherMockRecorder) Refresh(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockTaskRefresher)(nil).Refresh), arg0, arg1)
 }

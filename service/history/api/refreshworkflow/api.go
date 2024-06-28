@@ -64,7 +64,7 @@ func Invoke(
 		shard.GetLogger(),
 	)
 
-	err = mutableStateTaskRefresher.RefreshTasks(ctx, mutableState)
+	err = mutableStateTaskRefresher.Refresh(ctx, mutableState)
 	if err != nil {
 		return err
 	}
