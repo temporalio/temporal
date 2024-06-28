@@ -33,28 +33,31 @@ message StateMachineNode {
     bytes data = 1;
     // Map of state machine type to a map of machines by ID.
     map<string, StateMachineMap> children = 2;
-    // Namespace failover version at the time this node was instantiated.
-    // If this node is deleted and later recreated, this field, in combination with
-    // initial_mutable_state_transition_count, can be used to invalidate references to a previous incarnation of the
-    // node.
-    // Also used for staleness checks while transition history is disabled in mutable state.
-    // NOTE: Node deletion is not yet implemented at the time of writing.
-    int64 initial_namespace_failover_version = 3;
-    // Tracks the mutable state transition count at the time this node was instantiated.
-    // This field, in combination with initial_namespace_failover_version, can be used to invalidate references to a
-    // previous incarnation of the node.
-    // NOTE: Transition history is disabled at the time of writing.
-    // NOTE: Node deletion is not yet implemented at the time of writing.
-    int64 initial_mutable_state_transition_count = 4;
-    // Tracks the mutable state transition count at the time this node was last updated.
-    // This field is used to check non-concurrent task staleness and to determine whether this node should be synced
+
+    // Versioned transition when the node was instantiated.
+    // This field, plus node path uniquely identifies a state machine node in a mutable state instance.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used to uniquely identify a node.
+    // NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
+    // with the initial namespace failover version.
+    VersionedTransition initial_versioned_transition = 3;
+
+    // Versioned transition when the node was last updated.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used for non-concurrent task staleness check or to determine whether this node should be synced
     // during state replication.
-    // NOTE: Transition history is disabled at the time of writing.
-    int64 last_update_mutable_state_transition_count = 5;
+    VersionedTransition last_update_versioned_transition = 4;
+
     // Number of transitions on this state machine object.
     // Used to verify that a task is not stale if the state machine does not allow concurrent task execution.
+    // The transition count monotonically increases with each state transition and only resets when the entire 
+    // mutable state was rebuilt. This case is handled by the task_generation_shard_clock_timestamp field in 
+    // WorkflowExecutionInfo.
+    // NOTE: This field is cluster specific and cannot be replicated.
     // NOTE: This field will be made obsolete when transition history is enabled in favor of
-    // last_update_mutable_state_transition_count.
+    // last_update_versioned_transition.
     int64 transition_count = 100;
 }
 
@@ -76,30 +79,30 @@ message StateMachineKey {
 message StateMachineRef {
     // Nested path to a state machine.
     repeated StateMachineKey path = 1;
-    // Namespace failover version on the corresponding mutable state object, used for staleness detection when global
-    // namespaces are enabled.
-    int64 mutable_state_namespace_failover_version = 2;
-    // Number of transitions on the corresponding mutable state object. Used to verify that a task is not referencing a
-    // stale state or, in some situations, that the task itself is not stale.
-    int64 mutable_state_transition_count = 3;
-    // The namespace failover at the time the machine node was instantiated.
-    // This field, in combination with machine_initial_mutable_state_transition_count, is used to verify this ref is not
-    // targeting a previous incarnation of the machine.
-    // Also used for staleness checks while transition history is disabled.
-    // NOTE: Transition history is disabled at the time of writing.
-    // NOTE: Node deletion is not yet implemented at the time of writing.
-    int64 machine_initial_namespace_failover_version = 4;
-    // Tracks the mutable state transition count at the time the machine node was instantiated.
-    // This field, in combination with machine_initial_namespace_failover_version, is used to verify this ref is not
-    // targeting a previous incarnation of the machine.
-    // NOTE: Transition history is disabled at the time of writing.
-    // NOTE: Node deletion is not yet implemented at the time of writing.
-    int64 machine_initial_mutable_state_transition_count = 5;
-    // Tracks the mutable state transition count at the time this ref was generated.
-    // If non-zero, this reference is considered non-concurrent and this number should match the
-    // last_update_mutable_state_transition_count on the corresponding state machine node.
-    // NOTE: Transition history is disabled at the time of writing.
-    int64 machine_last_update_mutable_state_transition_count = 6;
+
+    // Versioned transition of the ref was instantiated.
+    // Used to verify that the ref is not referencing a stale state or, in some situations, 
+    // that the ref itself is not stale.
+    // NOTE: If transition history is disabled, the field will not be specified and
+    // cannot be used for staleness check.
+    VersionedTransition mutable_state_versioned_transition = 2;
+
+    // Versioned transition when the state machine node was instantiated.
+    // This field, plus node path uniquely identifies a state machine node in a mutable state instance.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used to uniquely identify a node.
+    // NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
+    // with the initial namespace failover version.
+    VersionedTransition machine_initial_versioned_transition = 3;
+
+    // Versioned transition when the state machine node was last updated.
+    // If not specified, this reference is considered non-concurrent, 
+    // and should match the last_update_versioned_transition on the corresponding state machine node.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used for non-concurrent task staleness check.
+    VersionedTransition machine_last_update_versioned_transition = 4;
+
     // Number of transitions executed on the referenced state machine node at the time this Ref is instantiated.
     // If non-zero, this reference is considered non-concurrent and this number should match the number of state
     // transitions on the corresponding state machine node.
@@ -128,20 +131,11 @@ message StateMachineTimerGroup {
     bool scheduled = 3;
 }
 
-// Keeps track of the ranges of transition counts per namespace failover version.
-// Each task generated by the HSM framework is imprinted with the current transaction’s `NamespaceFailoverVersion` and
-// `MaxTransitionCount` at the end of the transaction.
-// When a task is being processed, the `StateTransitionHistory` is compared with the imprinted task information to
-// verify that a task is not referencing a stale state or that the task itself is not stale.
-// For example, if the state has a history of `[{v: 1, t: 3}, {v: 2, t: 5}]`, task A `{v: 2, t: 4}` **is not**
-// referencing stale state because for version `2` transitions `4-5` are valid, while task B `{v: 2, t: 6}` **is**
-// referencing stale state because the transition count is out of range for version `2`.
-// Furthermore, task C `{v: 1, t: 4}` itself is stale because it is referencing an impossible state, likely due to post
-// split-brain reconciliation.
+// VersionedTransition is a unique identifier for a specific mutable state transition.
 message VersionedTransition {
     // The namespace failover version at transition time.
     int64 namespace_failover_version = 1;
-    // Maximum state transition count perceived during the specified namespace_failover_version.
-    int64 max_transition_count = 2;
+    // State transition count perceived during the specified namespace_failover_version.
+    int64 transition_count = 2;
 }
 

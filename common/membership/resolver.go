@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,35 +20,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package membership
 
 import (
-	"net"
-	"net/http"
+	"fmt"
 
-	"google.golang.org/grpc"
+	"go.temporal.io/server/common/primitives"
 )
 
-// RPCFactory creates gRPC listeners and connections, and frontend HTTP clients.
-type RPCFactory interface {
-	GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
-	GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error)
-	GetGRPCListener() net.Listener
-	CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn
-	CreateLocalFrontendGRPCConnection() *grpc.ClientConn
-	CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn
-	CreateLocalFrontendHTTPClient() (*FrontendHTTPClient, error)
-}
+const ResolverScheme = "membership"
 
-type FrontendHTTPClient struct {
-	http.Client
-	// Address is the host:port pair of this HTTP client.
-	Address string
-	// Scheme is the URL scheme of this HTTP client.
-	Scheme string
-}
-
-// BaseURL is the scheme and address of this HTTP client.
-func (c *FrontendHTTPClient) BaseURL() string {
-	return c.Scheme + "://" + c.Address
+func MakeResolverURL(service primitives.ServiceName) string {
+	return fmt.Sprintf("%s://%s", ResolverScheme, string(service))
 }

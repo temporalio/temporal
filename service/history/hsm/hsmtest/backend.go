@@ -43,8 +43,8 @@ func (n *NodeBackend) GetCurrentVersion() int64 {
 	return 1
 }
 
-func (n *NodeBackend) TransitionCount() int64 {
-	return 2
+func (n *NodeBackend) NextTransitionCount() int64 {
+	return 3
 }
 
 func (n *NodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {

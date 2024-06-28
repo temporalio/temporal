@@ -150,7 +150,7 @@ func (o Operation) transitionTasks(node *hsm.Node) ([]hsm.Task, error) {
 	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
 		return []hsm.Task{BackoffTask{Deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
-		return []hsm.Task{InvocationTask{Destination: o.EndpointId}}, nil
+		return []hsm.Task{InvocationTask{EndpointName: o.Endpoint}}, nil
 	default:
 		return nil, nil
 	}
@@ -228,12 +228,12 @@ func (operationMachineDefinition) CompareState(state1, state2 any) (int, error) 
 		return 0, fmt.Errorf("failed to get progress for state2: %w", err)
 	}
 	if stage1 != stage2 {
-		return stage2 - stage1, nil
+		return stage1 - stage2, nil
 	}
 	if stage1 == terminalStage && o1.State() != o2.State() {
 		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", o1.State(), o2.State()))
 	}
-	return int(attempts2 - attempts1), nil
+	return int(attempts1 - attempts2), nil
 }
 
 // CompletionSource is an enum specifying where an operation completion originated from.
@@ -473,10 +473,10 @@ func (o Operation) progress() (int, int32, error) {
 	switch o.State() {
 	case enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED:
 		return 0, 0, serviceerror.NewInvalidArgument("uninitialized operation state")
-	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
-		return 1, o.GetAttempt() * 2, nil
 	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
-		// We've made slightly more progress if we transitioned from scheduled to backing off.
+		return 1, o.GetAttempt() * 2, nil
+	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
+		// We've made slightly more progress if we transitioned from backing off to scheduled.
 		return 1, o.GetAttempt()*2 + 1, nil
 	case enumsspb.NEXUS_OPERATION_STATE_STARTED:
 		return 2, 0, nil
@@ -532,12 +532,12 @@ func (cancelationMachineDefinition) CompareState(state1, state2 any) (int, error
 		return 0, fmt.Errorf("failed to get progress for state2: %w", err)
 	}
 	if stage1 != stage2 {
-		return stage2 - stage1, nil
+		return stage1 - stage2, nil
 	}
 	if stage1 == terminalStage && c1.State() != c2.State() {
 		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", c1.State(), c2.State()))
 	}
-	return int(attempts2 - attempts1), nil
+	return int(attempts1 - attempts2), nil
 }
 
 // Cancelation state machine for canceling an operation.
@@ -566,7 +566,7 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	}
 	switch c.State() { // nolint:exhaustive
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
-		return []hsm.Task{CancelationTask{Destination: op.EndpointId}}, nil
+		return []hsm.Task{CancelationTask{EndpointName: op.Endpoint}}, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
 		return []hsm.Task{CancelationBackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	default:
@@ -587,10 +587,10 @@ func (c Cancelation) progress() (int, int32, error) {
 	switch c.State() {
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED:
 		return 0, 0, serviceerror.NewInvalidArgument("uninitialized cancelation state")
-	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
-		return 1, c.GetAttempt() * 2, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
-		// We've made slightly more progress if we transitioned from scheduled to backing off.
+		return 1, c.GetAttempt() * 2, nil
+	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
+		// We've made slightly more progress if we transitioned from backing off to scheduled.
 		return 1, c.GetAttempt()*2 + 1, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED:
 		// Consider any terminal state as "max progress", we'll rely on last update namespace failover version to break

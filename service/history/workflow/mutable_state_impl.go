@@ -193,6 +193,11 @@ type (
 		// The flag will be unset whenever workflow task successfully completed, timedout or failed
 		// due to cause other than UnhandledCommand.
 		workflowCloseAttempted bool
+		// A flag indicating if transition history feature is enabled for the current transaction.
+		// We need a consistent view of if transition history is enabled within one transaction in case
+		// dynamic configuration value changes in the middle of a transaction
+		// TODO: remove this flag once transition history feature is stable.
+		transitionHistoryEnabled bool
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
@@ -262,15 +267,16 @@ func NewMutableState(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
-		approximateSize:  0,
-		currentVersion:   namespaceEntry.FailoverVersion(),
-		bufferEventsInDB: nil,
-		stateInDB:        enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
-		nextEventIDInDB:  common.FirstEventID,
-		dbRecordVersion:  1,
-		namespaceEntry:   namespaceEntry,
-		appliedEvents:    make(map[string]struct{}),
-		InsertTasks:      make(map[tasks.Category][]tasks.Task),
+		approximateSize:          0,
+		currentVersion:           namespaceEntry.FailoverVersion(),
+		bufferEventsInDB:         nil,
+		stateInDB:                enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
+		nextEventIDInDB:          common.FirstEventID,
+		dbRecordVersion:          1,
+		namespaceEntry:           namespaceEntry,
+		appliedEvents:            make(map[string]struct{}),
+		InsertTasks:              make(map[tasks.Category][]tasks.Task),
+		transitionHistoryEnabled: shard.GetConfig().EnableTransitionHistory(),
 
 		QueryRegistry: NewQueryRegistry(),
 
@@ -724,9 +730,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if ms.config.EnableTransitionHistory() &&
-		len(ms.executionInfo.TransitionHistory) != 0 {
-
+	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
 		// this make sure current version >= last write version
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
 		ms.currentVersion = lastVersionedTransition.NamespaceFailoverVersion
@@ -770,13 +774,19 @@ func (ms *MutableStateImpl) GetCurrentVersion() int64 {
 	return common.EmptyVersion
 }
 
-// TransitionCount implements hsm.NodeBackend.
-func (ms *MutableStateImpl) TransitionCount() int64 {
-	hist := ms.executionInfo.TransitionHistory
-	if len(hist) == 0 {
+// NextTransitionCount implements hsm.NodeBackend.
+func (ms *MutableStateImpl) NextTransitionCount() int64 {
+	if !ms.transitionHistoryEnabled {
 		return 0
 	}
-	return hist[len(hist)-1].MaxTransitionCount
+
+	hist := ms.executionInfo.TransitionHistory
+	if len(hist) == 0 {
+		// it is possible that this is the first transition and
+		// transition history has not been updated yet.
+		return 1
+	}
+	return hist[len(hist)-1].TransitionCount + 1
 }
 
 func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
@@ -812,9 +822,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
-	if ms.config.EnableTransitionHistory() &&
-		len(ms.executionInfo.TransitionHistory) != 0 {
-
+	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
 		return lastVersionedTransition.NamespaceFailoverVersion, nil
 	}
@@ -2053,7 +2061,7 @@ func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.
 		interval += backoffDuration.AsDuration()
 	}
 	// minimal interval for continue as new to prevent tight continue as new loop
-	minInterval := ms.config.ContinueAsNewMinInterval(ms.namespaceEntry.Name().String())
+	minInterval := ms.config.WorkflowIdReuseMinimalInterval(ms.namespaceEntry.Name().String())
 	if interval < minInterval {
 		// enforce a minimal backoff
 		return durationpb.New(minInterval - lifetime)
@@ -5076,6 +5084,8 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
 	}
 
+	ms.transitionHistoryEnabled = ms.config.EnableTransitionHistory()
+
 	namespaceEntry, err := ms.startTransactionHandleNamespaceMigration(namespaceEntry)
 	if err != nil {
 		return false, err
@@ -5341,7 +5351,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		return nil
 	}
 
-	if !ms.config.EnableTransitionHistory() {
+	if !ms.transitionHistoryEnabled {
 		return nil
 	}
 

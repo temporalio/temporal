@@ -223,14 +223,18 @@ func (e *stateMachineEnvironment) validateStateMachineRef(ms workflow.MutableSta
 		return err
 	}
 
-	if ref.StateMachineRef.MutableStateTransitionCount == 0 {
-		// Transtion history was disabled when the ref is generated, fallback to the old validation logic.
+	if ref.StateMachineRef.MutableStateVersionedTransition == nil ||
+		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount == 0 ||
+		(ref.StateMachineRef.MachineLastUpdateVersionedTransition != nil &&
+			ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount == 0) {
+		// Transtion history was disabled when the ref is generated,
+		// fallback to the old validation logic.
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
+
 	err := workflow.TransitionHistoryStalenessCheck(
 		ms.GetExecutionInfo().GetTransitionHistory(),
-		ref.StateMachineRef.MutableStateNamespaceFailoverVersion,
-		ref.StateMachineRef.MutableStateTransitionCount,
+		ref.StateMachineRef.MutableStateVersionedTransition,
 	)
 	if err != nil {
 		return err
@@ -243,17 +247,39 @@ func (e *stateMachineEnvironment) validateStateMachineRef(ms workflow.MutableSta
 		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)
 	}
 
-	// TODO(bergundy): When we support deletion, we'll need to also check the ref's initial version and transition count.
+	if node.InternalRepr().GetInitialVersionedTransition().TransitionCount == 0 {
+		// transition history was disabled after the ref was generated and mutable state got rebuilt.
+		// fallback to the old validation logic.
+		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
+	}
 
-	// Non-zero MachineLastUpdateMutableStateTransitionCount marks the reference as non-concurrent and can be
-	// invalidated with the check below.
-	if ref.StateMachineRef.MachineLastUpdateMutableStateTransitionCount == 0 {
+	if workflow.CompareVersionedTransition(
+		ref.StateMachineRef.MachineInitialVersionedTransition,
+		node.InternalRepr().GetInitialVersionedTransition(),
+	) != 0 {
+		return fmt.Errorf("%w: initial versioned transition mismatch", consts.ErrStaleReference)
+	}
+
+	if ref.StateMachineRef.MachineLastUpdateVersionedTransition == nil {
+		// ref is concurrent or when transition history was disabled when the node was last updated.
 		return nil
 	}
 
-	if node.InternalRepr().GetLastUpdateMutableStateTransitionCount() != ref.StateMachineRef.MachineLastUpdateMutableStateTransitionCount {
-		return fmt.Errorf("%w: state machine last update transition count != ref last update transition", consts.ErrStaleReference)
+	if node.InternalRepr().GetLastUpdateVersionedTransition().TransitionCount == 0 {
+		// transition history was disabled after the ref was generated.
+		// fallback to the old validation logic.
+		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
+
+	// Non-nil MachineLastUpdatedVersionedTransition marks the reference as non-concurrent and can be
+	// invalidated with the check below.
+	if workflow.CompareVersionedTransition(
+		ref.StateMachineRef.MachineLastUpdateVersionedTransition,
+		node.InternalRepr().GetLastUpdateVersionedTransition(),
+	) != 0 {
+		return fmt.Errorf("%w: last update versioned transition mismatch", consts.ErrStaleReference)
+	}
+
 	return nil
 }
 
@@ -278,7 +304,8 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)
 	}
 
-	if node.InternalRepr().GetInitialNamespaceFailoverVersion() != ref.StateMachineRef.MachineInitialNamespaceFailoverVersion {
+	if node.InternalRepr().InitialVersionedTransition.NamespaceFailoverVersion !=
+		ref.StateMachineRef.MachineInitialVersionedTransition.NamespaceFailoverVersion {
 		if potentialStaleState {
 			return fmt.Errorf("%w: state machine ref initial failover version mismatch", consts.ErrStaleState)
 		}
@@ -286,7 +313,8 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 	}
 
 	// Only check for strict equality if the ref has non zero MachineTransitionCount, which marks the task as non-concurrent.
-	if ref.StateMachineRef.MachineTransitionCount != 0 && node.InternalRepr().GetTransitionCount() != ref.StateMachineRef.MachineTransitionCount {
+	if ref.StateMachineRef.MachineTransitionCount != 0 &&
+		node.InternalRepr().GetTransitionCount() != ref.StateMachineRef.MachineTransitionCount {
 		return fmt.Errorf("%w: state machine transitions != ref transitions", consts.ErrStaleReference)
 	}
 

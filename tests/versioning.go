@@ -3591,8 +3591,14 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	}, "wf")
 	s.NoError(err)
 
-	// give it ~3 runs on v1
-	time.Sleep(3500 * time.Millisecond)
+	// give it >=3 runs on v1
+	s.Eventually(
+		func() bool {
+			return runs1.Load() >= int32(3)
+		},
+		3500*time.Millisecond,
+		100*time.Millisecond,
+	)
 
 	if newVersioning {
 		rule := s.addAssignmentRule(ctx, tq, v2)
@@ -3622,14 +3628,17 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w2.Start())
-	defer w2.Stop()
 
-	// give it ~3 runs on v2
-	time.Sleep(3500 * time.Millisecond)
-
-	s.GreaterOrEqual(runs1.Load(), int32(3))
+	// give it >=3 runs on v2
+	s.Eventually(
+		func() bool {
+			return runs2.Load() >= int32(3)
+		},
+		3500*time.Millisecond,
+		100*time.Millisecond,
+	)
+	w2.Stop() // stop w2, because appending to runIds2 while reading from it to validate causes a race
 	s.Zero(runs11.Load())
-	s.GreaterOrEqual(runs2.Load(), int32(3))
 
 	for _, runid := range runIds1 {
 		s.validateWorkflowBuildIds(ctx, run.GetID(), runid, v1, newVersioning, v1, "", nil)
