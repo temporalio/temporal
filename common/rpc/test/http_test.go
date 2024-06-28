@@ -31,7 +31,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
@@ -55,12 +54,13 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 	resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{membership.NewHostInfoFromAddress(addr.String())})
 
 	fact := rpc.NewFactory(
-		&config.RPC{HTTPPort: int(port)},
+		nil,
 		primitives.HistoryService,
 		nil, // No logger
 		nil,
 		membership.MakeResolverURL(primitives.FrontendService),
 		membership.MakeResolverURL(primitives.FrontendService),
+		int(port),
 		nil, // No TLS
 		[]grpc.UnaryClientInterceptor{},
 		monitor,
@@ -90,6 +90,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		nil,
 		membership.MakeResolverURL(primitives.FrontendService),
 		addr.String(),
+		0, // Port is unused
 		nil, // No TLS
 		[]grpc.UnaryClientInterceptor{},
 		nil, // monitor should not be used
@@ -120,6 +121,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		nil,
 		membership.MakeResolverURL(primitives.FrontendService),
 		addr.String(),
+		0, // Port is unused
 		tlsConfig,
 		[]grpc.UnaryClientInterceptor{},
 		nil, // monitor should not be used
