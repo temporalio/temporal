@@ -119,7 +119,7 @@ tasks to your versioned worker.
 ```shell
 temporal task-queue versioning insert-assignment-rule --task-queue my-tq --build-id $BUILD_ID --percentage 1
 ```
-Once this rule is created, 1% of tasks from new workflow executions will be sent to the versioned
+Once this rule is created, 1% of new workflow executions will be sent to the versioned
 worker that you started above. The remaining 99% of new workflow executions will be assigned to the default
 Build ID, which is the first Build ID in the assignment rule list that has a ramp of 100%, or unversioned
 if no such rule exists.
@@ -160,8 +160,8 @@ executions will send their outstanding tasks to workers with the version that th
 temporal task-queue describe --task-queue my-tq --select-build-id $OLD_BUILD_ID --report-reachability
 ```
 
-Note: Set `OLD_BUILD_ID` to your previous default version, or to the empty string if your previous default was unversioned.
-If you omit the `--select-build-id` flag, results for the current default Build ID will be returned.
+Note: If your previous default was unversioned, replace `--select-build-id $OLD_BUILD_ID` with `--select-unversioned` in the above command.
+If you omit the `--select-*` flags, results for the current default Build ID will be returned.
 
 
 ### 8. Decommission the previous versioned worker
