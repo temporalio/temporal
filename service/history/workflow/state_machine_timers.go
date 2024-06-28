@@ -44,10 +44,9 @@ func AddNextStateMachineTimerTask(ms MutableState) {
 		return
 	}
 	ms.AddTasks(&tasks.StateMachineTimerTask{
-		WorkflowKey:                 ms.GetWorkflowKey(),
-		VisibilityTimestamp:         timerGroup.Deadline.AsTime(),
-		Version:                     ms.GetCurrentVersion(),
-		MutableStateTransitionCount: ms.TransitionCount(),
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: timerGroup.Deadline.AsTime(),
+		Version:             ms.GetCurrentVersion(),
 	})
 	timerGroup.Scheduled = true
 }

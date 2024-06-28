@@ -166,3 +166,7 @@ func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.Wo
 	}
 	return nil
 }
+
+func StampForBuildId(buildId string) *commonpb.WorkerVersionStamp {
+	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
+}

@@ -146,6 +146,7 @@ func NewHistoryReplicator(
 	logger log.Logger,
 ) *HistoryReplicatorImpl {
 
+	logger = log.With(logger, tag.ComponentHistoryReplicator)
 	transactionMgr := NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false)
 	replicator := &HistoryReplicatorImpl{
 		shardContext:      shardContext,
@@ -156,7 +157,7 @@ func NewHistoryReplicator(
 		workflowCache:     workflowCache,
 		transactionMgr:    transactionMgr,
 		eventsReapplier:   eventsReapplier,
-		logger:            log.With(logger, tag.ComponentHistoryReplicator),
+		logger:            logger,
 
 		mutableStateMapper: NewMutableStateMapping(
 			shardContext,

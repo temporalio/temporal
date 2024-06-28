@@ -77,6 +77,7 @@ var (
 		"StateMachineOutbound":         27,
 		"StateMachineTimer":            28,
 		"WorkflowExecutionTimeout":     29,
+		"ReplicationSyncHsm":           30,
 	}
 )
 

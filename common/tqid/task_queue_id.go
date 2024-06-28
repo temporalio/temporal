@@ -187,6 +187,14 @@ func NormalPartitionFromRpcName(rpcName string, namespaceId string, taskType enu
 	return tq.NormalPartition(partition), nil
 }
 
+func MustNormalPartitionFromRpcName(rpcName string, namespaceId string, taskType enumspb.TaskQueueType) *NormalPartition {
+	p, err := NormalPartitionFromRpcName(rpcName, namespaceId, taskType)
+	if err != nil {
+		panic(err)
+	}
+	return p
+}
+
 func (n *TaskQueueFamily) Name() string {
 	return n.name
 }

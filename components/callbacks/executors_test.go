@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -181,11 +182,12 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 					CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
-				},
-				&callbacks.Config{
-					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-					RetryPolicy: func() backoff.RetryPolicy {
-						return backoff.NewExponentialRetryPolicy(time.Second)
+					Logger: log.NewNoopLogger(),
+					Config: &callbacks.Config{
+						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+						RetryPolicy: func() backoff.RetryPolicy {
+							return backoff.NewExponentialRetryPolicy(time.Second)
+						},
 					},
 				},
 			))
@@ -247,11 +249,12 @@ func TestProcessBackoffTask(t *testing.T) {
 			CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 				return nil
 			},
-		},
-		&callbacks.Config{
-			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-			RetryPolicy: func() backoff.RetryPolicy {
-				return backoff.NewExponentialRetryPolicy(time.Second)
+			Logger: log.NewNoopLogger(),
+			Config: &callbacks.Config{
+				RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+				RetryPolicy: func() backoff.RetryPolicy {
+					return backoff.NewExponentialRetryPolicy(time.Second)
+				},
 			},
 		},
 	))

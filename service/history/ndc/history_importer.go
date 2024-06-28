@@ -73,6 +73,7 @@ func NewHistoryImporter(
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *HistoryImporterImpl {
+	logger = log.With(logger, tag.ComponentHistoryImporter)
 	backfiller := &HistoryImporterImpl{
 		shardContext:   shardContext,
 		namespaceCache: shardContext.GetNamespaceRegistry(),

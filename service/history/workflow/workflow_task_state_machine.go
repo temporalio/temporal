@@ -465,6 +465,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	skipVersioningCheck bool,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -488,7 +489,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// that resulted in the successful completion.
 	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
 
-	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, redirectInfo)
+	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -566,12 +567,17 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	workflowTask *WorkflowTaskInfo,
+	taskQueue *taskqueuepb.TaskQueue,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	skipVersioningCheck bool,
 ) (newWorkflowTask *WorkflowTaskInfo, converted bool, redirectCounter int64, err error) {
-	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() == "" {
+	buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp)
+	if buildId == "" && (m.ms.GetAssignedBuildId() == "" || // unversioned workflow
+		skipVersioningCheck || // resetter may add WFT started events without stamps, it sets skipVersioningCheck=true
+		(taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && m.ms.executionInfo.GetStickyTaskQueue() == taskQueue.GetName())) {
+		// build ID is expected to be empty for sticky queues until old versioning is removed [cleanup-old-wv]
 		return workflowTask, false, 0, nil
 	}
-	buildId := versioningStamp.GetBuildId()
 
 	redirectCounter, err = m.ms.validateBuildIdRedirectInfo(versioningStamp, redirectInfo)
 	if err != nil {

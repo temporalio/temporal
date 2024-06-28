@@ -88,7 +88,7 @@ func TestGRPCBuilder(t *testing.T) {
 	resolverBuilder := &grpcBuilder{}
 	resolverBuilder.monitor.Store(monitor)
 
-	url := (&GRPCResolver{}).MakeURL(primitives.FrontendService)
+	url := MakeResolverURL(primitives.FrontendService)
 	assert.Equal(t, "membership://frontend", url)
 
 	// dialedAddress is the actual address that the gRPC framework dialed after resolving the URL using our resolver.

@@ -73,14 +73,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	var taskType string
-	ref, smt, err := stateMachineTask(e.shardContext, task)
-	if err != nil {
-		taskType = "StandbyUnknownOutbound"
-	} else {
-		taskType = "Standby." + smt.Type()
-	}
-
+	taskType := queues.GetOutboundTaskTypeTagValue(task, false)
 	respond := func(err error) queues.ExecuteResponse {
 		metricsTags := []metrics.Tag{
 			getNamespaceTagByID(e.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
@@ -94,6 +87,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		}
 	}
 
+	ref, smt, err := stateMachineTask(e.shardContext, task)
 	if err != nil {
 		return respond(err)
 	}

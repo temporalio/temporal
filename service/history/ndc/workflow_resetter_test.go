@@ -384,6 +384,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		consts.IdentityHistoryService,
 		nil,
 		nil,
+		true,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart,
@@ -1033,6 +1034,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		consts.IdentityHistoryService,
 		nil,
 		nil,
+		true,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 
 	resetMutableState.EXPECT().AddWorkflowTaskFailedEvent(

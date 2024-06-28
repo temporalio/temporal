@@ -43,7 +43,7 @@ frontend.workerVersioningWorkflowAPIs:
 system.enableNexus:
   - value: true
 component.nexusoperations.callback.endpoint.template:
-  - value: http://localhost:7243/api/v1/namespaces/{{.NamespaceName}}/nexus/callback
+  - value: http://localhost:7243/namespaces/{{.NamespaceName}}/nexus/callback
 matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:

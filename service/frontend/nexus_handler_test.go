@@ -100,13 +100,16 @@ type contextOptions struct {
 }
 
 func newOperationContext(options contextOptions) *operationContext {
-	oc := &operationContext{}
+	oc := &operationContext{
+		nexusContext: &nexusContext{},
+	}
 	oc.logger = log.NewTestLogger()
 	mh := metricstest.NewCaptureHandler()
 	oc.metricsHandlerForInterceptors = mh
 	oc.metricsHandler = mh
 	oc.clientVersionChecker = headers.NewDefaultVersionChecker()
 	oc.apiName = "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"
+	oc.responseHeaders = make(map[string]string)
 
 	oc.namespaceName = "test-namespace"
 	activeClusterName := cluster.TestCurrentClusterName

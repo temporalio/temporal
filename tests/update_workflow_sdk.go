@@ -160,13 +160,13 @@ func (s *ClientFunctionalSuite) updateWorkflowWaitAdmitted(ctx context.Context, 
 }
 
 func (s *ClientFunctionalSuite) updateWorkflowWaitAccepted(ctx context.Context, tv *testvars.TestVars, arg string) (sdkclient.WorkflowUpdateHandle, error) {
-	return s.sdkClient.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
-		UpdateID:   tv.UpdateID(),
-		WorkflowID: tv.WorkflowID(),
-		RunID:      tv.RunID(),
-		UpdateName: tv.HandlerName(),
-		Args:       []interface{}{arg},
-		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+	return s.sdkClient.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
+		UpdateID:     tv.UpdateID(),
+		WorkflowID:   tv.WorkflowID(),
+		RunID:        tv.RunID(),
+		UpdateName:   tv.HandlerName(),
+		Args:         []interface{}{arg},
+		WaitForStage: sdkclient.WorkflowUpdateStageAccepted,
 	})
 }
 

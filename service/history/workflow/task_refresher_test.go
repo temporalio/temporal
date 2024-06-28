@@ -105,7 +105,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	err = s.stateMachineRegistry.RegisterMachine(stateMachineDef)
 	s.NoError(err)
 
-	versionedTransition := &persistence.VersionedTransition{NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(), MaxTransitionCount: 3}
+	versionedTransition := &persistence.VersionedTransition{NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(), TransitionCount: 3}
 	s.mutableState.GetExecutionInfo().TransitionHistory = []*persistence.VersionedTransition{
 		versionedTransition,
 	}

@@ -133,6 +133,9 @@ func CompletionHandler(
 	opFailedError *nexus.UnsuccessfulOperationError,
 ) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		if err := node.CheckRunning(); err != nil {
+			return status.Errorf(codes.NotFound, "operation not found")
+		}
 		err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 			if opFailedError != nil {
 				return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceCallback)

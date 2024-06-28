@@ -191,6 +191,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 			tv.Any().String(),
 			nil,
 			nil,
+			false,
 		)
 
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(

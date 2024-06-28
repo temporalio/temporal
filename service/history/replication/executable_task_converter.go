@@ -128,6 +128,15 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskClusterName,
 			replicationTask.GetPriority(),
 		)
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
+		return NewExecutableSyncHSMTask(
+			e.processToolBox,
+			replicationTask.SourceTaskId,
+			taskCreationTime,
+			replicationTask.GetSyncHsmAttributes(),
+			taskClusterName,
+			replicationTask.GetPriority(),
+		)
 	default:
 		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
 		return NewExecutableUnknownTask(

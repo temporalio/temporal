@@ -49,7 +49,6 @@ func Invoke(
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
 		workflow.LockPriorityLow,
 	)

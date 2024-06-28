@@ -23,12 +23,17 @@
 package frontend
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,6 +49,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -66,13 +72,15 @@ const (
 )
 
 type Config struct {
-	Enabled          dynamicconfig.BoolPropertyFn
-	PayloadSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
+	Enabled                       dynamicconfig.BoolPropertyFn
+	PayloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ForwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 type HandlerOptions struct {
 	fx.In
 
+	ClusterMetadata                      cluster.Metadata
 	NamespaceRegistry                    namespace.Registry
 	Logger                               log.Logger
 	MetricsHandler                       metrics.Handler
@@ -85,6 +93,8 @@ type HandlerOptions struct {
 	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	RateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	AuthInterceptor                      *authorization.Interceptor
+	RedirectionInterceptor               *interceptor.Redirection
+	ForwardingClients                    *cluster.FrontendHTTPClientCache
 }
 
 type completionHandler struct {
@@ -133,6 +143,10 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
+		var notActiveErr *serviceerror.NamespaceNotActive
+		if errors.As(err, &notActiveErr) {
+			return h.forwardCompleteOperation(ctx, r, rCtx)
+		}
 		return err
 	}
 
@@ -201,6 +215,90 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	return nil
 }
 
+func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nexus.CompletionRequest, rCtx *requestContext) error {
+	client, err := h.ForwardingClients.Get(rCtx.namespace.ActiveClusterName())
+	if err != nil {
+		h.Logger.Error("unable to get HTTP client for forward request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(rCtx.namespace.ActiveClusterName()))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	forwardURL, err := url.JoinPath(client.BaseURL(), commonnexus.RouteCompletionCallback.Path(rCtx.namespace.Name().String()))
+	if err != nil {
+		h.Logger.Error("failed to construct forwarding request URL", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.TargetCluster(rCtx.namespace.ActiveClusterName()))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	forwardReq, err := http.NewRequestWithContext(ctx, r.HTTPRequest.Method, forwardURL, r.HTTPRequest.Body)
+	if err != nil {
+		h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	if r.HTTPRequest.Header != nil {
+		forwardReq.Header = r.HTTPRequest.Header.Clone()
+	}
+	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
+
+	resp, err := client.Do(forwardReq)
+	if err != nil {
+		h.Logger.Error("received error from HTTP client when forwarding request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	body, err := readAndReplaceBody(resp)
+	if err != nil {
+		h.Logger.Error("unable to read HTTP response for forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+
+	if !isMediaTypeJSON(resp.Header.Get("Content-Type")) {
+		h.Logger.Error("received invalid content-type header for non-OK HTTP response to forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Value(resp.Header.Get("Content-Type")))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	var failure nexus.Failure
+	err = json.Unmarshal(body, &failure)
+	if err != nil {
+		h.Logger.Error("failed to deserialize Nexus Failure from HTTP response to forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	handlerErr := &nexus.HandlerError{
+		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
+		Failure: &failure,
+	}
+
+	if handlerErr.Type == nexus.HandlerErrorTypeInternal && resp.StatusCode != http.StatusInternalServerError {
+		h.Logger.Warn("received unknown status code on Nexus client unexpected response error", tag.Value(resp.StatusCode))
+		handlerErr.Failure.Message = "internal error"
+	}
+
+	return handlerErr
+}
+
+// readAndReplaceBody reads the response body in its entirety and closes it, and then replaces the original response
+// body with an in-memory buffer.
+// The body is replaced even when there was an error reading the entire body.
+func readAndReplaceBody(response *http.Response) ([]byte, error) {
+	responseBody := response.Body
+	body, err := io.ReadAll(responseBody)
+	_ = responseBody.Close()
+	response.Body = io.NopCloser(bytes.NewReader(body))
+	return body, err
+}
+
+func isMediaTypeJSON(contentType string) bool {
+	if contentType == "" {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	return err == nil && mediaType == "application/json"
+}
+
 type requestContext struct {
 	*completionHandler
 	logger                        log.Logger
@@ -210,6 +308,7 @@ type requestContext struct {
 	cleanupFunctions              []func(error)
 	requestStartTime              time.Time
 	outcomeTag                    metrics.Tag
+	forwarded                     bool
 }
 
 func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {
@@ -246,7 +345,11 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 		*errPtr = err
 	}
 	if *errPtr == nil {
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
+		if c.forwarded {
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarded"))
+		} else {
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
+		}
 	} else if c.outcomeTag != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
 	} else {
@@ -309,7 +412,22 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 		c.outcomeTag = metrics.NexusOutcomeTag("invalid_namespace_state")
 		return commonnexus.ConvertGRPCError(err, false)
 	}
-	// TODO: Redirect if current cluster is passive for this namespace.
+
+	// Redirect if current cluster is passive for this namespace.
+	if !c.namespace.ActiveInCluster(c.ClusterMetadata.GetCurrentClusterName()) {
+		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header) {
+			c.forwarded = true
+			var forwardStartTime time.Time
+			c.metricsHandlerForInterceptors, forwardStartTime = c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
+			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
+				c.RedirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
+			})
+			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
+			return serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
+		}
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_inactive_forwarding_disabled"))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
+	}
 
 	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 		if retErr != nil {
@@ -345,4 +463,22 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 	}
 
 	return nil
+}
+
+// TODO: copied from nexus_handler.go; should be combined with other intercept logic.
+// Combines logic from RedirectionInterceptor.redirectionAllowed and some from
+// SelectedAPIsForwardingRedirectionPolicy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding so all
+// redirection conditions can be checked at once. If either of those methods are updated, this should
+// be kept in sync.
+func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.Header) bool {
+	redirectHeader := header.Get(interceptor.DCRedirectionContextHeaderName)
+	redirectAllowed, err := strconv.ParseBool(redirectHeader)
+	if err != nil {
+		redirectAllowed = true
+	}
+	return redirectAllowed &&
+		c.RedirectionInterceptor.RedirectionAllowed(ctx) &&
+		c.namespace.IsGlobalNamespace() &&
+		len(c.namespace.ClusterNames()) > 1 &&
+		c.Config.ForwardingEnabledForNamespace(c.namespace.Name().String())
 }

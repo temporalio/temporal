@@ -1807,6 +1807,8 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.SupportsSchedules)
 	s.True(resp.Capabilities.EncodedFailureAttributes)
 	s.True(resp.Capabilities.UpsertMemo)
+	// Nexus is enabled by a dynamic config feature flag which defaults to false.
+	s.False(resp.Capabilities.Nexus)
 }
 
 func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {

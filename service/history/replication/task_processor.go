@@ -471,6 +471,23 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			},
 		}, nil
 
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
+		taskAttributes := replicationTask.GetSyncHsmAttributes()
+
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
+			SourceClusterName: p.sourceCluster,
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId:    taskAttributes.GetNamespaceId(),
+				WorkflowId:     taskAttributes.GetWorkflowId(),
+				RunId:          taskAttributes.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+				VisibilityTime: replicationTask.GetVisibilityTime(),
+			},
+		}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown replication task type: %v", replicationTask.TaskType)
 	}

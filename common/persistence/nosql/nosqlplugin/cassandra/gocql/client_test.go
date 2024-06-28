@@ -175,6 +175,18 @@ func TestNewCassandraCluster(t *testing.T) {
 				assert.Equal(t, time.Duration(789), cluster.WriteTimeout)
 			},
 		},
+		"set_allowed_authenticators": {
+			cfg: config.Cassandra{
+				User:                  "TestUser",
+				Password:              "TestPassword",
+				AllowedAuthenticators: []string{"org.apache.cassandra.auth.LDAPAuthenticator"},
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				authenticator := cluster.Authenticator
+				_, _, err := authenticator.Challenge([]byte("org.apache.cassandra.auth.LDAPAuthenticator"))
+				assert.NoError(t, err)
+			},
+		},
 	}
 
 	for name, tc := range tests {

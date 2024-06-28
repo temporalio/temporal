@@ -35,6 +35,8 @@ const (
 )
 
 type InvocationTask struct {
+	// The base URL for nexus callbacks.
+	// Will have other meanings as more callback use cases are added.
 	Destination string
 }
 

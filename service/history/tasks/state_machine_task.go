@@ -89,10 +89,9 @@ var _ HasDestination = &StateMachineOutboundTask{}
 // StateMachineCallbackTask is a generic timer task that can be emitted by any hierarchical state machine.
 type StateMachineTimerTask struct {
 	definition.WorkflowKey
-	VisibilityTimestamp         time.Time
-	TaskID                      int64
-	Version                     int64
-	MutableStateTransitionCount int64
+	VisibilityTimestamp time.Time
+	TaskID              int64
+	Version             int64
 }
 
 func (*StateMachineTimerTask) GetCategory() Category {

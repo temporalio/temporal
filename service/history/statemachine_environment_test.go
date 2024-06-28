@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -144,6 +145,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 		name                    string
 		enableTransitionHistory bool
 		mutateRef               func(*hsm.Ref)
+		mutateNode              func(*hsm.Node)
 		assertOutcome           func(*testing.T, error)
 	}{
 		{
@@ -152,6 +154,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateRef: func(ref *hsm.Ref) {
 				ref.TaskID = 1
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -160,8 +163,13 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithTransitionHistory/StalenessCheckFailure",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
+				mutableStateVersonedTransition := ref.StateMachineRef.MutableStateVersionedTransition
+				ref.StateMachineRef.MutableStateVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: mutableStateVersonedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          mutableStateVersonedTransition.TransitionCount,
+				}
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleState)
 			},
@@ -170,8 +178,13 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CanBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MachineInitialNamespaceFailoverVersion++
+				machineInitialVersonedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
+				ref.StateMachineRef.MachineInitialVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: machineInitialVersonedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
+				}
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleState)
 			},
@@ -180,9 +193,14 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CannotBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MachineInitialNamespaceFailoverVersion++
+				machineInitialVersonedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
+				ref.StateMachineRef.MachineInitialVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: machineInitialVersonedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
+				}
 				ref.TaskID = tasks.MaximumKey.TaskID
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -193,6 +211,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.Path[0].Id = "not-found"
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -203,6 +222,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.Path[0].Id = "not-found"
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleState)
 			},
@@ -214,6 +234,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 				ref.StateMachineRef.Path[0].Id = "not-found"
 				ref.TaskID = tasks.MaximumKey.TaskID
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -222,8 +243,13 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithTransitionHistory/MachineLastUpdateTransitionInequality",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MachineLastUpdateMutableStateTransitionCount++
+				machineLastUpdateVersionedTransition := ref.StateMachineRef.MachineLastUpdateVersionedTransition
+				ref.StateMachineRef.MachineLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: machineLastUpdateVersionedTransition.NamespaceFailoverVersion,
+					TransitionCount:          machineLastUpdateVersionedTransition.TransitionCount + 1,
+				}
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -234,6 +260,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateRef: func(ref *hsm.Ref) {
 				ref.StateMachineRef.MachineTransitionCount++
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
@@ -243,6 +270,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.NoError(t, err)
 			},
@@ -252,8 +280,45 @@ func TestValidateStateMachineRef(t *testing.T) {
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
 			},
+			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.NoError(t, err)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/NodeRebuilt/MachineTransitionInequality",
+			enableTransitionHistory: true,
+			mutateRef: func(ref *hsm.Ref) {
+				// this validates we fallback to the validation logic without transition history
+				ref.StateMachineRef.MachineTransitionCount++
+			},
+			mutateNode: func(node *hsm.Node) {
+				initialVersionedTransition := node.InternalRepr().InitialVersionedTransition
+				node.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: initialVersionedTransition.NamespaceFailoverVersion,
+					TransitionCount:          0, // transition history disabled when re-creating the node
+				}
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleReference)
+			},
+		},
+		{
+			name:                    "WithoutTransitionHistory/NodeTransitioned/MachineTransitionInequality",
+			enableTransitionHistory: true,
+			mutateRef: func(ref *hsm.Ref) {
+				// this validates we fallback to the validation logic without transition history
+				ref.StateMachineRef.MachineTransitionCount++
+			},
+			mutateNode: func(node *hsm.Node) {
+				lastUpdateVersionedTransition := node.InternalRepr().LastUpdateVersionedTransition
+				node.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: lastUpdateVersionedTransition.NamespaceFailoverVersion,
+					TransitionCount:          0, // transition history disabled when node transitioned.
+				}
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
 		},
 	}
@@ -278,7 +343,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 				WorkflowKey:     taskWorkflowKey(task),
 				StateMachineRef: cbt.Info.Ref,
 			}
+			node, err := mutableState.HSM().Child(ref.StateMachinePath())
+			require.NoError(t, err)
+			tc.mutateNode(node)
 			tc.mutateRef(&ref)
+
 			err = exec.validateStateMachineRef(mutableState, ref, true)
 			tc.assertOutcome(t, err)
 		})
@@ -289,6 +358,7 @@ func TestAccess(t *testing.T) {
 	cases := []struct {
 		name                string
 		accessType          hsm.AccessType
+		workflowState       enumsspb.WorkflowExecutionState
 		expectedSetRequests int
 		accessor            func(*hsm.Node) error
 		assertOutcome       func(*testing.T, error)
@@ -296,6 +366,7 @@ func TestAccess(t *testing.T) {
 		{
 			name:                "read success",
 			accessType:          hsm.AccessRead,
+			workflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			expectedSetRequests: 0,
 			accessor: func(n *hsm.Node) error {
 				return nil
@@ -307,6 +378,7 @@ func TestAccess(t *testing.T) {
 		{
 			name:                "read failure",
 			accessType:          hsm.AccessRead,
+			workflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			expectedSetRequests: 0,
 			accessor: func(n *hsm.Node) error {
 				return fmt.Errorf("test read error")
@@ -318,6 +390,7 @@ func TestAccess(t *testing.T) {
 		{
 			name:                "write success",
 			accessType:          hsm.AccessWrite,
+			workflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			expectedSetRequests: 1,
 			accessor: func(n *hsm.Node) error {
 				return nil
@@ -329,6 +402,7 @@ func TestAccess(t *testing.T) {
 		{
 			name:                "write error",
 			accessType:          hsm.AccessWrite,
+			workflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			expectedSetRequests: 0,
 			accessor: func(n *hsm.Node) error {
 				return fmt.Errorf("test write error")
@@ -337,19 +411,44 @@ func TestAccess(t *testing.T) {
 				require.ErrorContains(t, err, "test write error")
 			},
 		},
+		{
+			name:                "write zombie",
+			accessType:          hsm.AccessWrite,
+			workflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			expectedSetRequests: 0,
+			accessor: func(n *hsm.Node) error {
+				return fmt.Errorf("accessor should not be called")
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, consts.ErrWorkflowZombie)
+			},
+		},
+		{
+			name:                "read zombie",
+			accessType:          hsm.AccessRead,
+			workflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			expectedSetRequests: 0,
+			accessor: func(n *hsm.Node) error {
+				return nil
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
 		// TODO: test write success on open workflow updates instead of sets execution when we have machines that support that.
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newStateMachineEnvTestContext(t, true)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
+			mutableState.GetExecutionState().State = tc.workflowState
 			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
 			require.NoError(t, err)
 			persistenceMutableState := workflow.TestCloneToProto(mutableState)
 			em := s.mockShard.GetExecutionManager().(*persistence.MockExecutionManager)
 			em.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			em.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.SetWorkflowExecutionResponse{}, nil).Times(tc.expectedSetRequests)
-			task := snapshot.Tasks[tasks.CategoryOutbound][0]
+
 			exec := stateMachineEnvironment{
 				shardContext:   s.mockShard,
 				cache:          s.workflowCache,
@@ -357,6 +456,7 @@ func TestAccess(t *testing.T) {
 				logger:         s.mockShard.GetLogger(),
 			}
 
+			task := snapshot.Tasks[tasks.CategoryOutbound][0]
 			cbt := task.(*tasks.StateMachineOutboundTask)
 			ref := hsm.Ref{
 				WorkflowKey:     taskWorkflowKey(task),

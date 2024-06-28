@@ -272,7 +272,7 @@ func (r *EndpointRegistryImpl) refreshEndpoints(ctx context.Context) error {
 	entries := resp.Entries
 
 	currentPageToken := resp.NextPageToken
-	for currentPageToken != nil {
+	for len(currentPageToken) != 0 {
 		resp, err = r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 			NextPageToken:         currentPageToken,
 			PageSize:              int32(r.config.refreshPageSize()),

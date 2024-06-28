@@ -24,6 +24,7 @@ package hsmtest
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/service/history/hsm"
@@ -101,4 +102,18 @@ func (d Definition) Serialize(s any) ([]byte, error) {
 // Type implements hsm.StateMachineDefinition.
 func (d Definition) Type() string {
 	return d.typeName
+}
+
+func (d Definition) CompareState(s1 any, s2 any) (int, error) {
+	t1, ok := s1.(*Data)
+	if !ok {
+		return 0, errInvalidStateType
+	}
+
+	t2, ok := s2.(*Data)
+	if !ok {
+		return 0, errInvalidStateType
+	}
+
+	return strings.Compare(string(t1.State()), string(t2.State())), nil
 }

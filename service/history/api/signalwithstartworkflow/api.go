@@ -56,7 +56,6 @@ func Invoke(
 	currentWorkflowLease, err = workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			string(namespaceID),
 			signalWithStartRequest.SignalWithStartRequest.WorkflowId,

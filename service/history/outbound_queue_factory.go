@@ -180,27 +180,44 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 							key.NamespaceID,
 							metricsHandler,
 						)
+						taggedMetricsHandler := metricsHandler.WithTags(
+							metrics.NamespaceTag(nsName),
+							metrics.DestinationTag(key.Destination),
+						)
 						return ctasks.NewRateLimitedTaskRunnableFromTask(
 							ctasks.RunnableTask{
-								Task: queues.NewCircuitBreakerExecutable(e, circuitBreakerPool.Get(key)),
+								Task: queues.NewCircuitBreakerExecutable(
+									e,
+									circuitBreakerPool.Get(key),
+									taggedMetricsHandler,
+								),
 							},
 							rateLimiterPool.Get(key),
-							metricsHandler.WithTags(
-								metrics.NamespaceTag(nsName),
-								metrics.DestinationTag(key.Destination),
-							),
+							taggedMetricsHandler,
 						)
 					},
 					SchedulerFactory: func(
 						key queues.OutboundTaskGroupNamespaceIDAndDestination,
 					) ctasks.RunnableScheduler {
-						return ctasks.NewDynamicWorkerPoolScheduler(groupLimiter{
-							key:               key,
-							namespaceRegistry: params.NamespaceRegistry,
-							metricsHandler:    metricsHandler,
-							bufferSize:        params.Config.OutboundQueueGroupLimiterBufferSize,
-							concurrency:       params.Config.OutboundQueueGroupLimiterConcurrency,
-						})
+						nsName := getNamespaceNameOrDefault(
+							params.NamespaceRegistry,
+							key.NamespaceID,
+							key.NamespaceID,
+							metricsHandler,
+						)
+						return ctasks.NewDynamicWorkerPoolScheduler(
+							groupLimiter{
+								key:               key,
+								namespaceRegistry: params.NamespaceRegistry,
+								metricsHandler:    metricsHandler,
+								bufferSize:        params.Config.OutboundQueueGroupLimiterBufferSize,
+								concurrency:       params.Config.OutboundQueueGroupLimiterConcurrency,
+							},
+							metricsHandler.WithTags(
+								metrics.NamespaceTag(nsName),
+								metrics.DestinationTag(key.Destination),
+							),
+						)
 					},
 				},
 			),

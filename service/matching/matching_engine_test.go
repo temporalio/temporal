@@ -102,6 +102,7 @@ type (
 		mockVisibilityManager *manager.MockVisibilityManager
 		mockHostInfoProvider  *membership.MockHostInfoProvider
 		mockServiceResolver   *membership.MockServiceResolver
+		hostInfoForResolver   membership.HostInfo
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -118,7 +119,8 @@ func createTestMatchingEngine(
 	controller *gomock.Controller,
 	config *Config,
 	matchingClient matchingservice.MatchingServiceClient,
-	namespaceRegistry namespace.Registry) *matchingEngineImpl {
+	namespaceRegistry namespace.Registry,
+) *matchingEngineImpl {
 	logger := log.NewTestLogger()
 	tm := newTestTaskManager(logger)
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
@@ -175,9 +177,12 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
 	s.mockHostInfoProvider = membership.NewMockHostInfoProvider(s.controller)
 	hostInfo := membership.NewHostInfoFromAddress("self")
+	s.hostInfoForResolver = hostInfo
 	s.mockHostInfoProvider.EXPECT().HostInfo().Return(hostInfo).AnyTimes()
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
-	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(hostInfo, nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).DoAndReturn(func(string) (membership.HostInfo, error) {
+		return s.hostInfoForResolver, nil
+	}).AnyTimes()
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
 
@@ -212,20 +217,21 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
-		logger:              logger,
-		throttledLogger:     log.ThrottledLogger(logger),
-		metricsHandler:      metrics.NoopMetricsHandler,
-		matchingRawClient:   mockMatchingClient,
-		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
-		config:              config,
-		namespaceRegistry:   mockNamespaceCache,
-		hostInfoProvider:    mockHostInfoProvider,
-		serviceResolver:     mockServiceResolver,
-		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
-		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:          clock.NewRealTimeSource(),
-		visibilityManager:   mockVisibilityManager,
+		queryResults:                  collection.NewSyncMap[string, chan *queryResult](),
+		logger:                        logger,
+		throttledLogger:               log.ThrottledLogger(logger),
+		metricsHandler:                metrics.NoopMetricsHandler,
+		matchingRawClient:             mockMatchingClient,
+		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
+		config:                        config,
+		namespaceRegistry:             mockNamespaceCache,
+		hostInfoProvider:              mockHostInfoProvider,
+		serviceResolver:               mockServiceResolver,
+		membershipChangedCh:           make(chan *membership.ChangedEvent, 1),
+		clusterMeta:                   clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:                    clock.NewRealTimeSource(),
+		visibilityManager:             mockVisibilityManager,
+		nexusEndpointsOwnershipLostCh: make(chan struct{}),
 	}
 }
 
@@ -2527,6 +2533,8 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 
 	s.Equal(2, len(e.getTaskQueuePartitions(1000)))
 
+	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
+
 	// signal membership changed and give time for loop to wake up
 	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
 	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(self, nil)
@@ -3089,6 +3097,30 @@ func (s *matchingEngineSuite) TestLargerBacklogAge() {
 	thirdAge := durationpb.New(5 * time.Minute)
 	s.Same(thirdAge, largerBacklogAge(firstAge, thirdAge))
 	s.Same(thirdAge, largerBacklogAge(secondAge, thirdAge))
+}
+
+func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
+	isOwner, _, err := s.matchingEngine.checkNexusEndpointsOwnership()
+	s.NoError(err)
+	s.True(isOwner)
+	s.hostInfoForResolver = membership.NewHostInfoFromAddress("other")
+	isOwner, _, err = s.matchingEngine.checkNexusEndpointsOwnership()
+	s.NoError(err)
+	s.False(isOwner)
+}
+
+func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
+	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh
+	s.matchingEngine.notifyIfNexusEndpointsOwnershipLost()
+	select {
+	case <-ch:
+		s.Fail("expected nexusEndpointsOwnershipLost channel to not have been closed")
+	default:
+	}
+	s.hostInfoForResolver = membership.NewHostInfoFromAddress("other")
+	s.matchingEngine.notifyIfNexusEndpointsOwnershipLost()
+	<-ch
+	// If the channel is unblocked the test passed.
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {

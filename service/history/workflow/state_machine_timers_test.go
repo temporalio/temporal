@@ -42,7 +42,7 @@ func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	ms.EXPECT().TransitionCount().Return(int64(2)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
 	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0"})
 	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "1"})
@@ -66,7 +66,7 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	ms.EXPECT().TransitionCount().Return(int64(2)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 	ms.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(task tasks.Task) {
 		scheduledTasks = append(scheduledTasks, task)
 	})
@@ -85,7 +85,6 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 	require.Equal(t, "wf-id", task.GetWorkflowID())
 	require.Equal(t, "run-id", task.GetRunID())
 	require.Equal(t, int64(1), task.Version)
-	require.Equal(t, int64(2), task.MutableStateTransitionCount)
 	require.Equal(t, now.Add(-time.Hour), task.VisibilityTimestamp)
 
 	// First timer already scheduled should not generate any tasks.
