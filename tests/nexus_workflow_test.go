@@ -1002,11 +1002,11 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionInternalAuth() 
 			},
 		},
 	})
+
 	s.NoError(err)
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
-
 }
 
 func (s *FunctionalTestBase) sendNexusCompletionRequest(
