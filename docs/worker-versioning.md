@@ -209,7 +209,7 @@ Worker Versioning rules and added to a given Task Queue. If your Worker Program 
 multiple Workers polling multiple Task Queues, you would need to separately update the rules 
 of each Task Queue.
 
-There are two types of rules: _Build ID Assignment rules_ and _Compatible Build ID Redirect rules_.
+There are two types of rules: _Build ID Assignment rules_ and _Build ID Redirect rules_.
 
 ### Assignment Rules
 Assignment rules are used to assign a Build ID for a new execution when it starts. Their primary
@@ -318,7 +318,7 @@ You don't need to change your worker code or Task Queue name. Only for your next
 deployment, add an Assignment rule instead of a Version Set (incompatible Build ID).
 
 The Version Sets added previously will be present and be used for the old Workflow
-executions. They will be cleaned up automatically once all their workflows are archived.
+executions. They will be cleaned up automatically once all their workflows pass their retention time.
 
 Note that:
 - For routing new executions, Assignment rules take precedence over the default Version Set.
