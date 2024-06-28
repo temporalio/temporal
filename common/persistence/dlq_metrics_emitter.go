@@ -24,7 +24,6 @@ package persistence
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -33,6 +32,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -52,6 +52,7 @@ type (
 		historyTaskQueueManager HistoryTaskQueueManager
 		historyServiceResolver  membership.ServiceResolver
 		hostInfoProvider        membership.HostInfoProvider
+		taskCategoryRegistry    tasks.TaskCategoryRegistry
 	}
 )
 
@@ -61,6 +62,7 @@ func NewDLQMetricsEmitter(
 	manager HistoryTaskQueueManager,
 	historyServiceResolver membership.ServiceResolver,
 	hostInfoProvider membership.HostInfoProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
 ) *DLQMetricsEmitter {
 	return &DLQMetricsEmitter{
 		status:                  common.DaemonStatusInitialized,
@@ -71,6 +73,7 @@ func NewDLQMetricsEmitter(
 		historyTaskQueueManager: manager,
 		historyServiceResolver:  historyServiceResolver,
 		hostInfoProvider:        hostInfoProvider,
+		taskCategoryRegistry:    taskCategoryRegistry,
 	}
 }
 
@@ -98,7 +101,11 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 			if !s.shouldEmitMetrics() {
 				continue
 			}
+			categories := s.taskCategoryRegistry.GetCategories()
 			messageCounts := make(map[int]int64)
+			for category := range categories {
+				messageCounts[category] = 0
+			}
 			queues, err := s.getDLQList()
 			if err != nil {
 				s.logger.Error("Failed to list DLQs to emit metrics", tag.Error(err))
@@ -111,8 +118,12 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 				}
 				messageCounts[category] += q.MessageCount
 			}
-			for category, count := range messageCounts {
-				metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(strconv.Itoa(category)))
+			for id, count := range messageCounts {
+				category, ok := categories[id]
+				if !ok {
+					s.logger.Error("Failed to find category from ID ", tag.TaskCategoryID(id))
+				}
+				metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(category.Name()))
 			}
 		}
 	}

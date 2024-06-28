@@ -23,7 +23,6 @@
 package persistence
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -66,11 +65,11 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 		NextPageToken: nil,
 	}, nil).Times(1)
 	resolver := membership.NewMockServiceResolver(ctrl)
-	resolver.EXPECT().Lookup("0").Return(membership.NewHostInfoFromAddress("testAddress"), nil).Times(1)
+	resolver.EXPECT().Lookup("1").Return(membership.NewHostInfoFromAddress("testAddress"), nil).Times(1)
 	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
 	hostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("testAddress")).Times(1)
-
-	emitter := NewDLQMetricsEmitter(metricsHandler, logger, manager, resolver, hostInfoProvider)
+	categoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
+	emitter := NewDLQMetricsEmitter(metricsHandler, logger, manager, resolver, hostInfoProvider, categoryRegistry)
 	emitter.emitMetricsTimer = time.NewTicker(60 * time.Millisecond)
 	logger.EXPECT().Info(gomock.Any()).AnyTimes()
 	logger.EXPECT().Error(gomock.Any()).AnyTimes()
@@ -80,7 +79,7 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 	emitter.Start()
 	assert.Eventually(t, func() bool {
 		snapshot = capture.Snapshot()
-		return len(snapshot[metrics.DLQMessageCount.Name()]) == 3
+		return len(snapshot[metrics.DLQMessageCount.Name()]) == len(categoryRegistry.GetCategories())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	emitter.Stop()
@@ -90,9 +89,9 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 	for _, recording := range snapshot[metrics.DLQMessageCount.Name()] {
 		messageCount[recording.Tags[metrics.TaskCategoryTagName]] = recording.Value.(float64)
 	}
-	assert.Equal(t, float64(9), messageCount[strconv.Itoa(tasks.CategoryIDTransfer)])
-	assert.Equal(t, float64(11), messageCount[strconv.Itoa(tasks.CategoryIDTimer)])
-	assert.Equal(t, float64(13), messageCount[strconv.Itoa(tasks.CategoryIDReplication)])
+	assert.Equal(t, float64(9), messageCount["transfer"])
+	assert.Equal(t, float64(11), messageCount["timer"])
+	assert.Equal(t, float64(13), messageCount["replication"])
 }
 
 func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardZero(t *testing.T) {
@@ -105,11 +104,11 @@ func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardZero(t
 	manager := NewMockHistoryTaskQueueManager(ctrl)
 
 	resolver := membership.NewMockServiceResolver(ctrl)
-	resolver.EXPECT().Lookup("0").Return(membership.NewHostInfoFromAddress("testAddress1"), nil).MinTimes(1)
+	resolver.EXPECT().Lookup("1").Return(membership.NewHostInfoFromAddress("testAddress1"), nil).MinTimes(1)
 	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
 	hostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("testAddress2")).MinTimes(1)
 
-	emitter := NewDLQMetricsEmitter(metricsHandler, logger, manager, resolver, hostInfoProvider)
+	emitter := NewDLQMetricsEmitter(metricsHandler, logger, manager, resolver, hostInfoProvider, tasks.NewDefaultTaskCategoryRegistry())
 	emitter.emitMetricsTimer = time.NewTicker(time.Millisecond)
 	logger.EXPECT().Info(gomock.Any()).AnyTimes()
 	logger.EXPECT().Error(gomock.Any()).AnyTimes()

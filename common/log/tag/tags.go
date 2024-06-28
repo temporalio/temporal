@@ -646,7 +646,7 @@ func TaskType(taskType enumsspb.TaskType) ZapTag {
 }
 
 func TaskCategoryID(taskCategoryID int) ZapTag {
-	return NewInt("queue-task-type", taskCategoryID)
+	return NewInt("queue-task-category-id", taskCategoryID)
 }
 
 // TaskVisibilityTimestamp returns tag for task visibilityTimestamp
