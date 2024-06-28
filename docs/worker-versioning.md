@@ -302,7 +302,7 @@ In addition, here are likely improvements and behavior changes being considered 
 - Improvements for multi-region namespaces.
 
 ## Migration Notes
-### Migrating from Unversioned Task Queue
+### Migrating from an Unversioned Task Queue
 To migrate your existing Task Queue, follow the normal procedure as if you upgrade from
 one Build ID to another.
 
