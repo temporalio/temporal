@@ -963,6 +963,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 			},
 		},
 	}
+	s.mutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
