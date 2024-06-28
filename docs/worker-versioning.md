@@ -129,6 +129,7 @@ temporal task-queue versioning commit-build-id --task-queue my-tq --build-id $BU
 See the `--help` output for more details:
 ```shell
 % temporal task-queue versioning commit-build-id --help
+```
 Completes  the rollout of a BuildID and cleanup unnecessary rules possibly
 created during a gradual rollout. Specifically, this command will make the
 following changes atomically:
@@ -138,7 +139,6 @@ following changes atomically:
 
 To prevent committing invalid Build IDs, we reject the request if no pollers
 have been seen recently for this Build ID. Use the force option to disable this validation.
-```
 
 ### 7. Wait until the old workers are not needed
 Check the reachability of your old version. Now that all new workflow executions are assigned to the new Build ID,
