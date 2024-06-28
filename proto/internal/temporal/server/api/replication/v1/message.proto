@@ -33,6 +33,7 @@ import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
@@ -52,6 +53,7 @@ message ReplicationTask {
         HistoryTaskAttributes history_task_attributes = 8;
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
         TaskQueueUserDataAttributes task_queue_user_data_attributes = 11;
+        SyncHSMAttributes sync_hsm_attributes = 14;
     }
     // All attributes should be deprecated and replaced by this field.
     // The task_type + data provide more flexibility in future use cases.
@@ -106,6 +108,7 @@ message WorkflowReplicationMessages {
     temporal.server.api.enums.v1.TaskPriority priority = 4;
 }
 
+// TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic
 message ReplicationTaskInfo {
     string namespace_id = 1;
     string workflow_id = 2;
@@ -182,4 +185,12 @@ message TaskQueueUserDataAttributes {
     string namespace_id = 1;
     string task_queue_name = 2;
     temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
+}
+
+message SyncHSMAttributes {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    temporal.server.api.history.v1.VersionHistory version_history = 4;
+    temporal.server.api.persistence.v1.StateMachineNode state_machine_node = 5;
 }

@@ -54,7 +54,6 @@ func Invoke(
 		// the logic will return WorkflowNotReady error and the caller will retry
 		// this can prevent keep reloading mutable state when there's a replication lag
 		// in parent shard.
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.ParentExecution.WorkflowId,

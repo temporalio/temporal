@@ -72,6 +72,8 @@ enum TaskType {
 
     // Timeout task for the entire workflow execution chain.
     TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT = 29;
+
+    TASK_TYPE_REPLICATION_SYNC_HSM = 30;
 }
 
 // TaskPriority is only used for replication task as of May 2024

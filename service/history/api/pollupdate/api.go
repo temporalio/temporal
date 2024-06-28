@@ -55,7 +55,6 @@ func Invoke(
 		workflowLease, err := ctxLookup.GetWorkflowLease(
 			ctx,
 			nil,
-			api.BypassMutableStateConsistencyPredicate,
 			definition.NewWorkflowKey(
 				req.GetNamespaceId(),
 				wfexec.GetWorkflowId(),

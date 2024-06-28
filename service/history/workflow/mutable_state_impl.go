@@ -193,6 +193,11 @@ type (
 		// The flag will be unset whenever workflow task successfully completed, timedout or failed
 		// due to cause other than UnhandledCommand.
 		workflowCloseAttempted bool
+		// A flag indicating if transition history feature is enabled for the current transaction.
+		// We need a consistent view of if transition history is enabled within one transaction in case
+		// dynamic configuration value changes in the middle of a transaction
+		// TODO: remove this flag once transition history feature is stable.
+		transitionHistoryEnabled bool
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
@@ -262,15 +267,16 @@ func NewMutableState(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
-		approximateSize:  0,
-		currentVersion:   namespaceEntry.FailoverVersion(),
-		bufferEventsInDB: nil,
-		stateInDB:        enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
-		nextEventIDInDB:  common.FirstEventID,
-		dbRecordVersion:  1,
-		namespaceEntry:   namespaceEntry,
-		appliedEvents:    make(map[string]struct{}),
-		InsertTasks:      make(map[tasks.Category][]tasks.Task),
+		approximateSize:          0,
+		currentVersion:           namespaceEntry.FailoverVersion(),
+		bufferEventsInDB:         nil,
+		stateInDB:                enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
+		nextEventIDInDB:          common.FirstEventID,
+		dbRecordVersion:          1,
+		namespaceEntry:           namespaceEntry,
+		appliedEvents:            make(map[string]struct{}),
+		InsertTasks:              make(map[tasks.Category][]tasks.Task),
+		transitionHistoryEnabled: shard.GetConfig().EnableTransitionHistory(),
 
 		QueryRegistry: NewQueryRegistry(),
 
@@ -473,6 +479,14 @@ func NewSanitizedMutableState(
 	// Timer tasks are generated locally, do not sync them.
 	mutableState.executionInfo.StateMachineTimers = nil
 	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 0
+	if err := mutableState.HSM().Walk(func(node *hsm.Node) error {
+		// Node TransitionCount is cluster local information used for detecting staleness.
+		// Reset it to 1 since we are creating a new mutable state.
+		node.InternalRepr().TransitionCount = 1
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
@@ -716,9 +730,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if ms.config.EnableTransitionHistory() &&
-		len(ms.executionInfo.TransitionHistory) != 0 {
-
+	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
 		// this make sure current version >= last write version
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
 		ms.currentVersion = lastVersionedTransition.NamespaceFailoverVersion
@@ -762,13 +774,19 @@ func (ms *MutableStateImpl) GetCurrentVersion() int64 {
 	return common.EmptyVersion
 }
 
-// TransitionCount implements hsm.NodeBackend.
-func (ms *MutableStateImpl) TransitionCount() int64 {
-	hist := ms.executionInfo.TransitionHistory
-	if len(hist) == 0 {
+// NextTransitionCount implements hsm.NodeBackend.
+func (ms *MutableStateImpl) NextTransitionCount() int64 {
+	if !ms.transitionHistoryEnabled {
 		return 0
 	}
-	return hist[len(hist)-1].MaxTransitionCount
+
+	hist := ms.executionInfo.TransitionHistory
+	if len(hist) == 0 {
+		// it is possible that this is the first transition and
+		// transition history has not been updated yet.
+		return 1
+	}
+	return hist[len(hist)-1].TransitionCount + 1
 }
 
 func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
@@ -804,9 +822,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
-	if ms.config.EnableTransitionHistory() &&
-		len(ms.executionInfo.TransitionHistory) != 0 {
-
+	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
 		return lastVersionedTransition.NamespaceFailoverVersion, nil
 	}
@@ -2045,7 +2061,7 @@ func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.
 		interval += backoffDuration.AsDuration()
 	}
 	// minimal interval for continue as new to prevent tight continue as new loop
-	minInterval := ms.config.ContinueAsNewMinInterval(ms.namespaceEntry.Name().String())
+	minInterval := ms.config.WorkflowIdReuseMinimalInterval(ms.namespaceEntry.Name().String())
 	if interval < minInterval {
 		// enforce a minimal backoff
 		return durationpb.New(minInterval - lifetime)
@@ -2469,7 +2485,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 	if !startedWorkerStamp.GetUseVersioning() && assignedBuildId != "" && ms.HasCompletedAnyWorkflowTask() {
 		// We don't allow moving from versioned to unversioned once the wf has completed the first WFT.
 		// If this happens, it must be a stale task.
-		return 0, serviceerrors.NewObsoleteDispatchBuildId()
+		return 0, serviceerrors.NewObsoleteDispatchBuildId("versioned workflow's task cannot be dispatched to unversioned workers")
 	}
 
 	if startedWorkerStamp.GetBuildId() == assignedBuildId {
@@ -2482,7 +2498,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 		// Workflow hs already completed tasks but no redirect or a redirect based on a wrong assigned build ID is
 		// reported. This must be a task backlogged on an old build ID. rejecting this task, there should be another
 		// task scheduled on the right build ID.
-		return 0, serviceerrors.NewObsoleteDispatchBuildId()
+		return 0, serviceerrors.NewObsoleteDispatchBuildId("dispatch build ID is not the workflow's current build ID")
 	}
 
 	if assignedBuildId == "" && !ms.HasCompletedAnyWorkflowTask() {
@@ -5068,6 +5084,8 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
 	}
 
+	ms.transitionHistoryEnabled = ms.config.EnableTransitionHistory()
+
 	namespaceEntry, err := ms.startTransactionHandleNamespaceMigration(namespaceEntry)
 	if err != nil {
 		return false, err
@@ -5224,6 +5242,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
 		eventBatches,
+		clearBuffer,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -5333,7 +5352,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		return nil
 	}
 
-	if !ms.config.EnableTransitionHistory() {
+	if !ms.transitionHistoryEnabled {
 		return nil
 	}
 
@@ -5352,6 +5371,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
+	clearBufferEvents bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -5374,12 +5394,13 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 
-	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches)
+	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	transactionPolicy TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
+	clearBufferEvents bool,
 ) error {
 
 	if ms.config.ReplicationMultipleBatches() {
@@ -5397,6 +5418,11 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	ms.InsertTasks[tasks.CategoryReplication] = append(
 		ms.InsertTasks[tasks.CategoryReplication],
 		ms.syncActivityToReplicationTask(transactionPolicy)...,
+	)
+
+	ms.InsertTasks[tasks.CategoryReplication] = append(
+		ms.InsertTasks[tasks.CategoryReplication],
+		ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...,
 	)
 
 	if transactionPolicy == TransactionPolicyPassive &&
@@ -5538,6 +5564,48 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 			)
 		}
 		return nil
+	case TransactionPolicyPassive:
+		return emptyTasks
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+	}
+}
+
+func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
+	transactionPolicy TransactionPolicy,
+	eventBatches [][]*historypb.HistoryEvent,
+	clearBufferEvents bool,
+) []tasks.Task {
+	switch transactionPolicy {
+	case TransactionPolicyActive:
+		if !ms.generateReplicationTask() {
+			return emptyTasks
+		}
+
+		// HSM() contains children also implies Nexus is enabled
+		if len(ms.HSM().InternalRepr().Children) == 0 {
+			return emptyTasks
+		}
+
+		// We also assume that - for the time being - if events were generated in a transaction,
+		// all HSM node updates are a result of applying those events.
+		// The passive cluster will transition the HSM when applying the events.
+		//
+		// When mutable state contains buffered events, SyncHSM task will be dropped as
+		// the state for **some** HSM nodes may depend on those buffered events.
+		// But there might be some other nodes whose state do not depend on buffered events.
+		// For those nodes, we need to make sure their states will be synced as well.
+		// So when clearing buffered events, generate another SyncHSM task.
+		if clearBufferEvents || (ms.HSM().Dirty() && len(eventBatches) == 0) {
+			return []tasks.Task{
+				&tasks.SyncHSMTask{
+					WorkflowKey: ms.GetWorkflowKey(),
+					// TaskID and VisibilityTimestamp are set by shard
+				},
+			}
+		}
+
+		return emptyTasks
 	case TransactionPolicyPassive:
 		return emptyTasks
 	default:

@@ -49,7 +49,6 @@ func Invoke(
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		req.Clock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.WorkflowExecution.WorkflowId,

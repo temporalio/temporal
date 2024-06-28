@@ -489,7 +489,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// that resulted in the successful completion.
 	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
 
-	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, redirectInfo, skipVersioningCheck)
+	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -567,13 +567,14 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	workflowTask *WorkflowTaskInfo,
+	taskQueue *taskqueuepb.TaskQueue,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	skipVersioningCheck bool,
 ) (newWorkflowTask *WorkflowTaskInfo, converted bool, redirectCounter int64, err error) {
 	buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp)
 	if buildId == "" && (m.ms.GetAssignedBuildId() == "" || // unversioned workflow
 		skipVersioningCheck || // resetter may add WFT started events without stamps, it sets skipVersioningCheck=true
-		m.ms.IsStickyTaskQueueSet()) {
+		(taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && m.ms.executionInfo.GetStickyTaskQueue() == taskQueue.GetName())) {
 		// build ID is expected to be empty for sticky queues until old versioning is removed [cleanup-old-wv]
 		return workflowTask, false, 0, nil
 	}

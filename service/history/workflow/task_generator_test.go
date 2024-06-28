@@ -336,7 +336,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 
 	mutableState := NewMockMutableState(ctrl)
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
-	mutableState.EXPECT().TransitionCount().Return(int64(2)).AnyTimes()
+	mutableState.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
 	subStateMachinesByType := map[string]*persistencespb.StateMachineMap{}
 	reg := hsm.NewRegistry()
@@ -383,7 +383,11 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 
 	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node }).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 3, TransitionCount: 3},
+		},
+	}).AnyTimes()
 	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
 	cfg := &configs.Config{}
@@ -409,7 +413,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	}
 	require.Equal(t, tests.WorkflowKey, invocationTask.WorkflowKey)
 	require.Equal(t, "http://localhost", invocationTask.Destination)
-	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
 				{
@@ -417,12 +421,19 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 					Id:   "sched",
 				},
 			},
-			MachineInitialNamespaceFailoverVersion:       3,
-			MachineInitialMutableStateTransitionCount:    2,
-			MutableStateNamespaceFailoverVersion:         3,
-			MutableStateTransitionCount:                  2,
-			MachineLastUpdateMutableStateTransitionCount: 3,
-			MachineTransitionCount:                       1,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineTransitionCount: 1,
 		},
 		Type: callbacks.TaskTypeInvocation,
 		Data: nil,
@@ -430,7 +441,6 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 
 	require.Equal(t, tests.WorkflowKey, backoffTask.WorkflowKey)
 	require.Equal(t, int64(3), backoffTask.Version)
-	require.Equal(t, int64(2), backoffTask.MutableStateTransitionCount)
 
 	timers := mutableState.GetExecutionInfo().StateMachineTimers
 	require.Equal(t, 1, len(timers))
@@ -446,12 +456,19 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 							Id:   "backoff",
 						},
 					},
-					MachineInitialNamespaceFailoverVersion:       3,
-					MachineInitialMutableStateTransitionCount:    2,
-					MutableStateNamespaceFailoverVersion:         3,
-					MutableStateTransitionCount:                  2,
-					MachineLastUpdateMutableStateTransitionCount: 3,
-					MachineTransitionCount:                       1,
+					MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineTransitionCount: 1,
 				},
 				Type: callbacks.TaskTypeBackoff,
 				Data: nil,
@@ -495,11 +512,16 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 					Id:   opNode.Key.ID,
 				},
 			},
-			MachineInitialNamespaceFailoverVersion:    3,
-			MachineInitialMutableStateTransitionCount: 2,
-			MutableStateNamespaceFailoverVersion:      3,
-			MutableStateTransitionCount:               2,
-			MachineTransitionCount:                    0, // concurrent tasks don't store the machine transition count.
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineLastUpdateVersionedTransition: nil,
+			MachineTransitionCount:               0, // concurrent tasks don't store the machine transition count.
 		},
 		Type: nexusoperations.TaskTypeTimeout,
 		Data: nil,
