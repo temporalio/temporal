@@ -1822,7 +1822,7 @@ func (e *matchingEngineImpl) DeleteNexusEndpoint(ctx context.Context, request *m
 func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *matchingservice.ListNexusEndpointsRequest) (*matchingservice.ListNexusEndpointsResponse, error) {
 	lastKnownVersion := request.LastKnownTableVersion
 	// Read API, verify table ownership via membership.
-	isOwner, err := e.checkNexusEndpointsOwnership()
+	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
 		e.logger.Error("Failed to check Nexus endpoints ownerhip", tag.Error(err))
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot verify ownership of Nexus endpoints table: %v", err))
@@ -1854,7 +1854,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 		if request.Wait && lastKnownVersion == resp.TableVersion {
 			// long-poll: wait for data to change/appear
 			select {
-			case <-e.nexusEndpointsOwnershipLostCh:
+			case <-ownershipLostCh:
 				return nil, serviceerror.NewFailedPrecondition("Nexus endpoints table ownership lost")
 			case <-ctx.Done():
 				return resp, nil
@@ -1867,25 +1867,29 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	}
 }
 
-func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, error) {
+func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct{}, error) {
+	// Get the channel before checking the condition to prevent the channel from being closed while we're running this
+	// check.
+	ch := e.nexusEndpointsOwnershipLostCh
 	self := e.hostInfoProvider.HostInfo().Identity()
 	owner, err := e.serviceResolver.Lookup(nexusEndpointsTablePartitionRoutingKey)
 	if err != nil {
-		return false, fmt.Errorf("cannot resolve Nexus endpoints partition owner: %w", err)
+		return false, nil, fmt.Errorf("cannot resolve Nexus endpoints partition owner: %w", err)
 	}
-	return owner.Identity() == self, nil
+	return owner.Identity() == self, ch, nil
 }
 
 func (e *matchingEngineImpl) notifyIfNexusEndpointsOwnershipLost() {
-	isOwner, err := e.checkNexusEndpointsOwnership()
+	// We don't care about the channel returned here. This method is ensured to only be called from the single
+	// watchMembership method and is the only way the channel may be replace.
+	isOwner, _, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
 		e.logger.Error("Failed to check Nexus endpoints ownerhip", tag.Error(err))
 		return
 	}
 	if !isOwner {
-		ch := e.nexusEndpointsOwnershipLostCh
+		close(e.nexusEndpointsOwnershipLostCh)
 		e.nexusEndpointsOwnershipLostCh = make(chan struct{})
-		close(ch)
 	}
 }
 

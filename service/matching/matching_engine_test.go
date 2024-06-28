@@ -3100,11 +3100,11 @@ func (s *matchingEngineSuite) TestLargerBacklogAge() {
 }
 
 func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
-	isOwner, err := s.matchingEngine.checkNexusEndpointsOwnership()
+	isOwner, _, err := s.matchingEngine.checkNexusEndpointsOwnership()
 	s.NoError(err)
 	s.True(isOwner)
 	s.hostInfoForResolver = membership.NewHostInfoFromAddress("other")
-	isOwner, err = s.matchingEngine.checkNexusEndpointsOwnership()
+	isOwner, _, err = s.matchingEngine.checkNexusEndpointsOwnership()
 	s.NoError(err)
 	s.False(isOwner)
 }
