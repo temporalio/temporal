@@ -53,6 +53,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests"
 )
@@ -72,6 +73,7 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.EnableNexus.Key():                  true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key(): 1 * time.Millisecond,
+		callbacks.AllowedAddresses.Key():                 []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.setupSuite([]string{"nexus_state_replication_active", "nexus_state_replication_standby"})
 }
