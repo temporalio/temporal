@@ -47,6 +47,10 @@ system.enableNexus:
   - value: true
 component.nexusoperations.callback.endpoint.template:
   - value: http://localhost:7243/namespaces/{{.NamespaceName}}/nexus/callback
+component.callbacks.allowedAddresses:
+  - value:
+      - Pattern: "*"
+        AllowInsecure: true
 matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:

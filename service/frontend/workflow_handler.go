@@ -4511,24 +4511,10 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	for _, callback := range callbacks {
 		switch cb := callback.GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
-			if len(cb.Nexus.GetUrl()) > wh.config.CallbackURLMaxLength(ns.String()) {
-				return status.Error(
-					codes.InvalidArgument,
-					fmt.Sprintf(
-						"invalid url: url length longer than max length allowed of %d",
-						wh.config.CallbackURLMaxLength(ns.String()),
-					),
-				)
+			if err := wh.validateCallbackURL(ns, cb.Nexus.GetUrl()); err != nil {
+				return err
 			}
-			u, err := url.Parse(cb.Nexus.GetUrl())
-			if err != nil {
-				return status.Errorf(codes.InvalidArgument, "invalid url: %v", err)
-			}
-			if !(u.Scheme == "http" || u.Scheme == "https") {
-				return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
-			}
-			// TODO: check in dynamic config that address is valid and that http is only accepted
-			// if "insecure" is allowed for address.
+
 			headerSize := 0
 			for k, v := range cb.Nexus.GetHeader() {
 				headerSize += len(k) + len(v)
@@ -4548,6 +4534,29 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 		}
 	}
 	return nil
+}
+
+func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string) error {
+	if len(rawURL) > wh.config.CallbackURLMaxLength(ns.String()) {
+		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if !(u.Scheme == "http" || u.Scheme == "https") {
+		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
+	}
+	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
+		if cfg.Regexp.MatchString(u.Host) {
+			if u.Scheme == "http" && !cfg.AllowInsecure {
+				return status.Errorf(codes.InvalidArgument, "invalid url: callback address does not allow insecure connections: %v", u)
+			}
+			return nil
+		}
+	}
+	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback address: %v", u)
 }
 
 type buildIdAndFlag interface {
