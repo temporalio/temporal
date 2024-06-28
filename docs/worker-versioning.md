@@ -7,6 +7,7 @@ to the new APIs using the process [outlined in a later section](#migrating-from-
 
 **Note 2:** Worker Versioning is still in [Pre-Release](https://docs.temporal.io/evaluate/release-stages#pre-release) 
 stage and not recommended for production usage. Future breaking changes may be made if deemed necessary.
+We love feedback!  Please reach out in the Temporal Slack or at community.temporal.io with any thoughts.
 
 ## What is Worker Versioning?
 Worker Versioning simplifies the process of deploying changes to [Worker Programs](https://docs.temporal.io/workers#worker-program). 
@@ -29,6 +30,9 @@ API to help determine when a Worker version can be decommissioned.
 
 ## When should I use Worker Versioning?
 
+### Short-running workflows
+Worker versioning is currently optimized for short-running workflows.
+
 The main reason to use this feature is that it frees you from having to worry about
 nondeterministic changes. This is a significant gain, however it comes at the cost of
 running multiple versions of Workers simultaneously.
@@ -44,12 +48,18 @@ approaches:
 managing multiple versions of your Workers for an extended duration. This might be
 a suitable solutions if the expected deployment frequency during the average lifetime is
 not high.
-- OR, break long-running Workflows to shorter ones using Continue-as-New and setting 
-`UseAssingmentRules` [VersioningIntent](https://pkg.go.dev/go.temporal.io/sdk@v1.27.0/internal#VersioningIntent) 
+- OR, break long-running Workflows to shorter ones using Continue-as-New and set
+`UseAssignmentRules` [VersioningIntent](https://pkg.go.dev/go.temporal.io/sdk@v1.27.0/internal#VersioningIntent) 
 so each new CaN execution starts on the latest Build ID.
 - OR, avoid making any nondeterministic changes by using [Patching](https://docs.temporal.io/workflows#patching) or [GetCurrentBuildID](https://pkg.go.dev/go.temporal.io/sdk@v1.27.0/internal#WorkflowInfo.GetCurrentBuildID)
   and consistently applying [Redirect rules](#redirect-rules) each time you deploy for
   those long-running workflows.
+
+### Blue-green deploys
+When juggling multiple Worker versions, you need each version to be able to handle the load 
+placed upon it.  This can be difficult to calculate.  Therefore, the safest option is to operate 
+each version at the normal capacity during your deployment.  
+For this reason, we recommend a blue-green deploy strategy.
 
 ## Getting Started
 
@@ -206,23 +216,23 @@ Assignment rules are used to assign a Build ID for a new execution when it start
 use case is to specify the latest Build ID, but they have powerful features for gradual rollout
 of a new Build ID.
 
-Once a Build ID is assigned to a Workflow Execution, and it completes its first Workflow Task,
-the workflow stays on the assigned Build ID regardless of changes in Assignment rules. This
+Once a Workflow Execution is assigned to a build ID, and it completes its first Workflow Task,
+the workflow stays on that Build ID regardless of changes in Assignment rules. This
 eliminates the need for compatibility between versions when you only care about using the new
 version for new Workflows and let existing Workflows finish in their own version.
 
 Activities, Child Workflows and Continue-as-New executions have the option to inherit the 
 Build ID of their parent/previous Workflow or use the latest Assignment rules to independently 
 select a Build ID. This is specified by the parent/previous Workflow using VersioningIntent.
+We recommend that you allow Continued-as-New workflows to be assigned new versions, otherwise your
+workflow may become like a long-running workflow that gets stuck on the old build.
 
-In absence of (applicable) Redirect rules the task will be dispatched to Workers 
-of the Build ID determined by the Assignment rules (or inherited). Otherwise, the final 
-Build ID will be determined by the Redirect rules.
+Unless there's a redirect rule for it, the task will be dispatched to Workers of the Build ID determined by the Assignment rules (or inherited).
 
 When using Worker Versioning on a Task Queue, in the steady state,
 there should typically be a single assignment rule to send all new executions
 to the latest Build ID. Existence of at least one such "unconditional"
-rule at all times is enforces by the system, unless the `force` flag is used
+rule at all times is enforced by the system, unless the `force` flag is used
 by the user when replacing/deleting these rules (for exceptional cases).
 
 During a deployment, one or more additional rules can be added to assign a
@@ -242,17 +252,12 @@ one Build ID (source) to another compatible Build ID (target). You are responsib
 the target Build ID of a redirect rule is able to process event histories made by the source
 Build ID by using [Patching](https://docs.temporal.io/workflows#patching) or other means.
 
-Most deployments are not expected to need these rules, however following
- situations can greatly benefit from redirects:
-  - Need to move long-running Workflow Executions from an old Build ID to a
-    newer one.
-  - Need to hotfix some broken or stuck Workflow Executions.
-
-In steady state, redirect rules are beneficial when dealing with old
-Executions ran on now-decommissioned Build IDs:
-  - To redirecting the Workflow Queries to the current (compatible) Build ID.
-  - To be able to Reset an old Execution so it can run on the current
-    (compatible) Build ID.
+Here are situations you might need a redirect rule: 
+  - Need to move long-running Workflow Executions to a newer build ID.
+  - You have stuck Workflow Executions that you want to move to a later version, to fix them or
+    so that you can decommission the old version.
+  - Workflow queries will not run if sent to a closed workflow that ran on a decommissioned build.
+    You would need redirect rules to allow those queries to run on newer builds.
 
 Redirect rules can be chained.
 
@@ -271,11 +276,8 @@ any existing execution within the retention period.
 - **UNSPECIFIED:** Task reachability is not reported
 
 #### Caveats:
-- Task Reachability is eventually consistent; there may be a delay until it converges to the most
-accurate value. The delay should not normally increase more than a few minutes. The reachability 
-status is designed in a way to take the more conservative side until it converges.
-For example, we may report REACHABLE for a minute even though the actual status is CLOSED_WORKFLOWS_ONLY, 
-but not vice versa. Hence, it's safe to rely on Reachability status for shutting down old workers. 
+- It's safe to rely on Reachability status for shutting down old workers.  However, it may take a bit 
+longer to converge due to possible delays, usually no more than a few minutes, in the status being updated. 
 
 - Future activities who inherit their workflow's Build ID but not its Task Queue will not be
 accounted for reachability as server cannot know if they'll happen as they do not use
@@ -284,10 +286,20 @@ who inherit the parent/previous workflow's Build ID but not its Task Queue. In t
 sure to query reachability for the parent/previous workflow's Task Queue as well.
 
 ## Planned Improvements
-Worker Versioning is currently in Pre-Release (alpha) stage. We continue to improve this
-feature before the public release. Here are some improvements planned for the coming months:
+Worker Versioning is currently in Early Release (https://docs.temporal.io/evaluate/release-stages). 
+We continue to improve this feature before public preview. 
+Here are some likely improvements and behavior changes being considered for public preview:
 
-- [TBD]
+- Allow workflow queries on closed workflows to run on newer builds.
+- Ways to more gradually redirect workflows 
+- Ability to apply redirect rules from unversioned task queues.  This may help users first onboarding
+  to worker versioning
+- Default continued-as-new workflows to run on later builds rather than pegging them to the build
+  of the previous workflow.
+- Docs, API improvements, polish.
+- More integration with Temporal UI.
+- Improvements for multi-region namespaces.
+- Improvements and fixes based on your feedback.  Please reach out!
 
 ## Migration Notes
 ### Migrating from Unversioned Task Queue
