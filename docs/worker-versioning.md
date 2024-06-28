@@ -286,9 +286,10 @@ who inherit the parent/previous workflow's Build ID but not its Task Queue. In t
 sure to query reachability for the parent/previous workflow's Task Queue as well.
 
 ## Planned Improvements
-Worker Versioning is currently in Early Release (https://docs.temporal.io/evaluate/release-stages). 
-We continue to improve this feature before public preview. 
-Here are some likely improvements and behavior changes being considered for public preview:
+Worker Versioning is currently in [Pre-Release](https://docs.temporal.io/evaluate/release-stages#pre-release). 
+We will continue to improve this feature before public preview. 
+We plan to respond to your feedback, so please reach out!
+In addition, here are likely improvements and behavior changes being considered for public preview:
 
 - Allow workflow queries on closed workflows to run on newer builds.
 - Ways to more gradually redirect workflows 
@@ -299,7 +300,6 @@ Here are some likely improvements and behavior changes being considered for publ
 - Docs, API improvements, polish.
 - More integration with Temporal UI.
 - Improvements for multi-region namespaces.
-- Improvements and fixes based on your feedback.  Please reach out!
 
 ## Migration Notes
 ### Migrating from Unversioned Task Queue
