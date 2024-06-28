@@ -174,7 +174,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		return
 	}
 
-	r, err = h.parseTlsAndAuthInfo(r, &nc)
+	r, err = h.parseTlsAndAuthInfo(r, nc)
 	if err != nil {
 		h.logger.Error("failed to get claims", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusUnauthorized, &nexus.Failure{Message: "unauthorized"})
@@ -188,7 +188,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		return
 	}
 
-	h.serveResolvedURL(w, r, u)
+	h.serveResolvedURL(w, r, u, nc)
 }
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
@@ -230,7 +230,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		return
 	}
 
-	r, err = h.parseTlsAndAuthInfo(r, &nc)
+	r, err = h.parseTlsAndAuthInfo(r, nc)
 	if err != nil {
 		h.logger.Error("failed to get claims", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusUnauthorized, &nexus.Failure{Message: "unauthorized"})
@@ -244,17 +244,18 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		return
 	}
 
-	h.serveResolvedURL(w, r, u)
+	h.serveResolvedURL(w, r, u, nc)
 }
 
-func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
-	return nexusContext{
+func (h *NexusHTTPHandler) baseNexusContext(apiName string) *nexusContext {
+	return &nexusContext{
 		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
 		apiName:                              apiName,
 		requestStartTime:                     time.Now(),
+		responseHeaders:                      make(map[string]string),
 	}
 }
 
@@ -262,7 +263,7 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
 // endpoint is valid for dispatching.
 // For security reasons, at the moment only worker target endpoints are considered valid, in the future external
 // endpoints may also be supported.
-func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter) (nexusContext, bool) {
+func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter) (*nexusContext, bool) {
 	switch v := entry.Endpoint.Spec.GetTarget().GetVariant().(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
@@ -274,7 +275,7 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 			} else {
 				h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
 			}
-			return nexusContext{}, false
+			return nil, false
 		}
 		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName)
 		nc.namespaceName = nsName.String()
@@ -283,7 +284,7 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 		return nc, true
 	default:
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
-		return nexusContext{}, false
+		return nil, false
 	}
 }
 
@@ -320,10 +321,14 @@ func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext
 		r = r.WithContext(h.auth.EnhanceContext(r.Context(), authInfo, nc.claims))
 	}
 
-	return r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, *nc)), nil
+	return r, nil
 }
 
-func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL) {
+func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL, nc *nexusContext) {
+	// Attach Nexus context to response writer and request context.
+	w = newNexusHTTPResponseWriter(w, nc)
+	r = r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, nc))
+
 	// This whole mess is required to support escaped path vars.
 	prefix, err := url.PathUnescape(u.Path)
 	if err != nil {

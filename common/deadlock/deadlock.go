@@ -34,11 +34,11 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -51,7 +51,7 @@ type (
 		HealthServer   *health.Server
 		MetricsHandler metrics.Handler
 
-		Roots []common.Pingable `group:"deadlockDetectorRoots"`
+		Roots []pingable.Pingable `group:"deadlockDetectorRoots"`
 	}
 
 	config struct {
@@ -67,14 +67,14 @@ type (
 		healthServer   *health.Server
 		metricsHandler metrics.Handler
 		config         config
-		roots          []common.Pingable
+		roots          []pingable.Pingable
 		loops          goro.Group
 	}
 
 	loopContext struct {
 		dd      *deadlockDetector
-		root    common.Pingable
-		ch      chan common.PingCheck
+		root    pingable.Pingable
+		ch      chan pingable.Check
 		workers int32
 	}
 )
@@ -100,7 +100,7 @@ func (dd *deadlockDetector) Start() error {
 		loopCtx := &loopContext{
 			dd:   dd,
 			root: root,
-			ch:   make(chan common.PingCheck),
+			ch:   make(chan pingable.Check),
 		}
 		dd.loops.Go(loopCtx.run)
 	}
@@ -152,7 +152,7 @@ func (lc *loopContext) run(ctx context.Context) error {
 	for {
 		// ping blocks until it has passed all checks to a worker goroutine (using an
 		// unbuffered channel).
-		lc.ping(ctx, []common.Pingable{lc.root})
+		lc.ping(ctx, []pingable.Pingable{lc.root})
 
 		timer := time.NewTimer(lc.dd.config.Interval())
 		select {
@@ -164,7 +164,7 @@ func (lc *loopContext) run(ctx context.Context) error {
 	}
 }
 
-func (lc *loopContext) ping(ctx context.Context, pingables []common.Pingable) {
+func (lc *loopContext) ping(ctx context.Context, pingables []pingable.Pingable) {
 	for _, pingable := range pingables {
 		for _, check := range pingable.GetPingChecks() {
 			select {
@@ -190,7 +190,7 @@ func (lc *loopContext) ping(ctx context.Context, pingables []common.Pingable) {
 
 func (lc *loopContext) worker(ctx context.Context) error {
 	for {
-		var check common.PingCheck
+		var check pingable.Check
 		select {
 		case check = <-lc.ch:
 		case <-ctx.Done():

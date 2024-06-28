@@ -46,31 +46,30 @@ var ErrStateMachineAlreadyExists = errors.New("state machine already exists")
 // ErrIncompatibleType is returned when trying to cast a state machine's data to a type that it is incompatible with.
 var ErrIncompatibleType = errors.New("state machine data was cast into an incompatible type")
 
+// ErrInitialTransitionMismatch is returned when the initial failover version or transition count of a node does not match the incoming node upon sync.
+var ErrInitialTransitionMismatch = errors.New("node initial failover version or transition count mismatch")
+
 // Key is used for looking up a state machine in a [Node].
 type Key struct {
-	// Type ID of the state machine.
-	Type int32
+	// Type of the state machine.
+	Type string
 	// ID of the state machine.
 	ID string
 }
 
-// State machine type.
-type MachineType struct {
-	// Type ID that is used to minimize the persistence storage space and address a machine (see also [Key]).
-	// Type IDs are expected to be immutable as they are used for looking up state machine definitions when loading data
-	// from persistence.
-	ID int32
-	// Human readable name for this type.
-	Name string
-}
-
 // StateMachineDefinition provides type information and a serializer for a state machine.
 type StateMachineDefinition interface {
-	Type() MachineType
+	Type() string
 	// Serialize a state machine into bytes.
 	Serialize(any) ([]byte, error)
 	// Deserialize a state machine from bytes.
 	Deserialize([]byte) (any, error)
+	// CompareState compares two state objects. It should return 0 if the states are equal, a positive number if the
+	// first state is considered newer, a negative number if the second state is considered newer.
+	// TODO: Remove this method and implementations once transition history is fully implemented. For now, we have to
+	// rely on each component to tell the framework which state is newer and if sync state can overwrite the states in
+	// the standby cluster.
+	CompareState(any, any) (int, error)
 }
 
 // cachedMachine contains deserialized data and state for a state machine in a [Node].
@@ -92,8 +91,12 @@ type cachedMachine struct {
 type NodeBackend interface {
 	// AddHistoryEvent adds a history event to be committed at the end of the current transaction.
 	AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
-	// Load a history event by token generated via [GenerateEventLoadToken].
+	// LoadHistoryEvent loads a history event by token generated via [GenerateEventLoadToken].
 	LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+	// GetCurrentVersion returns the current namespace failover version.
+	GetCurrentVersion() int64
+	// TransitionCount returns the current state transition count from the state transition history.
+	TransitionCount() int64
 }
 
 // EventIDFromToken gets the event ID associated with an event load token.
@@ -123,7 +126,7 @@ type Node struct {
 // NewRoot creates a new root [Node].
 // Children may be provided from persistence to rehydrate the tree.
 // Returns [ErrNotRegistered] if the key's type is not registered in the given registry or serialization errors.
-func NewRoot(registry *Registry, t int32, data any, children map[int32]*persistencespb.StateMachineMap, backend NodeBackend) (*Node, error) {
+func NewRoot(registry *Registry, t string, data any, children map[string]*persistencespb.StateMachineMap, backend NodeBackend) (*Node, error) {
 	def, ok := registry.Machine(t)
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, t)
@@ -281,8 +284,11 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		definition: def,
 		registry:   n.registry,
 		persistence: &persistencespb.StateMachineNode{
-			Children: make(map[int32]*persistencespb.StateMachineMap),
-			Data:     serialized,
+			Children:                              make(map[string]*persistencespb.StateMachineMap),
+			Data:                                  serialized,
+			InitialNamespaceFailoverVersion:       n.backend.GetCurrentVersion(),
+			InitialMutableStateTransitionCount:    n.backend.TransitionCount(),
+			LastUpdateMutableStateTransitionCount: n.backend.TransitionCount(),
 		},
 		cache: &cachedMachine{
 			dataLoaded: true,
@@ -298,7 +304,7 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
 		// Children may be nil if the map was empty and the proto message we serialized and deserialized.
 		if n.persistence.Children == nil {
-			n.persistence.Children = make(map[int32]*persistencespb.StateMachineMap, 1)
+			n.persistence.Children = make(map[string]*persistencespb.StateMachineMap, 1)
 		}
 		n.persistence.Children[key.Type] = children
 	}
@@ -341,11 +347,6 @@ func MachineData[T any](n *Node) (T, error) {
 	return t, ErrIncompatibleType
 }
 
-// TransitionCount returns the transition count for the state machine contained in this node.
-func (n *Node) TransitionCount() int64 {
-	return n.persistence.TransitionCount
-}
-
 // CheckRunning has two modes of operation:
 // 1. If the node is **not** attached to a workflow (not yet supported), it returns nil.
 // 2. If the node is attached to a workflow, it verifies that the workflow execution is running, and returns
@@ -372,6 +373,60 @@ func (n *Node) CheckRunning() error {
 	return nil
 }
 
+// InternalRepr returns the internal persistence representation of this node.
+// Meant to be used by the framework, **not** by components.
+func (n *Node) InternalRepr() *persistencespb.StateMachineNode {
+	return n.persistence
+}
+
+// Sync updates the current node with the incoming node if state in the incoming node is newer.
+// Meant to be used by the framework, **not** by components.
+func (n *Node) Sync(incomingNode *Node) (bool, error) {
+	incomingInternalRepr := incomingNode.InternalRepr()
+
+	if n.persistence.InitialNamespaceFailoverVersion != incomingInternalRepr.InitialNamespaceFailoverVersion ||
+		n.persistence.InitialMutableStateTransitionCount != incomingInternalRepr.InitialMutableStateTransitionCount {
+		return false, ErrInitialTransitionMismatch
+	}
+
+	currentState, err := MachineData[any](n)
+	if err != nil {
+		return false, err
+	}
+	incomingState, err := MachineData[any](incomingNode)
+	if err != nil {
+		return false, err
+	}
+
+	if result, err := n.definition.CompareState(currentState, incomingState); err != nil || result >= 0 {
+		return false, err
+	}
+
+	n.persistence.Data = incomingInternalRepr.Data
+	// do not sync children, we are just syncing the current node
+	// do not sync transitionCount, that is cluster local information
+
+	// force reload data
+	n.cache.dataLoaded = false
+
+	// reuse MachineTransition for
+	// - marking the node as dirty
+	// - generate transition outputs (tasks)
+	// - update transition count
+	if err = MachineTransition(n, func(taskRegenerator TaskRegenerator) (TransitionOutput, error) {
+		tasks, err := taskRegenerator.RegenerateTasks(n)
+		return TransitionOutput{
+			Tasks: tasks,
+		}, err
+	}); err != nil {
+		return false, err
+	}
+
+	// sync LastUpdateMutableStateTransitionCount last as MachineTransition can't correctly handle it.
+	n.persistence.LastUpdateMutableStateTransitionCount = incomingInternalRepr.LastUpdateMutableStateTransitionCount
+	return true, nil
+}
+
 // MachineTransition runs the given transitionFn on a machine's data for the given key.
 // It updates the state machine's metadata and marks the entry as dirty in the node's cache.
 // If the transition fails, the changes are rolled back and no state is mutated.
@@ -380,11 +435,22 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	if err != nil {
 		return err
 	}
+	// Update the transition counts before applying the transition function in case the transition function needs to
+	// generate references to this node.
 	n.persistence.TransitionCount++
+	prevMSTransitionCount := n.persistence.LastUpdateMutableStateTransitionCount
+	// The transition count for the backend is only incremented before the current transaction is closed but it is
+	// monotonically increasing so we can safely assume that incrementing by 1 here is safe.
+	currentMutableStateTransitionCount := n.backend.TransitionCount()
+	if currentMutableStateTransitionCount != 0 {
+		// only update when transition history is enabled.
+		n.persistence.LastUpdateMutableStateTransitionCount = n.backend.TransitionCount() + 1
+	}
 	// Rollback on error
 	defer func() {
 		if retErr != nil {
 			n.persistence.TransitionCount--
+			n.persistence.LastUpdateMutableStateTransitionCount = prevMSTransitionCount
 			// Force reloading data.
 			n.cache.dataLoaded = false
 		}
@@ -406,12 +472,12 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 // A Collection of similarly typed sibling state machines.
 type Collection[T any] struct {
 	// The type of machines stored in this collection.
-	Type int32
+	Type string
 	node *Node
 }
 
 // NewCollection creates a new [Collection].
-func NewCollection[T any](node *Node, stateMachineType int32) Collection[T] {
+func NewCollection[T any](node *Node, stateMachineType string) Collection[T] {
 	return Collection[T]{
 		Type: stateMachineType,
 		node: node,

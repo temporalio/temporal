@@ -184,34 +184,34 @@ func (s *predicatesSuite) TestDestinationPredicate_Equals() {
 }
 
 func (s *predicatesSuite) TestStateMachineTaskTypePredicate_Test() {
-	types := []int32{1, 2}
+	groups := []string{"1", "2"}
 
-	p := NewStateMachineTaskTypePredicate(types)
-	for _, t := range types {
+	p := NewOutboundTaskGroupPredicate(groups)
+	for _, t := range groups {
 		mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: t}}}
 		s.True(p.Test(mockTask))
 	}
 
-	mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: 3}}}
+	mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: "3"}}}
 	s.False(p.Test(mockTask))
 }
 
 func (s *predicatesSuite) TestStateMachineTaskTypePredicate_Equals() {
-	types := []int32{1, 2}
+	groups := []string{"1", "2"}
 
-	p := NewStateMachineTaskTypePredicate(types)
+	p := NewOutboundTaskGroupPredicate(groups)
 
 	s.True(p.Equals(p))
-	s.True(p.Equals(NewStateMachineTaskTypePredicate(types)))
+	s.True(p.Equals(NewOutboundTaskGroupPredicate(groups)))
 	rand.Shuffle(
-		len(types),
+		len(groups),
 		func(i, j int) {
-			types[i], types[j] = types[j], types[i]
+			groups[i], groups[j] = groups[j], groups[i]
 		},
 	)
-	s.True(p.Equals(NewStateMachineTaskTypePredicate(types)))
+	s.True(p.Equals(NewOutboundTaskGroupPredicate(groups)))
 
-	s.False(p.Equals(NewStateMachineTaskTypePredicate([]int32{3, 4})))
+	s.False(p.Equals(NewOutboundTaskGroupPredicate([]string{"3", "4"})))
 	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }

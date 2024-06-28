@@ -35,6 +35,7 @@ import (
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -81,7 +82,7 @@ func TestProcessScheduleTask(t *testing.T) {
 		HsmState: enums.SCHEDULER_STATE_WAITING,
 	}}
 
-	node, err := root.AddChild(hsm.Key{Type: scheduler.StateMachineType.ID}, schedulerHsm)
+	node, err := root.AddChild(hsm.Key{Type: scheduler.StateMachineType}, schedulerHsm)
 	require.NoError(t, err)
 	env := fakeEnv{node}
 
@@ -116,7 +117,7 @@ func newRoot(t *testing.T) *hsm.Node {
 	mutableState := newMutableState(t)
 
 	// Backend is nil because we don't need to generate history events for this test.
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap), nil)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	return root
 }

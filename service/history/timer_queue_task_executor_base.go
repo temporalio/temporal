@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -221,7 +222,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 		WorkflowKey:     ms.GetWorkflowKey(),
 		StateMachineRef: timer.Ref,
 	}
-	if err := t.validateStateMachineRef(ms, ref); err != nil {
+	if err := t.validateStateMachineRef(ms, ref, false); err != nil {
 		return err
 	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())
@@ -238,10 +239,17 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 // executeStateMachineTimers gets the state machine timers, processed the expired timers,
 // and return a slice of unprocessed timers.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
-	ctx context.Context,
 	ms workflow.MutableState,
 	execute func(node *hsm.Node, task hsm.Task) error,
 ) (int, error) {
+
+	// need to specifically check for zombie workflows here instead of workflow running
+	// or not since zombie workflows are considered as not running but state machine timers
+	// can target closed workflows.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return 0, consts.ErrWorkflowZombie
+	}
+
 	timers := ms.GetExecutionInfo().StateMachineTimers
 	processedTimers := 0
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.

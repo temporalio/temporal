@@ -15,14 +15,13 @@ ci-build-misc: print-go-version proto bins shell-check copyright-check go-genera
 clean: clean-bins clean-test-results
 	rm -rf $(STAMPDIR)
 	rm -rf $(TEST_OUTPUT_ROOT)
-	rm -rf $(PROTO_OUT)
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: clean-proto lint-protos lint-api protoc service-clients goimports-proto proto-mocks copyright-proto
+proto: lint-protos lint-api protoc service-clients
 ########################################################################
 
-.PHONY: proto proto-mocks protoc install bins ci-build-misc clean
+.PHONY: proto protoc install bins ci-build-misc clean
 
 ##### Arguments ######
 GOOS        ?= $(shell go env GOOS)
@@ -65,7 +64,7 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT := 30m
+TEST_TIMEOUT := 25m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -73,7 +72,6 @@ PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 API_BINPB := $(PROTO_ROOT)/api.binpb
 PROTO_OUT := api
 PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
-PROTO_PATHS = paths=source_relative:$(PROTO_OUT)
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
@@ -229,38 +227,15 @@ rm -rf $${tmpdir} ;\
 endef
 
 ##### Proto #####
-$(PROTO_OUT):
-	@mkdir -p $(PROTO_OUT)
-
-# We depend on gomodtidy to ensure that go.mod is up to date before we delete the generated files
-# in case protogen fails, and we need to rerun it.
-clean-proto: gomodtidy
-	@rm -rf $(PROTO_OUT)/*
-
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
 	@printf $(COLOR) "Generate api.binpb..."
 	@./cmd/tools/getproto/run.sh --out $@
 
-protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
-	@$(PROTOGEN) \
-		--descriptor_set_in=$(API_BINPB) \
-		--root=proto/internal \
-		--rewrite-enum=BuildId_State:BuildId \
-		-p go-grpc_out=$(PROTO_PATHS) \
-		-p go-helpers_out=$(PROTO_PATHS)
-	@mv -f "$(PROTO_OUT)/temporal/server/api/"* "$(PROTO_OUT)"
-
-# All gRPC generated service files paths relative to PROTO_OUT.
-PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go" -o -name "service_grpc.pb.go"))
-service_name = $(firstword $(subst /, ,$(1)))
-mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
-
-proto-mocks: protoc $(MOCKGEN)
-	@printf $(COLOR) "Generate proto mocks..."
-	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
-		@cd $(PROTO_OUT) && \
-		$(ROOT)/$(MOCKGEN) -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
-	$(NEWLINE))
+protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
+	@env \
+		PROTOGEN=$(PROTOGEN) MOCKGEN=$(MOCKGEN) GOIMPORTS=$(GOIMPORTS) \
+		API_BINPB=$(API_BINPB) PROTO_OUT=$(PROTO_OUT) \
+		./develop/protoc.sh
 
 service-clients:
 	@printf $(COLOR) "Generate service clients..."
@@ -269,14 +244,6 @@ service-clients:
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
 	@go get -u go.temporal.io/api@master
-
-goimports-proto: $(GOIMPORTS)
-	@printf $(COLOR) "Run goimports for proto files..."
-	@$(GOIMPORTS) -w $(PROTO_OUT)
-
-copyright-proto:
-	@printf $(COLOR) "Update license headers for proto files..."
-	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT)
 
 ##### Binaries #####
 clean-bins:

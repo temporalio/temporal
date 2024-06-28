@@ -160,7 +160,7 @@ func (f *timerQueueFactory) CreateQueue(
 				namespaceId namespace.ID,
 				workflowId string,
 				runId string,
-				events []*historypb.HistoryEvent,
+				events [][]*historypb.HistoryEvent,
 				versionHistory []*historyspb.VersionHistoryItem,
 			) error {
 				engine, err := shard.GetEngine(ctx)
@@ -176,7 +176,7 @@ func (f *timerQueueFactory) CreateQueue(
 					},
 					nil,
 					versionHistory,
-					[][]*historypb.HistoryEvent{events},
+					events,
 					nil,
 					"",
 				)
@@ -184,6 +184,7 @@ func (f *timerQueueFactory) CreateQueue(
 			shard.GetPayloadSerializer(),
 			f.Config.StandbyTaskReReplicationContextTimeout,
 			logger,
+			f.Config,
 		),
 		f.MatchingRawClient,
 		logger,

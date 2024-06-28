@@ -338,6 +338,8 @@ type (
 		User string `yaml:"user"`
 		// Password is the cassandra password used for authentication by gocql client
 		Password string `yaml:"password"`
+		// AllowedAuthenticators is the optional list of authenticators the gocql client checks before approving the challenge request from the server.
+		AllowedAuthenticators []string `yaml:"allowedAuthenticators"`
 		// keyspace is the cassandra keyspace
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
 		// Datacenter is the data center filter arg for cassandra

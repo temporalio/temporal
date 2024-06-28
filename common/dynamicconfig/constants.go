@@ -514,6 +514,11 @@ is currently processing a task.
 		4*1024,
 		`NexusEndpointExternalURLMaxLength is the maximum length of a Nexus endpoint external target URL.`,
 	)
+	NexusEndpointDescriptionMaxSize = NewNamespaceIntSetting(
+		"limit.endpointDescriptionMaxSize",
+		20000,
+		`Maximum size of Nexus Endpoint description payload in bytes including data and metadata.`,
+	)
 	NexusEndpointListDefaultPageSize = NewGlobalIntSetting(
 		"limit.endpointListDefaultPageSize",
 		100,
@@ -1257,6 +1262,12 @@ timeout timer when execution timeout is specified when starting a workflow.
 For backward compatibility, this feature is disabled by default and should only be enabled after server version
 containing this flag is deployed to all history service nodes in the cluster.`,
 	)
+	EnableTransitionHistory = NewGlobalBoolSetting(
+		"history.enableTransitionHistory",
+		false,
+		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.
+This feature is still under development and should NOT be enabled.`,
+	)
 	HistoryStartupMembershipJoinDelay = NewGlobalDurationSetting(
 		"history.startupMembershipJoinDelay",
 		0*time.Second,
@@ -1830,6 +1841,12 @@ state. The total size is determined by the sum of the size, in bytes, of each Hi
 		5*time.Minute,
 		`ShardUpdateMinInterval is the minimal time interval which the shard info can be updated`,
 	)
+	ShardFirstUpdateInterval = NewGlobalDurationSetting(
+		"history.shardFirstUpdateInterval",
+		10*time.Second,
+		`ShardFirstUpdateInterval is the time interval after which the first shard info update will happen.
+		It should be smaller than ShardUpdateMinInterval`,
+	)
 	ShardUpdateMinTasksCompleted = NewGlobalIntSetting(
 		"history.shardUpdateMinTasksCompleted",
 		1000,
@@ -2027,6 +2044,11 @@ the number of children greater than or equal to this threshold`,
 		`ReplicationEnableUpdateWithNewTaskMerge is the flag controlling whether replication task merging logic
 should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 	)
+	ReplicationMultipleBatches = NewGlobalBoolSetting(
+		"history.ReplicationMultipleBatches",
+		false,
+		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
+	)
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",
 		true,
@@ -2111,6 +2133,11 @@ that task will be sent to DLQ.`,
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
 		50,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
+	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
+		"history.ReplicationResendMaxBatchCount",
+		10,
+		`Maximum number of resend events batch for a single replication request`,
 	)
 
 	// keys for worker

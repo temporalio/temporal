@@ -31,8 +31,11 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	commonpb "go.temporal.io/api/common/v1"
+	"go.uber.org/fx"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
@@ -50,13 +53,13 @@ type CanGetNexusCompletion interface {
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
+type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
 func RegisterExecutor(
 	registry *hsm.Registry,
 	executorOptions TaskExecutorOptions,
-	config *Config,
 ) error {
-	exec := taskExecutor{options: executorOptions, config: config}
+	exec := taskExecutor{executorOptions}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,
 		exec.executeInvocationTask,
@@ -71,14 +74,17 @@ func RegisterExecutor(
 
 type (
 	TaskExecutorOptions struct {
+		fx.In
+
+		Config            *Config
 		NamespaceRegistry namespace.Registry
 		MetricsHandler    metrics.Handler
-		CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
+		Logger            log.Logger
+		CallerProvider    HTTPCallerProvider
 	}
 
 	taskExecutor struct {
-		options TaskExecutorOptions
-		config  *Config
+		TaskExecutorOptions
 	}
 )
 
@@ -88,7 +94,7 @@ func (e taskExecutor) executeInvocationTask(
 	ref hsm.Ref,
 	task InvocationTask,
 ) error {
-	ns, err := e.options.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
+	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
@@ -100,7 +106,7 @@ func (e taskExecutor) executeInvocationTask(
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.config.RequestTimeout(ns.Name().String(), task.Destination),
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
 	)
 	defer cancel()
 
@@ -117,7 +123,7 @@ func (e taskExecutor) executeInvocationTask(
 		)
 	}
 
-	caller := e.options.CallerProvider(queues.NamespaceIDAndDestination{
+	caller := e.CallerProvider(queues.NamespaceIDAndDestination{
 		NamespaceID: ref.WorkflowKey.GetNamespaceID(),
 		Destination: task.Destination,
 	})
@@ -128,8 +134,8 @@ func (e taskExecutor) executeInvocationTask(
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination)
 	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(callCtx, response, callErr))
-	e.options.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
-	e.options.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
+	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
 
 	if callErr == nil {
 		// Body is not read but should be discarded to keep the underlying TCP connection alive.
@@ -138,6 +144,16 @@ func (e taskExecutor) executeInvocationTask(
 		if _, callErr = io.Copy(io.Discard, response.Body); callErr == nil {
 			callErr = response.Body.Close()
 		}
+	}
+
+	if callErr != nil || response.StatusCode >= 400 {
+		status := "unknown"
+		retryable := callErr != nil
+		if response != nil {
+			status = response.Status
+			retryable = isRetryableHTTPResponse(response)
+		}
+		e.Logger.Error("Callback request failed", tag.Error(callErr), tag.NewStringTag("status", status), tag.NewBoolTag("retryable", retryable))
 	}
 
 	err = e.saveResult(ctx, env, ref, response, callErr)
@@ -173,8 +189,8 @@ func (e taskExecutor) loadInvocationArgs(
 		if err != nil {
 			return err
 		}
-		switch variant := callback.PublicInfo.GetCallback().GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
+		switch variant := callback.GetCallback().GetVariant().(type) {
+		case *persistencespb.Callback_Nexus_:
 			args.url = variant.Nexus.GetUrl()
 			args.header = variant.Nexus.GetHeader()
 			args.completion, err = target.GetNexusCompletion(ctx)
@@ -215,7 +231,7 @@ func (e taskExecutor) saveResult(
 			return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
 				Time:        env.Now(),
 				Err:         callErr,
-				RetryPolicy: e.config.RetryPolicy(),
+				RetryPolicy: e.Config.RetryPolicy(),
 			})
 		})
 	})

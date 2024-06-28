@@ -413,8 +413,8 @@ func (p *queueBase) updateQueueState(
 
 func (p *queueBase) resetCheckpointTimer(checkPointErr error) {
 	if checkPointErr != nil {
-		backoff := p.checkpointRetrier.NextBackOff()
-		p.checkpointTimer.Reset(backoff)
+		delay := p.checkpointRetrier.NextBackOff(checkPointErr)
+		p.checkpointTimer.Reset(delay)
 		return
 	}
 

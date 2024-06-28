@@ -83,7 +83,7 @@ func TestGet(t *testing.T) {
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry, endpoint)
 
-	endpoint, err = reg.GetByName(context.Background(), testEntry.Endpoint.Spec.Name)
+	endpoint, err = reg.GetByName(context.Background(), "ignored", testEntry.Endpoint.Spec.Name)
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry, endpoint)
 
@@ -124,7 +124,7 @@ func TestGetNotFound(t *testing.T) {
 	assert.ErrorAs(t, err, &notFound)
 	assert.Nil(t, endpoint)
 
-	endpoint, err = reg.GetByName(context.Background(), uuid.NewString())
+	endpoint, err = reg.GetByName(context.Background(), "ignored", uuid.NewString())
 	assert.ErrorAs(t, err, &notFound)
 	assert.Nil(t, endpoint)
 

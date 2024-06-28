@@ -151,23 +151,23 @@ func convertActivityStateReplicationTask(
 				SourceTaskId: taskInfo.TaskID,
 				Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 					SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-						NamespaceId:        taskInfo.NamespaceID,
-						WorkflowId:         taskInfo.WorkflowID,
-						RunId:              taskInfo.RunID,
-						Version:            activityInfo.Version,
-						ScheduledEventId:   activityInfo.ScheduledEventId,
-						ScheduledTime:      activityInfo.ScheduledTime,
-						StartedEventId:     activityInfo.StartedEventId,
-						StartedTime:        startedTime,
-						LastHeartbeatTime:  activityInfo.LastHeartbeatUpdateTime,
-						Details:            activityInfo.LastHeartbeatDetails,
-						Attempt:            activityInfo.Attempt,
-						LastFailure:        activityInfo.RetryLastFailure,
-						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						LastStartedBuildId: lastStartedBuildId,
+						NamespaceId:                taskInfo.NamespaceID,
+						WorkflowId:                 taskInfo.WorkflowID,
+						RunId:                      taskInfo.RunID,
+						Version:                    activityInfo.Version,
+						ScheduledEventId:           activityInfo.ScheduledEventId,
+						ScheduledTime:              activityInfo.ScheduledTime,
+						StartedEventId:             activityInfo.StartedEventId,
+						StartedTime:                startedTime,
+						LastHeartbeatTime:          activityInfo.LastHeartbeatUpdateTime,
+						Details:                    activityInfo.LastHeartbeatDetails,
+						Attempt:                    activityInfo.Attempt,
+						LastFailure:                activityInfo.RetryLastFailure,
+						LastWorkerIdentity:         activityInfo.RetryLastWorkerIdentity,
+						LastStartedBuildId:         lastStartedBuildId,
 						LastStartedRedirectCounter: activityInfo.GetUseWorkflowBuildIdInfo().GetLastRedirectCounter(),
-						BaseExecutionInfo:  persistence.CopyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
-						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
+						BaseExecutionInfo:          persistence.CopyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
+						VersionHistory:             versionhistory.CopyVersionHistory(currentVersionHistory),
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -207,6 +207,45 @@ func convertWorkflowStateReplicationTask(
 	)
 }
 
+func convertSyncHSMReplicationTask(
+	ctx context.Context,
+	shardContext shard.Context,
+	taskInfo *tasks.SyncHSMTask,
+	workflowCache wcache.Cache,
+) (*replicationspb.ReplicationTask, error) {
+	return generateStateReplicationTask(
+		ctx,
+		shardContext,
+		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+		workflowCache,
+		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
+			// HSM can be updated after workflow is completed
+			// so no check on workflow state here.
+
+			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+			if err != nil {
+				return nil, err
+			}
+
+			return &replicationspb.ReplicationTask{
+				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
+				SourceTaskId: taskInfo.TaskID,
+				Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{
+					SyncHsmAttributes: &replicationspb.SyncHSMAttributes{
+						NamespaceId:      taskInfo.NamespaceID,
+						WorkflowId:       taskInfo.WorkflowID,
+						RunId:            taskInfo.RunID,
+						VersionHistory:   currentVersionHistory,
+						StateMachineNode: mutableState.HSM().InternalRepr(),
+					},
+				},
+				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
+			}, nil
+		},
+	)
+}
+
 func convertHistoryReplicationTask(
 	ctx context.Context,
 	shardContext shard.Context,
@@ -216,6 +255,7 @@ func convertHistoryReplicationTask(
 	eventBlobCache persistence.XDCCache,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
+	config *configs.Config,
 ) (*replicationspb.ReplicationTask, error) {
 	currentVersionHistory, currentEvents, currentBaseWorkflowInfo, err := getVersionHistoryAndEvents(
 		ctx,
@@ -236,6 +276,18 @@ func convertHistoryReplicationTask(
 	if currentVersionHistory == nil {
 		return nil, nil
 	}
+
+	var events *commonpb.DataBlob
+	var eventsBatches []*commonpb.DataBlob
+	if config.ReplicationMultipleBatches() {
+		eventsBatches = currentEvents
+	} else {
+		if len(currentEvents) != 1 {
+			return nil, serviceerror.NewInternal("replicatorQueueProcessor encountered more than 1 NDC raw event batch")
+		}
+		events = currentEvents[0]
+	}
+
 	var newEvents *commonpb.DataBlob
 	if len(taskInfo.NewRunID) != 0 {
 		newVersionHistory, newEventBlob, _, err := getVersionHistoryAndEvents(
@@ -256,8 +308,11 @@ func convertHistoryReplicationTask(
 		if err != nil {
 			return nil, err
 		}
+		if len(newEventBlob) != 1 {
+			return nil, serviceerror.NewInternal("replicatorQueueProcessor encountered more than 1 NDC raw event batch for new run")
+		}
 		if newVersionHistory != nil {
-			newEvents = newEventBlob
+			newEvents = newEventBlob[0]
 		}
 	}
 
@@ -271,7 +326,8 @@ func convertHistoryReplicationTask(
 				RunId:               taskInfo.RunID,
 				BaseExecutionInfo:   currentBaseWorkflowInfo,
 				VersionHistoryItems: currentVersionHistory,
-				Events:              currentEvents,
+				Events:              events,
+				EventsBatches:       eventsBatches,
 				NewRunEvents:        newEvents,
 				NewRunId:            taskInfo.NewRunID,
 			},
@@ -325,7 +381,7 @@ func getVersionHistoryAndEvents(
 	eventBlobCache persistence.XDCCache,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
-) ([]*historyspb.VersionHistoryItem, *commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
+) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
 	if eventBlobCache != nil {
 		if xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(
 			workflowKey,
@@ -333,7 +389,7 @@ func getVersionHistoryAndEvents(
 			nextEventID,
 			eventVersion,
 		)); ok {
-			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlob, xdcCacheValue.BaseWorkflowInfo, nil
+			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlobs, xdcCacheValue.BaseWorkflowInfo, nil
 		}
 	}
 	versionHistory, branchToken, baseWorkflowInfo, err := getBranchToken(
@@ -350,11 +406,11 @@ func getVersionHistoryAndEvents(
 	if versionHistory == nil {
 		return nil, nil, nil, nil
 	}
-	events, err := getEventsBlob(ctx, shardID, branchToken, firstEventID, nextEventID, executionManager)
+	eventBatches, err := getEventsBlob(ctx, shardID, branchToken, firstEventID, nextEventID, executionManager)
 	if err != nil {
 		return nil, nil, nil, convertGetHistoryError(workflowKey, logger, err)
 	}
-	return versionHistory, events, baseWorkflowInfo, nil
+	return versionHistory, eventBatches, baseWorkflowInfo, nil
 }
 
 func getBranchToken(
@@ -398,7 +454,7 @@ func getEventsBlob(
 	firstEventID int64,
 	nextEventID int64,
 	executionManager persistence.ExecutionManager,
-) (*commonpb.DataBlob, error) {
+) ([]*commonpb.DataBlob, error) {
 	var eventBatchBlobs []*commonpb.DataBlob
 	var pageToken []byte
 	req := &persistence.ReadHistoryBranchRequest{
@@ -424,11 +480,7 @@ func getEventsBlob(
 		}
 	}
 
-	if len(eventBatchBlobs) != 1 {
-		return nil, serviceerror.NewInternal("replicatorQueueProcessor encountered more than 1 NDC raw event batch")
-	}
-
-	return eventBatchBlobs[0], nil
+	return eventBatchBlobs, nil
 }
 
 func convertGetHistoryError(

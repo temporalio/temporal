@@ -471,6 +471,23 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			},
 		}, nil
 
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
+		taskAttributes := replicationTask.GetSyncHsmAttributes()
+
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
+			SourceClusterName: p.sourceCluster,
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId:    taskAttributes.GetNamespaceId(),
+				WorkflowId:     taskAttributes.GetWorkflowId(),
+				RunId:          taskAttributes.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+				VisibilityTime: replicationTask.GetVisibilityTime(),
+			},
+		}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown replication task type: %v", replicationTask.TaskType)
 	}
@@ -551,7 +568,8 @@ func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		metrics.ServiceErrNotFoundCounter.With(metricsScope).Record(1)
 	case *serviceerror.ResourceExhausted:
-		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
 	case *serviceerrors.RetryReplication:
 		metrics.ServiceErrRetryTaskCounter.With(metricsScope).Record(1)
 	default:

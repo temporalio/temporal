@@ -73,26 +73,27 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	var taskType string
-	ref, smt, err := stateMachineTask(e.shardContext, task)
-	if err != nil {
-		taskType = "StandbyUnknownOutbound"
-	} else {
-		taskType = "Standby." + smt.Type().Name
-	}
-
-	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(e.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType),
-	}
-
-	if err != nil {
+	taskType := queues.GetOutboundTaskTypeTagValue(task, false)
+	respond := func(err error) queues.ExecuteResponse {
+		metricsTags := []metrics.Tag{
+			getNamespaceTagByID(e.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
+			metrics.TaskTypeTag(taskType),
+			metrics.OperationTag(taskType),
+		}
 		return queues.ExecuteResponse{
 			ExecutionMetricTags: metricsTags,
 			ExecutedAsActive:    false,
 			ExecutionErr:        err,
 		}
+	}
+
+	ref, smt, err := stateMachineTask(e.shardContext, task)
+	if err != nil {
+		return respond(err)
+	}
+
+	if err := validateTaskByClock(e.shardContext, task); err != nil {
+		return respond(err)
 	}
 
 	actionFn := func(ctx context.Context) (any, error) {
@@ -120,7 +121,6 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	err = e.processTask(
 		ctx,
 		task,
-		ref,
 		actionFn,
 		getStandbyPostActionFn(
 			task,
@@ -132,17 +132,12 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		),
 	)
 
-	return queues.ExecuteResponse{
-		ExecutionMetricTags: metricsTags,
-		ExecutedAsActive:    false,
-		ExecutionErr:        err,
-	}
+	return respond(err)
 }
 
 func (e *outboundQueueStandbyTaskExecutor) processTask(
 	ctx context.Context,
 	task tasks.Task,
-	ref hsm.Ref,
 	actionFn func(context.Context) (any, error),
 	postActionFn standbyPostActionFn,
 ) (retError error) {

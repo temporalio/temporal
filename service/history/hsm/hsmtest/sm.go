@@ -24,6 +24,7 @@ package hsmtest
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/service/history/hsm"
@@ -76,14 +77,12 @@ func (d *Data) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 }
 
 type Definition struct {
-	typeID int32
-	name   string
+	typeName string
 }
 
-func NewDefinition(typeID int32) Definition {
+func NewDefinition(typeName string) Definition {
 	return Definition{
-		typeID: typeID,
-		name:   fmt.Sprintf("test-%d", typeID),
+		typeName: typeName,
 	}
 }
 
@@ -101,9 +100,20 @@ func (d Definition) Serialize(s any) ([]byte, error) {
 }
 
 // Type implements hsm.StateMachineDefinition.
-func (d Definition) Type() hsm.MachineType {
-	return hsm.MachineType{
-		ID:   d.typeID,
-		Name: d.name,
+func (d Definition) Type() string {
+	return d.typeName
+}
+
+func (d Definition) CompareState(s1 any, s2 any) (int, error) {
+	t1, ok := s1.(*Data)
+	if !ok {
+		return 0, errInvalidStateType
 	}
+
+	t2, ok := s2.(*Data)
+	if !ok {
+		return 0, errInvalidStateType
+	}
+
+	return strings.Compare(string(t1.State()), string(t2.State())), nil
 }

@@ -29,20 +29,10 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-const (
-	TaskTypeID   = int32(4321)
-	TaskTypeName = "test-task-type-name"
-)
+const TaskType = "test-task-type-name"
 
 var (
 	errInvalidTaskType = fmt.Errorf("invalid task type")
-)
-
-var (
-	TaskType = hsm.TaskType{
-		ID:   TaskTypeID,
-		Name: TaskTypeName,
-	}
 )
 
 type Task struct {
@@ -60,7 +50,7 @@ func NewTask(
 	}
 }
 
-func (t *Task) Type() hsm.TaskType {
+func (t *Task) Type() string {
 	return TaskType
 }
 
