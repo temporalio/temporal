@@ -909,6 +909,7 @@ func (c *temporalImpl) newRPCFactory(
 		tlsConfigProvider,
 		membership.MakeResolverURL(primitives.FrontendService),
 		membership.MakeResolverURL(primitives.FrontendService),
+		int(httpPort),
 		frontendTLSConfig,
 		nil,
 		monitor,
