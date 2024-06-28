@@ -191,8 +191,26 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	// Now failover, and let cluster2 be the active.
 	s.failover(ns, s.clusterNames[1], 2, s.cluster1.GetFrontendClient())
 
+	s.NoError(sdkClient2.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "dont-care", nil))
+
+	pollRes = s.pollWorkflowTask(ctx, s.cluster2.GetFrontendClient(), ns)
+
 	// Unblock nexus operation start after failover.
 	failStartOperation.Store(false)
+
+	s.Eventually(func() bool {
+		describeRes, err := sdkClient2.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		s.Equal(1, len(describeRes.PendingNexusOperations))
+		op := describeRes.PendingNexusOperations[0]
+		return op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
+	}, time.Second*10, time.Millisecond*100)
+
+	_, err = s.cluster2.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: pollRes.TaskToken,
+		Commands:  []*commandpb.Command{}, // No need to generate other commands, this "workflow" just waits for the operation to complete.
+	})
+	s.NoError(err)
 
 	// Poll in cluster2 (previously standby) and verify the operation was started.
 	pollRes = s.pollWorkflowTask(ctx, s.cluster2.GetFrontendClient(), ns)
