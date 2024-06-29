@@ -1,0 +1,10 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+"executions [type 'transfer_task']": {
+    shape: sql_table
+    shard_id: int { constraint: PK }
+    type: int { constraint: PK }
+    task_id: int { constraint: PK }
+    transfer: blob
+}
