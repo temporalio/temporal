@@ -99,11 +99,22 @@ type (
 		// all clusters can do namespace failover.
 		MasterClusterName string `yaml:"masterClusterName"`
 		// CurrentClusterName is the name of the current cluster.
-		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterInformation is a map from cluster name to corresponding information for each registered cluster.
-		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
+		CurrentClusterName     string `yaml:"currentClusterName"`
+		InitialFailoverVersion int64  `yaml:"initialFailoverVersion"`
+		// RPCAddress indicate the remote service address(Host:Port). Host can be DNS name.
+		RPCAddress string `yaml:"rpcAddress"`
+		// HTTPAddress indicates the address of the [go.temporal.io/server/service/frontend.HTTPAPIServer].
+		// E.g. "localhost:7243".
+		HTTPAddress string `yaml:"httpAddress"`
+		// ClusterID allows to explicitly set the ID of the cluster. Optional.
+		ClusterID string `yaml:"-"`
 		// Tags contains customized tags for the current cluster.
 		Tags map[string]string `yaml:"tags"`
+	}
+
+	ClusterMap struct {
+		// ClusterInformation is a map from cluster name to corresponding information for each registered cluster.
+		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
 	}
 
 	// ClusterInformation contains information for a single cluster.
@@ -209,6 +220,7 @@ func NewMetadata(
 
 func NewMetadataFromConfig(
 	config *Config,
+	clusterMap *ClusterMap,
 	clusterMetadataStore persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
 	logger log.Logger,
@@ -218,7 +230,7 @@ func NewMetadataFromConfig(
 		config.FailoverVersionIncrement,
 		config.MasterClusterName,
 		config.CurrentClusterName,
-		config.ClusterInformation,
+		clusterMap.ClusterInformation,
 		clusterMetadataStore,
 		dynamicconfig.ClusterMetadataRefreshInterval.Get(dynamicCollection),
 		logger,
