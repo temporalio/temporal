@@ -3573,6 +3573,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Lost
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted`, task.History)
@@ -3591,15 +3593,16 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Lost
 		msgHandlerCalls++
 		switch msgHandlerCalls {
 		case 1:
+			s.Empty(task.Messages)
 			return nil, nil
-		case 2:
+		case 2: // first try, pre-shard closure
 			updRequestMsg := task.Messages[0]
 			s.EqualValues(5, updRequestMsg.GetEventId())
-
 			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
-		case 3:
-			s.Empty(task.Messages, "update must be lost due to shard reload")
-			return nil, nil
+		case 3: // second try, post-shard closure
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(6, updRequestMsg.GetEventId())
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
 			return nil, nil
@@ -3620,6 +3623,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Lost
 	// Drain first WT.
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
+	s.Equal(1, wtHandlerCalls)
+	s.Equal(1, msgHandlerCalls)
 
 	updateResultCh := make(chan struct{})
 	updateWorkflowFn := func() {
@@ -3652,6 +3657,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Lost
 	s.ErrorContains(err, "Workflow task not found")
 
 	<-updateResultCh
+	s.Equal(2, wtHandlerCalls)
+	s.Equal(2, msgHandlerCalls)
 
 	// Send signal to schedule new WT.
 	err = s.sendSignal(s.namespace, tv.WorkflowExecution(), tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
@@ -3750,10 +3757,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResur
 
 	updateResultCh := make(chan struct{})
 	updateWorkflowFn := func() {
-		halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
-		defer cancel()
-
-		updateResponse, err1 := s.engine.UpdateWorkflowExecution(halfSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+		updateResp, err1 := s.engine.UpdateWorkflowExecution(NewContext(), &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.namespace,
 			WorkflowExecution: tv.WorkflowExecution(),
 			Request: &updatepb.Request{
@@ -3764,12 +3768,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResur
 				},
 			},
 		})
-
-		// Even if update was resurrected on server and completed, original initiator
-		// lost connection to it and times out. Following poll for update results returns them right away.
-		assert.Error(s.T(), err1)
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
-		assert.Nil(s.T(), updateResponse)
+		s.NoError(err1)
+		s.NotNil(updateResp)
+		s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, updateResp.GetOutcome().GetSuccess()))
 
 		updateResultCh <- struct{}{}
 	}
@@ -3782,13 +3783,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResur
 	res, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
 	s.NoError(err)
 	s.NotNil(res)
+	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 	<-updateResultCh
-	pollResult, err := s.pollUpdate(tv, "1", &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-	s.NoError(err)
-	s.NotNil(pollResult)
-	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, pollResult.GetOutcome().GetSuccess()))
-	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 	// Signal to create new WFT which shouldn't get any updates.
 	err = s.sendSignal(s.namespace, tv.WorkflowExecution(), tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
@@ -5205,3 +5202,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOfAdmi
 	s.NoError(err)
 	s.Equal(1, nCalls)
 }
+
+//func (s *FunctionalSuite) TestUpdateWorkflow_AbortUpdateWhenShardCloses() {
+//	tv := testvars.New(s.T())
+//
+//	s.closeShard(tv.WorkflowID())
+//}

@@ -104,3 +104,11 @@ type Entry interface {
 	// CreateTime represents the time when the entry is created
 	CreateTime() time.Time
 }
+
+type PutCallback interface {
+	OnPut()
+}
+
+type EvictCallback interface {
+	OnEvict()
+}
