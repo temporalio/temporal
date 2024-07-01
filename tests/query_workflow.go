@@ -27,13 +27,12 @@ package tests
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -181,8 +180,10 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.testName, func(t *testing.T) {
+			stv := testvars.New(t)
+			r := require.New(t)
 			workflowOptions := sdkclient.StartWorkflowOptions{
-				ID:         tv.WorkflowID(t.Name()),
+				ID:         stv.WorkflowID(),
 				TaskQueue:  s.taskQueue,
 				StartDelay: tc.startDelay,
 			}
@@ -192,21 +193,22 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*tc.contextTimeout)
 			defer cancel()
 
-			t.Log(fmt.Sprintf("Start workflow with delay %v", tc.startDelay))
+			t.Logf("Start workflow with delay %v", tc.startDelay)
 			workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-			assert.NoError(t, err, "Start workflow failed")
-			assert.NotNil(t, workflowRun)
-			assert.NotEmpty(t, workflowRun.GetRunID())
+			r.NoError(err, "Start workflow failed")
+			r.NotNil(workflowRun)
+			r.NotEmpty(workflowRun.GetRunID())
+			stv = stv.WithRunID(workflowRun.GetRunID())
 
-			queryResp, err := s.sdkClient.QueryWorkflow(ctx, tv.WorkflowID(t.Name()), workflowRun.GetRunID(), tv.QueryType())
+			queryResp, err := s.sdkClient.QueryWorkflow(ctx, stv.WorkflowID(), stv.RunID(), tv.QueryType())
 
 			if tc.err != nil {
-				assert.Error(t, err)
-				assert.ErrorContains(t, err, tc.err.Error())
-				assert.Nil(t, queryResp)
+				r.Error(err)
+				r.ErrorContains(err, tc.err.Error())
+				r.Nil(queryResp)
 			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, queryResp)
+				r.NoError(err)
+				r.NotNil(queryResp)
 			}
 		})
 	}
