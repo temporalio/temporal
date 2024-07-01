@@ -81,7 +81,6 @@ type (
 		archivalNamespace      string
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 		hostPort               string
-		isElasticsearchEnabled bool
 	}
 	// TestClusterParams contains the variables which are used to configure test suites via the Option type.
 	TestClusterParams struct {
@@ -162,20 +161,6 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.httpAPIAddress = cluster.host.FrontendHTTPAddress()
 	}
 
-	if UsingSQLAdvancedVisibility() {
-		s.setupSuite("testdata/cluster.yaml")
-		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
-		s.isElasticsearchEnabled = false
-	} else {
-		s.setupSuite("testdata/es_cluster.yaml")
-		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
-		s.isElasticsearchEnabled = true
-		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
-		// but returns error if page size on request is greater than defaultPageSize.
-		// Probably can be removed and replaced with assert on items count in response.
-		s.updateMaxResultWindow()
-	}
-
 	s.namespace = s.randomizeStr("functional-test-namespace")
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.namespace))
 
@@ -185,6 +170,10 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	if clusterConfig.EnableArchival {
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
+	}
+
+	if !UsingSQLAdvancedVisibility() {
+		s.waitForESReady()
 	}
 }
 
@@ -446,26 +435,11 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 	return err
 }
 
-func (s *FunctionalTestBase) updateMaxResultWindow() {
-	esConfig := s.testClusterConfig.ESConfig
-
-	esClient, err := esclient.NewFunctionalTestsClient(esConfig, s.Logger)
+func (s *FunctionalTestBase) waitForESReady() {
+	esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
 	s.Require().NoError(err)
-
-	acknowledged, err := esClient.IndexPutSettings(
-		context.Background(),
-		esConfig.GetVisibilityIndex(),
-		fmt.Sprintf(`{"max_result_window" : %d}`, defaultPageSize))
-	s.Require().NoError(err)
-	s.Require().True(acknowledged)
-
-	for i := 0; i < numOfRetry; i++ {
-		settings, err := esClient.IndexGetSettings(context.Background(), esConfig.GetVisibilityIndex())
-		s.Require().NoError(err)
-		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(defaultPageSize) {
-			return
-		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
-	}
-	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
+	s.Eventuallyf(func() bool {
+		exists, esErr := esClient.IndexExists(context.Background(), s.testClusterConfig.ESConfig.GetVisibilityIndex())
+		return esErr == nil && exists
+	}, 1*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }
