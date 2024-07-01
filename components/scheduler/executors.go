@@ -195,6 +195,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 			return err
 		}
 		// All updates should touch at least one of these two fields
+		// TODO(Tianyu): As we implement capabilities to update args from user side, we need to potentially merge state using custom logic instead of just failing
 		if sPtr.HsmState != s.HsmState || sPtr.HsmSchedulerState != prevArgs {
 			return ErrSchedulerConflict
 		}
@@ -426,8 +427,6 @@ func (e taskExecutor) terminateWorkflow(
 	s *Scheduler,
 	ex *commonpb.WorkflowExecution) {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
-	// TODO(Tianyu): hardcoded wait time
-
 	rreq := &historyservice.TerminateWorkflowExecutionRequest{
 		NamespaceId: s.Args.State.NamespaceId,
 		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
