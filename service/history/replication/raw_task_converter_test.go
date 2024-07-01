@@ -963,6 +963,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 			},
 		},
 	}
+	s.mutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
@@ -1006,5 +1007,53 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 	}, result)
+	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
+	ctx := context.Background()
+	taskID := int64(1444)
+	version := int64(288)
+	task := &tasks.SyncHSMTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID,
+			s.workflowID,
+			s.runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+	}
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(),
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.runID,
+		},
+		workflow.LockPriorityLow,
+	).Return(s.workflowContext, s.releaseFn, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
+
+	s.mutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
+	s.mutableState.EXPECT().GetCurrentVersion().Return(version).AnyTimes()
+	s.mutableState.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes()
+
+	reg := s.shardContext.StateMachineRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	stateMachineDef := hsmtest.NewDefinition("test")
+	err = reg.RegisterMachine(stateMachineDef)
+	s.NoError(err)
+
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, s.mutableState, make(map[string]*persistencespb.StateMachineMap), s.mutableState)
+	s.NoError(err)
+	_, err = root.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
+	s.NoError(err)
+	s.mutableState.EXPECT().HSM().Return(root).AnyTimes()
+
+	result, err := convertSyncHSMReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	s.NoError(err)
+	s.Nil(result)
 	s.True(s.lockReleased)
 }
