@@ -79,7 +79,6 @@ type AdvancedVisibilitySuite struct {
 	protorequire.ProtoAssertions
 	historyrequire.HistoryRequire
 	FunctionalTestBase
-	isElasticsearchEnabled bool
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
