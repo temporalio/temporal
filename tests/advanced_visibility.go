@@ -48,17 +48,17 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/common/testing/historyrequire"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -100,20 +100,6 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.BuildIdScavengerEnabled.Key():                    true,
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
-	}
-
-	if UsingSQLAdvancedVisibility() {
-		s.setupSuite("testdata/cluster.yaml")
-		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
-		s.isElasticsearchEnabled = false
-	} else {
-		s.setupSuite("testdata/es_cluster.yaml")
-		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
-		s.isElasticsearchEnabled = true
-		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
-		// but returns error if page size on request is greater than defaultPageSize.
-		// Probably can be removed and replaced with assert on items count in response.
-		s.updateMaxResultWindow()
 	}
 
 	clientAddr := "127.0.0.1:7134"
@@ -2691,28 +2677,4 @@ func (s *AdvancedVisibilitySuite) getBuildIds(ctx context.Context, execution *co
 	err = payload.Decode(attr, &buildIDs)
 	s.NoError(err)
 	return buildIDs
-}
-
-func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
-	esConfig := s.testClusterConfig.ESConfig
-
-	esClient, err := esclient.NewFunctionalTestsClient(esConfig, s.Logger)
-	s.Require().NoError(err)
-
-	acknowledged, err := esClient.IndexPutSettings(
-		context.Background(),
-		esConfig.GetVisibilityIndex(),
-		fmt.Sprintf(`{"max_result_window" : %d}`, defaultPageSize))
-	s.Require().NoError(err)
-	s.Require().True(acknowledged)
-
-	for i := 0; i < numOfRetry; i++ {
-		settings, err := esClient.IndexGetSettings(context.Background(), esConfig.GetVisibilityIndex())
-		s.Require().NoError(err)
-		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(defaultPageSize) {
-			return
-		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
-	}
-	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
 }
