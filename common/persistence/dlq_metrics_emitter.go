@@ -102,31 +102,35 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 			if !s.shouldEmitMetrics() {
 				continue
 			}
-			categories := s.taskCategoryRegistry.GetCategories()
-			messageCounts := make(map[int]int64)
-			for category := range categories {
-				messageCounts[category] = 0
-			}
-			queues, err := s.getDLQList()
-			if err != nil {
-				s.logger.Error("Failed to list DLQs to emit metrics", tag.Error(err))
-				continue
-			}
-			for _, q := range queues {
-				category, err := GetHistoryTaskQueueCategoryID(q.QueueName)
-				if err != nil {
-					s.logger.Error("Failed to process DLQ queue name", tag.Error(err))
-				}
-				messageCounts[category] += q.MessageCount
-			}
-			for id, count := range messageCounts {
-				category, ok := categories[id]
-				if !ok {
-					s.logger.Error("Failed to find category from ID", tag.TaskCategoryID(id))
-				}
-				metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(category.Name()))
-			}
+			s.emitMetrics()
 		}
+	}
+}
+
+func (s *DLQMetricsEmitter) emitMetrics() {
+	categories := s.taskCategoryRegistry.GetCategories()
+	messageCounts := make(map[int]int64)
+	for category := range categories {
+		messageCounts[category] = 0
+	}
+	queues, err := s.getDLQList()
+	if err != nil {
+		s.logger.Error("Failed to list DLQs to emit metrics", tag.Error(err))
+		return
+	}
+	for _, q := range queues {
+		category, err := GetHistoryTaskQueueCategoryID(q.QueueName)
+		if err != nil {
+			s.logger.Error("Failed to process DLQ queue name", tag.Error(err))
+		}
+		messageCounts[category] += q.MessageCount
+	}
+	for id, count := range messageCounts {
+		category, ok := categories[id]
+		if !ok {
+			s.logger.Error("Failed to find category from ID", tag.TaskCategoryID(id))
+		}
+		metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(category.Name()))
 	}
 }
 

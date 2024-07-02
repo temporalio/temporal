@@ -87,7 +87,9 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 
 	messageCount := make(map[string]float64)
 	for _, recording := range snapshot[metrics.DLQMessageCount.Name()] {
-		messageCount[recording.Tags[metrics.TaskCategoryTagName]] = recording.Value.(float64)
+		value, ok := recording.Value.(float64)
+		assert.True(t, ok)
+		messageCount[recording.Tags[metrics.TaskCategoryTagName]] = value
 	}
 	assert.Equal(t, float64(9), messageCount["transfer"])
 	assert.Equal(t, float64(11), messageCount["timer"])
