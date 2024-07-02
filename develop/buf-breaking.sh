@@ -48,14 +48,15 @@ $MAKE "$INTERNAL_BINPB"
 tmp=$(mktemp --tmpdir -d temporal-buf-breaking.XXXXXXXXX)
 trap 'rm -rf $tmp' EXIT
 
-color "Cloning repo to temp dir..."
-git clone . "$tmp"
 if [[ $PR_BASE_COMMIT != $MAIN_BRANCH ]]; then
   # We're running in GHA, using shallow clone. Fetch some commits from the PR
   # base so we can try to find the merge base.
   color "Fetching more commits from $PR_BASE_COMMIT..."
-  git -C "$tmp" fetch --no-tags --prune --no-recurse-submodules --depth=100 origin $PR_BASE_COMMIT
+  git fetch --no-tags --no-recurse-submodules --depth=100 origin $PR_BASE_COMMIT
 fi
+
+color "Cloning repo to temp dir..."
+git clone . "$tmp"
 
 check_against_commit() {
   local commit=$1 name=$2
