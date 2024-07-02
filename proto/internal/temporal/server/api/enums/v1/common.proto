@@ -42,8 +42,9 @@ enum SchedulerState {
     // Default value, unspecified state.
     SCHEDULER_STATE_UNSPECIFIED = 0;
     // Scheduler is waiting to be activated after the specified amount of time.
-    // TODO(Tianyu): Add more state in the future
     SCHEDULER_STATE_WAITING = 1;
+    // Scheduler is actively executing logic.
+    SCHEDULER_STATE_EXECUTING = 2;
 }
 
 // State of a callback.
