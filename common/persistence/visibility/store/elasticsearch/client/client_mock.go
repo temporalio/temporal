@@ -654,3 +654,18 @@ func (mr *MockIntegrationTestsClientMockRecorder) PutMapping(ctx, index, mapping
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockIntegrationTestsClient)(nil).PutMapping), ctx, index, mapping)
 }
+
+// WaitForYellowStatus mocks base method.
+func (m *MockIntegrationTestsClient) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForYellowStatus", ctx, index)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForYellowStatus indicates an expected call of WaitForYellowStatus.
+func (mr *MockIntegrationTestsClientMockRecorder) WaitForYellowStatus(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockIntegrationTestsClient)(nil).WaitForYellowStatus), ctx, index)
+}
