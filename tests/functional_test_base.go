@@ -439,7 +439,6 @@ func (s *FunctionalTestBase) waitForESReady() {
 	esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
 	s.Require().NoError(err)
 	s.Eventuallyf(func() bool {
-		exists, esErr := esClient.IndexExists(context.Background(), s.testClusterConfig.ESConfig.GetVisibilityIndex())
-		return esErr == nil && exists
+		return esClient.Ping(context.Background()) == nil
 	}, 1*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }
