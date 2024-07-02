@@ -25,7 +25,6 @@
 package tests
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -105,10 +105,11 @@ func (s *namespaceTestSuite) SetupSuite() {
 
 	if !UsingSQLAdvancedVisibility() {
 		s.Require().EventuallyWithTf(func(t *assert.CollectT) {
-			_, err := s.frontendClient.ListWorkflowExecutions(context.Background(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: "any",
-			})
+			esClient, err := esclient.NewFunctionalTestsClient(s.clusterConfig.ESConfig, s.logger)
 			assert.NoError(t, err)
+			status, err := esClient.WaitForYellowStatus(NewContext(), s.clusterConfig.ESConfig.GetVisibilityIndex())
+			assert.NoError(t, err)
+			assert.True(t, status == "yellow" || status == "green")
 		}, 5*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 	}
 }

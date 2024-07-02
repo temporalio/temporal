@@ -439,9 +439,9 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 func (s *FunctionalTestBase) waitForESReady() {
 	s.Require().EventuallyWithTf(func(t *assert.CollectT) {
 		esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
-		s.Require().NoError(err)
+		assert.NoError(t, err)
 		status, err := esClient.WaitForYellowStatus(NewContext(), s.testClusterConfig.ESConfig.GetVisibilityIndex())
-		s.Require().NoError(err)
-		s.Require().Equal("YELLOW", status)
+		assert.NoError(t, err)
+		assert.True(t, status == "yellow" || status == "green")
 	}, 5*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }
