@@ -1495,7 +1495,8 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	s.waitForChan(ctx, timedoutTask)
 	s.waitForChan(ctx, timedoutTask)
 	s.waitForChan(ctx, timedoutTask)
-	// After scheduling the second time, now MS should be assigned to v2
+	// After scheduling the second time, now MS should be assigned to v11
+	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, expectedStampBuildId, "", []string{v1})
 
 	// v12 can process the task
@@ -1527,6 +1528,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done on v1.2!", out)
+	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v12)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v12, true, v12, "", []string{v1, v11})
 	expectedStamps := []string{
 		v1,  // failed wf task
@@ -5022,6 +5024,13 @@ func (s *VersioningIntegSuite) waitForWorkflowBuildId(
 	)
 }
 
+// validateWorkflowBuildIds gets the specified workflow execution from visibility and validates that the BuildIds
+// SearchAttribute has the expected characteristics.
+//   - expectedBuildId: the currently-assigned build id for the workflow execution (only present in newVersioning)
+//   - expectedStampBuildId: the most recent version of a worker that processed a task for that workflow execution
+//
+// If expectedBuildId != "" and newVersioning == true, waitForWorkflowBuildId should be called before this to prevent
+// race conditions due to the visibility update delay.
 func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 	ctx context.Context,
 	wfId string,
