@@ -44,7 +44,12 @@ tmp=$(mktemp --tmpdir -d temporal-buf-breaking.XXXXXXXXX)
 trap 'rm -rf $tmp' EXIT
 
 color "Cloning repo to temp dir..."
+git log --oneline | head -10 # FIXME
+head .git/shallow
+[[ -e .git/shallow ]] && git fetch --depth 2  # on CI we're in a shallow clone, need to deepen it
+git log --oneline | head -10 # FIXME
 git clone . "$tmp"
+git -C "$tmp" log --oneline | head -10 # FIXME
 
 check_against_commit() {
   local commit=$1 name=$2
