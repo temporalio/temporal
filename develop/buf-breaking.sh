@@ -54,7 +54,7 @@ if [[ $PR_BASE_COMMIT != $MAIN_BRANCH ]]; then
   # We're running in GHA, using shallow clone. Fetch some commits from the PR
   # base so we can try to find the merge base.
   color "Fetching more commits from $PR_BASE_COMMIT..."
-  git -C "$tmp" fetch --depth=100 origin $PR_BASE_COMMIT
+  git -C "$tmp" fetch --no-tags --prune --no-recurse-submodules --depth=100 origin $PR_BASE_COMMIT
 fi
 
 check_against_commit() {
