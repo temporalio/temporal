@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -88,6 +89,7 @@ type (
 		mockClusterMetadata    *cluster.MockMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
+		resendHandler          *eventhandler.MockResendHandler
 		mockHistoryClient      *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
@@ -195,6 +197,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
+	s.resendHandler = eventhandler.NewMockResendHandler(s.controller)
 
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
@@ -212,6 +215,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard,
 		s.workflowCache,
 		s.mockNDCHistoryResender,
+		s.resendHandler,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,

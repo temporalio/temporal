@@ -30,6 +30,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -141,6 +143,8 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	if c.CategoryExists {
 		registry.AddCategory(tasks.CategoryArchival)
 	}
+	serializer := serialization.NewSerializer()
+	historyFetcher := eventhandler.NewMockHistoryPaginatedFetcher(controller)
 	return fx.Supply(
 		unusedDependencies{},
 		cfg,
@@ -149,6 +153,8 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 		fx.Annotate(log.NewTestLogger(), fx.As(new(log.SnTaggedLogger))),
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
 		lazyLoadedOwnershipBasedQuotaScaler,
+		fx.Annotate(serializer, fx.As(new(serialization.Serializer))),
+		fx.Annotate(historyFetcher, fx.As(new(eventhandler.HistoryPaginatedFetcher))),
 	)
 }
 
