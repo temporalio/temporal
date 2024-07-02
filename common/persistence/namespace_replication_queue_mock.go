@@ -85,6 +85,20 @@ func (mr *MockNamespaceReplicationQueueMockRecorder) DeleteMessageFromDLQ(ctx, m
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessageFromDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).DeleteMessageFromDLQ), ctx, messageID)
 }
 
+// DeleteMessagesBefore mocks base method.
+func (m *MockNamespaceReplicationQueue) DeleteMessagesBefore(ctx context.Context, exclusiveMessageID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteMessagesBefore", ctx, exclusiveMessageID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteMessagesBefore indicates an expected call of DeleteMessagesBefore.
+func (mr *MockNamespaceReplicationQueueMockRecorder) DeleteMessagesBefore(ctx, exclusiveMessageID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessagesBefore", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).DeleteMessagesBefore), ctx, exclusiveMessageID)
+}
+
 // GetAckLevels mocks base method.
 func (m *MockNamespaceReplicationQueue) GetAckLevels(ctx context.Context) (map[string]int64, error) {
 	m.ctrl.T.Helper()
@@ -187,30 +201,6 @@ func (m *MockNamespaceReplicationQueue) RangeDeleteMessagesFromDLQ(ctx context.C
 func (mr *MockNamespaceReplicationQueueMockRecorder) RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteMessagesFromDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).RangeDeleteMessagesFromDLQ), ctx, firstMessageID, lastMessageID)
-}
-
-// Start mocks base method.
-func (m *MockNamespaceReplicationQueue) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockNamespaceReplicationQueueMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Start))
-}
-
-// Stop mocks base method.
-func (m *MockNamespaceReplicationQueue) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *MockNamespaceReplicationQueueMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Stop))
 }
 
 // UpdateAckLevel mocks base method.
