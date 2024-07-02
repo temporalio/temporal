@@ -26,7 +26,7 @@ color()  { printf "\e[1;35m%s\e[0m\n" "$*" ; }
 yellow() { printf "\e[1;33m%s\e[0m\n" "$*" ; }
 red()    { printf "\e[1;31m%s\e[0m\n" "$*" ; }
 
-if ! git diff-index --quiet HEAD --; then
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   red "Commit all local changes before running buf-breaking"
   git status
   # Exit with success here.
