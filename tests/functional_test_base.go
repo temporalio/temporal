@@ -441,5 +441,5 @@ func (s *FunctionalTestBase) waitForESReady() {
 			Namespace: s.namespace,
 		})
 		assert.NoError(t, err)
-	}, 2*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
+	}, 3*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }
