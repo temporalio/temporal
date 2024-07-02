@@ -78,6 +78,7 @@ type (
 		// shardCountSubscriptions is a set of subscriptions that receive shard count updates whenever the set of
 		// shards that this controller owns changes.
 		shardCountSubscriptions map[*shardCountSubscription]struct{}
+		dlqMetricsEmitter       *persistence.DLQMetricsEmitter
 	}
 	// shardCountSubscription is a subscription to shard count updates.
 	shardCountSubscription struct {
@@ -95,6 +96,7 @@ func ControllerProvider(
 	metricsHandler metrics.Handler,
 	hostInfoProvider membership.HostInfoProvider,
 	contextFactory ContextFactory,
+	emitter *persistence.DLQMetricsEmitter,
 ) *ControllerImpl {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	contextTaggedLogger := log.With(logger, tag.ComponentShardController, tag.Address(hostIdentity))
@@ -117,6 +119,7 @@ func ControllerProvider(
 		ownership:               ownership,
 		taggedMetricsHandler:    taggedMetricsHandler,
 		shardCountSubscriptions: map[*shardCountSubscription]struct{}{},
+		dlqMetricsEmitter:       emitter,
 	}
 	c.lingerState.shards = make(map[ControllableContext]struct{})
 	return c
@@ -132,6 +135,7 @@ func (c *ControllerImpl) Start() {
 	}
 
 	c.ownership.start(c)
+	c.dlqMetricsEmitter.Start()
 
 	c.contextTaggedLogger.Info("", tag.LifeCycleStarted)
 }
@@ -146,6 +150,7 @@ func (c *ControllerImpl) Stop() {
 	}
 
 	c.ownership.stop()
+	c.dlqMetricsEmitter.Stop()
 
 	c.doShutdown()
 
