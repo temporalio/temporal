@@ -19,7 +19,10 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   cancel-in-progress: true
 
 env:
-  COMMIT: ${{ github.event.inputs.commit || github.sha }}
+  # For workflow_dispatch: use the given commit.
+  # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
+  # For push: use the pushed commit.
+  COMMIT: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
@@ -38,6 +41,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
           submodules: true
+          # buf-breaking compares HEAD against its parent so we need at least 2
+          fetch-depth: 2
 
       - uses: actions/setup-go@v5
         with:
