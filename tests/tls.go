@@ -45,7 +45,6 @@ type TLSFunctionalSuite struct {
 
 func (s *TLSFunctionalSuite) SetupSuite() {
 	s.setupSuite("testdata/tls_cluster.yaml")
-
 }
 
 func (s *TLSFunctionalSuite) TearDownSuite() {

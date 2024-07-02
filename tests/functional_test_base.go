@@ -37,6 +37,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -169,6 +170,10 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	if clusterConfig.EnableArchival {
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
+	}
+
+	if !UsingSQLAdvancedVisibility() {
+		s.waitForESReady()
 	}
 }
 
@@ -428,4 +433,13 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
+}
+
+func (s *FunctionalTestBase) waitForESReady() {
+	s.EventuallyWithTf(func(t *assert.CollectT) {
+		_, err := s.engine.ListWorkflowExecutions(context.Background(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+		})
+		assert.NoError(t, err)
+	}, 2*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }
