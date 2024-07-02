@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -436,10 +437,11 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 }
 
 func (s *FunctionalTestBase) waitForESReady() {
-	s.EventuallyWithTf(func(t *assert.CollectT) {
-		_, err := s.engine.ListWorkflowExecutions(context.Background(), &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-		})
-		assert.NoError(t, err)
+	s.Require().EventuallyWithTf(func(t *assert.CollectT) {
+		esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
+		s.Require().NoError(err)
+		status, err := esClient.WaitForYellowStatus(NewContext(), s.testClusterConfig.ESConfig.GetVisibilityIndex())
+		s.Require().NoError(err)
+		s.Require().Equal("YELLOW", status)
 	}, 5*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }

@@ -104,7 +104,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 	s.operatorClient = s.cluster.GetOperatorClient()
 
 	if !UsingSQLAdvancedVisibility() {
-		s.EventuallyWithTf(func(t *assert.CollectT) {
+		s.Require().EventuallyWithTf(func(t *assert.CollectT) {
 			_, err := s.frontendClient.ListWorkflowExecutions(context.Background(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: "any",
 			})
