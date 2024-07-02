@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -107,7 +108,10 @@ func (s *namespaceTestSuite) SetupSuite() {
 		s.Require().EventuallyWithTf(func(t *assert.CollectT) {
 			esClient, err := esclient.NewFunctionalTestsClient(s.clusterConfig.ESConfig, s.logger)
 			assert.NoError(t, err)
-			status, err := esClient.WaitForYellowStatus(NewContext(), s.clusterConfig.ESConfig.GetVisibilityIndex())
+			// WaitForYellowStatus is a blocking request, so set timeout equal to Eventually tick to cancel in-flight requests before retrying
+			ctx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
+			defer cancel()
+			status, err := esClient.WaitForYellowStatus(ctx, s.clusterConfig.ESConfig.GetVisibilityIndex())
 			assert.NoError(t, err)
 			assert.True(t, status == "yellow" || status == "green")
 		}, 2*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
