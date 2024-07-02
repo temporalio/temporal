@@ -24,8 +24,6 @@ set -eu -o pipefail
 : "${API_BINPB:=proto/api.binpb}"
 : "${INTERNAL_BINPB:=proto/image.bin}"
 : "${MAIN_BRANCH:=main}"
-# This is passed in by GHA if running on GHA. Otherwise use local main branch:
-: "${PR_BASE_COMMIT:=$MAIN_BRANCH}"
 
 color()  { printf "\e[1;35m%s\e[0m\n" "$*" ; }
 yellow() { printf "\e[1;33m%s\e[0m\n" "$*" ; }
@@ -48,16 +46,6 @@ $MAKE "$INTERNAL_BINPB"
 tmp=$(mktemp --tmpdir -d temporal-buf-breaking.XXXXXXXXX)
 trap 'rm -rf $tmp' EXIT
 
-if [[ $PR_BASE_COMMIT != $MAIN_BRANCH ]]; then
-  # We're running in GHA, using shallow clone. Fetch some commits from the PR
-  # base so we can try to find the merge base.
-  color "Fetching more commits from $PR_BASE_COMMIT..."
-  git fetch --no-tags --no-recurse-submodules --depth=100 origin $PR_BASE_COMMIT
-fi
-
-color "Cloning repo to temp dir..."
-git clone . "$tmp"
-
 check_against_commit() {
   local commit=$1 name=$2
   color "Breaking check against $name:"
@@ -73,11 +61,24 @@ check_against_commit() {
   fi
 }
 
-# First check against merge base commit:
-if base=$(git -C "$tmp" merge-base HEAD $PR_BASE_COMMIT); then
-  check_against_commit "$base" "merge base"
-else
-  yellow "Can't find merge base for breaking check, checking against main only"
+if [[ $PR_BASE_COMMIT ]]; then
+  # We're running in GHA, using shallow clone. Fetch some commits from the PR
+  # base so we can try to find the merge base.
+  color "Fetching more commits from $PR_BASE_COMMIT..."
+  git fetch --no-tags --no-recurse-submodules --depth=100 origin "$PR_BASE_COMMIT"
+fi
+
+color "Cloning repo to temp dir..."
+git clone . "$tmp"
+
+if [[ $PR_BASE_COMMIT ]]; then
+  # First check against merge base commit:
+  git -C "$tmp" fetch origin "$PR_BASE_COMMIT"
+  if base=$(git -C "$tmp" merge-base HEAD "$PR_BASE_COMMIT"); then
+    check_against_commit "$base" "merge base"
+  else
+    yellow "Can't find merge base for breaking check, checking against main only"
+  fi
 fi
 
 # Next check against main:
