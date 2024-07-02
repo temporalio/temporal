@@ -122,7 +122,7 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 			for id, count := range messageCounts {
 				category, ok := categories[id]
 				if !ok {
-					s.logger.Error("Failed to find category from ID ", tag.TaskCategoryID(id))
+					s.logger.Error("Failed to find category from ID", tag.TaskCategoryID(id))
 				}
 				metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(category.Name()))
 			}
