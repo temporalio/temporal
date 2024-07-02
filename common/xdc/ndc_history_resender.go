@@ -32,6 +32,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 
@@ -166,6 +167,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 	}
 	var eventsBatch [][]*historypb.HistoryEvent
 	var versionHistory []*historyspb.VersionHistoryItem
+	eventsVersion := common.EmptyVersion
 	applyFn := func() error {
 		err := n.ApplyReplicateFn(
 			ctx,
@@ -186,6 +188,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		}
 		eventsBatch = nil
 		versionHistory = nil
+		eventsVersion = common.EmptyVersion
 		return nil
 	}
 	for historyIterator.HasNext() {
@@ -202,15 +205,22 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		if err != nil {
 			return err
 		}
+		if len(events) == 0 {
+			continue
+		}
 		// check if version history changed during the batching process
-		if len(eventsBatch) != 0 && len(versionHistory) != 0 && !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.versionHistory.Items) {
-			err := applyFn()
-			if err != nil {
-				return err
+		if len(eventsBatch) != 0 && len(versionHistory) != 0 {
+			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.versionHistory.Items) ||
+				(eventsVersion != common.EmptyVersion && eventsVersion != events[0].Version) {
+				err := applyFn()
+				if err != nil {
+					return err
+				}
 			}
 		}
 		eventsBatch = append(eventsBatch, events)
 		versionHistory = batch.versionHistory.Items
+		eventsVersion = events[0].Version
 		if len(eventsBatch) >= getMaxBatchCount() {
 			err := applyFn()
 			if err != nil {
