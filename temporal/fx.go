@@ -148,7 +148,6 @@ var (
 		fx.Provide(
 			NewServerFxImpl,
 			ServerOptionsProvider,
-			dynamicconfig.NewCollection,
 			resource.ArchivalMetadataProvider,
 			TaskCategoryRegistryProvider,
 			PersistenceFactoryProvider,
@@ -159,6 +158,7 @@ var (
 			WorkerServiceProvider,
 			ApplyClusterMetadataConfigProvider,
 		),
+		dynamicconfig.Module,
 		pprof.Module,
 		TraceExportModule,
 		FxLogAdapter,
