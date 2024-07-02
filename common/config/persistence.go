@@ -84,7 +84,7 @@ func (c *Persistence) Validate() error {
 			c.DataStores[c.SecondaryVisibilityStore].CustomDataStoreConfig != nil
 		isPrimaryEs := c.DataStores[c.VisibilityStore].Elasticsearch != nil
 		isSecondaryEs := c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil
-		if !isAnyCustom && (isPrimaryEs != isSecondaryEs) {
+		if !isAnyCustom && isPrimaryEs != isSecondaryEs {
 			return fmt.Errorf(
 				"%w: cannot set visibilityStore and secondaryVisibilityStore with different datastore types",
 				ErrPersistenceConfig)
