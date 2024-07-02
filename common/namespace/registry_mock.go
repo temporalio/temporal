@@ -34,8 +34,8 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/server/common"
 	persistence "go.temporal.io/server/common/persistence"
+	pingable "go.temporal.io/server/common/pingable"
 )
 
 // MockClock is a mock of Clock interface.
@@ -287,10 +287,10 @@ func (mr *MockRegistryMockRecorder) GetNamespaceWithOptions(name, opts interface
 }
 
 // GetPingChecks mocks base method.
-func (m *MockRegistry) GetPingChecks() []common.PingCheck {
+func (m *MockRegistry) GetPingChecks() []pingable.Check {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPingChecks")
-	ret0, _ := ret[0].([]common.PingCheck)
+	ret0, _ := ret[0].([]pingable.Check)
 	return ret0
 }
 

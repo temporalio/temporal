@@ -1,5 +1,4 @@
 // The MIT License
-
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
@@ -27,15 +26,6 @@ package metrics
 
 // types used/defined by the package
 type (
-	MetricUnit string
-
-	// metricDefinition contains the definition for a metric
-	metricDefinition struct {
-		name        string
-		description string
-		unit        MetricUnit
-	}
-
 	histogramDefinition struct {
 		metricDefinition
 	}
@@ -53,40 +43,44 @@ type (
 	}
 )
 
-// MetricUnit supported values
-// Values are pulled from https://pkg.go.dev/golang.org/x/exp/event#Unit
-const (
-	Dimensionless = "1"
-	Milliseconds  = "ms"
-	Bytes         = "By"
-)
-
-func (md metricDefinition) Name() string {
-	return md.name
-}
-
-func (md metricDefinition) Unit() MetricUnit {
-	return md.unit
-}
-
 func NewTimerDef(name string, opts ...Option) timerDefinition {
-	return timerDefinition{globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, append(opts, WithUnit(Milliseconds))...)
+	globalRegistry.register(def)
+	return timerDefinition{def}
 }
 
 func NewBytesHistogramDef(name string, opts ...Option) histogramDefinition {
-	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Bytes))...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, append(opts, WithUnit(Bytes))...)
+	globalRegistry.register(def)
+	return histogramDefinition{def}
 }
 
 func NewDimensionlessHistogramDef(name string, opts ...Option) histogramDefinition {
-	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, append(opts, WithUnit(Dimensionless))...)
+	globalRegistry.register(def)
+	return histogramDefinition{def}
 }
 
 func NewCounterDef(name string, opts ...Option) counterDefinition {
-	return counterDefinition{globalRegistry.register(name, opts...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, opts...)
+	globalRegistry.register(def)
+	return counterDefinition{def}
 }
 
 func NewGaugeDef(name string, opts ...Option) gaugeDefinition {
-	return gaugeDefinition{globalRegistry.register(name, opts...)}
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, opts...)
+	globalRegistry.register(def)
+	return gaugeDefinition{def}
 }
 
 func (d histogramDefinition) With(handler Handler) HistogramIface {

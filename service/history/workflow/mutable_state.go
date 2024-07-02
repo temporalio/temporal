@@ -64,6 +64,8 @@ type TransactionPolicy int
 const (
 	TransactionPolicyActive  TransactionPolicy = 0
 	TransactionPolicyPassive TransactionPolicy = 1
+	// Mutable state is a top-level state machine in the state machines framework.
+	StateMachineType = "workflow.MutableState"
 )
 
 func (policy TransactionPolicy) Ptr() *TransactionPolicy {
@@ -72,13 +74,12 @@ func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 
 var emptyTasks = []tasks.Task{}
 
-// Mutable state is a top-level state machine in the state machines framework.
-var StateMachineType = hsm.MachineType{
-	ID:   1,
-	Name: "workflow.MutableState",
-}
-
 type stateMachineDefinition struct{}
+
+// TODO: Remove this implementation once transition history is fully implemented.
+func (s stateMachineDefinition) CompareState(any, any) (int, error) {
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for workflow mutable state")
+}
 
 func (stateMachineDefinition) Deserialize([]byte) (any, error) {
 	return nil, serviceerror.NewUnimplemented("workflow mutable state persistence is not supported in the HSM framework")
@@ -89,7 +90,7 @@ func (stateMachineDefinition) Serialize(any) ([]byte, error) {
 	return nil, nil
 }
 
-func (stateMachineDefinition) Type() hsm.MachineType {
+func (stateMachineDefinition) Type() string {
 	return StateMachineType
 }
 
@@ -170,7 +171,7 @@ type (
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *timestamppb.Timestamp, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
+		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo, bool) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
 		AddWorkflowTaskTimedOutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, namespace.Name, namespace.ID, string, string) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, namespace.Name, namespace.ID, string, string, string) (*historypb.HistoryEvent, error)
@@ -379,8 +380,8 @@ type (
 
 		HSM() *hsm.Node
 
-		// TransitionCount returns the current state transition count from the state transition history.
+		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
-		TransitionCount() int64
+		NextTransitionCount() int64
 	}
 )

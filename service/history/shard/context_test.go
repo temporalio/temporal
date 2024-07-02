@@ -841,3 +841,56 @@ func (s *contextSuite) TestUpdateShardInfo_FailsUnlessShardAcquired() {
 	}))
 	s.True(called)
 }
+
+func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
+
+	s.mockShard.config.ShardUpdateMinInterval = func() time.Duration { return 5 * time.Minute }
+	s.mockShard.config.ShardFirstUpdateInterval = func() time.Duration { return 10 * time.Second }
+	s.timeSource.Update(time.Now())
+
+	s.mockShard.initLastUpdatesTime()
+	s.mockShard.tasksCompletedSinceLastUpdate = 1
+	_any := gomock.Any()
+	s.mockShardManager.EXPECT().UpdateShard(_any, _any).Times(0)
+
+	// updating too early
+	var called bool
+	updateFunc := func() { called = true }
+
+	err := s.mockShard.updateShardInfo(1, updateFunc)
+
+	s.NoError(err)
+	s.True(called)
+	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 2)
+
+	// update after ShardFirstUpdateInterval
+	s.mockShard.initLastUpdatesTime()
+	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardFirstUpdateInterval() + 10*time.Second))
+	called = false
+	s.mockShardManager.EXPECT().UpdateShard(_any, _any).Return(nil).Times(1)
+	err = s.mockShard.updateShardInfo(1, updateFunc)
+
+	s.NoError(err)
+	s.True(called)
+	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 0)
+
+	// update again. This time update will not work since shard lastUpdate time was set during previous update
+	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardFirstUpdateInterval() + 15*time.Second))
+	called = false
+	s.mockShardManager.EXPECT().UpdateShard(_any, _any).Times(0)
+	err = s.mockShard.updateShardInfo(1, updateFunc)
+
+	s.NoError(err)
+	s.True(called)
+	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 1)
+
+	// now move past last updated interval. This time hard info should be updated/persisted
+	s.timeSource.Update(s.mockShard.lastUpdated.Add(s.mockShard.config.ShardUpdateMinInterval() + 10*time.Second))
+	called = false
+	s.mockShardManager.EXPECT().UpdateShard(_any, _any).Return(nil).Times(1)
+	err = s.mockShard.updateShardInfo(1, updateFunc)
+
+	s.NoError(err)
+	s.True(called)
+	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 0)
+}

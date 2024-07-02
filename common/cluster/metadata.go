@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -58,7 +59,7 @@ const (
 type (
 	// Metadata provides information about the current cluster and other registered remote clusters.
 	Metadata interface {
-		common.Pingable
+		pingable.Pingable
 
 		// IsGlobalNamespaceEnabled whether the global namespace is enabled,
 		// this attr should be discarded when cross DC is made public
@@ -250,13 +251,13 @@ func (m *metadataImpl) Stop() {
 	<-m.refresher.Done()
 }
 
-func (m *metadataImpl) GetPingChecks() []common.PingCheck {
-	return []common.PingCheck{
+func (m *metadataImpl) GetPingChecks() []pingable.Check {
+	return []pingable.Check{
 		{
 			Name: "cluster metadata lock",
 			// we don't do any persistence ops under clusterLock, use a short timeout
 			Timeout: 10 * time.Second,
-			Ping: func() []common.Pingable {
+			Ping: func() []pingable.Pingable {
 				m.clusterLock.Lock()
 				//lint:ignore SA2001 just checking if we can acquire the lock
 				m.clusterLock.Unlock()
@@ -269,7 +270,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 			// listeners get called under clusterCallbackLock, they may do some more work, but
 			// not persistence ops.
 			Timeout: 10 * time.Second,
-			Ping: func() []common.Pingable {
+			Ping: func() []pingable.Pingable {
 				m.clusterCallbackLock.Lock()
 				//lint:ignore SA2001 just checking if we can acquire the lock
 				m.clusterCallbackLock.Unlock()
@@ -455,6 +456,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
 				newClusterInfo.HTTPAddress == oldClusterInfo.HTTPAddress &&
 				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
+				newClusterInfo.ClusterID == oldClusterInfo.ClusterID &&
 				maps.Equal(newClusterInfo.Tags, oldClusterInfo.Tags) {
 				// key cluster info does not change
 				continue
@@ -576,6 +578,7 @@ func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResp
 		InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
 		RPCAddress:             getClusterResp.GetClusterAddress(),
 		HTTPAddress:            getClusterResp.GetHttpAddress(),
+		ClusterID:              getClusterResp.GetClusterId(),
 		ShardCount:             getClusterResp.GetHistoryShardCount(),
 		Tags:                   getClusterResp.GetTags(),
 		version:                getClusterResp.Version,

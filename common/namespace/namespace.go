@@ -34,6 +34,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -251,6 +252,13 @@ func (ns *Namespace) IsOnCluster(clusterName string) bool {
 		}
 	}
 	return false
+}
+
+// FailoverHistory returns the a copy of failover history for this namespace.
+func (ns *Namespace) FailoverHistory() []*replication.FailoverStatus {
+	return convertFailoverHistoryToReplicationProto(
+		ns.replicationConfig.GetFailoverHistory(),
+	)
 }
 
 // ConfigVersion return the namespace config version

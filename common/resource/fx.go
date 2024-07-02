@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
@@ -105,7 +106,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRegistryProvider),
 	namespace.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
-		func(p namespace.Registry) common.Pingable { return p },
+		func(p namespace.Registry) pingable.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
 	fx.Provide(serialization.NewSerializer),
@@ -366,7 +367,7 @@ func SdkClientFactoryProvider(
 	resolver membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
-	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -390,9 +391,10 @@ func RPCFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
+	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
 	svcCfg := cfg.Services[string(svcName)]
-	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -402,10 +404,13 @@ func RPCFactoryProvider(
 		logger,
 		tlsConfigProvider,
 		frontendURL,
+		frontendHTTPURL,
+		frontendHTTPPort,
 		frontendTLSConfig,
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},
+		monitor,
 	), nil
 }
 
@@ -420,7 +425,7 @@ func getFrontendConnectionDetails(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver membership.GRPCResolver,
-) (string, *tls.Config, error) {
+) (string, string, int, *tls.Config, error) {
 	// To simplify the static config, we switch default values based on whether the config
 	// defines an "internal-frontend" service. The default for TLS config can be overridden
 	// with publicClient.forceTLSConfig, and the default for hostPort can be overridden by
@@ -448,17 +453,33 @@ func getFrontendConnectionDetails(
 		err = fmt.Errorf("invalid forceTLSConfig")
 	}
 	if err != nil {
-		return "", nil, fmt.Errorf("unable to load TLS configuration: %w", err)
+		return "", "", 0, nil, fmt.Errorf("unable to load TLS configuration: %w", err)
 	}
 
 	frontendURL := cfg.PublicClient.HostPort
 	if frontendURL == "" {
 		if hasIFE {
-			frontendURL = resolver.MakeURL(primitives.InternalFrontendService)
+			frontendURL = membership.MakeResolverURL(primitives.InternalFrontendService)
 		} else {
-			frontendURL = resolver.MakeURL(primitives.FrontendService)
+			frontendURL = membership.MakeResolverURL(primitives.FrontendService)
 		}
 	}
+	frontendHTTPURL := cfg.PublicClient.HTTPHostPort
+	if frontendHTTPURL == "" {
+		if hasIFE {
+			frontendHTTPURL = membership.MakeResolverURL(primitives.InternalFrontendService)
+		} else {
+			frontendHTTPURL = membership.MakeResolverURL(primitives.FrontendService)
+		}
 
-	return frontendURL, frontendTLSConfig, nil
+	}
+
+	var frontendHTTPPort int
+	if hasIFE {
+		frontendHTTPPort = cfg.Services[string(primitives.InternalFrontendService)].RPC.HTTPPort
+	} else {
+		frontendHTTPPort = cfg.Services[string(primitives.FrontendService)].RPC.HTTPPort
+	}
+
+	return frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, nil
 }

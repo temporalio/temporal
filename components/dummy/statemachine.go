@@ -25,6 +25,8 @@ package dummy
 import (
 	"encoding/json"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -35,13 +37,10 @@ const (
 	State1
 )
 
-var StateMachineType = hsm.MachineType{
-	ID:   1,
-	Name: "dummy.Dummy",
-}
+var StateMachineType = "dummy.Dummy"
 
 func MachineCollection(tree *hsm.Node) hsm.Collection[*Dummy] {
-	return hsm.NewCollection[*Dummy](tree, StateMachineType.ID)
+	return hsm.NewCollection[*Dummy](tree, StateMachineType)
 }
 
 // Dummy state machine.
@@ -75,7 +74,7 @@ type stateMachineDefinition struct{}
 
 var _ hsm.StateMachineDefinition = stateMachineDefinition{}
 
-func (stateMachineDefinition) Type() hsm.MachineType {
+func (stateMachineDefinition) Type() string {
 	return StateMachineType
 }
 
@@ -87,6 +86,11 @@ func (stateMachineDefinition) Deserialize(d []byte) (any, error) {
 
 func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	return json.Marshal(state)
+}
+
+func (stateMachineDefinition) CompareState(s1, s2 any) (int, error) {
+	// This is just a dummy used in tests, CompareState is not used.
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for dummy state machine")
 }
 
 func RegisterStateMachine(r *hsm.Registry) error {

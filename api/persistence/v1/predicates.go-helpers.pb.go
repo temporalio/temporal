@@ -362,35 +362,35 @@ func (this *DestinationPredicateAttributes) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type StateMachineTaskTypePredicateAttributes to the protobuf v3 wire format
-func (val *StateMachineTaskTypePredicateAttributes) Marshal() ([]byte, error) {
+// Marshal an object of type OutboundTaskGroupPredicateAttributes to the protobuf v3 wire format
+func (val *OutboundTaskGroupPredicateAttributes) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type StateMachineTaskTypePredicateAttributes from the protobuf v3 wire format
-func (val *StateMachineTaskTypePredicateAttributes) Unmarshal(buf []byte) error {
+// Unmarshal an object of type OutboundTaskGroupPredicateAttributes from the protobuf v3 wire format
+func (val *OutboundTaskGroupPredicateAttributes) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *StateMachineTaskTypePredicateAttributes) Size() int {
+func (val *OutboundTaskGroupPredicateAttributes) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two StateMachineTaskTypePredicateAttributes values are equivalent by recursively
+// Equal returns whether two OutboundTaskGroupPredicateAttributes values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *StateMachineTaskTypePredicateAttributes) Equal(that interface{}) bool {
+func (this *OutboundTaskGroupPredicateAttributes) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *StateMachineTaskTypePredicateAttributes
+	var that1 *OutboundTaskGroupPredicateAttributes
 	switch t := that.(type) {
-	case *StateMachineTaskTypePredicateAttributes:
+	case *OutboundTaskGroupPredicateAttributes:
 		that1 = t
-	case StateMachineTaskTypePredicateAttributes:
+	case OutboundTaskGroupPredicateAttributes:
 		that1 = &t
 	default:
 		return false

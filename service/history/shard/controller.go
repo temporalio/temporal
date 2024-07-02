@@ -25,15 +25,15 @@
 package shard
 
 import (
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/pingable"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination controller_mock.go
 
 type (
 	Controller interface {
-		common.Pingable
+		pingable.Pingable
 
 		GetShardByID(shardID int32) (Context, error)
 		GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (Context, error)

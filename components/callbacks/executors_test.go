@@ -32,13 +32,12 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -87,7 +86,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			destinationDown:       false,
 			expectedMetricOutcome: "status:200",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, cb.PublicInfo.State)
+				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
 			},
 		},
 		{
@@ -98,7 +97,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			destinationDown:       true,
 			expectedMetricOutcome: "unknown-error",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
+				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
 		},
 		{
@@ -109,7 +108,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			destinationDown:       true,
 			expectedMetricOutcome: "status:500",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
+				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
 		},
 		{
@@ -120,7 +119,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			destinationDown:       false,
 			expectedMetricOutcome: "status:400",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumspb.CALLBACK_STATE_FAILED, cb.PublicInfo.State)
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
 		},
 	}
@@ -158,16 +157,14 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			root := newRoot(t)
 			cb := callbacks.Callback{
 				CallbackInfo: &persistencespb.CallbackInfo{
-					PublicInfo: &workflowpb.CallbackInfo{
-						Callback: &common.Callback{
-							Variant: &common.Callback_Nexus_{
-								Nexus: &common.Callback_Nexus{
-									Url: "http://localhost",
-								},
+					Callback: &persistencespb.Callback{
+						Variant: &persistencespb.Callback_Nexus_{
+							Nexus: &persistencespb.Callback_Nexus{
+								Url: "http://localhost",
 							},
 						},
-						State: enumspb.CALLBACK_STATE_SCHEDULED,
 					},
+					State: enumsspb.CALLBACK_STATE_SCHEDULED,
 				},
 			}
 			coll := callbacks.MachineCollection(root)
@@ -185,11 +182,12 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 					CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
-				},
-				&callbacks.Config{
-					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-					RetryPolicy: func() backoff.RetryPolicy {
-						return backoff.NewExponentialRetryPolicy(time.Second)
+					Logger: log.NewNoopLogger(),
+					Config: &callbacks.Config{
+						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+						RetryPolicy: func() backoff.RetryPolicy {
+							return backoff.NewExponentialRetryPolicy(time.Second)
+						},
 					},
 				},
 			))
@@ -202,7 +200,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 					StateMachineRef: &persistencespb.StateMachineRef{
 						Path: []*persistencespb.StateMachineKey{
 							{
-								Type: callbacks.StateMachineType.ID,
+								Type: callbacks.StateMachineType,
 								Id:   "ID",
 							},
 						},
@@ -212,7 +210,8 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			)
 
 			if tc.destinationDown {
-				require.IsType(t, &queues.DestinationDownError{}, err)
+				var destinationDownErr *queues.DestinationDownError
+				require.ErrorAs(t, err, &destinationDownErr)
 			} else {
 				require.NoError(t, err)
 			}
@@ -228,16 +227,14 @@ func TestProcessBackoffTask(t *testing.T) {
 	root := newRoot(t)
 	cb := callbacks.Callback{
 		CallbackInfo: &persistencespb.CallbackInfo{
-			PublicInfo: &workflowpb.CallbackInfo{
-				Callback: &common.Callback{
-					Variant: &common.Callback_Nexus_{
-						Nexus: &common.Callback_Nexus{
-							Url: "http://localhost",
-						},
+			Callback: &persistencespb.Callback{
+				Variant: &persistencespb.Callback_Nexus_{
+					Nexus: &persistencespb.Callback_Nexus{
+						Url: "http://localhost",
 					},
 				},
-				State: enumspb.CALLBACK_STATE_BACKING_OFF,
 			},
+			State: enumsspb.CALLBACK_STATE_BACKING_OFF,
 		},
 	}
 	coll := callbacks.MachineCollection(root)
@@ -252,11 +249,12 @@ func TestProcessBackoffTask(t *testing.T) {
 			CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 				return nil
 			},
-		},
-		&callbacks.Config{
-			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-			RetryPolicy: func() backoff.RetryPolicy {
-				return backoff.NewExponentialRetryPolicy(time.Second)
+			Logger: log.NewNoopLogger(),
+			Config: &callbacks.Config{
+				RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+				RetryPolicy: func() backoff.RetryPolicy {
+					return backoff.NewExponentialRetryPolicy(time.Second)
+				},
 			},
 		},
 	))
@@ -270,7 +268,7 @@ func TestProcessBackoffTask(t *testing.T) {
 
 	cb, err = coll.Data("ID")
 	require.NoError(t, err)
-	require.Equal(t, enumspb.CALLBACK_STATE_SCHEDULED, cb.PublicInfo.State)
+	require.Equal(t, enumsspb.CALLBACK_STATE_SCHEDULED, cb.State())
 }
 
 func newMutableState(t *testing.T) mutableState {
@@ -287,7 +285,7 @@ func newRoot(t *testing.T) *hsm.Node {
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	mutableState := newMutableState(t)
 
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	return root
 }
