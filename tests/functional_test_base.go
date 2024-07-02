@@ -37,6 +37,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -435,16 +436,10 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 }
 
 func (s *FunctionalTestBase) waitForESReady() {
-	attempt := 0
-	s.Eventuallyf(func() bool {
+	s.EventuallyWithTf(func(t *assert.CollectT) {
 		_, err := s.engine.ListWorkflowExecutions(context.Background(), &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.namespace,
 		})
-		if err != nil {
-			s.Logger.Info(fmt.Sprintf("error checking whether ES is healthy. attempt=%v err=(%v)", attempt, err))
-			attempt++
-			return false
-		}
-		return true
-	}, 4*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
+		assert.NoError(t, err)
+	}, 5*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }

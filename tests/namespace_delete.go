@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -32,6 +33,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -100,6 +102,15 @@ func (s *namespaceTestSuite) SetupSuite() {
 	s.frontendClient = s.cluster.GetFrontendClient()
 	s.adminClient = s.cluster.GetAdminClient()
 	s.operatorClient = s.cluster.GetOperatorClient()
+
+	if !UsingSQLAdvancedVisibility() {
+		s.EventuallyWithTf(func(t *assert.CollectT) {
+			_, err := s.frontendClient.ListWorkflowExecutions(context.Background(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: "any",
+			})
+			assert.NoError(t, err)
+		}, 5*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
+	}
 }
 
 func (s *namespaceTestSuite) TearDownSuite() {
