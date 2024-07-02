@@ -66,7 +66,6 @@ import (
 )
 
 func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
-	t.Parallel()
 
 	for _, tc := range []mutationTestCase{
 		{
@@ -116,8 +115,6 @@ type mutationTestCase struct {
 }
 
 func (c *mutationTestCase) Run(t *testing.T) {
-	t.Parallel()
-
 	nsEntry := tests.LocalNamespaceEntry
 	ms, _ := createMutableState(t, nsEntry, c.createConfig())
 

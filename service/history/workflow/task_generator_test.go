@@ -79,7 +79,6 @@ type testParams struct {
 }
 
 func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
-	t.Parallel()
 
 	for _, c := range []testConfig{
 		{
@@ -178,7 +177,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 	} {
 		c := c
 		t.Run(c.Name, func(t *testing.T) {
-			t.Parallel()
 
 			now := time.Unix(0, 0).UTC()
 			ctrl := gomock.NewController(t)

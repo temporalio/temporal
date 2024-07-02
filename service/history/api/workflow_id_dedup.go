@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -124,7 +125,7 @@ func resolveDuplicateWorkflowStart(
 	}
 
 	nsName := namespaceEntry.Name().String()
-	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval(nsName)
+	minimalReuseInterval := configs.GetConfig().WorkflowIdReuseMinimalInterval(nsName)
 
 	now := shardContext.GetTimeSource().Now().UTC()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())

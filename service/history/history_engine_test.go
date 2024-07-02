@@ -171,7 +171,6 @@ func (s *engineSuite) SetupTest() {
 	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockMemoryScheduledQueue.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockOutboundProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
-
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,

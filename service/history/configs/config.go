@@ -25,6 +25,8 @@
 package configs
 
 import (
+	"sync"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -353,8 +355,27 @@ type Config struct {
 	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
-// NewConfig returns new service config with default values
-func NewConfig(
+var _instance *Config
+var _init_ctx sync.Once
+
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32) *Config {
+	if _instance != nil {
+		return _instance
+	}
+	_init_ctx.Do(func() { _instance = CreateConfig(dc, numberOfShards) })
+	return _instance
+}
+
+func GetConfig() *Config {
+	return _instance
+}
+
+func LoadConfig(newConfig *Config) {
+	_instance = newConfig
+}
+
+// CreateConfig returns new service config with default values
+func CreateConfig(
 	dc *dynamicconfig.Collection,
 	numberOfShards int32,
 ) *Config {
