@@ -222,7 +222,6 @@ message SyncVersionedTransitionTaskAttributes {
     // best guess from source cluster
     repeated temporal.api.common.v1.DataBlob event_batches = 3;
     
-    
     string new_run_id = 4;
     temporal.api.common.v1.DataBlob new_run_event_batch = 5;
 }
@@ -231,7 +230,7 @@ message VerifyVersionedTransitionTaskAttributes {
     // next event version can be get from versioned_transition
     int64 next_event_id = 1;
     
-	string new_run_id = 2;
+    string new_run_id = 2;
 }
 
 message BackfillHistoryEventsTaskAttributes {
