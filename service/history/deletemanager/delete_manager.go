@@ -170,6 +170,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		return err
 	}
 
+	executionInfo := ms.GetExecutionInfo()
 	if err := m.shardContext.DeleteWorkflowExecution(
 		ctx,
 		definition.WorkflowKey{
@@ -178,7 +179,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			RunID:       we.GetRunId(),
 		},
 		currentBranchToken,
-		ms.GetExecutionInfo().GetCloseVisibilityTaskId(),
+		executionInfo.GetCloseVisibilityTaskId(),
+		executionInfo.GetCloseTime().AsTime(),
 		stage,
 	); err != nil {
 		return err

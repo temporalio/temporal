@@ -335,7 +335,6 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 		if err != nil {
 			return err
 		}
-
 		return esClient.Ping(context.TODO())
 	}
 
@@ -375,7 +374,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	logger.Info("Index template created.")
 
 	logger.Info("Creating index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	_, err = esClient.CreateIndex(context.Background(), esConfig.GetVisibilityIndex())
+	_, err = esClient.CreateIndex(context.Background(), esConfig.GetVisibilityIndex(), nil)
 	if err != nil {
 		return err
 	}
@@ -392,7 +391,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 }
 
 func deleteIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
+	esClient, err := esclient.NewClient(esConfig, nil, logger)
 	if err != nil {
 		return err
 	}

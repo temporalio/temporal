@@ -509,6 +509,9 @@ start: start-sqlite
 start-cass-es: temporal-server
 	./temporal-server --env development-cass-es --allow-no-auth start
 
+start-cass-es-custom: temporal-server
+	./temporal-server --env development-cass-es-custom --allow-no-auth start
+
 start-es-fi: temporal-server
 	./temporal-server --env development-cass-es-fi --allow-no-auth start
 
