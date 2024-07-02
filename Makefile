@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto bins shell-check copyright-check go-generate gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto bins temporal-server-debug shell-check copyright-check go-generate gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -249,6 +249,7 @@ update-go-api:
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f temporal-server
+	@rm -f temporal-server-debug
 	@rm -f temporal-cassandra-tool
 	@rm -f tdbg
 	@rm -f temporal-sql-tool
