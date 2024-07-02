@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -133,8 +134,10 @@ func (s *DLQMetricsEmitter) getDLQList() ([]QueueInfo, error) {
 	var queues []QueueInfo
 	var nextPageToken []byte
 	for {
-		resp, err := s.historyTaskQueueManager.ListQueues(context.Background(), &ListQueuesRequest{
+		ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
+		resp, err := s.historyTaskQueueManager.ListQueues(ctx, &ListQueuesRequest{
 			QueueType:     QueueTypeHistoryDLQ,
+			PageSize:      100,
 			NextPageToken: nextPageToken,
 		})
 		if err != nil {
