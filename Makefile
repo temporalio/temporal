@@ -70,6 +70,8 @@ PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 API_BINPB := $(PROTO_ROOT)/api.binpb
+# Note: If you change the value of INTERNAL_BINPB, you'll have to add logic to
+# develop/buf-breaking.sh to handle the old and new values at once.
 INTERNAL_BINPB := $(PROTO_ROOT)/image.bin
 PROTO_OUT := api
 
