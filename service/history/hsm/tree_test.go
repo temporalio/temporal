@@ -144,6 +144,7 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, root.Dirty()) // Should now be dirty again.
 	require.Equal(t, 1, len(root.Outputs()))
+	require.Equal(t, int64(1), root.Outputs()[0].Outputs[0].TransitionCount)
 	require.Equal(t, []hsm.Key{key}, root.Outputs()[0].Path)
 
 	// Cache when loaded from persistence.
