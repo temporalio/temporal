@@ -110,7 +110,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 			status, err := esClient.WaitForYellowStatus(NewContext(), s.clusterConfig.ESConfig.GetVisibilityIndex())
 			assert.NoError(t, err)
 			assert.True(t, status == "yellow" || status == "green")
-		}, 5*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
+		}, 2*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 	}
 }
 
