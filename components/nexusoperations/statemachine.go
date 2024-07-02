@@ -414,7 +414,7 @@ type EventStarted struct {
 }
 
 var TransitionStarted = hsm.NewTransition(
-	[]enumsspb.NexusOperationState{enumsspb.NEXUS_OPERATION_STATE_SCHEDULED},
+	[]enumsspb.NexusOperationState{enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF},
 	enumsspb.NEXUS_OPERATION_STATE_STARTED,
 	func(op Operation, event EventStarted) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
