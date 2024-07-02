@@ -426,7 +426,6 @@ func (e taskExecutor) terminateWorkflow(
 	ctx context.Context,
 	s *Scheduler,
 	ex *commonpb.WorkflowExecution) {
-	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	rreq := &historyservice.TerminateWorkflowExecutionRequest{
 		NamespaceId: s.Args.State.NamespaceId,
 		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -452,7 +451,6 @@ func (e taskExecutor) cancelWorkflow(
 	ctx context.Context,
 	s *Scheduler,
 	ex *commonpb.WorkflowExecution) {
-	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	rreq := &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: s.Args.State.NamespaceId,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{

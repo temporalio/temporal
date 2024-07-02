@@ -54,7 +54,7 @@ var DefaultTweakables = Tweakables{
 var CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting[Tweakables](
 	"component.scheduler.tweakables",
 	DefaultTweakables,
-	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
+	"A set of tweakable parameters for the schedulers")
 
 var ExecutionTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"component.scheduler.executionTimeout",
