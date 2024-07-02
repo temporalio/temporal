@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -436,9 +435,10 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 }
 
 func (s *FunctionalTestBase) waitForESReady() {
-	esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
-	s.Require().NoError(err)
 	s.Eventuallyf(func() bool {
-		return esClient.Ping(context.Background()) == nil
+		_, err := s.engine.ListWorkflowExecutions(context.Background(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+		})
+		return err == nil
 	}, 1*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }
