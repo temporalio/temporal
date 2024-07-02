@@ -28,6 +28,7 @@ red()    { printf "\e[1;31m%s\e[0m\n" "$*" ; }
 
 if ! git diff-index --quiet HEAD --; then
   red "Commit all local changes before running buf-breaking"
+  git status
   # Exit with success here.
   # Interactively: the user will see this and know what to do. In CI: this is run as
   # part of ci-build-misc, which has a "ensure-no-changes at the end". Fail there
