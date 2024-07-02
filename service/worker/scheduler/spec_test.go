@@ -69,7 +69,7 @@ func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleS
 	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
-		result := cs.getNextTime(jitterSeed, start)
+		result := cs.GetNextTime(jitterSeed, start)
 		if exp.IsZero() {
 			s.Require().True(
 				result.Nominal.IsZero(),
