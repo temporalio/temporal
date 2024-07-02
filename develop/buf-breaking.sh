@@ -8,19 +8,23 @@
 # compare images, instead of using buf's built-in git support. That means we have to use
 # git manually to collect the versions we want to compare.
 #
-# We run two breaking checks: this commit against its parent, and also this commit against
-# the current head of main. Checking against the parent is the one that will find most
-# breakage, but it doesn't handle the case where protos are evolved in compatible ways in
-# different directions on a feature branch vs the main branch, that are not compatible
-# with each other. That case would hopefully be detected at merge time, but it's better to
-# detect it early during feature branch development. The check against main handles that.
+# We run two breaking checks: this commit against its PR merge base, and also this commit
+# against the current head of main. Checking against the merge base is the one that will
+# find most breakage, but it doesn't handle the case where protos are evolved in
+# compatible ways in different directions on a feature branch vs the main branch, that are
+# not compatible with each other. That case would hopefully be detected at merge time, but
+# it's better to detect it early during feature branch development. The check against main
+# handles that.
 
 set -eu -o pipefail
 
+# These are passed in by the Makefile:
 : "${MAKE:=make}"
 : "${BUF:=buf}"
 : "${API_BINPB:=proto/api.binpb}"
 : "${INTERNAL_BINPB:=proto/image.bin}"
+# This is passed in by GHA if running on GHA. Otherwise use local main branch:
+: "${PR_BASE_COMMIT:=main}"
 
 color()  { printf "\e[1;35m%s\e[0m\n" "$*" ; }
 yellow() { printf "\e[1;33m%s\e[0m\n" "$*" ; }
@@ -61,8 +65,12 @@ check_against_commit() {
   fi
 }
 
-# First check against parent commit:
-check_against_commit HEAD^ "parent"
+# First check against merge base commit:
+if base=$(git merge-base HEAD $PR_BASE_COMMIT); then
+  check_against_commit "$base" "merge base"
+else
+  yellow "Can't find merge base for breaking check, checking against main only"
+fi
 
 # Next check against main:
 git -C "$tmp" fetch --depth=1 https://github.com/temporalio/temporal.git "$MAIN_BRANCH"
