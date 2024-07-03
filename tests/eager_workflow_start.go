@@ -36,9 +36,10 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 func (s *FunctionalSuite) defaultWorkflowID() string {
@@ -73,7 +74,7 @@ func (s *FunctionalSuite) startEagerWorkflow(baseOptions *workflowservice.StartW
 		options.RequestId = uuid.New()
 	}
 
-	response, err := s.engine.StartWorkflowExecution(NewContext(), options)
+	response, err := s.client.StartWorkflowExecution(NewContext(), options)
 	s.Require().NoError(err)
 
 	return response
@@ -93,12 +94,12 @@ func (s *FunctionalSuite) respondWorkflowTaskCompleted(task *workflowservice.Pol
 			},
 		}}},
 	}
-	_, err = s.engine.RespondWorkflowTaskCompleted(NewContext(), &completion)
+	_, err = s.client.RespondWorkflowTaskCompleted(NewContext(), &completion)
 	s.Require().NoError(err)
 }
 
 func (s *FunctionalSuite) pollWorkflowTaskQueue() *workflowservice.PollWorkflowTaskQueueResponse {
-	task, err := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: s.defaultTaskQueue(),
 		Identity:  "test",
