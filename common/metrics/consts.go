@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,18 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package scheduler
+package metrics
 
-import (
-	"go.temporal.io/server/service/worker/scheduler"
-	"go.uber.org/fx"
-)
+type MetricUnit string
 
-var Module = fx.Module(
-	"component.scheduler",
-	fx.Provide(ConfigProvider),
-	fx.Provide(scheduler.NewSpecBuilder),
-	fx.Invoke(RegisterTaskSerializers),
-	fx.Invoke(RegisterStateMachine),
-	fx.Invoke(RegisterExecutor),
+// MetricUnit supported values
+// Values are pulled from https://pkg.go.dev/golang.org/x/exp/event#Unit
+const (
+	Dimensionless = "1"
+	Milliseconds  = "ms"
+	Bytes         = "By"
 )

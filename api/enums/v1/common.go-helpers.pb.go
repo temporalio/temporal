@@ -70,6 +70,7 @@ var (
 	SchedulerState_shorthandValue = map[string]int32{
 		"Unspecified": 0,
 		"Waiting":     1,
+		"Executing":   2,
 	}
 )
 

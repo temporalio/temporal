@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,18 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package scheduler
+//go:build !TEMPORAL_DEBUG
 
-import (
-	"go.temporal.io/server/service/worker/scheduler"
-	"go.uber.org/fx"
-)
+package metrics
 
-var Module = fx.Module(
-	"component.scheduler",
-	fx.Provide(ConfigProvider),
-	fx.Provide(scheduler.NewSpecBuilder),
-	fx.Invoke(RegisterTaskSerializers),
-	fx.Invoke(RegisterStateMachine),
-	fx.Invoke(RegisterExecutor),
-)
+// metricDefinition contains the definition for a metric
+type metricDefinition struct {
+	name        string
+	description string
+	unit        MetricUnit
+}
+
+func newMetricDefinition(name string, opts ...Option) metricDefinition {
+	d := metricDefinition{
+		name:        name,
+		description: "",
+		unit:        "",
+	}
+	for _, opt := range opts {
+		opt.apply(&d)
+	}
+	return d
+}
+
+func (md metricDefinition) Name() string {
+	return md.name
+}
+
+func (md metricDefinition) Unit() MetricUnit {
+	return md.unit
+}

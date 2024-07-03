@@ -312,6 +312,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 					stateMachineRegistry,
 					node,
 					pao.Path,
+					output.TransitionCount,
 					task,
 				); err != nil {
 					return err
@@ -817,6 +818,7 @@ func generateSubStateMachineTask(
 	stateMachineRegistry *hsm.Registry,
 	node *hsm.Node,
 	subStateMachinePath []hsm.Key,
+	transitionCount int64,
 	task hsm.Task,
 ) error {
 	ser, ok := stateMachineRegistry.TaskSerializer(task.Type())
@@ -836,10 +838,15 @@ func generateSubStateMachineTask(
 	}
 	// Only set transition count if a task is non-concurrent.
 	var machineLastUpdateVersionedTransition *persistencespb.VersionedTransition
-	transitionCount := int64(0)
-	if !task.Concurrent() {
+	if task.Concurrent() {
+		transitionCount = 0
+	} else {
+		// An already outdated concurrent task.
+		// This happens during replication when multiple event batches are applied in a single transaction.
+		if node.InternalRepr().TransitionCount != transitionCount {
+			return nil
+		}
 		machineLastUpdateVersionedTransition = node.InternalRepr().GetLastUpdateVersionedTransition()
-		transitionCount = node.InternalRepr().GetTransitionCount()
 	}
 
 	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory

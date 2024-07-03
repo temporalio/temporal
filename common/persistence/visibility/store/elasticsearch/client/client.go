@@ -75,6 +75,7 @@ type (
 		IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error)
 		IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error)
 		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
+		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		Ping(ctx context.Context) error
 	}
 
