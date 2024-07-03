@@ -46,6 +46,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -234,7 +235,8 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 
 	if isActive {
 		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
-		if syncMatched {
+		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
+
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
 			// For sync-match case, History has already received the build ID in the Record*TaskStarted call.
@@ -255,6 +257,14 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	}
 
 	return assignedBuildId, false, spoolQueue.SpoolTask(params.taskInfo)
+}
+
+func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
+	if err != nil && errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
+		return true
+	}
+
+	return false
 }
 
 func (pm *taskQueuePartitionManagerImpl) isActiveInCluster() (bool, error) {
