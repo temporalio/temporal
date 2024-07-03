@@ -157,6 +157,15 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 
 	historyResendInfo, err := actionFn(ctx)
 	if err != nil {
+		if errors.Is(err, consts.ErrTaskRetry) {
+			// If the error is retryable, it means the task hasn't been processed on the active side yet.
+			// Since the most likely reason would be the destination is down, we wrap the error here with
+			// DestinationDownError so it can trigger the circuit breaker on the standby side as well.
+			// Assuming the dynamic config StandbyTaskMissingEventsDiscardDelay is long enough, it should
+			// give enough time for the active side to execute the task successfully, and the standby side
+			// to process it as well without discarding the task.
+			err = queues.NewDestinationDownError("standby task executor returned retryable error", err)
+		}
 		return err
 	}
 
