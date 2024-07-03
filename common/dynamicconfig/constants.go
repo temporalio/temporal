@@ -2133,6 +2133,16 @@ that task will be sent to DLQ.`,
 		10,
 		`Maximum number of resend events batch for a single replication request`,
 	)
+	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
+		"history.workflowIdReuseMinimalInterval",
+		1*time.Second,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
+	)
+	EnableWorkflowIdReuseStartTimeValidation = NewNamespaceBoolSetting(
+		"history.enableWorkflowIdReuseStartTimeValidation",
+		false,
+		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
+	)
 
 	// keys for worker
 
@@ -2375,10 +2385,5 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
-	)
-	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
-		"system.workflowIdReuseMinimalInterval",
-		1*time.Second,
-		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
 )
