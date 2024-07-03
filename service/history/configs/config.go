@@ -250,9 +250,6 @@ type Config struct {
 	WorkflowTaskCriticalAttempts dynamicconfig.IntPropertyFn
 	WorkflowTaskRetryMaxInterval dynamicconfig.DurationPropertyFn
 
-	// ContinueAsNewMinInterval is the minimal interval between continue_as_new to prevent tight continue_as_new loop.
-	ContinueAsNewMinInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
-
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
@@ -351,9 +348,10 @@ type Config struct {
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFn
+	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFnWithNamespaceFilter[schedulerhsm.Tweakables]
 }
 
 // NewConfig returns new service config with default values
@@ -381,7 +379,6 @@ func NewConfig(
 		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
 		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
-		ContinueAsNewMinInterval:             dynamicconfig.ContinueAsNewMinInterval.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:       dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:      dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
@@ -642,6 +639,7 @@ func NewConfig(
 		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 
 		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
+		HsmSchedulerTweakables:      schedulerhsm.CurrentTweakables.Get(dc),
 	}
 
 	return cfg

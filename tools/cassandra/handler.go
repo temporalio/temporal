@@ -174,6 +174,7 @@ func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 		Port:                     cli.GlobalInt(schema.CLIOptPort),
 		User:                     cli.GlobalString(schema.CLIOptUser),
 		Password:                 cli.GlobalString(schema.CLIOptPassword),
+		AllowedAuthenticators:    cli.GlobalStringSlice(schema.CLIOptAllowedAuthenticators),
 		Timeout:                  cli.GlobalInt(schema.CLIOptTimeout),
 		Keyspace:                 cli.GlobalString(schema.CLIOptKeyspace),
 		numReplicas:              cli.Int(schema.CLIOptReplicationFactor),

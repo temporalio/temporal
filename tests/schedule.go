@@ -644,7 +644,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(1 * time.Second)},
+				{Interval: durationpb.New(3 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -680,10 +680,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 
 	_, err = s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
-	// TODO(Tianyu): For now, simply test that no workflow tasks are generated and the scheduler does not run
-	<-time.NewTimer(5 * time.Second).C
-	s.True(atomic.LoadInt32(&runs) == 0)
-	s.NoError(err)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 5*time.Second, 200*time.Millisecond)
 
 	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
 	expectedHistory := `1 WorkflowExecutionStarted`

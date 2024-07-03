@@ -127,10 +127,10 @@ func (c Callback) progress() (int, int32, error) {
 		return 0, 0, serviceerror.NewInvalidArgument("uninitialized callback state")
 	case enumsspb.CALLBACK_STATE_STANDBY:
 		return 1, 0, nil
-	case enumsspb.CALLBACK_STATE_SCHEDULED:
-		return 2, c.GetAttempt() * 2, nil
 	case enumsspb.CALLBACK_STATE_BACKING_OFF:
-		// We've made slightly more progress if we transitioned from scheduled to backing off.
+		return 2, c.GetAttempt() * 2, nil
+	case enumsspb.CALLBACK_STATE_SCHEDULED:
+		// We've made slightly more progress if we transitioned from backing off to scheduled.
 		return 2, c.GetAttempt()*2 + 1, nil
 	case enumsspb.CALLBACK_STATE_FAILED, enumsspb.CALLBACK_STATE_SUCCEEDED:
 		// Consider any terminal state as "max progress", we'll rely on last update namespace failover version to break
@@ -184,12 +184,12 @@ func (stateMachineDefinition) CompareState(state1, state2 any) (int, error) {
 		return 0, fmt.Errorf("failed to get progress for state2: %w", err)
 	}
 	if stage1 != stage2 {
-		return stage2 - stage1, nil
+		return stage1 - stage2, nil
 	}
 	if stage1 == terminalStage && cb1.State() != cb2.State() {
 		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", cb1.State(), cb2.State()))
 	}
-	return int(attempts2 - attempts1), nil
+	return int(attempts1 - attempts2), nil
 }
 
 func RegisterStateMachine(r *hsm.Registry) error {

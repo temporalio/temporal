@@ -2061,7 +2061,7 @@ func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.
 		interval += backoffDuration.AsDuration()
 	}
 	// minimal interval for continue as new to prevent tight continue as new loop
-	minInterval := ms.config.ContinueAsNewMinInterval(ms.namespaceEntry.Name().String())
+	minInterval := ms.config.WorkflowIdReuseMinimalInterval(ms.namespaceEntry.Name().String())
 	if interval < minInterval {
 		// enforce a minimal backoff
 		return durationpb.New(minInterval - lifetime)
@@ -5242,6 +5242,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
 		eventBatches,
+		clearBuffer,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -5370,6 +5371,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
+	clearBufferEvents bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -5392,12 +5394,13 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 
-	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches)
+	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	transactionPolicy TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
+	clearBufferEvents bool,
 ) error {
 
 	if ms.config.ReplicationMultipleBatches() {
@@ -5419,7 +5422,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 
 	ms.InsertTasks[tasks.CategoryReplication] = append(
 		ms.InsertTasks[tasks.CategoryReplication],
-		ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches)...,
+		ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...,
 	)
 
 	if transactionPolicy == TransactionPolicyPassive &&
@@ -5571,14 +5574,29 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 	transactionPolicy TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
+	clearBufferEvents bool,
 ) []tasks.Task {
 	switch transactionPolicy {
 	case TransactionPolicyActive:
-		// HSM().Dirty() implies Nexus is enabled
+		if !ms.generateReplicationTask() {
+			return emptyTasks
+		}
+
+		// HSM() contains children also implies Nexus is enabled
+		if len(ms.HSM().InternalRepr().Children) == 0 {
+			return emptyTasks
+		}
+
 		// We also assume that - for the time being - if events were generated in a transaction,
 		// all HSM node updates are a result of applying those events.
 		// The passive cluster will transition the HSM when applying the events.
-		if ms.HSM().Dirty() && len(eventBatches) == 0 && ms.generateReplicationTask() {
+		//
+		// When mutable state contains buffered events, SyncHSM task will be dropped as
+		// the state for **some** HSM nodes may depend on those buffered events.
+		// But there might be some other nodes whose state do not depend on buffered events.
+		// For those nodes, we need to make sure their states will be synced as well.
+		// So when clearing buffered events, generate another SyncHSM task.
+		if clearBufferEvents || (ms.HSM().Dirty() && len(eventBatches) == 0) {
 			return []tasks.Task{
 				&tasks.SyncHSMTask{
 					WorkflowKey: ms.GetWorkflowKey(),
@@ -5586,6 +5604,7 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 				},
 			}
 		}
+
 		return emptyTasks
 	case TransactionPolicyPassive:
 		return emptyTasks

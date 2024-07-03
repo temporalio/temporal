@@ -56,6 +56,7 @@ import (
 
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -108,6 +109,7 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): limit,
 		dynamicconfig.EnableNexus.Key():                                     true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
+		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 
@@ -1328,7 +1330,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	}
 
 	workflowFn := func(ctx workflow.Context) error {
-		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(arg string) (string, error) {
+		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
 			return "my-update-result", nil
 		})
 		if err != nil {
@@ -1363,12 +1365,13 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	updateHandleCh := make(chan sdkclient.WorkflowUpdateHandle)
 	updateErrCh := make(chan error)
 	go func() {
-		handle, err := s.sdkClient.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
-			UpdateID:   tv.UpdateID(),
-			UpdateName: tv.HandlerName(),
-			WorkflowID: tv.WorkflowID(),
-			RunID:      tv.RunID(),
-			Args:       []interface{}{"update-value"},
+		handle, err := s.sdkClient.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
+			UpdateID:     tv.UpdateID(),
+			UpdateName:   tv.HandlerName(),
+			WorkflowID:   tv.WorkflowID(),
+			RunID:        tv.RunID(),
+			Args:         []interface{}{"update-value"},
+			WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
 		})
 		updateErrCh <- err
 		updateHandleCh <- handle

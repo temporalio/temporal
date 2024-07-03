@@ -353,6 +353,122 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory_Batching() {
 	}
 }
 
+func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory_Batching_ApplyWithSameEventVersion() {
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	startEventID := int64(123)
+	startEventVersion := int64(100)
+	pageSize := defaultPageSize
+	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
+
+	eventBatch0 := []*historypb.HistoryEvent{
+		{EventId: 1, Version: 123},
+		{EventId: 2, Version: 123},
+	}
+	eventBatch1 := []*historypb.HistoryEvent{
+		{EventId: 3, Version: 124},
+		{EventId: 4, Version: 124},
+	}
+	eventBatch2 := []*historypb.HistoryEvent{
+		{EventId: 5, Version: 125},
+		{EventId: 6, Version: 125},
+	}
+	eventBatch3 := []*historypb.HistoryEvent{
+		{EventId: 7, Version: 126},
+		{EventId: 8, Version: 126},
+	}
+	eventBatch4 := []*historypb.HistoryEvent{
+		{EventId: 9, Version: 127},
+		{EventId: 10, Version: 127},
+	}
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{EventId: 2, Version: 123},
+		{EventId: 4, Version: 124},
+		{EventId: 6, Version: 125},
+		{EventId: 8, Version: 126},
+		{EventId: 10, Version: 127},
+	}
+	mockGetHistoryCall := func(events []*historypb.HistoryEvent, vh []*historyspb.VersionHistoryItem, inputToken []byte, returnToken []byte) {
+		blob := s.serializeEvents(events)
+		s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
+			gomock.Any(),
+			&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+				NamespaceId: s.namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				StartEventId:      startEventID,
+				StartEventVersion: startEventVersion,
+				EndEventId:        common.EmptyEventID,
+				EndEventVersion:   common.EmptyVersion,
+				MaximumPageSize:   pageSize,
+				NextPageToken:     inputToken,
+			}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+			HistoryBatches: []*commonpb.DataBlob{blob},
+			NextPageToken:  returnToken,
+			VersionHistory: &historyspb.VersionHistory{
+				Items: vh,
+			},
+		}, nil)
+	}
+	token0 := []byte{0}
+	token1 := []byte{1}
+	token2 := []byte{2}
+	token3 := []byte{3}
+	mockGetHistoryCall(eventBatch0, versionHistoryItems, nil, token0)
+	mockGetHistoryCall(eventBatch1, versionHistoryItems, token0, token1)
+	mockGetHistoryCall(eventBatch2, versionHistoryItems, token1, token2)
+	mockGetHistoryCall(eventBatch3, versionHistoryItems, token2, token3)
+	mockGetHistoryCall(eventBatch4, versionHistoryItems, token3, nil)
+
+	functionCallTimes := 0
+	var calledEvents [][]*historypb.HistoryEvent
+	rereplicator := NewNDCHistoryResender(
+		s.mockNamespaceCache,
+		s.mockClientBean,
+		func(
+			ctx context.Context,
+			sourceClusterName string,
+			namespaceId namespace.ID,
+			workflowId string,
+			runId string,
+			events [][]*historypb.HistoryEvent,
+			versionHistory []*historyspb.VersionHistoryItem,
+		) error {
+			functionCallTimes++
+			calledEvents = append(calledEvents, events...)
+			return nil
+		},
+		serialization.NewSerializer(),
+		nil,
+		s.logger,
+		s.config,
+	)
+
+	err := rereplicator.SendSingleWorkflowHistory(
+		context.Background(),
+		cluster.TestCurrentClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		startEventID,
+		startEventVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
+	)
+	s.Nil(err)
+	s.Equal(5, functionCallTimes)
+	s.Equal(5, len(calledEvents))
+	eventId := int64(1)
+	for _, events := range calledEvents {
+		for _, event := range events {
+			event.EventId = eventId
+			eventId++
+		}
+	}
+}
+
 func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
