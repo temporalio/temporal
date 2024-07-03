@@ -136,15 +136,38 @@ jobs:
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
+  functional-test-prepare-flags:
+    outputs:
+      test_flags: ${{ steps.prepare-flags.outputs.test_flags }}
+      test_index: ${{ steps.prepare-flags.outputs.test_index }}
+    runs-on: ubuntu-20.04
+    steps:
+      - id: prepare-flags
+        run: |
+          TEST_GROUPS='[
+            [
+              "TestVersioningFunctionalSuite"
+            ],
+            [
+              "TestClientFunctionalSuite",
+              "TestFunctionalSuite",
+              "TestFunctionalTestBaseSuite"
+            ]
+          ]'
+          TEST_FLAGS="$(echo "$TEST_GROUPS" | jq -c 'map("-run \"" + join("|") + "\"") + ["-skip \"" + (flatten | join("|")) + "\""]')"
+          TEST_INDEX="$(seq 1 $(echo "$TEST_FLAGS" | jq 'length') | jq -cs 'map(. - 1)')"
+          echo "test_flags=${TEST_FLAGS}" >> "$GITHUB_OUTPUT"
+          echo "test_index=${TEST_INDEX}" >> "$GITHUB_OUTPUT"
+
   functional-test:
     name: Functional test
-    needs: [misc-checks, cache-docker-images]
+    needs: [misc-checks, cache-docker-images, functional-test-prepare-flags]
     strategy:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
-        shard_index: [0, 1, 2]
+        test_index: ${{ fromJSON(needs.functional-test-prepare-flags.outputs.test_index) }}
         include:
           - name: cass_es
             persistence_type: nosql
@@ -172,8 +195,7 @@ jobs:
             containers: [postgresql]
     runs-on: ${{ matrix.runs-on }}
     env:
-      TEST_TOTAL_SHARDS: 3
-      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+      TEST_ARGS: "-race ${{ fromJSON(needs.functional-test-prepare-flags.outputs.test_flags)[matrix.test_index] }}"
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
@@ -192,13 +214,14 @@ jobs:
           check-latest: true
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
+        if: ${{ toJSON(matrix.containers) != '[]' }}
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
         timeout-minutes: 30 # make sure this is larger than the test timeout in the Makefile
-        run: make functional-test-coverage
+        run: |
+          make functional-test-coverage
 
       - name: Upload test results
         if: ${{ !cancelled() }}
@@ -259,7 +282,7 @@ jobs:
           check-latest: true
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
+        if: ${{ toJSON(matrix.containers) != '[]' }}
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
@@ -325,7 +348,7 @@ jobs:
           check-latest: true
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
+        if: ${{ toJSON(matrix.containers) != '[]' }}
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
