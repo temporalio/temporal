@@ -279,9 +279,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		}
 	}
 
-	dcClient := dynamicconfig.StaticClient(options.DynamicConfigOverrides)
-	dcc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
-	taskCategoryRegistry := temporal.TaskCategoryRegistryProvider(archiverBase.metadata, dcc)
+	taskCategoryRegistry := temporal.TaskCategoryRegistryProvider(archiverBase.metadata)
 
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
