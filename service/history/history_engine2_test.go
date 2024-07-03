@@ -118,7 +118,9 @@ func TestEngine2Suite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *engine2Suite) SetupSuite() {}
+func (s *engine2Suite) SetupSuite() {
+	s.config = tests.NewDynamicConfig()
+}
 
 func (s *engine2Suite) TearDownSuite() {}
 
@@ -144,7 +146,6 @@ func (s *engine2Suite) SetupTest() {
 	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockMemoryScheduledQueue.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
-	s.config = tests.NewDynamicConfig()
 	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{

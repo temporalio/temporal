@@ -325,7 +325,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+
 			s := newStateMachineEnvTestContext(t, tc.enableTransitionHistory)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
 			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)

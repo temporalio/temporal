@@ -61,6 +61,10 @@ import (
 )
 
 func TestArchivalQueueTaskExecutor(t *testing.T) {
+
+	cfg := tests.NewDynamicConfig()
+	cfg.RetentionTimerJitterDuration = func() time.Duration { return 0 }
+
 	for _, c := range []testCase{
 		{
 			Name: "success",
@@ -358,10 +362,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			a := archival.NewMockArchiver(p.Controller)
 
 			shardContext.EXPECT().GetNamespaceRegistry().Return(namespaceRegistry).AnyTimes()
-			cfg := tests.NewDynamicConfig()
-			cfg.RetentionTimerJitterDuration = func() time.Duration {
-				return 0
-			}
 			shardContext.EXPECT().GetConfig().Return(cfg).AnyTimes()
 			mockMetadata := cluster.NewMockMetadata(p.Controller)
 			mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
