@@ -543,8 +543,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 	s.Run("WorkflowCloseTime=1970-01-01T00:00:00Z", func() {
 		s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
 		err := s.execute(&tasks.DeleteExecutionVisibilityTask{
-			WorkflowKey:       workflowKey,
-			WorkflowCloseTime: time.Unix(0, 0).UTC(),
+			WorkflowKey: workflowKey,
+			CloseTime:   time.Unix(0, 0).UTC(),
 		})
 		s.Assert().NoError(err)
 	})

@@ -326,8 +326,8 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		TaskID:      task.TaskID,
 	}
 
-	if task.WorkflowCloseTime.After(time.Unix(0, 0)) {
-		request.CloseTime = &task.WorkflowCloseTime
+	if task.CloseTime.After(time.Unix(0, 0)) {
+		request.CloseTime = &task.CloseTime
 	}
 
 	if t.ensureCloseBeforeDelete() {
