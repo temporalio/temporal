@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) {
+func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardOne(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -44,6 +44,7 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 	manager := NewMockHistoryTaskQueueManager(ctrl)
 	manager.EXPECT().ListQueues(gomock.Any(), &ListQueuesRequest{
 		QueueType:     QueueTypeHistoryDLQ,
+		PageSize:      100,
 		NextPageToken: nil,
 	}).Return(&ListQueuesResponse{
 		Queues: []QueueInfo{
@@ -55,6 +56,7 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 	}, nil).Times(1)
 	manager.EXPECT().ListQueues(gomock.Any(), &ListQueuesRequest{
 		QueueType:     QueueTypeHistoryDLQ,
+		PageSize:      100,
 		NextPageToken: []byte("test_page_token"),
 	}).Return(&ListQueuesResponse{
 		Queues: []QueueInfo{
@@ -96,7 +98,7 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardZero(t *testing.T) 
 	assert.Equal(t, float64(13), messageCount["replication"])
 }
 
-func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardZero(t *testing.T) {
+func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardOne(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
