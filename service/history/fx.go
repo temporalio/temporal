@@ -157,6 +157,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
 		taskQueueManager:             args.TaskQueueManager,
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
+		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
