@@ -78,8 +78,6 @@ type Tag interface {
 	Value() string
 }
 
-var StickyTaskQueueTag = TaskQueueTag("__sticky__")
-
 type (
 	tagImpl struct {
 		key   string
@@ -168,8 +166,15 @@ func ToClusterIDTag(value int32) Tag {
 	return &tagImpl{key: toCluster, value: strconv.FormatInt(int64(value), 10)}
 }
 
-// TaskQueueTag returns a new task queue tag.
-func TaskQueueTag(value string) Tag {
+// UnsafeTaskQueueTag returns a new task queue tag.
+// WARNING: Do not use this function directly as it may create high number of unique task queues that can
+// trouble the observability stack. Instead, use one of the following helper functions and pass a proper
+// breakdown boolean (typically based on the task queue dynamic configs):
+// - `workflow.PerTaskQueueFamilyScope`
+// - `tqid.PerTaskQueueFamilyScope`
+// - `tqid.PerTaskQueueScope`
+// - `tqid.PerTaskQueuePartitionScope`
+func UnsafeTaskQueueTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}

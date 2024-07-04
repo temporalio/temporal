@@ -912,6 +912,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	req := request.GetDescRequest()
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
+		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if err != nil {
 			return nil, err
 		}
@@ -929,7 +930,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		for _, taskQueueType := range req.TaskQueueTypes {
-			for i := 0; i < e.config.NumTaskqueueWritePartitions(req.Namespace, req.TaskQueue.Name, taskQueueType); i++ {
+			for i := 0; i < tqConfig.NumWritePartitions(); i++ {
 				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: request.GetNamespaceId(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -992,8 +993,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						e.reachabilityCache,
 						request.GetNamespaceId(),
 						req.GetNamespace(),
-						req.GetTaskQueue().GetName(),
+						rootPartition.TaskQueue().Family(),
 						e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+						tqConfig,
 					),
 					e.metricsHandler,
 					e.logger,
@@ -2012,8 +2014,8 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitio
 		pm.Partition(),
 		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 		false,
-		// we don't want breakdown by partition ID, only sticky vs normal breakdown.
-		false)
+		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
+	)
 	metrics.LoadedTaskQueuePartitionGauge.With(taggedHandler).Record(float64(loadedTaskQueuePartitionCounter))
 }
 

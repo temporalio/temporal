@@ -178,9 +178,8 @@ func Invoke(
 					metricsScope,
 					namespaceName.String(),
 					tqPartition,
-					// TODO: honor TQ config in here to possibly breakdown by TQ name
-					false,
-					false,
+					config.BreakdownMetricsByTaskQueue(namespaceName.String(), tqPartition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+					false, // we don't want breakdown by normal partition, only sticky vs normal breakdown.
 				),
 			).Record(workflowScheduleToStartLatency)
 

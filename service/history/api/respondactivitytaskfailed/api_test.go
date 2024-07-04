@@ -468,7 +468,7 @@ func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContex
 		metrics.NamespaceTag(uc.namespaceName.String()),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
-		metrics.TaskQueueTag(uc.taskQueueId),
+		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 	)
 	metricsHandler := metrics.NewMockHandler(s.controller)
 	metricsHandler.EXPECT().Timer(metrics.ActivityE2ELatency.Name()).Return(timer)

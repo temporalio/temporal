@@ -742,6 +742,7 @@ func emitCompletionMetrics(
 			completionMetric.namespaceState,
 			completionMetric.taskQueue,
 			completionMetric.status,
+			shard.GetConfig(),
 		)
 	}
 }

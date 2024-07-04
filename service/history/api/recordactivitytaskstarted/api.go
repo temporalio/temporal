@@ -27,18 +27,17 @@ package recordactivitytaskstarted
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -123,14 +122,12 @@ func Invoke(
 
 			scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
 			namespaceName := namespaceEntry.Name()
-			taskQueue := tqid.UnsafeTaskQueueFamily(request.GetNamespaceId(), ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 			metrics.TaskScheduleToStartLatency.With(
-				tqid.GetPerTaskQueueScope(
+				workflow.GetPerTaskQueueFamilyScope(
 					taggedMetrics,
-					namespaceName.String(),
-					taskQueue,
-					// TODO: honor TQ config in here to possibly breakdown by TQ name
-					false,
+					namespaceName,
+					ai.GetTaskQueue(),
+					shard.GetConfig(),
 				),
 			).Record(scheduleToStartLatency)
 

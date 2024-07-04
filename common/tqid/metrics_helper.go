@@ -30,19 +30,36 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+const (
+	unknown = "_unknown_"
+	omitted = "__omitted__"
+	normal  = "__normal__"
+	sticky  = "__sticky__"
+)
+
+func GetPerTaskQueueFamilyScope(
+	handler metrics.Handler,
+	namespaceName string,
+	taskQueueFamily *TaskQueueFamily,
+	taskQueueBreakdown bool,
+) metrics.Handler {
+	metricTaskQueueName := omitted
+	if taskQueueBreakdown {
+		metricTaskQueueName = taskQueueFamily.Name()
+	}
+	return handler.WithTags(
+		metrics.NamespaceTag(namespaceName),
+		metrics.UnsafeTaskQueueTag(metricTaskQueueName),
+	)
+}
+
 func GetPerTaskQueueScope(
 	handler metrics.Handler,
 	namespaceName string,
 	taskQueue *TaskQueue,
 	taskQueueBreakdown bool,
 ) metrics.Handler {
-	metricTaskQueueName := "__omitted__"
-	if taskQueueBreakdown {
-		metricTaskQueueName = taskQueue.Name()
-	}
-	return handler.WithTags(
-		metrics.NamespaceTag(namespaceName),
-		metrics.TaskQueueTag(metricTaskQueueName),
+	return GetPerTaskQueueFamilyScope(handler, namespaceName, taskQueue.Family(), taskQueueBreakdown).WithTags(
 		metrics.TaskQueueTypeTag(taskQueue.TaskType()),
 	)
 }
@@ -58,15 +75,15 @@ func GetPerTaskQueuePartitionScope(
 
 	var value string
 	if partition == nil {
-		value = "_unknown_"
+		value = unknown
 	} else if normalPartition, ok := partition.(*NormalPartition); ok {
 		if partitionIDBreakdown {
 			value = strconv.Itoa(normalPartition.PartitionId())
 		} else {
-			value = "__normal__"
+			value = normal
 		}
 	} else {
-		value = "__sticky__"
+		value = sticky
 	}
 
 	return h.WithTags(metrics.PartitionTag(value))

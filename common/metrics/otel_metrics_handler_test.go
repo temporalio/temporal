@@ -232,8 +232,8 @@ func recordMetrics(mp Handler) {
 	timer.Record(time.Duration(minLatency) * time.Millisecond)
 	timer.Record(time.Duration(maxLatency) * time.Millisecond)
 	histogram.Record(int64(testBytes))
-	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
-	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
+	hitsTaggedCounter.Record(11, UnsafeTaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, UnsafeTaskQueueTag("filtered"))
 }
 
 type erroneousMeter struct {
