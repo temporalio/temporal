@@ -120,6 +120,8 @@ func (s *ClientFunctionalSuite) TearDownSuite() {
 }
 
 func (s *ClientFunctionalSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
@@ -149,8 +151,12 @@ func (s *ClientFunctionalSuite) SetupTest() {
 }
 
 func (s *ClientFunctionalSuite) TearDownTest() {
-	s.worker.Stop()
-	s.sdkClient.Close()
+	if s.worker != nil {
+		s.worker.Stop()
+	}
+	if s.sdkClient != nil {
+		s.sdkClient.Close()
+	}
 }
 
 // testDataConverter implements encoded.DataConverter using gob

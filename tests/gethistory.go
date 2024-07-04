@@ -70,6 +70,8 @@ func (s *RawHistorySuite) TearDownSuite() {
 }
 
 func (s *RawHistorySuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 }

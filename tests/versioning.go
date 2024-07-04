@@ -123,6 +123,8 @@ func (s *VersioningIntegSuite) TearDownSuite() {
 }
 
 func (s *VersioningIntegSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
@@ -137,7 +139,9 @@ func (s *VersioningIntegSuite) SetupTest() {
 }
 
 func (s *VersioningIntegSuite) TearDownTest() {
-	s.sdkClient.Close()
+	if s.sdkClient != nil {
+		s.sdkClient.Close()
+	}
 }
 
 func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {

@@ -75,8 +75,6 @@ type (
 const invalidUTF8 = "\n\x8f\x01\n\x0ejunk\x12data"
 
 func (s *namespaceTestSuite) SetupSuite() {
-	checkTestShard(s.T())
-
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = NewTestClusterFactory()
 
@@ -123,6 +121,8 @@ func (s *namespaceTestSuite) TearDownSuite() {
 }
 
 func (s *namespaceTestSuite) SetupTest() {
+	checkTestShard(s.T())
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
