@@ -1217,6 +1217,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					assert.Error(s.T(), err1)
 					assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
 					assert.Nil(s.T(), updateResponse)
+					// To make sure that update has completed.
+					runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, runtime.WithNumGoRoutines(0))
 				} else {
 					assert.NoError(s.T(), err1)
 				}
@@ -4473,6 +4475,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_N
 		Namespace: s.namespace,
 		TaskToken: wt1.TaskToken,
 	})
+	s.NoError(err)
 
 	// Send 1st update. It will create 2nd speculative WFT.
 	go func() {

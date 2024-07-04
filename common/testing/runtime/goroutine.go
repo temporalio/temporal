@@ -72,8 +72,9 @@ func WithNumGoRoutines(numGoRoutines int) func(*WaitOptions) {
 	}
 }
 
-// WaitGoRoutineWithFn waits for a go routine with the given function to appear within the duration.
-func WaitGoRoutineWithFn(t testing.TB, fn any, opts ...func(*WaitOptions)) {
+// WaitGoRoutineWithFn waits for a go routine with the given function to appear in call stacks,
+// using different WaitOptions, and returns the number of attempts needed to find the go routine.
+func WaitGoRoutineWithFn(t testing.TB, fn any, opts ...func(*WaitOptions)) int {
 	wo := defaultWaitOptions
 	for _, opt := range opts {
 		opt(&wo)
@@ -99,6 +100,7 @@ func WaitGoRoutineWithFn(t testing.TB, fn any, opts ...func(*WaitOptions)) {
 		wo.MaxDuration,
 		wo.CheckInterval,
 		"Function %s must be found %d times but was found %d times in all go routine call stacks after %s", fnName, wo.NumGoRoutines, numFound, wo.MaxDuration.String())
+	return attempt
 }
 
 func AssertNoGoRoutineWithFn(t testing.TB, fn any) {
@@ -119,6 +121,7 @@ func numGoRoutinesWithFn(fnName string) (int, error) {
 	stackRecords := make([]runtime.StackRecord, runtime.NumGoroutine()+20)
 	stackRecordsLen, ok := runtime.GoroutineProfile(stackRecords)
 	if !ok {
+		// nolint:goerr113 // Error is just for logging.
 		return 0, errors.New(fmt.Sprintf("Size %d is too small for stack records. Need %d", len(stackRecords), stackRecordsLen))
 	}
 
@@ -148,6 +151,7 @@ func functionName(fn any) (string, error) {
 		return fnName, nil
 	}
 
+	// nolint:goerr113 // Error is just for logging.
 	return "", errors.New(fmt.Sprintf("Invalid function %#v", fn))
 }
 
