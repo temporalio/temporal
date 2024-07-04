@@ -2133,7 +2133,7 @@ that task will be sent to DLQ.`,
 		10,
 		`Maximum number of resend events batch for a single replication request`,
 	)
-	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
+	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
 		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
