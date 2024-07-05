@@ -1658,6 +1658,12 @@ Fields (see gobreaker reference for more details):
   if interval is 0, then it never clears the internal counts (default 0).
 - Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
+	OutboundStandbyWrapErrTaskRetryWithDestionationDown = NewTaskTypeBoolSetting(
+		"history.outboundQueue.wrapErrTaskRetryWithDestionationDown",
+		true,
+		`OutboundStandbyWrapErrTaskRetryWithDestionationDown enables wrapping ErrTaskRetry error when
+processing standby task with DestinationDownError`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",

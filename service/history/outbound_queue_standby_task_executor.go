@@ -157,10 +157,13 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 
 	historyResendInfo, err := actionFn(ctx)
 	if err != nil {
-		if errors.Is(err, consts.ErrTaskRetry) {
+		if e.config.OutboundStandbyWrapErrTaskRetryWithDestionationDown(task.GetType()) &&
+			errors.Is(err, consts.ErrTaskRetry) {
 			// If the error is retryable, it means the task hasn't been processed on the active side yet.
-			// Since the most likely reason would be the destination is down, we wrap the error here with
-			// DestinationDownError so it can trigger the circuit breaker on the standby side as well.
+			// The *likely* reasons are: a) delay in the replication stack; b) destination is down.
+			// In any case, since the task is retryable, wrapping the error with DestinationDownError so
+			// it can trigger the circuit breaker on the standby side won't do any harm (at most delay
+			// processing the standby task a little bit).
 			// Assuming the dynamic config StandbyTaskMissingEventsDiscardDelay is long enough, it should
 			// give enough time for the active side to execute the task successfully, and the standby side
 			// to process it as well without discarding the task.
