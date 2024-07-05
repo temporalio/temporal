@@ -834,6 +834,18 @@ server hosts for it to take effect.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
+	NexusReadThroughCacheSize = NewGlobalIntSetting(
+		"system.nexusReadThroughCacheSize",
+		100,
+		`The size of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
+used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
+	NexusReadThroughCacheTTL = NewGlobalDurationSetting(
+		"system.nexusReadThroughCacheTTL",
+		30*time.Second,
+		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
+used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
