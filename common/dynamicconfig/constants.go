@@ -1096,7 +1096,7 @@ This can help reduce effects of task queue movement.`,
 	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
-		24*365*10*time.Hour,
+		5*time.Second,
 		`MatchingBacklogNegligibleAge if the head of backlog gets older than this we stop sync match and
 forwarding to ensure more equal dispatch order among partitions.`,
 	)
