@@ -68,7 +68,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -693,7 +692,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 		s.mockShard,
 		tests.NamespaceID,
 		&execution,
-		locks.PriorityHigh,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
@@ -4492,7 +4491,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 		s.mockShard,
 		tests.NamespaceID,
 		&we,
-		locks.PriorityHigh,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
@@ -6255,7 +6254,7 @@ func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we *commonpb
 		s.mockShard,
 		tests.NamespaceID,
 		we,
-		locks.PriorityHigh,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil
