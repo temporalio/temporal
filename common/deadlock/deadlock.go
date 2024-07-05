@@ -68,6 +68,7 @@ type (
 		metricsHandler metrics.Handler
 		config         config
 		roots          []pingable.Pingable
+		pools          []*goro.AdaptivePool
 		loops          goro.Group
 	}
 
@@ -96,16 +97,18 @@ func NewDeadlockDetector(params params) *deadlockDetector {
 
 func (dd *deadlockDetector) Start() error {
 	for _, root := range dd.roots {
+		pool := goro.NewAdaptivePool(
+			clock.NewRealTimeSource(),
+			0,
+			dd.config.MaxWorkersPerRoot(),
+			100*time.Millisecond,
+			10,
+		)
+		dd.pools = append(dd.pools, pool)
 		loopCtx := &loopContext{
 			dd:   dd,
 			root: root,
-			p: goro.NewAdaptivePool(
-				clock.NewRealTimeSource(),
-				0,
-				dd.config.MaxWorkersPerRoot(),
-				100*time.Millisecond,
-				10,
-			),
+			p:    pool,
 		}
 		dd.loops.Go(loopCtx.run)
 	}
@@ -113,6 +116,9 @@ func (dd *deadlockDetector) Start() error {
 }
 
 func (dd *deadlockDetector) Stop() error {
+	for _, pool := range dd.pools {
+		pool.Stop()
+	}
 	dd.loops.Cancel()
 	// don't wait for workers to exit, they may be blocked
 	return nil
@@ -163,7 +169,6 @@ func (lc *loopContext) run(ctx context.Context) error {
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
-			lc.p.Stop()
 			timer.Stop()
 			return ctx.Err()
 		}
