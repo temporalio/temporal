@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -1216,6 +1217,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					assert.Error(s.T(), err1)
 					assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
 					assert.Nil(s.T(), updateResponse)
+					// To make sure that update has completed.
+					runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, runtime.WithNumGoRoutines(0))
 				} else {
 					assert.NoError(s.T(), err1)
 				}
@@ -4169,14 +4172,14 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
 	}
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_AfterCloseShardBecauseOfDifferentStartedId() {
+func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartedId() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
-		Shard is reloaded, speculative WT is disappeared from server.
-		Another update come in and second speculative WT is scheduled but not dispatched yet.
+		Workflow context is cleared, speculative WT is disappeared from server.
+		Update is retired and second speculative WT is scheduled but not dispatched yet.
 		An activity completes, it converts the 2nd speculative WT into normal one.
-		The first speculative WT responds back, server fails request it because WorkflowTaskStarted event Id is mismatched.
+		The first speculative WT responds back, server fails request because WorkflowTaskStarted event Id is mismatched.
 		The second speculative WT responds back and server completes it.
 	*/
 
@@ -4248,13 +4251,15 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_A
 	  6 WorkflowTaskScheduled
 	  7 WorkflowTaskStarted`, wt2.History)
 
-	// Close shard, this will clear mutable state and speculative WT will disappear.
-	s.closeShard(tv.WorkflowID())
+	// DescribeMutableState will clear workflow context cause the speculative WT and update registry to disappear.
+	_, err = s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: tv.WorkflowExecution(),
+	})
+	s.NoError(err)
 
-	// Send 2nd update (with SAME updateId). This will create a 3rd WT as speculative.
-	go func() {
-		_, _ = s.sendUpdate(tv, "1")
-	}()
+	// Wait for update to retry and recreate. This will create a 3rd WFT as speculative.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	// Before polling for the 3rd speculative WT, process activity. This will convert 3rd speculative WT to normal WT.
 	err = poller.PollAndProcessActivityTask(false)
@@ -4286,28 +4291,19 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_A
 	_, err = s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: wt2.TaskToken,
-		Commands:  s.UpdateAcceptCommands(tv, "1"),
-		Messages:  s.UpdateAcceptMessages(tv, wt2.Messages[0], "1"),
+		Commands:  s.UpdateAcceptCompleteCommands(tv, "1"),
+		Messages:  s.UpdateAcceptCompleteMessages(tv, wt2.Messages[0], "1"),
 	})
-	s.Error(err)
+	s.Error(err, "Must fail because WorkflowTaskStarted event Id is different.")
+	s.IsType(&serviceerror.NotFound{}, err)
 	s.Contains(err.Error(), "Workflow task not found")
 
 	// Complete 3rd WT. It should succeed.
 	_, err = s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: wt3.TaskToken,
-		Commands: append(
-			s.UpdateAcceptCommands(tv, "1"),
-			&commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID(),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}),
-		Messages: s.UpdateAcceptMessages(tv, wt3.Messages[0], "1"),
+		Commands:  s.UpdateAcceptCompleteCommands(tv, "1"),
+		Messages:  s.UpdateAcceptCompleteMessages(tv, wt3.Messages[0], "1"),
 	})
 	s.NoError(err)
 
@@ -4324,16 +4320,16 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_A
 	  9 WorkflowTaskStarted
 	 10 WorkflowTaskCompleted
 	 11 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":8}
-	 12 ActivityTaskScheduled
+	 12 WorkflowExecutionUpdateCompleted
 	`, events)
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_AfterCloseShardBecauseOfDifferentStartTime() {
+func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartTime() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
-		Shard is reloaded, speculative WT is disappeared from server.
-		Another update come in and second speculative WT is dispatched to worker with same WT scheduled/started Id and update Id.
+		WF context is cleared, speculative WT is disappeared from server.
+		Update is retried and second speculative WT is dispatched to worker with same WT scheduled/started Id and update Id.
 		The first speculative WT respond back, server reject it because startTime is different.
 		The second speculative WT respond back, server accept it.
 	*/
@@ -4345,16 +4341,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_A
 		wtHandlerCalls++
 		switch wtHandlerCalls {
 		case 1:
-			// Schedule activity.
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("1"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}}, nil
+			return nil, nil
 		default:
 			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
 			return nil, nil
@@ -4375,7 +4362,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_A
 	s.NoError(err)
 	s.NotNil(res)
 
-	// Send 1st update. It will create 2nd WT as speculative.
+	// Send update. It will create 2nd WT as speculative.
 	go func() {
 		_, _ = s.sendUpdate(tv, "1")
 	}()
@@ -4389,24 +4376,25 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_A
 	s.NotNil(wt2)
 	s.NotEmpty(wt2.TaskToken, "2nd workflow task must have valid task token")
 	s.Len(wt2.Messages, 1, "2nd workflow task must have a message with 1st update")
-	s.EqualValues(7, wt2.StartedEventId)
-	s.EqualValues(6, wt2.Messages[0].GetEventId())
+	s.EqualValues(6, wt2.StartedEventId)
+	s.EqualValues(5, wt2.Messages[0].GetEventId())
 	s.EqualHistory(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted`, wt2.History)
+	  5 WorkflowTaskScheduled
+	  6 WorkflowTaskStarted`, wt2.History)
 
-	// Close shard, this will clear mutable state and speculative WT will disappear.
-	s.closeShard(tv.WorkflowID())
+	// DescribeMutableState will clear workflow context cause the speculative WT and update registry to disappear.
+	_, err = s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: tv.WorkflowExecution(),
+	})
+	s.NoError(err)
 
-	// Send 2nd update (with SAME updateId). This will create a 3rd WT as speculative.
-	go func() {
-		_, _ = s.sendUpdate(tv, "1")
-	}()
+	// Wait for update to retry and recreate. This will create a 3rd WFT as speculative.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
 
 	// Poll for the 3rd speculative WT.
 	wt3, err := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4417,52 +4405,33 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_A
 	s.NotNil(wt3)
 	s.NotEmpty(wt3.TaskToken, "3rd workflow task must have valid task token")
 	s.Len(wt3.Messages, 1, "3rd workflow task must have a message with 1st update")
-	s.EqualValues(7, wt3.StartedEventId)
-	s.EqualValues(6, wt3.Messages[0].GetEventId())
+	s.EqualValues(6, wt3.StartedEventId)
+	s.EqualValues(5, wt3.Messages[0].GetEventId())
 	s.EqualHistory(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted`, wt3.History)
+	  5 WorkflowTaskScheduled
+	  6 WorkflowTaskStarted`, wt3.History)
 
 	// Now try to complete 2nd (speculative) WT, it should fail.
 	_, err = s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: wt2.TaskToken,
-		Commands: append(
-			s.UpdateAcceptCommands(tv, "1"),
-			&commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("2"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}),
-		Messages: s.UpdateAcceptMessages(tv, wt2.Messages[0], "1"),
+		Commands:  s.UpdateAcceptCompleteCommands(tv, "1"),
+		Messages:  s.UpdateAcceptCompleteMessages(tv, wt2.Messages[0], "1"),
 	})
+	s.Error(err, "Must fail because workflow task start time is different.")
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.Contains(err.Error(), "Workflow task not found")
 
 	// Try to complete 3rd WT, it should succeed
 	_, err = s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: wt3.TaskToken,
-		Commands: append(
-			s.UpdateAcceptCommands(tv, "1"),
-			&commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("2"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}),
-		Messages: s.UpdateAcceptMessages(tv, wt3.Messages[0], "1"),
+		Commands:  s.UpdateAcceptCompleteCommands(tv, "1"),
+		Messages:  s.UpdateAcceptCompleteMessages(tv, wt3.Messages[0], "1"),
 	})
 	s.NoError(err, "2nd speculative WT should be completed because it has same WT scheduled/started Id and startTime matches the accepted message is valid (same update Id)")
 
@@ -4472,66 +4441,41 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_A
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted
-	  8 WorkflowTaskCompleted
-	  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":6}
-	 10 ActivityTaskScheduled
+	  5 WorkflowTaskScheduled
+	  6 WorkflowTaskStarted
+	  7 WorkflowTaskCompleted
+	  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":5}
+	  9 WorkflowExecutionUpdateCompleted
 	`, events)
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_ClearMutableState() {
+func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_NewWorkflowTaskWith2Updates() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
 		Mutable state cleared, speculative WT and update registry are disappeared from server.
-		Another update come in, and second speculative WT is dispatched to worker with same WT scheduled/started Id but different update Id.
+		First update is retried and another update come in.
+		Second speculative WT is dispatched to worker with same WT scheduled/started Id but 2 updates.
 		The first speculative WT responds back, server rejected it (different start time).
 		The second speculative WT responds back, server accepted it.
 	*/
 
-	// reset reuse minimal interval to allow workflow termination
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
-
 	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
-
 	testCtx := NewContext()
-	wtHandlerCalls := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		wtHandlerCalls++
-		switch wtHandlerCalls {
-		case 1:
-			// Schedule activity.
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("1"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}}, nil
-		default:
-			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
-			return nil, nil
-		}
-	}
 
-	poller := &TaskPoller{
-		Engine:              s.engine,
-		Namespace:           s.namespace,
-		TaskQueue:           tv.TaskQueue(),
-		WorkflowTaskHandler: wtHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
-
-	// First WT will schedule activity.
-	res, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+	// Drain first WFT.
+	wt1, err := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+	})
 	s.NoError(err)
-	s.NotNil(res)
+	s.NotNil(wt1)
+	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
+		TaskToken: wt1.TaskToken,
+	})
+	s.NoError(err)
 
 	// Send 1st update. It will create 2nd speculative WFT.
 	go func() {
@@ -4547,16 +4491,15 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 	s.NotNil(wt2)
 	s.NotEmpty(wt2.TaskToken, "2nd workflow task must have valid task token")
 	s.Len(wt2.Messages, 1, "2nd workflow task must have a message with 1st update")
-	s.EqualValues(7, wt2.StartedEventId)
-	s.EqualValues(6, wt2.Messages[0].GetEventId())
+	s.EqualValues(6, wt2.StartedEventId)
+	s.EqualValues(5, wt2.Messages[0].GetEventId())
 	s.EqualHistory(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted`, wt2.History)
+	  5 WorkflowTaskScheduled
+	  6 WorkflowTaskStarted`, wt2.History)
 
 	// DescribeMutableState will clear workflow context cause the speculative WT and update registry to disappear.
 	_, err = s.adminClient.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
@@ -4572,7 +4515,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 	go func() {
 		_, _ = s.sendUpdate(tv, "2")
 	}()
-	// Make sure that updateID=2 reached server (and added to the 4th WFT) before WFT is polled.
+	// Make sure that updateID=2 reached server (and added to the 3rd WFT) before WFT is polled.
 	// updateID=1 is still blocked. There must be 2 blocked calls now.
 	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, runtime.WithNumGoRoutines(2))
 
@@ -4585,35 +4528,27 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 	s.NotNil(wt3)
 	s.NotEmpty(wt3.TaskToken, "3rd workflow task must have valid task token")
 	s.Len(wt3.Messages, 2, "3rd workflow task must have a message with 1st and 2nd updates")
-	s.EqualValues(7, wt3.StartedEventId)
-	s.EqualValues(6, wt3.Messages[0].GetEventId())
+	s.EqualValues(6, wt3.StartedEventId)
+	s.EqualValues(5, wt3.Messages[0].GetEventId())
+	s.EqualValues(5, wt3.Messages[1].GetEventId())
 	s.EqualHistory(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted`, wt3.History)
+	  5 WorkflowTaskScheduled
+	  6 WorkflowTaskStarted`, wt3.History)
 
 	// Now try to complete 2nd speculative WT, it should fail because start time does not match.
 	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.namespace,
-		TaskToken: wt2.TaskToken,
-		Commands: append(
-			s.UpdateAcceptCommands(tv, "1"),
-			&commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("2"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}),
-		Messages:              s.UpdateAcceptMessages(tv, wt2.Messages[0], "1"),
+		Namespace:             s.namespace,
+		TaskToken:             wt2.TaskToken,
+		Commands:              s.UpdateAcceptCompleteCommands(tv, "1"),
+		Messages:              s.UpdateAcceptCompleteMessages(tv, wt2.Messages[0], "1"),
 		ReturnNewWorkflowTask: true,
 	})
+	s.Error(err, "Must fail because start time is different.")
+	s.Contains(err.Error(), "Workflow task not found")
 	s.IsType(&serviceerror.NotFound{}, err)
 
 	// Complete of the 3rd WT should succeed. It must accept both updates.
@@ -4621,31 +4556,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 		Namespace: s.namespace,
 		TaskToken: wt3.TaskToken,
 		Commands: append(
-			s.UpdateAcceptCommands(tv, "1"),
-			append(
-				s.UpdateAcceptCommands(tv, "2"),
-				&commandpb.Command{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             tv.ActivityID("3"),
-						ActivityType:           tv.ActivityType(),
-						TaskQueue:              tv.TaskQueue(),
-						ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-					}},
-				},
-				&commandpb.Command{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             tv.ActivityID("4"),
-						ActivityType:           tv.ActivityType(),
-						TaskQueue:              tv.TaskQueue(),
-						ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-					}},
-				},
-			)...),
+			s.UpdateAcceptCompleteCommands(tv, "1"),
+			s.UpdateAcceptCompleteCommands(tv, "2")...),
 		Messages: append(
-			s.UpdateAcceptMessages(tv, wt3.Messages[0], "1"),
-			s.UpdateAcceptMessages(tv, wt3.Messages[1], "2")...),
+			s.UpdateAcceptCompleteMessages(tv, wt3.Messages[0], "1"),
+			s.UpdateAcceptCompleteMessages(tv, wt3.Messages[1], "2")...),
 		ReturnNewWorkflowTask: true,
 	})
 	s.NoError(err)
@@ -4657,170 +4572,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_C
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted
-	  8 WorkflowTaskCompleted
-	  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6}
-	 10 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6}
-	 11 ActivityTaskScheduled
-	 12 ActivityTaskScheduled
-	`, events)
-}
-
-func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_AfterCloseShardBecauseOfDifferentUpdateId() {
-	/*
-		Test scenario:
-		An update created a speculative WT and WT is dispatched to the worker (started).
-		Shard is reloaded, speculative WT and update registry are disappeared from server.
-		Another update come in (with different update Id), and second speculative WT is dispatched to worker.
-		The first speculative WT responds back, server fails WT because start time different.
-		The second speculative WT responds back, server reject it.
-	*/
-
-	tv := testvars.New(s.T())
-	tv = s.startWorkflow(tv)
-
-	testCtx := NewContext()
-	wtHandlerCalls := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		wtHandlerCalls++
-		switch wtHandlerCalls {
-		case 1:
-			// Schedule activity.
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("1"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}}, nil
-		default:
-			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
-			return nil, nil
-		}
-	}
-
-	poller := &TaskPoller{
-		Engine:              s.engine,
-		Namespace:           s.namespace,
-		TaskQueue:           tv.TaskQueue(),
-		WorkflowTaskHandler: wtHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
-
-	// First WT will schedule activity.
-	res, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
-	s.NoError(err)
-	s.NotNil(res)
-
-	// send update wf request, this will trigger speculative wft
-	go func() {
-		_, _ = s.sendUpdate(tv, "1")
-	}()
-
-	// Poll 2nd speculative WT.
-	wt2, err := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
-		TaskQueue: tv.TaskQueue(),
-	})
-	s.NoError(err)
-	s.NotNil(wt2)
-	s.NotEmpty(wt2.TaskToken, "2nd workflow task must have valid task token")
-	s.Len(wt2.Messages, 1, "2nd workflow task must have a message with 1st update")
-	s.EqualValues(7, wt2.StartedEventId)
-	s.EqualValues(6, wt2.Messages[0].GetEventId())
-	s.EqualHistory(`
-	  1 WorkflowExecutionStarted
-	  2 WorkflowTaskScheduled
-	  3 WorkflowTaskStarted
-	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted`, wt2.History)
-
-	// Close shard, this will clear mutable state and update registry, and speculative WT2 will disappear.
-	s.closeShard(tv.WorkflowID())
-
-	// Send 2nd update (with DIFFERENT updateId). This will create a 3rd WT as speculative.
-	go func() {
-		_, _ = s.sendUpdate(tv, "2")
-	}()
-
-	// Poll the 3rd speculative WT which must have 2nd update.
-	wt3, err := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
-		TaskQueue: tv.TaskQueue(),
-	})
-	s.NoError(err)
-	s.NotNil(wt3)
-	s.NotEmpty(wt3.TaskToken, "4th workflow task must have valid task token")
-	s.Len(wt3.Messages, 1, "4th workflow task must have a message with 1st update")
-	s.EqualValues(7, wt3.StartedEventId)
-	s.EqualValues(6, wt3.Messages[0].GetEventId())
-	s.EqualHistory(`
-	  1 WorkflowExecutionStarted
-	  2 WorkflowTaskScheduled
-	  3 WorkflowTaskStarted
-	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted`, wt3.History)
-
-	// Now try to complete 2nd speculative WT, it should fail.
-	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.namespace,
-		TaskToken: wt2.TaskToken,
-		Commands: append(
-			s.UpdateAcceptCommands(tv, "1"),
-			&commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("2"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}),
-		Messages: s.UpdateAcceptMessages(tv, wt2.Messages[0], "1"),
-	})
-	s.Error(err, "Must fail because start time is different.")
-	s.Contains(err.Error(), "Workflow task not found")
-
-	// Now try to complete 3rd speculative WT. It should also fail, because the previous attempt already mark the WT as failed.
-	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.namespace,
-		TaskToken: wt3.TaskToken,
-		Commands: append(
-			s.UpdateAcceptCommands(tv, "2"),
-			&commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("3"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}),
-		Messages: s.UpdateAcceptMessages(tv, wt3.Messages[0], "2"),
-	})
-	s.NoError(err)
-
-	events := s.getHistory(s.namespace, tv.WorkflowExecution())
-	s.EqualHistoryEvents(`
-	  1 WorkflowExecutionStarted
-	  2 WorkflowTaskScheduled
-	  3 WorkflowTaskStarted
-	  4 WorkflowTaskCompleted
-	  5 ActivityTaskScheduled
-	  6 WorkflowTaskScheduled
-	  7 WorkflowTaskStarted
-	  8 WorkflowTaskCompleted
-	  9 WorkflowExecutionUpdateAccepted
-	 10 ActivityTaskScheduled
+	  5 WorkflowTaskScheduled
+	  6 WorkflowTaskStarted
+	  7 WorkflowTaskCompleted
+	  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5}
+	  9 WorkflowExecutionUpdateCompleted
+	 10 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5}
+	 11 WorkflowExecutionUpdateCompleted
 	`, events)
 }
 
@@ -5161,47 +4919,67 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOfAdmi
 	// non-deterministically. This number should be high enough that the false-negative rate of the test is low, but
 	// must not exceed our limit on number of in-flight updates. If we were picking a random ordering then the
 	// false-negative rate would be 1/(nUpdates!).
-	nUpdates := 20
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowExecutionMaxInFlightUpdates, nUpdates)
+	nUpdates := 10
 
 	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 	for i := 0; i < nUpdates; i++ {
-		updateId := fmt.Sprint(i)
-		go func() { _, _ = s.sendUpdate(tv, updateId) }()
-		s.Eventually(func() bool {
-			resp, err := s.pollUpdate(tv, updateId, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED})
-			if err == nil {
-				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
-				return true
-			}
-			var notFoundErr *serviceerror.NotFound
-			s.ErrorAs(err, &notFoundErr) // poll beat send in race
-			return false
-		}, time.Second, 10*time.Millisecond, fmt.Sprintf("update %s did not reach Admitted stage", updateId))
+		// Sequentially send updates one by one.
+		updateId := strconv.Itoa(i)
+		go func() {
+			_, _ = s.sendUpdate(tv, updateId)
+		}()
+		runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, runtime.WithNumGoRoutines(i+1))
 	}
 
-	nCalls := 0
+	wtHandlerCalls := 0
+	msgHandlerCalls := 0
 	poller := &TaskPoller{
 		Engine:    s.engine,
 		Namespace: s.namespace,
 		TaskQueue: tv.TaskQueue(),
 		Identity:  tv.WorkerIdentity(),
 		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-			return []*commandpb.Command{}, nil
+			msgHandlerCalls++
+			var commands []*commandpb.Command
+			for i := range task.Messages {
+				commands = append(commands, s.UpdateAcceptCompleteCommands(tv, strconv.Itoa(i))...)
+			}
+			return commands, nil
 		},
 		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			wtHandlerCalls++
 			s.Len(task.Messages, nUpdates)
+			var messages []*protocolpb.Message
+			// Updates were sent in sequential order of updateId => messages must be ordered in the same way.
 			for i, m := range task.Messages {
-				s.Equal(tv.UpdateID(fmt.Sprint(i)), m.ProtocolInstanceId)
+				s.Equal(tv.UpdateID(strconv.Itoa(i)), m.ProtocolInstanceId)
+				messages = append(messages, s.UpdateAcceptCompleteMessages(tv, m, strconv.Itoa(i))...)
 			}
-			nCalls++
-			return []*protocolpb.Message{}, nil
+			return messages, nil
 		},
 		Logger: s.Logger,
 		T:      s.T(),
 	}
 	_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
 	s.NoError(err)
-	s.Equal(1, nCalls)
+	s.Equal(1, wtHandlerCalls)
+	s.Equal(1, msgHandlerCalls)
+
+	expectedHistory := `
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+`
+	for i := 0; i < nUpdates; i++ {
+		expectedHistory += fmt.Sprintf(`
+  %d WorkflowExecutionUpdateAccepted {"AcceptedRequest":{"Meta": {"UpdateId": "%s"}}}
+  %d WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "%s"}}`,
+			5+2*i, tv.UpdateID(strconv.Itoa(i)),
+			6+2*i, tv.UpdateID(strconv.Itoa(i)))
+	}
+
+	history := s.getHistory(s.namespace, tv.WorkflowExecution())
+	s.EqualHistoryEvents(expectedHistory, history)
 }
