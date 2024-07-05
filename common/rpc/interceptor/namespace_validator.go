@@ -62,10 +62,11 @@ var (
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
-		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
-		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		"/temporal.api.operatorservice.v1.OperatorService/DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
-		"/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask":                      {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.WorkflowServicePrefix + "StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.OperatorServicePrefix + "DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		api.AdminServicePrefix + "DescribeMutableState":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		api.NexusServicePrefix + "DispatchNexusTask":                   {enumspb.NAMESPACE_STATE_REGISTERED},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
