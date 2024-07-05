@@ -840,8 +840,9 @@ func NexusEndpointClientProvider(
 func NexusEndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	nexusEndpointManager persistence.NexusEndpointManager,
-	logger log.Logger,
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) nexus.EndpointRegistry {
 	registryConfig := nexus.NewEndpointRegistryConfig(dc)
 	return nexus.NewEndpointRegistry(
@@ -849,6 +850,7 @@ func NexusEndpointRegistryProvider(
 		matchingClient,
 		nexusEndpointManager,
 		logger,
+		metricsHandler,
 	)
 }
 
