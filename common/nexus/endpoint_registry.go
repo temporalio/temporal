@@ -34,10 +34,13 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
@@ -51,6 +54,8 @@ type (
 		refreshPageSize        dynamicconfig.IntPropertyFn
 		refreshMinWait         dynamicconfig.DurationPropertyFn
 		refreshRetryPolicy     backoff.RetryPolicy
+		readThroughCacheSize   dynamicconfig.IntPropertyFn
+		readThroughCacheTTL    dynamicconfig.DurationPropertyFn
 	}
 
 	EndpointRegistry interface {
@@ -80,6 +85,8 @@ type (
 		matchingClient matchingservice.MatchingServiceClient
 		persistence    p.NexusEndpointManager
 		logger         log.Logger
+
+		readThroughCacheByID cache.Cache
 	}
 )
 
@@ -89,6 +96,8 @@ func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryCo
 		refreshLongPollTimeout: dynamicconfig.RefreshNexusEndpointsLongPollTimeout.Get(dc),
 		refreshPageSize:        dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc),
 		refreshMinWait:         dynamicconfig.RefreshNexusEndpointsMinWait.Get(dc),
+		readThroughCacheSize:   dynamicconfig.NexusReadThroughCacheSize.Get(dc),
+		readThroughCacheTTL:    dynamicconfig.NexusReadThroughCacheTTL.Get(dc),
 	}
 	config.refreshRetryPolicy = backoff.NewExponentialRetryPolicy(config.refreshMinWait()).WithMaximumInterval(config.refreshLongPollTimeout())
 	return config
@@ -99,6 +108,7 @@ func NewEndpointRegistry(
 	matchingClient matchingservice.MatchingServiceClient,
 	persistence p.NexusEndpointManager,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *EndpointRegistryImpl {
 	return &EndpointRegistryImpl{
 		config:          config,
@@ -108,6 +118,9 @@ func NewEndpointRegistry(
 		matchingClient:  matchingClient,
 		persistence:     persistence,
 		logger:          logger,
+		readThroughCacheByID: cache.NewWithMetrics(config.readThroughCacheSize(), &cache.Options{
+			TTL: config.readThroughCacheTTL(),
+		}, metricsHandler.WithTags(metrics.CacheTypeTag(metrics.NexusEndpointRegistryReadThroughCacheTypeTagValue))),
 	}
 }
 
@@ -135,9 +148,9 @@ func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, en
 		return nil, err
 	}
 	r.dataLock.RLock()
-	defer r.dataLock.RUnlock()
-
 	endpoint, ok := r.endpointsByName[endpointName]
+	r.dataLock.RUnlock()
+
 	if !ok {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus endpoint by name: %v", endpointName))
 	}
@@ -150,11 +163,25 @@ func (r *EndpointRegistryImpl) GetByID(ctx context.Context, id string) (*persist
 	}
 
 	r.dataLock.RLock()
-	defer r.dataLock.RUnlock()
-
 	endpoint, ok := r.endpointsByID[id]
+	r.dataLock.RUnlock()
+
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus endpoint with ID: %v", id))
+		// Entry not found, attempt read-through to persistence.
+		fut := future.NewFuture[*persistencespb.NexusEndpointEntry]()
+		cachedFut, err := r.readThroughCacheByID.PutIfNotExist(id, fut)
+		if err != nil {
+			return nil, err
+		}
+		// The future was already in the cache, reuse it.
+		if cachedFut != fut {
+			return cachedFut.(future.Future[*persistencespb.NexusEndpointEntry]).Get(ctx)
+		}
+		endpoint, err = r.persistence.GetNexusEndpoint(ctx, &p.GetNexusEndpointRequest{
+			ID: id,
+		})
+		fut.Set(endpoint, err)
+		return endpoint, err
 	}
 
 	return endpoint, nil
@@ -222,14 +249,9 @@ func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context) error {
 // loadEndpoints initializes the in-memory view of endpoints data.
 // It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
 func (r *EndpointRegistryImpl) loadEndpoints(ctx context.Context) error {
-	tableVersion, endpoints, err := r.getAllEndpointsMatching(ctx)
+	tableVersion, endpoints, err := r.getAllEndpointsMatchingWithPersistenceFallback(ctx)
 	if err != nil {
-		// Fallback to persistence on matching error during initial load.
-		r.logger.Error("error from matching when initializing Nexus endpoint cache", tag.Error(err))
-		tableVersion, endpoints, err = r.getAllEndpointsPersistence(ctx)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 	endpointsByID := make(map[string]*persistencespb.NexusEndpointEntry, len(endpoints))
 	endpointsByName := make(map[string]*persistencespb.NexusEndpointEntry, len(endpoints))
@@ -237,6 +259,9 @@ func (r *EndpointRegistryImpl) loadEndpoints(ctx context.Context) error {
 		endpointsByID[endpoint.Id] = endpoint
 		endpointsByName[endpoint.Endpoint.Spec.Name] = endpoint
 	}
+
+	r.dataLock.Lock()
+	defer r.dataLock.Unlock()
 
 	r.tableVersion = tableVersion
 	r.endpointsByID = endpointsByID
@@ -319,13 +344,19 @@ func (r *EndpointRegistryImpl) refreshEndpoints(ctx context.Context) error {
 	return nil
 }
 
+func (r *EndpointRegistryImpl) getAllEndpointsMatchingWithPersistenceFallback(ctx context.Context) (int64, []*persistencespb.NexusEndpointEntry, error) {
+	tableVersion, endpoints, err := r.getAllEndpointsMatching(ctx)
+	if err != nil {
+		// Fallback to persistence on matching error during initial load.
+		r.logger.Error("error from matching when initializing Nexus endpoint cache", tag.Error(err))
+		tableVersion, endpoints, err = r.getAllEndpointsPersistence(ctx)
+	}
+	return tableVersion, endpoints, err
+}
+
 // getAllEndpointsMatching paginates over all endpoints returned by matching. It always does a simple get.
 func (r *EndpointRegistryImpl) getAllEndpointsMatching(ctx context.Context) (int64, []*persistencespb.NexusEndpointEntry, error) {
-	var currentPageToken []byte
-	currentTableVersion := int64(0)
-	entries := make([]*persistencespb.NexusEndpointEntry, 0)
-
-	for ctx.Err() == nil {
+	return r.getAllEndpoints(ctx, func(currentTableVersion int64, currentPageToken []byte) (int64, []byte, []*persistencespb.NexusEndpointEntry, error) {
 		resp, err := r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 			NextPageToken:         currentPageToken,
 			PageSize:              int32(r.config.refreshPageSize()),
@@ -333,44 +364,38 @@ func (r *EndpointRegistryImpl) getAllEndpointsMatching(ctx context.Context) (int
 			Wait:                  false,
 		})
 		if err != nil {
-			var fpe *serviceerror.FailedPrecondition
-			if errors.As(err, &fpe) && fpe.Message == p.ErrNexusTableVersionConflict.Error() {
-				// indicates table was updated during paging, so reset and start from the beginning.
-				currentPageToken = nil
-				currentTableVersion = 0
-				entries = make([]*persistencespb.NexusEndpointEntry, 0, len(entries))
-				continue
-			}
-			return 0, nil, err
+			return 0, nil, nil, err
 		}
-
-		currentTableVersion = resp.TableVersion
-		entries = append(entries, resp.GetEntries()...)
-
-		if len(resp.NextPageToken) == 0 {
-			return currentTableVersion, entries, nil
-		}
-
-		currentPageToken = resp.NextPageToken
-	}
-
-	return 0, nil, ctx.Err()
+		return resp.TableVersion, resp.NextPageToken, resp.Entries, nil
+	})
 }
 
 // getAllEndpointsPersistence paginates over all endpoints returned by persistence.
 // Should only be used as a fall-back if matching service is unavailable during initial load.
 func (r *EndpointRegistryImpl) getAllEndpointsPersistence(ctx context.Context) (int64, []*persistencespb.NexusEndpointEntry, error) {
+	return r.getAllEndpoints(ctx, func(currentTableVersion int64, currentPageToken []byte) (int64, []byte, []*persistencespb.NexusEndpointEntry, error) {
+		resp, err := r.persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
+			LastKnownTableVersion: currentTableVersion,
+			NextPageToken:         currentPageToken,
+			PageSize:              r.config.refreshPageSize(),
+		})
+		if err != nil {
+			return 0, nil, nil, err
+		}
+		return resp.TableVersion, resp.NextPageToken, resp.Entries, nil
+	})
+}
+
+// getAllEndpointsPersistence paginates over all endpoints returned by persistence.
+// Should only be used as a fall-back if matching service is unavailable during initial load.
+func (r *EndpointRegistryImpl) getAllEndpoints(ctx context.Context, getter func(int64, []byte) (int64, []byte, []*persistencespb.NexusEndpointEntry, error)) (int64, []*persistencespb.NexusEndpointEntry, error) {
 	var currentPageToken []byte
 
 	currentTableVersion := int64(0)
 	entries := make([]*persistencespb.NexusEndpointEntry, 0)
 
 	for ctx.Err() == nil {
-		resp, err := r.persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
-			LastKnownTableVersion: currentTableVersion,
-			NextPageToken:         currentPageToken,
-			PageSize:              r.config.refreshPageSize(),
-		})
+		respTableVersion, respNextPageToken, respEntries, err := getter(currentTableVersion, currentPageToken)
 		if err != nil {
 			var fpe *serviceerror.FailedPrecondition
 			if errors.As(err, &fpe) && fpe.Message == p.ErrNexusTableVersionConflict.Error() {
@@ -383,14 +408,14 @@ func (r *EndpointRegistryImpl) getAllEndpointsPersistence(ctx context.Context) (
 			return 0, nil, err
 		}
 
-		currentTableVersion = resp.TableVersion
-		entries = append(entries, resp.Entries...)
+		currentTableVersion = respTableVersion
+		entries = append(entries, respEntries...)
 
-		if len(resp.NextPageToken) == 0 {
+		if len(respNextPageToken) == 0 {
 			return currentTableVersion, entries, nil
 		}
 
-		currentPageToken = resp.NextPageToken
+		currentPageToken = respNextPageToken
 	}
 
 	return 0, nil, ctx.Err()
