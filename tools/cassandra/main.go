@@ -86,6 +86,12 @@ func buildCLIOptions() *cli.App {
 			Usage:  "Password used for authentication for connecting to cassandra host",
 			EnvVar: "CASSANDRA_PASSWORD",
 		},
+		cli.StringSliceFlag{
+			Name:   schema.CLIFlagAllowedAuthenticators,
+			Value:  nil,
+			Usage:  "List of authenticators allowed to be used by the gocql client while connecting to the server.",
+			EnvVar: "CASSANDRA_ALLOWED_AUTHENTICATORS",
+		},
 		cli.IntFlag{
 			Name:   schema.CLIFlagTimeout,
 			Value:  defaultTimeout,

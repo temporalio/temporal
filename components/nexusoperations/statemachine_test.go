@@ -32,13 +32,15 @@ import (
 	"go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestAddChild(t *testing.T) {
@@ -119,7 +121,7 @@ func TestRegenerateTasks(t *testing.T) {
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
-				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).Destination, "endpoint-id")
+				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).EndpointName, "endpoint")
 				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
 			},
 		},
@@ -212,7 +214,7 @@ func TestRetry(t *testing.T) {
 	require.Equal(t, 1, len(oap[0].Outputs))
 	require.Equal(t, 1, len(oap[0].Outputs[0].Tasks))
 	invocationTask := oap[0].Outputs[0].Tasks[0].(nexusoperations.InvocationTask) // nolint:revive
-	require.Equal(t, "endpoint-id", invocationTask.Destination)
+	require.Equal(t, "endpoint", invocationTask.EndpointName)
 	op, err = hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
@@ -544,7 +546,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert cancelation task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	cbTask := out.Tasks[0].(nexusoperations.CancelationTask) // nolint:revive
-	require.Equal(t, "endpoint-id", cbTask.Destination)
+	require.Equal(t, "endpoint", cbTask.EndpointName)
 
 	// Store the pre-succeeded state to test Failed later
 	dup := nexusoperations.Cancelation{common.CloneProto(cancelation.NexusOperationCancellationInfo)}
@@ -590,4 +592,165 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// Assert no additional tasks are generated
 	require.Equal(t, 0, len(out.Tasks))
+}
+
+func TestOperationCompareState(t *testing.T) {
+	reg := hsm.NewRegistry()
+	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
+	def, ok := reg.Machine(nexusoperations.OperationMachineType)
+	require.True(t, ok)
+
+	cases := []struct {
+		name                 string
+		s1, s2               enumsspb.NexusOperationState
+		attempts1, attempts2 int32
+		sign                 int
+		expectError          bool
+	}{
+		{
+			name:        "succeeded not comparable to failed",
+			s1:          enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED,
+			s2:          enumsspb.NEXUS_OPERATION_STATE_FAILED,
+			expectError: true,
+		},
+		{
+			name: "started < succeeded",
+			s1:   enumsspb.NEXUS_OPERATION_STATE_STARTED,
+			s2:   enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED,
+			sign: -1,
+		},
+		{
+			name: "started = started",
+			s1:   enumsspb.NEXUS_OPERATION_STATE_STARTED,
+			s2:   enumsspb.NEXUS_OPERATION_STATE_STARTED,
+			sign: 0,
+		},
+		{
+			name: "backing off < failed",
+			s1:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			s2:   enumsspb.NEXUS_OPERATION_STATE_FAILED,
+			sign: -1,
+		},
+		{
+			name: "scheduled > backing off",
+			s1:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+			s2:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			sign: 1,
+		},
+		{
+			name:      "backing off < scheduled with greater attempt",
+			s1:        enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			s2:        enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+			attempts2: 1,
+			sign:      -1,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			s1 := nexusoperations.Operation{
+				NexusOperationInfo: &persistencespb.NexusOperationInfo{
+					State:   tc.s1,
+					Attempt: tc.attempts1,
+				},
+			}
+			s2 := nexusoperations.Operation{
+				NexusOperationInfo: &persistencespb.NexusOperationInfo{
+					State:   tc.s2,
+					Attempt: tc.attempts2,
+				},
+			}
+			res, err := def.CompareState(s1, s2)
+			if tc.expectError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if tc.sign == 0 {
+				require.Equal(t, 0, res)
+			} else if tc.sign > 0 {
+				require.Greater(t, res, 0)
+			} else {
+				require.Greater(t, 0, res)
+			}
+		})
+	}
+}
+
+func TestCancelationCompareState(t *testing.T) {
+	reg := hsm.NewRegistry()
+	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
+	def, ok := reg.Machine(nexusoperations.CancelationMachineType)
+	require.True(t, ok)
+
+	cases := []struct {
+		name                 string
+		s1, s2               enumspb.NexusOperationCancellationState
+		attempts1, attempts2 int32
+		sign                 int
+		expectError          bool
+	}{
+		{
+			name:        "succeeded not comparable to failed",
+			s1:          enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED,
+			s2:          enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
+			expectError: true,
+		},
+		{
+			name: "backing off < failed",
+			s1:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
+			s2:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
+			sign: -1,
+		},
+		{
+			name: "backing off = backing off",
+			s1:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
+			s2:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
+			sign: 0,
+		},
+		{
+			name: "scheduled > backing off",
+			s1:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
+			s2:   enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
+			sign: 1,
+		},
+		{
+			name:      "backing off < scheduled with greater attempt",
+			s1:        enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
+			s2:        enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
+			attempts2: 1,
+			sign:      -1,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			s1 := nexusoperations.Cancelation{
+				NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{
+					State:   tc.s1,
+					Attempt: tc.attempts1,
+				},
+			}
+			s2 := nexusoperations.Cancelation{
+				NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{
+					State:   tc.s2,
+					Attempt: tc.attempts2,
+				},
+			}
+			res, err := def.CompareState(s1, s2)
+			if tc.expectError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if tc.sign == 0 {
+				require.Equal(t, 0, res)
+			} else if tc.sign > 0 {
+				require.Greater(t, res, 0)
+			} else {
+				require.Greater(t, 0, res)
+			}
+		})
+	}
 }

@@ -374,16 +374,26 @@ func (s *Starter) resolveDuplicateWorkflowID(
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
 
-	currentWorkflowStartTime, err := s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
-	if err != nil {
-		return nil, err
+	currentWorkflowStartTime := time.Time{}
+	if s.shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(s.namespace.Name().String()) {
+		var err error
+		currentWorkflowStartTime, err = s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	workflowKey := definition.NewWorkflowKey(
+		s.namespace.ID().String(),
+		workflowID,
+		currentWorkflowConditionFailed.RunID,
+	)
 
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
-		workflowID,
+		workflowKey,
+		s.namespace,
 		creationParams.runID,
-		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
 		currentWorkflowConditionFailed.RequestID,
@@ -411,7 +421,6 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			s.namespace.ID().String(),
 			workflowID,

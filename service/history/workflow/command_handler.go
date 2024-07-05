@@ -35,12 +35,12 @@ import (
 var ErrDuplicateRegistration = errors.New("duplicate registration")
 
 // FailWorkflowTaskError is an error that can be returned from a [CommandHandler] to fail the current workflow task and
-// optionally the entire workflow.
+// optionally terminate the entire workflow.
 type FailWorkflowTaskError struct {
 	// The cause to set on the WorkflowTaskFailed event.
-	Cause        enumspb.WorkflowTaskFailedCause
-	Message      string
-	FailWorkflow bool
+	Cause             enumspb.WorkflowTaskFailedCause
+	Message           string
+	TerminateWorkflow bool
 }
 
 func (e FailWorkflowTaskError) Error() string {

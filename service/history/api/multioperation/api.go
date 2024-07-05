@@ -96,7 +96,6 @@ func Invoke(
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(req.NamespaceId, startReq.StartRequest.WorkflowId, ""),
 		workflow.LockPriorityHigh,
 	)

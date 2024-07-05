@@ -564,7 +564,7 @@ func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
 		return err
 	}
 
-	engine.AddSpeculativeWorkflowTaskTimeoutTask(task)
+	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{task.GetCategory(): []tasks.Task{task}})
 
 	return nil
 }
@@ -1248,6 +1248,7 @@ func (s *ContextImpl) updateShardInfo(
 
 	// update lastUpdate here so that we don't have to grab shard lock again if UpdateShard is successful
 	previousLastUpdate := s.lastUpdated
+	prevTasksCompletedSinceLastUpdate := s.tasksCompletedSinceLastUpdate
 	metrics.TasksCompletedPerShardInfoUpdate.With(s.metricsHandler).Record(int64(s.tasksCompletedSinceLastUpdate))
 	metrics.TimeBetweenShardInfoUpdates.With(s.metricsHandler).Record(now.Sub(previousLastUpdate))
 
@@ -1273,8 +1274,9 @@ func (s *ContextImpl) updateShardInfo(
 	if err != nil {
 		s.wLock()
 		defer s.wUnlock()
-		// revert lastUpdated time so that operation can be retried
-		s.lastUpdated = util.MaxTime(previousLastUpdate, s.lastUpdated)
+		// revert update shard properties so that operation can be retried
+		s.lastUpdated = previousLastUpdate
+		s.tasksCompletedSinceLastUpdate = prevTasksCompletedSinceLastUpdate
 		return s.handleWriteErrorLocked(request.PreviousRangeID, err)
 	}
 
@@ -2127,7 +2129,20 @@ func newContext(
 			false,
 		)
 	}
+	shardContext.initLastUpdatesTime()
 	return shardContext, nil
+}
+
+func (s *ContextImpl) initLastUpdatesTime() {
+	// We need to set lastUpdate time to "now" - "wait between shard updates time" +  "first update interval".
+	// This is done to make sure that first shard update` will happen around "first update interval" after "now".
+	// The idea is to allow queue to persist even in the case of (relativly) constantly
+	// moving shards between hosts.
+	// Note: it still may prevent queue from progressing if shard moving rate is too high
+	lastUpdated := s.timeSource.Now()
+	lastUpdated = lastUpdated.Add(-1 * s.config.ShardUpdateMinInterval())
+	lastUpdated = lastUpdated.Add(s.config.ShardFirstUpdateInterval())
+	s.lastUpdated = lastUpdated
 }
 
 // TODO: why do we need a deep copy here?

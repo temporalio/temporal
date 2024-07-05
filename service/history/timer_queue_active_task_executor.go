@@ -336,12 +336,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		return nil
 	}
 
+	var operationMetricsTag string
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		// Check if mutable state still points to this task.
 		// Mutable state can lost speculative WT or even has another one there if, for example, workflow was evicted from cache.
 		if !mutableState.CheckSpeculativeWorkflowTaskTimeoutTask(task) {
 			return nil
 		}
+		operationMetricsTag = metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout
 	} else {
 		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
 		if err != nil {
@@ -351,6 +353,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		if workflowTask.Attempt != task.ScheduleAttempt {
 			return nil
 		}
+		operationMetricsTag = metrics.TimerActiveTaskWorkflowTaskTimeoutScope
 	}
 
 	scheduleWorkflowTask := false
@@ -358,7 +361,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
-			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
+			operationMetricsTag,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
 		if _, err := mutableState.AddWorkflowTaskTimedOutEvent(
@@ -376,7 +379,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
-			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
+			operationMetricsTag,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		)
 		_, err := mutableState.AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask)

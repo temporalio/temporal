@@ -48,10 +48,11 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/common/testing/historyrequire"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"

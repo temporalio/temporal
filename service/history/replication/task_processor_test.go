@@ -387,6 +387,48 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncWorkflowState() {
 	s.Equal(request, dlqTask)
 }
 
+func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncHSM() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	task := &replicationspb.ReplicationTask{
+		SourceTaskId: rand.Int63(),
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{SyncHsmAttributes: &replicationspb.SyncHSMAttributes{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			VersionHistory: &historyspb.VersionHistory{
+				BranchToken: []byte("branchToken"),
+				Items: []*historyspb.VersionHistoryItem{{
+					EventId: 10,
+					Version: 20,
+				}},
+			},
+			StateMachineNode: &persistencespb.StateMachineNode{
+				Data: []byte("stateMachineData"),
+			},
+		}},
+		VisibilityTime: timestamppb.New(time.Now()),
+	}
+	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.shardID,
+		SourceClusterName: cluster.TestAlternativeClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId:    namespaceID,
+			WorkflowId:     workflowID,
+			RunId:          runID,
+			TaskId:         task.GetSourceTaskId(),
+			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+			VisibilityTime: task.GetVisibilityTime(),
+		},
+	}
+
+	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
+	s.NoError(err)
+	s.Equal(request, dlqTask)
+}
+
 func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()

@@ -185,6 +185,10 @@ type Config struct {
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
+
+	// ShardFirstUpdateMinInterval defines how soon _first_ hard update should happen.
+	ShardFirstUpdateInterval dynamicconfig.DurationPropertyFn
+
 	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed before the shard info can be updated before
 	// history.shardUpdateMinInterval has passed
 	ShardUpdateMinTasksCompleted dynamicconfig.IntPropertyFn
@@ -245,9 +249,6 @@ type Config struct {
 	WorkflowTaskHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	WorkflowTaskCriticalAttempts dynamicconfig.IntPropertyFn
 	WorkflowTaskRetryMaxInterval dynamicconfig.DurationPropertyFn
-
-	// ContinueAsNewMinInterval is the minimal interval between continue_as_new to prevent tight continue_as_new loop.
-	ContinueAsNewMinInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
@@ -347,9 +348,11 @@ type Config struct {
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFn
+	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFnWithNamespaceFilter[schedulerhsm.Tweakables]
 }
 
 // NewConfig returns new service config with default values
@@ -377,7 +380,6 @@ func NewConfig(
 		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
 		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
-		ContinueAsNewMinInterval:             dynamicconfig.ContinueAsNewMinInterval.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:       dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:      dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
@@ -513,6 +515,7 @@ func NewConfig(
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
+		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),
 		ShardUpdateMinTasksCompleted:     dynamicconfig.ShardUpdateMinTasksCompleted.Get(dc),
 		ShardSyncMinInterval:             dynamicconfig.ShardSyncMinInterval.Get(dc),
 		ShardSyncTimerJitterCoefficient:  dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient.Get(dc),
@@ -633,10 +636,12 @@ func NewConfig(
 		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
 		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
-		SendRawWorkflowHistory:         dynamicconfig.SendRawWorkflowHistory.Get(dc),
-		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
 
 		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
+		HsmSchedulerTweakables:      schedulerhsm.CurrentTweakables.Get(dc),
 	}
 
 	return cfg

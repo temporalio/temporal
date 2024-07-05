@@ -801,15 +801,20 @@ func EstimateTaskMetricTag(
 type CircuitBreakerExecutable struct {
 	Executable
 	cb circuitbreaker.TwoStepCircuitBreaker
+
+	metricsHandler metrics.Handler
 }
 
 func NewCircuitBreakerExecutable(
 	e Executable,
 	cb circuitbreaker.TwoStepCircuitBreaker,
+	metricsHandler metrics.Handler,
 ) *CircuitBreakerExecutable {
 	return &CircuitBreakerExecutable{
 		Executable: e,
 		cb:         cb,
+
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -818,7 +823,9 @@ func NewCircuitBreakerExecutable(
 func (e *CircuitBreakerExecutable) Execute() error {
 	doneCb, err := e.cb.Allow()
 	if err != nil {
-		return err
+		metrics.CircuitBreakerExecutableBlocked.With(e.metricsHandler).Record(1)
+		// Return resource a exhausted error to ensure that this task is retried less aggressively and does not go to the DLQ.
+		return fmt.Errorf("%w: %w", serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "circuit breaker rejection"), err)
 	}
 
 	defer func() {
