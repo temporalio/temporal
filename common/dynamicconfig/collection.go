@@ -77,6 +77,8 @@ const (
 var (
 	errKeyNotPresent        = errors.New("key not present")
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
+
+	precedenceGlobalConstraints = []Constraints{{}}
 )
 
 // NewCollection creates a new collection
@@ -165,9 +167,8 @@ func matchAndConvert[T any](
 }
 
 func precedenceGlobal() []Constraints {
-	return []Constraints{
-		{},
-	}
+	// Return a common slice to avoid allocating.
+	return precedenceGlobalConstraints
 }
 
 func precedenceNamespace(namespace string) []Constraints {
