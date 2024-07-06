@@ -85,7 +85,7 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -132,7 +132,7 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -192,7 +192,7 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -232,7 +232,7 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -294,7 +294,7 @@ func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -333,7 +333,7 @@ func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -527,12 +527,12 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNew() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -641,12 +641,12 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -673,7 +673,7 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	s.NotNil(definition.startedEvent)
 
 	// Terminate parent workflow execution which should also trigger terminate of child due to parent close policy
-	_, err = s.engine.TerminateWorkflowExecution(
+	_, err = s.client.TerminateWorkflowExecution(
 		NewContext(),
 		&workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace: s.namespace,
@@ -684,7 +684,7 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	)
 	s.NoError(err)
 
-	parentDescribeResp, err := s.engine.DescribeWorkflowExecution(
+	parentDescribeResp, err := s.client.DescribeWorkflowExecution(
 		NewContext(),
 		&workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
@@ -701,7 +701,7 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	var childDescribeResp *workflowservice.DescribeWorkflowExecutionResponse
 	// Retry 10 times to wait for child to be terminated due to transfer task processing to enforce parent close policy
 	for i := 0; i < 10; i++ {
-		childDescribeResp, err = s.engine.DescribeWorkflowExecution(
+		childDescribeResp, err = s.client.DescribeWorkflowExecution(
 			NewContext(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.namespace,
