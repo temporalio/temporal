@@ -163,7 +163,7 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 	sendSignal := false
 	lastWorkflowTaskTime := time.Time{}
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		// Count signals
 		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
@@ -172,7 +172,7 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 		}
 		// Some signals received on this workflow task
 		if signalCount == 1 {
-			return []*commandpb.Command{}, nil
+			return nil, nil
 		}
 
 		// Send signals during workflow task
@@ -188,7 +188,7 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(1),
@@ -200,7 +200,7 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		} else if failureCount > 0 {
 			// Otherwise decrement failureCount and keep failing workflow tasks
 			failureCount--
@@ -214,12 +214,12 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 		lastWorkflowTaskEvent := task.History.Events[task.StartedEventId-1]
 		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, lastWorkflowTaskEvent.GetEventType())
 		lastWorkflowTaskTime = lastWorkflowTaskEvent.GetEventTime().AsTime()
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	// activity handler
@@ -353,9 +353,9 @@ func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 	s.NoError(err0)
 	s.NotNil(we0)
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 			Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
 				RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
@@ -364,7 +364,7 @@ func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 					Header:     nil,
 					Failure:    nil,
 				}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

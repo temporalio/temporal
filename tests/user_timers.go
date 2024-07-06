@@ -70,27 +70,27 @@ func (s *FunctionalSuite) TestUserTimers_Sequential() {
 	workflowComplete := false
 	timerCount := int32(4)
 	timerCounter := int32(0)
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if timerCounter < timerCount {
 			timerCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, timerCounter))
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            fmt.Sprintf("timer-id-%d", timerCounter),
 					StartToFireTimeout: durationpb.New(1 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -150,14 +150,14 @@ func (s *FunctionalSuite) TestUserTimers_CapDuration() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	timerID := "200-year-timer"
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 			Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 				TimerId:            timerID,
 				StartToFireTimeout: durationpb.New(timer.MaxAllowedTimer * 2),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

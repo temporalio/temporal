@@ -134,13 +134,13 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 
 	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

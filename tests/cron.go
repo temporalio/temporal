@@ -84,31 +84,29 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 
 	respondFailed := false
 	seeRetry := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !respondFailed {
 			respondFailed = true
 
-			return []*commandpb.Command{
-				{
-					CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
-						FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-							Failure: failure.NewServerFailure("cron error for retry", false),
-						}},
-				}}, nil
+			return &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+					FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+						Failure: failure.NewServerFailure("cron error for retry", false),
+					}},
+			}, nil
 		}
 
 		startEvent := task.History.Events[0]
 		seeRetry = startEvent.GetWorkflowExecutionStartedEventAttributes().Initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
-		return []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: nil,
-					}},
-			}}, nil
+		return &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: nil,
+				}},
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -182,17 +180,16 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 
 	var executions []*commonpb.WorkflowExecution
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if task.PreviousStartedEventId == common.EmptyEventID {
 			startedEvent := task.History.Events[0]
 			if startedEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-				return []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-							Failure: failure.NewServerFailure("incorrect first event", true),
-						}},
-					}}, nil
+				return &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+						Failure: failure.NewServerFailure("incorrect first event", true),
+					}},
+				}, nil
 			}
 
 			// Just check that it can be decoded
@@ -201,21 +198,19 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 
 		executions = append(executions, task.WorkflowExecution)
 		if len(executions) >= 3 {
-			return []*commandpb.Command{
-				{
-					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: payloads.EncodeString("cron-test-result"),
-					}},
-				}}, nil
-		}
-		return []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-					Failure: failure.NewServerFailure("cron-test-error", false),
+			return &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("cron-test-result"),
 				}},
-			}}, nil
+			}, nil
+		}
+		return &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+				Failure: failure.NewServerFailure("cron-test-error", false),
+			}},
+		}, nil
 	}
 
 	poller := &TaskPoller{

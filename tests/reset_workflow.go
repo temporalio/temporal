@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -84,14 +85,14 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	isFirstTaskProcessed := false
 	isSecondTaskProcessed := false
 	var firstActivityCompletionEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !isFirstTaskProcessed {
 			// Schedule 3 activities on first workflow task
 			isFirstTaskProcessed = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			var scheduleActivityCommands []*commandpb.Command
+			var scheduleActivityCommands []proto.Message
 			for i := 1; i <= activityCount; i++ {
 				scheduleActivityCommands = append(scheduleActivityCommands, &commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -115,20 +116,19 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
 					firstActivityCompletionEvent = event
-					return []*commandpb.Command{}, nil
+					return nil, nil
 				}
 			}
 		}
 
 		// Complete workflow after reset
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
-
+		}, nil
 	}
 
 	// activity handler
@@ -335,14 +335,14 @@ func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueRespo
 
 }
 
-func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-	commands := []*commandpb.Command{}
+func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
+	res := []any{}
 
 	// There's an initial empty WFT; then come `totalSignals` signals, followed by `totalUpdates` updates, each in
 	// a separate WFT. We must send COMPLETE_WORKFLOW_EXECUTION in the final WFT.
 	if t.wftCounter > t.totalSignals+1 {
 		updateId := fmt.Sprint(t.wftCounter - t.totalSignals - 1)
-		commands = append(commands, &commandpb.Command{
+		res = append(res, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
 				MessageId: "accept-" + updateId,
@@ -351,7 +351,7 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 	}
 	if t.wftCounter == t.totalSignals+t.totalUpdates+1 {
 		t.commandsCompleted = true
-		commands = append(commands, &commandpb.Command{
+		res = append(res, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -360,7 +360,28 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 			},
 		})
 	}
-	return commands, nil
+
+	// Increment WFT counter here; messageHandler is invoked prior to wftHandler
+	t.wftCounter++
+
+	// There's an initial empty WFT; then come `totalUpdates` updates, followed by `totalSignals` signals, each in a
+	// separate WFT. We must accept the updates, but otherwise respond with empty messages.
+	if t.wftCounter == t.totalUpdates+t.totalSignals+1 {
+		t.messagesCompleted = true
+	}
+	if t.wftCounter > t.totalSignals+1 {
+		updateId := fmt.Sprint(t.wftCounter - t.totalSignals - 1)
+		res = append(res, &protocolpb.Message{
+			Id:                 "accept-" + updateId,
+			ProtocolInstanceId: t.tv.UpdateID(updateId),
+			Body: protoutils.MarshalAny(t.T(), &updatepb.Acceptance{
+				AcceptedRequestMessageId:         "fake-request-message-id",
+				AcceptedRequestSequencingEventId: int64(-1),
+			}),
+		})
+	}
+
+	return res, nil
 }
 
 func (t resetTest) reset(eventId int64) string {
@@ -388,7 +409,6 @@ func (t *resetTest) run() {
 		TaskQueue:           t.tv.TaskQueue(),
 		Identity:            t.tv.WorkerIdentity(),
 		WorkflowTaskHandler: t.wftHandler,
-		MessageHandler:      t.messageHandler,
 		Logger:              t.Logger,
 		T:                   t.T(),
 	}
@@ -565,7 +585,7 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 	// workflow logic
 	resetRunID := ""
 	workflowComplete := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if len(resetRunID) == 0 {
 			signalRequest.RequestId = uuid.New()
 			_, err := s.client.SignalWorkflowExecution(NewContext(), signalRequest)
@@ -591,18 +611,18 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 			s.NoError(err)
 			resetRunID = resp.RunId
 
-			return []*commandpb.Command{}, nil
+			return nil, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				},
 			},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -711,21 +731,21 @@ func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 	// workflow logic
 	workflowComplete := false
 	isWorkflowTaskProcessed := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !isWorkflowTaskProcessed {
 			isWorkflowTaskProcessed = true
-			return []*commandpb.Command{}, nil
+			return nil, nil
 		}
 
 		// Complete workflow after reset
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				}},
-		}}, nil
+		}, nil
 
 	}
 

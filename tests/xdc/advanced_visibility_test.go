@@ -288,7 +288,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	testListResult(engine2, saListRequest)
 
 	// upsert search attributes
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{

@@ -51,10 +51,9 @@ import (
 )
 
 type (
-	workflowTaskHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error)
+	workflowTaskHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error)
 	activityTaskHandler func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error)
 	queryHandler        func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error)
-	messageHandler      func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error)
 
 	// TaskPoller is used in functional tests to poll workflow or activity task queues.
 	TaskPoller struct {
@@ -67,7 +66,6 @@ type (
 		WorkflowTaskHandler          workflowTaskHandler
 		ActivityTaskHandler          activityTaskHandler
 		QueryHandler                 queryHandler
-		MessageHandler               messageHandler
 		Logger                       log.Logger
 		T                            *testing.T
 	}
@@ -133,7 +131,9 @@ func (p *TaskPoller) PollAndProcessWorkflowTask(funcs ...PollAndProcessWorkflowT
 	return p.PollAndProcessWorkflowTaskWithOptions(&opts)
 }
 
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(opts *PollAndProcessWorkflowTaskOptions) (res PollAndProcessWorkflowTaskResponse, err error) {
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(
+	opts *PollAndProcessWorkflowTaskOptions,
+) (res PollAndProcessWorkflowTaskResponse, err error) {
 Loop:
 	for attempt := 1; attempt <= opts.Retries; attempt++ {
 
@@ -239,23 +239,6 @@ Loop:
 			return PollAndProcessWorkflowTaskResponse{IsQueryTask: true}, err
 		}
 
-		// Handle messages.
-		var workerToServerMessages []*protocolpb.Message
-		if p.MessageHandler != nil {
-			workerToServerMessages, err = p.MessageHandler(response)
-			if err != nil {
-				p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
-				_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-					Namespace: p.Namespace,
-					TaskToken: response.TaskToken,
-					Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
-					Failure:   newApplicationFailure(err, false, nil),
-					Identity:  p.Identity,
-				})
-				return PollAndProcessWorkflowTaskResponse{}, err
-			}
-		}
-
 		// handle normal workflow task / non query task response
 		var lastWorkflowTaskScheduleEvent *historypb.HistoryEvent
 		for _, e := range events {
@@ -267,7 +250,7 @@ Loop:
 			require.Equal(p.T, opts.ExpectedAttemptCount, int(lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt()))
 		}
 
-		commands, err := p.WorkflowTaskHandler(response)
+		commandsAndMessages, err := p.WorkflowTaskHandler(response)
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
 			_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
@@ -279,12 +262,14 @@ Loop:
 			})
 			return PollAndProcessWorkflowTaskResponse{}, err
 		}
+
+		commands, messages := extractCommandsAndMessages(commandsAndMessages)
 		if opts.DumpCommands {
 			if len(commands) > 0 {
 				common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
 			}
-			if len(workerToServerMessages) > 0 {
-				common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+			if len(messages) > 0 {
+				common.PrettyPrint(messages, "Send messages to server using RespondWorkflowTaskCompleted:")
 			}
 		}
 
@@ -295,7 +280,7 @@ Loop:
 				TaskToken:                  response.TaskToken,
 				Identity:                   p.Identity,
 				Commands:                   commands,
-				Messages:                   workerToServerMessages,
+				Messages:                   messages,
 				ReturnNewWorkflowTask:      true,
 				ForceCreateNewWorkflowTask: opts.ForceNewWorkflowTask,
 				QueryResults:               getQueryResults(response.GetQueries(), opts.QueryResult),
@@ -327,7 +312,10 @@ Loop:
 }
 
 // HandlePartialWorkflowTask for workflow task
-func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWorkflowTaskQueueResponse, forceCreateNewWorkflowTask bool) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+func (p *TaskPoller) HandlePartialWorkflowTask(
+	response *workflowservice.PollWorkflowTaskQueueResponse,
+	forceCreateNewWorkflowTask bool,
+) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	if response == nil || len(response.TaskToken) == 0 {
 		p.Logger.Info("Empty Workflow task: Polling again")
 		return nil, nil
@@ -347,24 +335,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 	}
 
 	// Handle messages.
-	var workerToServerMessages []*protocolpb.Message
-	if p.MessageHandler != nil {
-		var err error
-		workerToServerMessages, err = p.MessageHandler(response)
-		if err != nil {
-			p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
-			_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-				Namespace: p.Namespace,
-				TaskToken: response.TaskToken,
-				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
-				Failure:   newApplicationFailure(err, false, nil),
-				Identity:  p.Identity,
-			})
-			return nil, err
-		}
-	}
-
-	commands, err := p.WorkflowTaskHandler(response)
+	commandsAndMessages, err := p.WorkflowTaskHandler(response)
 	if err != nil {
 		p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
 		_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
@@ -376,11 +347,13 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		})
 		return nil, err
 	}
+
+	commands, messages := extractCommandsAndMessages(commandsAndMessages)
 	if len(commands) > 0 {
 		common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
 	}
-	if len(workerToServerMessages) > 0 {
-		common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+	if len(messages) > 0 {
+		common.PrettyPrint(messages, "Send messages to server using RespondWorkflowTaskCompleted:")
 	}
 
 	// sticky taskqueue
@@ -391,7 +364,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
 			Commands:  commands,
-			Messages:  workerToServerMessages,
+			Messages:  messages,
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 				WorkerTaskQueue:        p.StickyTaskQueue,
 				ScheduleToStartTimeout: durationpb.New(p.StickyScheduleToStartTimeout),
@@ -576,4 +549,37 @@ func getErrorType(err error) string {
 	}
 
 	return t.Name()
+}
+
+func extractCommandsAndMessages(response any) ([]*commandpb.Command, []*protocolpb.Message) {
+	var commands []*commandpb.Command
+	var messages []*protocolpb.Message
+
+	switch v := response.(type) {
+	case nil:
+	case *commandpb.Command:
+		return []*commandpb.Command{v}, nil
+	case *protocolpb.Message:
+		return nil, []*protocolpb.Message{v}
+	case []*commandpb.Command:
+		for _, cmd := range v {
+			commands = append(commands, cmd)
+		}
+	case []*protocolpb.Message:
+		for _, msg := range v {
+			messages = append(messages, msg)
+		}
+	case []any:
+		for _, item := range v {
+			cmds, msgs := extractCommandsAndMessages(item)
+			if cmds != nil {
+				commands = append(commands, cmds...)
+			}
+			if msgs != nil {
+				messages = append(messages, msgs...)
+			}
+		}
+	}
+
+	return commands, messages
 }

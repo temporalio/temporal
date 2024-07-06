@@ -75,11 +75,11 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 	}
 
 	// Complete workflow.
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

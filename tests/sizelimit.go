@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -103,13 +104,13 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 
 	activityCount := int32(4)
 	activityCounter := int32(0)
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -121,15 +122,15 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -267,7 +268,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.NoError(err)
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		select {
 		case sigReadyToSendChan <- struct{}{}:
 		default:
@@ -276,14 +277,12 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		select {
 		case <-sigSendDoneChan:
 		}
-		return []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
-					RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
-						MarkerName: "large-payload",
-						Details:    map[string]*commonpb.Payloads{"test": pl},
-					},
+		return &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+			Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+					MarkerName: "large-payload",
+					Details:    map[string]*commonpb.Payloads{"test": pl},
 				},
 			},
 		}, nil
@@ -382,9 +381,9 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	activityCount := int32(4)
 	activitiesScheduled := false
 	activityLargePayload := payloads.EncodeBytes(make([]byte, 900))
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !activitiesScheduled {
-			cmds := make([]*commandpb.Command, activityCount)
+			cmds := make([]proto.Message, activityCount)
 			for i := range cmds {
 				cmds[i] = &commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -403,12 +402,12 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 			return cmds, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {

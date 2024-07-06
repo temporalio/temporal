@@ -95,14 +95,14 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = task.WorkflowExecution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
 					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
@@ -116,19 +116,19 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 					},
 				},
-			}}, nil
+			}, nil
 		}
 
 		lastRunStartedEvent = task.History.Events[0]
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				},
 			},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -200,13 +200,13 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 	workflowComplete := false
 	continueAsNewCount := int32(1)
 	continueAsNewCounter := int32(0)
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
 					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
@@ -217,18 +217,18 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 						WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 					},
 				},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				},
 			},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -302,12 +302,12 @@ func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 	var executions []*commonpb.WorkflowExecution
 
 	continueAsNewed := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		executions = append(executions, task.WorkflowExecution)
 
 		if !continueAsNewed {
 			continueAsNewed = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
 					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
@@ -318,17 +318,17 @@ func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 						WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 					},
 				},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("succeed"),
 				},
 			},
-		}}, nil
+		}, nil
 
 	}
 
@@ -413,7 +413,7 @@ func newParentWithChildContinueAsNew(
 	return workflow
 }
 
-func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 	w.suite.Logger.Info(
 		"Processing workflow task for WorkflowId:",
 		tag.WorkflowID(task.WorkflowExecution.GetWorkflowId()),
@@ -430,25 +430,25 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 			buf := new(bytes.Buffer)
 			w.suite.Nil(binary.Write(buf, binary.LittleEndian, w.continueAsNewCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
 					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 						Input: payloads.EncodeBytes(buf.Bytes()),
 					},
 				},
-			}}, nil
+			}, nil
 		}
 
 		w.childComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Child Done"),
 				},
 			},
-		}}, nil
+		}, nil
 	}
 
 	// Parent workflow logic
@@ -459,7 +459,7 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 			buf := new(bytes.Buffer)
 			w.suite.Nil(binary.Write(buf, binary.LittleEndian, w.childData))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
 					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -470,24 +470,24 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 						ParentClosePolicy: w.closePolicy,
 					},
 				},
-			}}, nil
+			}, nil
 		} else if task.PreviousStartedEventId > 0 {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
 					w.startedEvent = event
-					return []*commandpb.Command{}, nil
+					return nil, nil
 				}
 
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
 					w.completedEvent = event
-					return []*commandpb.Command{{
+					return &commandpb.Command{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 								Result: payloads.EncodeString("Done"),
 							},
 						},
-					}}, nil
+					}, nil
 				}
 			}
 		}

@@ -75,11 +75,11 @@ func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	// workflow logic
 	localActivityDone := false
 	failureCount := 5
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !localActivityDone {
 			localActivityDone = true
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 					MarkerName: "local activity marker",
@@ -87,7 +87,7 @@ func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 						"data":   payloads.EncodeString("local activity marker"),
 						"result": payloads.EncodeString("local activity result"),
 					}}},
-			}}, nil
+			}, nil
 		}
 
 		if failureCount > 0 {
@@ -107,12 +107,12 @@ func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 			return nil, errors.New("non deterministic error")
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -268,11 +268,11 @@ func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
 	// workflow logic
 	localActivityDone := false
 	failureCount := 5
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !localActivityDone {
 			localActivityDone = true
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 					MarkerName: "local activity marker",
@@ -280,7 +280,7 @@ func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
 						"data":   payloads.EncodeString("local activity marker"),
 						"result": payloads.EncodeString("local activity result"),
 					}}},
-			}}, nil
+			}, nil
 		}
 
 		if failureCount > 0 {
@@ -288,12 +288,12 @@ func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
 			return nil, errors.New("non deterministic error")
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

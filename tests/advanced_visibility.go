@@ -280,14 +280,13 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 
 	searchAttributes := s.createSearchAttributes()
 	// test upsert
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		upsertCommand := &commandpb.Command{
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: searchAttributes,
-			}}}
-
-		return []*commandpb.Command{upsertCommand}, nil
+			}},
+		}, nil
 	}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	poller := &TaskPoller{
@@ -1203,7 +1202,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	commandCount := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{
@@ -1221,14 +1220,14 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 				},
 			}
 			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
-			return []*commandpb.Command{upsertCommand}, nil
+			return upsertCommand, nil
 		}
 
 		// handle second upsert, which update existing field and add new field
 		if commandCount == 1 {
 			commandCount++
 			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = s.createSearchAttributes()
-			return []*commandpb.Command{upsertCommand}, nil
+			return upsertCommand, nil
 		}
 
 		// handle third upsert, which update existing field to nil and empty list
@@ -1243,17 +1242,17 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 				},
 			}
 			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
-			return []*commandpb.Command{upsertCommand}, nil
+			return upsertCommand, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				},
 			},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -1494,7 +1493,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	commandCount := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		modifyCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES,
 			Attributes: &commandpb.Command_ModifyWorkflowPropertiesCommandAttributes{
@@ -1514,7 +1513,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 				},
 			}
 			modifyCommand.GetModifyWorkflowPropertiesCommandAttributes().UpsertedMemo = memo
-			return []*commandpb.Command{modifyCommand}, nil
+			return modifyCommand, nil
 		}
 
 		// handle second upsert, which update existing fields and add new field
@@ -1531,17 +1530,17 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 				},
 			}
 			modifyCommand.GetModifyWorkflowPropertiesCommandAttributes().UpsertedMemo = memo
-			return []*commandpb.Command{modifyCommand}, nil
+			return modifyCommand, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				},
 			},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -1763,7 +1762,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
@@ -1774,7 +1773,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 					},
 				},
 			}}}
-		return []*commandpb.Command{upsertCommand}, nil
+		return upsertCommand, nil
 	}
 
 	poller := &TaskPoller{

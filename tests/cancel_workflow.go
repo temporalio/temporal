@@ -80,14 +80,14 @@ func (s *FunctionalSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CancelWorkflowExecutionCommandAttributes{CancelWorkflowExecutionCommandAttributes: &commandpb.CancelWorkflowExecutionCommandAttributes{
 				Details: payloads.EncodeString("Cancelled"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -176,18 +176,18 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 	s.Logger.Info("StartWorkflowExecution on foreign namespace", tag.WorkflowNamespace(s.foreignNamespace), tag.WorkflowRunID(we2.RunId))
 
 	cancellationSent := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !cancellationSent {
 			cancellationSent = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 					Namespace:  s.foreignNamespace,
 					WorkflowId: id,
 					RunId:      we2.RunId,
 				}},
-			}}, nil
+			}, nil
 		}
 
 		// Find cancel requested event and verify it.
@@ -199,12 +199,12 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 		}
 		s.NotNil(cancelRequestEvent)
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -217,7 +217,7 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 		T:                   s.T(),
 	}
 
-	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		// Find cancel requested event and verify it.
 		var cancelRequestEvent *historypb.HistoryEvent
@@ -233,12 +233,12 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 		s.Equal(id, cancelRequestEventAttributes.ExternalWorkflowExecution.WorkflowId)
 		s.Equal(we.RunId, cancelRequestEventAttributes.ExternalWorkflowExecution.RunId)
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CancelWorkflowExecutionCommandAttributes{CancelWorkflowExecutionCommandAttributes: &commandpb.CancelWorkflowExecutionCommandAttributes{
 				Details: payloads.EncodeString("Cancelled"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	foreignPoller := &TaskPoller{
@@ -310,18 +310,18 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 	s.Logger.Info("StartWorkflowExecution on foreign namespace", tag.WorkflowNamespace(s.foreignNamespace), tag.WorkflowRunID(we2.RunId))
 
 	cancellationSent := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !cancellationSent {
 			cancellationSent = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 					Namespace:  s.foreignNamespace,
 					WorkflowId: id,
 					RunId:      we2.RunId,
 				}},
-			}}, nil
+			}, nil
 		}
 
 		// Find cancel requested event and verify it.
@@ -333,12 +333,12 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 		}
 		s.NotNil(cancelRequestEvent)
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -351,7 +351,7 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 		T:                   s.T(),
 	}
 
-	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		// Find cancel requested event not present
 		var cancelRequestEvent *historypb.HistoryEvent
@@ -363,12 +363,12 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 
 		s.Nil(cancelRequestEvent)
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	foreignPoller := &TaskPoller{
@@ -425,17 +425,17 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFou
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	cancellationSent := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !cancellationSent {
 			cancellationSent = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 					Namespace:  s.foreignNamespace,
 					WorkflowId: "some-random-non-existence-workflow-id",
 				}},
-			}}, nil
+			}, nil
 		}
 
 		// Find cancel requested event and verify it.
@@ -447,12 +447,12 @@ func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFou
 		}
 		s.NotNil(cancelRequestEvent)
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -522,7 +522,7 @@ func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	var requestCancelEvent *historypb.HistoryEvent
 	var workflowtaskFailedEvent *historypb.HistoryEvent
 	workflowComplete := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !childCancelled {
 			startEvent := task.History.Events[0]
 			if startEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -594,12 +594,12 @@ func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

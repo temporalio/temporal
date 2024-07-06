@@ -105,14 +105,14 @@ func (s *FunctionalSuite) TestSignalWorkflow() {
 	activityScheduled := false
 	activityData := int32(1)
 	var signalEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
@@ -124,23 +124,23 @@ func (s *FunctionalSuite) TestSignalWorkflow() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		} else if task.PreviousStartedEventId > 0 {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*commandpb.Command{}, nil
+					return nil, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	// activity handler
@@ -279,14 +279,14 @@ func (s *FunctionalSuite) TestSignalWorkflow_DuplicateRequest() {
 	activityData := int32(1)
 	var signalEvent *historypb.HistoryEvent
 	numOfSignaledEvent := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
@@ -298,7 +298,7 @@ func (s *FunctionalSuite) TestSignalWorkflow_DuplicateRequest() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		} else if task.PreviousStartedEventId > 0 {
 			numOfSignaledEvent = 0
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
@@ -307,16 +307,16 @@ func (s *FunctionalSuite) TestSignalWorkflow_DuplicateRequest() {
 					numOfSignaledEvent++
 				}
 			}
-			return []*commandpb.Command{}, nil
+			return nil, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	// activity handler
@@ -434,13 +434,13 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand() {
 	signalHeader := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
 	}
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -452,10 +452,10 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
@@ -467,7 +467,7 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand() {
 				Input:      signalInput,
 				Header:     signalHeader,
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -489,13 +489,13 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand() {
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	var signalEvent *historypb.HistoryEvent
-	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(foreignActivityCounter),
@@ -507,23 +507,23 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		} else if task.PreviousStartedEventId > 0 {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*commandpb.Command{}, nil
+					return nil, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	foreignPoller := &TaskPoller{
@@ -648,15 +648,15 @@ func (s *FunctionalSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 
 	// workflow logic
 	var workflowTaskDelay time.Duration
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		workflowTaskDelay = time.Now().UTC().Sub(now)
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -705,19 +705,19 @@ func (s *FunctionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 
 	workflowComplete := false
 	// workflow logic
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !workflowComplete {
 			workflowComplete = true
-			return []*commandpb.Command{}, nil
+			return nil, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -807,7 +807,7 @@ func (s *FunctionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	s.NoError(err)
 
 	attemptCount := 1
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if attemptCount == 1 {
 			_, err := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace: s.namespace,
@@ -839,12 +839,12 @@ func (s *FunctionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		}
 
 		attemptCount++
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -912,13 +912,13 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -930,10 +930,10 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
@@ -944,7 +944,7 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 				SignalName: signalName,
 				Input:      signalInput,
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -966,13 +966,13 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	var signalEvent *historypb.HistoryEvent
-	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(foreignActivityCounter),
@@ -984,23 +984,23 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		} else if task.PreviousStartedEventId > 0 {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*commandpb.Command{}, nil
+					return nil, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	foreignPoller := &TaskPoller{
@@ -1107,13 +1107,13 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -1125,10 +1125,10 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
@@ -1139,7 +1139,7 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 				SignalName: signalName,
 				Input:      signalInput,
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -1229,13 +1229,13 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -1247,10 +1247,10 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.namespace,
@@ -1261,7 +1261,7 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 				SignalName: signalName,
 				Input:      signalInput,
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -1360,14 +1360,14 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	activityData := int32(1)
 	newWorkflowStarted := false
 	var signalEvent, startedEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
@@ -1379,12 +1379,12 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		} else if task.PreviousStartedEventId > 0 {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*commandpb.Command{}, nil
+					return nil, nil
 				}
 			}
 		} else if newWorkflowStarted {
@@ -1400,17 +1400,17 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 				}
 			}
 			if signalEvent != nil && startedEvent != nil {
-				return []*commandpb.Command{}, nil
+				return nil, nil
 			}
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	// activity handler
@@ -1632,13 +1632,13 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication() {
 	workflowComplete := false
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -1650,16 +1650,16 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -1824,7 +1824,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 	var signalEvent *historypb.HistoryEvent
 	delayEndTime := time.Now()
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		delayEndTime = time.Now()
 
@@ -1834,12 +1834,12 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 			}
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -1898,19 +1898,19 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we0.RunId))
 
 	workflowComplete := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if !workflowComplete {
 			workflowComplete = true
-			return []*commandpb.Command{}, nil
+			return nil, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

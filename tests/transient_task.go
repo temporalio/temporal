@@ -76,7 +76,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 	failWorkflowTask := true
 	signalCount := 0
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if failWorkflowTask {
 			failWorkflowTask = false
 			return nil, errors.New("Workflow panic")
@@ -90,12 +90,12 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -175,7 +175,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	var sawFields []fields
 	// record value for failed wft
 	var failedTaskSawSize int64
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		// find workflow task started event
 		event := task.History.Events[len(task.History.Events)-1]
 		s.Equal(event.GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
@@ -189,26 +189,26 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 			s.False(attrs.SuggestContinueAsNew)
 			// record a large marker
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 					MarkerName: "big marker",
 					Details:    map[string]*commonpb.Payloads{"value": payloads.EncodeBytes(largeValue)},
 				}},
-			}}, nil
+			}, nil
 
 		case 2:
 			s.Greater(attrs.HistorySizeBytes, int64(1024*1024))
 			s.False(attrs.SuggestContinueAsNew)
 			// record another large marker
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 					MarkerName: "big marker",
 					Details:    map[string]*commonpb.Payloads{"value": payloads.EncodeBytes(largeValue)},
 				}},
-			}}, nil
+			}, nil
 
 		case 3:
 			s.Greater(attrs.HistorySizeBytes, int64(2048*1024))
@@ -234,12 +234,12 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 
 			workflowComplete = true
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("done"),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		return nil, errors.New("bad stage")
@@ -362,7 +362,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 	// workflow logic
 	workflowComplete := false
 	continueAsNewAndSignal := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !continueAsNewAndSignal {
 			continueAsNewAndSignal = true
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
@@ -378,7 +378,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 				})
 			s.NoError(err)
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:        task.WorkflowType,
@@ -387,16 +387,16 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 					WorkflowRunTimeout:  durationpb.New(1000 * time.Second),
 					WorkflowTaskTimeout: durationpb.New(100 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

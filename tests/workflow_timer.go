@@ -69,16 +69,16 @@ func (s *FunctionalSuite) TestCancelTimer() {
 	signalDelivered := false
 	timerCancelled := false
 	timer := 2000 * time.Second
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !timerScheduled {
 			timerScheduled = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            fmt.Sprintf("%v", timerID),
 					StartToFireTimeout: durationpb.New(timer),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		historyEvents := s.getHistory(s.namespace, workflowExecution)
@@ -96,20 +96,20 @@ func (s *FunctionalSuite) TestCancelTimer() {
 		}
 
 		if !timerCancelled {
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
 				Attributes: &commandpb.Command_CancelTimerCommandAttributes{CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{
 					TimerId: fmt.Sprintf("%v", timerID),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -191,16 +191,16 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	signalDelivered := false
 	timerCancelled := false
 	timer := 4 * time.Second
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !timerScheduled {
 			timerScheduled = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            fmt.Sprintf("%v", timerID),
 					StartToFireTimeout: durationpb.New(timer),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		historyEvents := s.getHistory(s.namespace, workflowExecution)
@@ -219,20 +219,20 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 
 		if !timerCancelled {
 			time.Sleep(2 * timer)
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
 				Attributes: &commandpb.Command_CancelTimerCommandAttributes{CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{
 					TimerId: fmt.Sprintf("%v", timerID),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{

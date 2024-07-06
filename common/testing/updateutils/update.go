@@ -31,6 +31,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	updatepb "go.temporal.io/api/update/v1"
+
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
@@ -83,7 +84,9 @@ func (u UpdateUtils) UpdateAcceptCompleteCommands(tv *testvars.TestVars, message
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
-	return append(u.UpdateAcceptCommands(tv, messageID), u.UpdateCompleteCommands(tv, messageID)...)
+	return append(
+		u.UpdateAcceptCommands(tv, messageID),
+		u.UpdateCompleteCommands(tv, messageID)...)
 }
 
 func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
@@ -133,7 +136,9 @@ func (u UpdateUtils) UpdateAcceptCompleteMessages(tv *testvars.TestVars, updRequ
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
-	return append(u.UpdateAcceptMessages(tv, updRequestMsg, messageID), u.UpdateCompleteMessages(tv, updRequestMsg, messageID)...)
+	return append(
+		u.UpdateAcceptMessages(tv, updRequestMsg, messageID),
+		u.UpdateCompleteMessages(tv, updRequestMsg, messageID)...)
 }
 
 func (u UpdateUtils) UpdateRejectMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {

@@ -67,20 +67,25 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 	}
 
 	workflowComplete, isFirst := false, true
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if isFirst {
 			isFirst = false
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
-					MarkerName: "test-marker",
-				}},
-			}}, nil
+				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+					RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+						MarkerName: "test-marker",
+					},
+				},
+			}, nil
 		}
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}}}}, nil
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			},
+		}, nil
 	}
 
 	poller := &TaskPoller{

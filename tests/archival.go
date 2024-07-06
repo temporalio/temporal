@@ -342,7 +342,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	expectedActivityID := int32(1)
 	runCounter := 1
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		branchToken, err := s.getBranchToken(namespace, task.WorkflowExecution)
 		s.NoError(err)
 
@@ -355,7 +355,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -367,14 +367,14 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		if runCounter < numRuns {
 			activityCounter = int32(0)
 			expectedActivityID = int32(1)
 			runCounter++
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:        workflowType,
@@ -383,16 +383,16 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 					WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 					WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {

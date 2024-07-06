@@ -38,7 +38,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -216,14 +215,14 @@ func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {
 	s.NoError(startErr)
 
 	delayEndTime := time.Now()
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		delayEndTime = time.Now()
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -278,13 +277,13 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -296,15 +295,15 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -422,13 +421,13 @@ func (s *FunctionalSuite) TestSequentialWorkflow() {
 	workflowComplete := false
 	activityCount := int32(10)
 	activityCounter := int32(0)
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -440,16 +439,16 @@ func (s *FunctionalSuite) TestSequentialWorkflow() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	expectedActivity := int32(1)
@@ -518,24 +517,24 @@ func (s *FunctionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	commandCount := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		if commandCount < 2 {
 			commandCount++
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 					MarkerName: "test-marker",
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -591,13 +590,13 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	activityCount := int32(4)
 	activityCounter := int32(0)
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -609,18 +608,18 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 					StartToCloseTimeout:    durationpb.New(1 * time.Second),
 					HeartbeatTimeout:       durationpb.New(1 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		s.Logger.Info("Completing enums")
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -709,25 +708,23 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 
 	attemptCount := 1
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		executions = append(executions, task.WorkflowExecution)
 		attemptCount++
 		if attemptCount > maximumAttempts {
-			return []*commandpb.Command{
-				{
-					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: payloads.EncodeString("succeed-after-retry"),
-					}},
-				}}, nil
-		}
-		return []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-					Failure: failure.NewServerFailure("retryable-error", false),
+			return &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("succeed-after-retry"),
 				}},
-			}}, nil
+			}, nil
+		}
+		return &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+				Failure: failure.NewServerFailure("retryable-error", false),
+			}},
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -840,26 +837,24 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) workflowTaskHandler {
 		attemptCount := 1
 
-		wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 			*executions = append(*executions, task.WorkflowExecution)
 			attemptCount++
 			if attemptCount > attempts {
-				return []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-							Result: payloads.EncodeString("succeed-after-retry"),
-						}},
-					}}, nil
-			}
-			return []*commandpb.Command{
-				{
-					CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-						// Reason:  "retryable-error",
-						Failure: failure.NewServerFailure(errorReason, nonRetryable),
+				return &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("succeed-after-retry"),
 					}},
-				}}, nil
+				}, nil
+			}
+			return &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+					// Reason:  "retryable-error",
+					Failure: failure.NewServerFailure(errorReason, nonRetryable),
+				}},
+			}, nil
 		}
 
 		return wtHandler
@@ -996,13 +991,12 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			Namespace: s.namespace,
 			TaskQueue: tv.TaskQueue(),
 			Identity:  tv.WorkerIdentity(),
-			WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-				return nil, nil
-			},
-			MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 				if len(task.Messages) > 0 {
 					updRequestMsg := task.Messages[0]
-					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+					return wftResponse(
+						s.UpdateAcceptCompleteCommands(tv, "1"),
+						s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"))
 				}
 				return nil, nil
 			},

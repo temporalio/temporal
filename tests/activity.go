@@ -95,11 +95,11 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -112,18 +112,18 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(1 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		s.Logger.Info("Completing Workflow")
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	activityExecutedCount := 0
@@ -223,7 +223,7 @@ func (s *FunctionalSuite) TestActivityRetry() {
 	activitiesScheduled := false
 	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *historypb.HistoryEvent
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
@@ -287,15 +287,15 @@ func (s *FunctionalSuite) TestActivityRetry() {
 		if activityAFailed != nil && activityBTimeout != nil {
 			s.Logger.Info("Completing Workflow")
 			workflowComplete = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{}, nil
+		return nil, nil
 	}
 
 	activityExecutedCount := 0
@@ -431,11 +431,11 @@ func (s *FunctionalSuite) TestActivityRetry_Infinite() {
 	workflowComplete := false
 	activitiesScheduled := false
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
 					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -449,18 +449,18 @@ func (s *FunctionalSuite) TestActivityRetry_Infinite() {
 							BackoffCoefficient: 1,
 						},
 					}},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				},
 			},
-		}}, nil
+		}, nil
 	}
 
 	activityExecutedCount := 0
@@ -535,7 +535,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		s.Logger.Info("Calling WorkflowTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
@@ -544,7 +544,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -556,16 +556,16 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(1 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	activityExecutedCount := 0
@@ -638,45 +638,50 @@ func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 	requestCancellation := false
 	activityScheduledID := int64(0)
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			activityScheduledID = task.StartedEventId + 2
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
-					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
-					StartToCloseTimeout:    durationpb.New(15 * time.Second),
-					HeartbeatTimeout:       durationpb.New(0 * time.Second),
-				}},
-			}}, nil
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             convert.Int32ToString(activityCounter),
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						Input:                  payloads.EncodeBytes(buf.Bytes()),
+						ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+						StartToCloseTimeout:    durationpb.New(15 * time.Second),
+						HeartbeatTimeout:       durationpb.New(0 * time.Second),
+					},
+				},
+			}, nil
 		}
 
 		if requestCancellation {
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
-					ScheduledEventId: activityScheduledID,
-				}},
-			}}, nil
+				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{
+					RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
+						ScheduledEventId: activityScheduledID,
+					},
+				},
+			}, nil
 		}
 
 		s.Logger.Info("Completing Workflow")
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			},
+			},
+		}, nil
 	}
 
 	activityCanceled := false
@@ -781,14 +786,14 @@ func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 	requestCancellation := false
 	activityScheduledID := int64(0)
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity")
 			activityScheduledID = task.StartedEventId + 2
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
@@ -800,26 +805,26 @@ func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(0 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		}
 
 		if requestCancellation {
 			s.Logger.Info("Requesting cancellation")
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 					ScheduledEventId: activityScheduledID,
 				}},
-			}}, nil
+			}, nil
 		}
 
 		s.Logger.Info("Completing Workflow")
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	// dummy activity handler
@@ -1013,11 +1018,11 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 
 	workflowComplete := false
 	workflowNextCmd := enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		switch workflowNextCmd {
 		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 			workflowNextCmd = enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.IntToString(rand.Int()),
@@ -1030,15 +1035,15 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(60 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
 			workflowComplete = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				}},
-			}}, nil
+			}, nil
 		}
 		panic("Unexpected workflow state")
 	}

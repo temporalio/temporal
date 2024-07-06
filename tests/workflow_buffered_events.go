@@ -75,7 +75,7 @@ func (s *FunctionalSuite) TestRateLimitBufferedEvents() {
 	workflowComplete := false
 	signalsSent := false
 	signalCount := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 
 		// Count signals
 		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
@@ -101,16 +101,16 @@ func (s *FunctionalSuite) TestRateLimitBufferedEvents() {
 			s.NoError(signalErr)
 
 			// this command will be ignored as workflow task has already failed
-			return []*commandpb.Command{}, nil
+			return nil, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -169,7 +169,7 @@ func (s *FunctionalSuite) TestBufferedEvents() {
 	workflowComplete := false
 	signalSent := false
 	var signalEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !signalSent {
 			signalSent = true
 
@@ -185,7 +185,7 @@ func (s *FunctionalSuite) TestBufferedEvents() {
 					Identity:   identity,
 				})
 			s.NoError(err)
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             "1",
@@ -197,7 +197,7 @@ func (s *FunctionalSuite) TestBufferedEvents() {
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
-			}}, nil
+			}, nil
 		} else if task.PreviousStartedEventId > 0 && signalEvent == nil {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
@@ -207,12 +207,12 @@ func (s *FunctionalSuite) TestBufferedEvents() {
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
@@ -287,7 +287,7 @@ func (s *FunctionalSuite) TestBufferedEventsOutOfOrder() {
 	// workflow logic
 	firstWorkflowTask := false
 	secondWorkflowTask := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
 		if !firstWorkflowTask {
 			firstWorkflowTask = true
 			return []*commandpb.Command{{
@@ -314,22 +314,22 @@ func (s *FunctionalSuite) TestBufferedEventsOutOfOrder() {
 
 		if !secondWorkflowTask {
 			secondWorkflowTask = true
-			return []*commandpb.Command{{
+			return &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 					MarkerName: "some random marker name",
 					Details: map[string]*commonpb.Payloads{
 						"data": payloads.EncodeString("some random data"),
 					}}},
-			}}, nil
+			}, nil
 		}
 
-		return []*commandpb.Command{{
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 	// activity handler
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {

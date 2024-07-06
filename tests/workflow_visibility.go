@@ -66,13 +66,13 @@ func (s *FunctionalSuite) TestVisibility() {
 	s.NoError(err0)
 
 	// Now complete one of the executions
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (any, error) {
+		return &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
-		}}, nil
+		}, nil
 	}
 
 	poller := &TaskPoller{
