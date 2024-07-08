@@ -1664,6 +1664,13 @@ Fields (see gobreaker reference for more details):
 		`OutboundStandbyWrapErrTaskRetryWithDestionationDown enables wrapping ErrTaskRetry error when
 processing standby task with DestinationDownError`,
 	)
+	OutboundStandbyDiscardTaskMissingEvents = NewTaskTypeBoolSetting(
+		"history.outboundQueue.discardTaskMissingEvents",
+		false,
+		`OutboundStandbyDiscardTaskMissingEvents enables discarding outbound tasks after
+StandbyTaskMissingEventsDiscardDelay. In normal operation with multi-cursor enabled,
+it should not be necessary to discard tasks.`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",

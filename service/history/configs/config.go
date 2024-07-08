@@ -172,6 +172,7 @@ type Config struct {
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
 	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedPropertyFnWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
 	OutboundStandbyWrapErrTaskRetryWithDestionationDown dynamicconfig.BoolPropertyFnWithTaskTypeFilter
+	OutboundStandbyDiscardTaskMissingEvents             dynamicconfig.BoolPropertyFnWithTaskTypeFilter
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -490,6 +491,7 @@ func NewConfig(
 		OutboundQueueHostSchedulerMaxTaskRPS:                dynamicconfig.OutboundQueueHostSchedulerMaxTaskRPS.Get(dc),
 		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Get(dc),
 		OutboundStandbyWrapErrTaskRetryWithDestionationDown: dynamicconfig.OutboundStandbyWrapErrTaskRetryWithDestionationDown.Get(dc),
+		OutboundStandbyDiscardTaskMissingEvents:             dynamicconfig.OutboundStandbyDiscardTaskMissingEvents.Get(dc),
 
 		ReplicatorProcessorMaxPollInterval:                  dynamicconfig.ReplicatorProcessorMaxPollInterval.Get(dc),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient.Get(dc),

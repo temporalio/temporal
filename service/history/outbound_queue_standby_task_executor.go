@@ -25,6 +25,8 @@ package history
 import (
 	"context"
 	"errors"
+	"math"
+	"time"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -115,7 +117,15 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		}
 		// If there was no error from Access nor from the accessor function, then the task
 		// is still valid for processing based on the current state of the machine.
-		return nil, consts.ErrTaskRetry
+		// The post action function needs a non-nil object so the task is retried properly.
+		return struct{}{}, nil
+	}
+
+	// MaxInt64 duration is 290+ years, so this is effectively equivalent to never
+	// discarding the task.
+	discardDelay := time.Duration(math.MaxInt64)
+	if e.config.OutboundStandbyDiscardTaskMissingEvents(task.GetType()) {
+		discardDelay = e.config.StandbyTaskMissingEventsDiscardDelay(task.GetType())
 	}
 
 	err = e.processTask(
@@ -126,8 +136,11 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 			task,
 			e.Now,
 			e.config.StandbyTaskMissingEventsResendDelay(task.GetType()),
-			e.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
-			e.noopPostProcessAction,
+			discardDelay,
+			// We don't need to fetch history from remote for state machine to sync.
+			// So, just use the noop post action which will return a retry error
+			// if the task didn't succeed.
+			standbyTaskPostActionNoOp,
 			standbyOutboundTaskPostActionTaskDiscarded,
 		),
 	)
@@ -173,14 +186,4 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 	}
 
 	return postActionFn(ctx, task, historyResendInfo, e.logger)
-}
-
-func (e *outboundQueueStandbyTaskExecutor) noopPostProcessAction(
-	ctx context.Context,
-	taskInfo tasks.Task,
-	postActionInfo interface{},
-	logger log.Logger,
-) error {
-	// Return retryable error, so task processing will retry.
-	return consts.ErrTaskRetry
 }
