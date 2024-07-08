@@ -75,7 +75,7 @@ func (s *LoaderSuite) TestBaseYaml() {
 			var cfg testConfig
 			err = Load(env, dir, zone, &cfg)
 			s.Nil(err)
-			s.Equal("hello__", cfg.Items.Item1)
+			s.Equal("HELLO__", cfg.Items.Item1)
 			s.Equal("world__", cfg.Items.Item2)
 		}
 	}
