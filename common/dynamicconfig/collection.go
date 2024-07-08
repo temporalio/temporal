@@ -158,8 +158,9 @@ func (c *Collection) GetPingChecks() []pingable.Check {
 }
 
 func (c *Collection) pollForChanges(ctx context.Context) error {
+	interval := DynamicConfigSubscriptionPollInterval.Get(c)
 	for ctx.Err() == nil {
-		util.InterruptibleSleep(ctx, DynamicConfigSubscriptionPollInterval.Get(c)())
+		util.InterruptibleSleep(ctx, interval())
 		c.pollOnce(ctx)
 	}
 	return ctx.Err()

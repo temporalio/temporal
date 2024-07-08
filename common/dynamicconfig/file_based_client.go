@@ -201,6 +201,10 @@ func (fc *fileBasedClient) Update() error {
 	changedMap := fc.diffAndLog(oldValues, newValues)
 	fc.logger.Info("Updated dynamic config")
 
+	if len(changedMap) == 0 {
+		return nil
+	}
+
 	fc.subscriptionLock.Lock()
 	subscriptions := maps.Values(fc.subscriptions)
 	fc.subscriptionLock.Unlock()
