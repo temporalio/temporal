@@ -41,7 +41,6 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -161,7 +160,6 @@ func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elas
 func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchSource := elastic.NewSearchSource().
 		Query(p.Query).
-		Collapse(elastic.NewCollapseBuilder(searchattribute.RunID)).
 		SortBy(p.Sorter...).
 		TrackTotalHits(false)
 
@@ -266,7 +264,6 @@ func (c *clientImpl) CountGroupBy(
 ) (*elastic.SearchResult, error) {
 	searchSource := elastic.NewSearchSource().
 		Query(query).
-		Collapse(elastic.NewCollapseBuilder(searchattribute.RunID)).
 		Size(0).
 		TrackTotalHits(false).
 		Aggregation(aggName, agg)

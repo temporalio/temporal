@@ -61,7 +61,7 @@ type (
 		controller *gomock.Controller
 
 		*persistencetests.TestBase
-		namespaceRegistry              namespace.Registry
+		NamespaceRegistry              namespace.Registry
 		VisibilityMgr                  manager.VisibilityManager
 		SearchAttributesProvider       searchattribute.Provider
 		SearchAttributesMapperProvider searchattribute.MapperProvider
@@ -81,6 +81,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
 	s.SearchAttributesProvider = searchattribute.NewTestProvider()
 	s.SearchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
+	s.NamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.VisibilityMgr, err = visibility.NewManager(
 		cfg,
 		resolver.NewNoopResolver(),
@@ -88,7 +89,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		nil,
 		s.SearchAttributesProvider,
 		s.SearchAttributesMapperProvider,
-		s.namespaceRegistry,
+		s.NamespaceRegistry,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetFloatPropertyFn(0.2),
