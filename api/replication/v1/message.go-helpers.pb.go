@@ -584,109 +584,35 @@ func (this *SyncHSMAttributes) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type SyncVersionedTransitionTaskAttributes to the protobuf v3 wire format
-func (val *SyncVersionedTransitionTaskAttributes) Marshal() ([]byte, error) {
+// Marshal an object of type BackfillHistoryTaskAttributes to the protobuf v3 wire format
+func (val *BackfillHistoryTaskAttributes) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type SyncVersionedTransitionTaskAttributes from the protobuf v3 wire format
-func (val *SyncVersionedTransitionTaskAttributes) Unmarshal(buf []byte) error {
+// Unmarshal an object of type BackfillHistoryTaskAttributes from the protobuf v3 wire format
+func (val *BackfillHistoryTaskAttributes) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *SyncVersionedTransitionTaskAttributes) Size() int {
+func (val *BackfillHistoryTaskAttributes) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two SyncVersionedTransitionTaskAttributes values are equivalent by recursively
+// Equal returns whether two BackfillHistoryTaskAttributes values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *SyncVersionedTransitionTaskAttributes) Equal(that interface{}) bool {
+func (this *BackfillHistoryTaskAttributes) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *SyncVersionedTransitionTaskAttributes
+	var that1 *BackfillHistoryTaskAttributes
 	switch t := that.(type) {
-	case *SyncVersionedTransitionTaskAttributes:
+	case *BackfillHistoryTaskAttributes:
 		that1 = t
-	case SyncVersionedTransitionTaskAttributes:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
-// Marshal an object of type VerifyVersionedTransitionTaskAttributes to the protobuf v3 wire format
-func (val *VerifyVersionedTransitionTaskAttributes) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type VerifyVersionedTransitionTaskAttributes from the protobuf v3 wire format
-func (val *VerifyVersionedTransitionTaskAttributes) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *VerifyVersionedTransitionTaskAttributes) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two VerifyVersionedTransitionTaskAttributes values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *VerifyVersionedTransitionTaskAttributes) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *VerifyVersionedTransitionTaskAttributes
-	switch t := that.(type) {
-	case *VerifyVersionedTransitionTaskAttributes:
-		that1 = t
-	case VerifyVersionedTransitionTaskAttributes:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
-// Marshal an object of type BackfillHistoryEventsTaskAttributes to the protobuf v3 wire format
-func (val *BackfillHistoryEventsTaskAttributes) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type BackfillHistoryEventsTaskAttributes from the protobuf v3 wire format
-func (val *BackfillHistoryEventsTaskAttributes) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *BackfillHistoryEventsTaskAttributes) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two BackfillHistoryEventsTaskAttributes values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *BackfillHistoryEventsTaskAttributes) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *BackfillHistoryEventsTaskAttributes
-	switch t := that.(type) {
-	case *BackfillHistoryEventsTaskAttributes:
-		that1 = t
-	case BackfillHistoryEventsTaskAttributes:
+	case BackfillHistoryTaskAttributes:
 		that1 = &t
 	default:
 		return false

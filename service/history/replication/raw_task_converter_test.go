@@ -1057,3 +1057,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
 	s.Nil(result)
 	s.True(s.lockReleased)
 }
+
+func (s *rawTaskConverterSuite) TestConvertBackfillHistoryTask() {
+	// FIXME
+}

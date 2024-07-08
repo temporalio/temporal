@@ -78,6 +78,7 @@ var (
 		"StateMachineTimer":            28,
 		"WorkflowExecutionTimeout":     29,
 		"ReplicationSyncHsm":           30,
+		"ReplicationBackfillHistory":   31,
 	}
 )
 

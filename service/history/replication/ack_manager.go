@@ -246,6 +246,16 @@ func (p *ackMgrImpl) GetTask(
 			VisibilityTimestamp: time.Unix(0, 0),
 			TaskID:              taskInfo.TaskId,
 		})
+	case enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY:
+		return p.ConvertTask(ctx, &tasks.BackfillHistoryTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0),
+			TaskID:              taskInfo.TaskId,
+		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
 	}
@@ -452,6 +462,17 @@ func (p *ackMgrImpl) ConvertTask(
 			p.shardContext,
 			task,
 			p.workflowCache,
+		)
+	case *tasks.BackfillHistoryTask:
+		return convertBackfillHistoryReplicationTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.shardContext.GetShardID(),
+			p.workflowCache,
+			p.eventBlobCache,
+			p.executionMgr,
+			p.logger,
 		)
 	default:
 		return nil, errUnknownReplicationTask

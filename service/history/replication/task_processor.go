@@ -32,6 +32,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -485,6 +486,46 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 				TaskId:         replicationTask.GetSourceTaskId(),
 				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 				VisibilityTime: replicationTask.GetVisibilityTime(),
+			},
+		}, nil
+
+	case enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK:
+		taskAttributes := replicationTask.GetBackfillHistoryTaskAttributes()
+
+		var eventBatches [][]*historypb.HistoryEvent
+		for _, eventBatch := range taskAttributes.EventBatches {
+			events, err := p.historySerializer.DeserializeEvents(eventBatch)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(events) == 0 {
+				p.logger.Error("Empty events in a batch")
+				return nil, fmt.Errorf("corrupted history event batch, empty events")
+			}
+			eventBatches = append(eventBatches, events)
+		}
+		firstEvent := eventBatches[0][0]
+		lastEvent := eventBatches[len(eventBatches)-1][len(eventBatches[len(eventBatches)-1])-1]
+		// NOTE: last event vs next event, next event ID is exclusive
+		nextEventID := lastEvent.GetEventId() + 1
+
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
+			SourceClusterName: p.sourceCluster,
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId:    taskAttributes.GetNamespaceId(),
+				WorkflowId:     taskAttributes.GetWorkflowId(),
+				RunId:          taskAttributes.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
+				FirstEventId:   firstEvent.GetEventId(),
+				NextEventId:    nextEventID,
+				Version:        firstEvent.GetVersion(),
+				VisibilityTime: replicationTask.GetVisibilityTime(),
+				NewRunId:       taskAttributes.GetNewRunId(),
+				// BranchToken & NewRunBranchToken should also be populated but are deprecated
 			},
 		}, nil
 

@@ -273,6 +273,8 @@ func (s *TaskSerializer) serializeReplicationTask(
 		replicationTask = s.replicationSyncWorkflowStateTaskToProto(task)
 	case *tasks.SyncHSMTask:
 		replicationTask = s.replicationSyncHSMTaskToProto(task)
+	case *tasks.BackfillHistoryTask:
+		replicationTask = s.replicationBackfillHistoryTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 	}
@@ -300,6 +302,8 @@ func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.Re
 		return s.replicationSyncWorkflowStateTaskFromProto(replicationTask), nil
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
 		return s.replicationSyncHSMTaskFromProto(replicationTask), nil
+	case enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY:
+		return s.replicationBackfillHistoryTaskFromProto(replicationTask), nil
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
 	}
@@ -1232,6 +1236,37 @@ func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
 		),
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              syncHSMTask.TaskId,
+	}
+}
+
+func (s *TaskSerializer) replicationBackfillHistoryTaskToProto(
+	backfillHistoryTask *tasks.BackfillHistoryTask,
+) *persistencespb.ReplicationTaskInfo {
+	return &persistencespb.ReplicationTaskInfo{
+		NamespaceId:    backfillHistoryTask.WorkflowKey.NamespaceID,
+		WorkflowId:     backfillHistoryTask.WorkflowKey.WorkflowID,
+		RunId:          backfillHistoryTask.WorkflowKey.RunID,
+		TaskType:       enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
+		TaskId:         backfillHistoryTask.TaskID,
+		VisibilityTime: timestamppb.New(backfillHistoryTask.VisibilityTimestamp),
+	}
+}
+
+func (s *TaskSerializer) replicationBackfillHistoryTaskFromProto(
+	backfillHistoryTask *persistencespb.ReplicationTaskInfo,
+) *tasks.BackfillHistoryTask {
+	visibilityTimestamp := time.Unix(0, 0)
+	if backfillHistoryTask.VisibilityTime != nil {
+		visibilityTimestamp = backfillHistoryTask.VisibilityTime.AsTime()
+	}
+	return &tasks.BackfillHistoryTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			backfillHistoryTask.NamespaceId,
+			backfillHistoryTask.WorkflowId,
+			backfillHistoryTask.RunId,
+		),
+		VisibilityTimestamp: visibilityTimestamp,
+		TaskID:              backfillHistoryTask.TaskId,
 	}
 }
 

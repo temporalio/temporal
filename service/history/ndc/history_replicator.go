@@ -113,6 +113,7 @@ type (
 			newEvents []*historypb.HistoryEvent,
 			newRunID string,
 		) error
+		BackfillHistoryEvents(ctx context.Context, request *shard.BackfillHistoryEventsRequest) error
 	}
 
 	HistoryReplicatorImpl struct {
@@ -218,6 +219,38 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 		r.historySerializer,
 		r.logger,
 		request,
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.doApplyEvents(ctx, task)
+}
+
+func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
+	ctx context.Context,
+	request *shard.BackfillHistoryEventsRequest,
+) error {
+	namespaceEntry, err := r.namespaceRegistry.GetNamespace(namespace.Name(request.NamespaceID))
+	if err != nil {
+		return err
+	}
+
+	if namespaceEntry.FailoverVersion() < request.VersionedHistory.NamespaceFailoverVersion {
+		// TODO: trigger SyncState.
+		// TODO: should we retry?
+		return nil
+	}
+
+	task, err := newReplicationTaskFromBatch(
+		r.clusterMetadata,
+		r.logger,
+		request.WorkflowKey,
+		request.BaseExecutionInfo,
+		request.VersionHistoryItems,
+		request.Events,
+		request.NewEvents,
+		request.NewRunID,
 	)
 	if err != nil {
 		return err

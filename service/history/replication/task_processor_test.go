@@ -429,6 +429,10 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncHSM() {
 	s.Equal(request, dlqTask)
 }
 
+func (s *taskProcessorSuite) TestConvertTaskToDLQTask_BackfillHistory() {
+	// FIXME
+}
+
 func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()

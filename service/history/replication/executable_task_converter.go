@@ -137,6 +137,15 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskClusterName,
 			replicationTask.GetPriority(),
 		)
+	case enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK:
+		return NewExecutableBackfillHistoryEventsTask(
+			e.processToolBox,
+			replicationTask.SourceTaskId,
+			taskCreationTime,
+			replicationTask.GetBackfillHistoryTaskAttributes(),
+			taskClusterName,
+			replicationTask.GetPriority(),
+		)
 	default:
 		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
 		return NewExecutableUnknownTask(

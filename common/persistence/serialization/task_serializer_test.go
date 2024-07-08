@@ -349,6 +349,16 @@ func (s *taskSerializerSuite) TestSyncHSMTask() {
 	s.assertEqualTasks(syncHSMTask)
 }
 
+func (s *taskSerializerSuite) TestBackfillHistoryTask() {
+	backfillHistoryTask := &tasks.BackfillHistoryTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+	}
+
+	s.assertEqualTasks(backfillHistoryTask)
+}
+
 func (s *taskSerializerSuite) TestSyncWorkflowStateTask() {
 	syncWorkflowStateTask := &tasks.SyncWorkflowStateTask{
 		WorkflowKey:         s.workflowKey,
