@@ -33,8 +33,9 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/testing/historyrequire"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -98,7 +99,7 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -143,7 +144,7 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -155,7 +156,7 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// this function poll events from history side
 	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*historypb.HistoryEvent, []byte) {
-		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -271,7 +272,7 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -316,7 +317,7 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -329,7 +330,7 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 	// this function poll events from history side
 	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*historypb.HistoryEvent, []byte) {
 		closeEventOnly := enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -427,7 +428,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -476,7 +477,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -488,7 +489,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// this function poll events from history side
 	getHistoryWithLongPoll := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*commonpb.DataBlob, []byte) {
-		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -504,7 +505,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	}
 
 	getHistory := func(namespace string, workflowID string, token []byte) ([]*commonpb.DataBlob, []byte) {
-		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -783,7 +784,7 @@ func reverseSlice(events []*historypb.HistoryEvent) []*historypb.HistoryEvent {
 }
 
 func (s *FunctionalTestBase) getHistoryReverse(namespace string, execution *commonpb.WorkflowExecution, pageSize int32) []*historypb.HistoryEvent {
-	historyResponse, err := s.engine.GetWorkflowExecutionHistoryReverse(NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+	historyResponse, err := s.client.GetWorkflowExecutionHistoryReverse(NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 		Namespace:       namespace,
 		Execution:       execution,
 		NextPageToken:   nil,
@@ -793,7 +794,7 @@ func (s *FunctionalTestBase) getHistoryReverse(namespace string, execution *comm
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.engine.GetWorkflowExecutionHistoryReverse(NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+		historyResponse, err = s.client.GetWorkflowExecutionHistoryReverse(NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 			Namespace:       namespace,
 			Execution:       execution,
 			NextPageToken:   historyResponse.NextPageToken,

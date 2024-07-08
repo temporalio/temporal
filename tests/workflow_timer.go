@@ -57,7 +57,7 @@ func (s *FunctionalSuite) TestCancelTimer() {
 		Identity:            identity,
 	}
 
-	creatResp, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	creatResp, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -113,7 +113,7 @@ func (s *FunctionalSuite) TestCancelTimer() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -179,7 +179,7 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		Identity:            identity,
 	}
 
-	creatResp, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	creatResp, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -236,7 +236,7 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,

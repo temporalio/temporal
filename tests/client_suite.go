@@ -859,7 +859,7 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 	// stop worker
 	s.worker.Stop()
 	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
-	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.client.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: stickyQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: s.taskQueue},
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -888,7 +888,7 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 	s.Equal(stickyQueue, ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
 
 	// now poll from normal queue, and it should see the full history.
-	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
@@ -1891,7 +1891,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 		searchattribute.ExecutionStatus, "Running",
 		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(v2))
 	s.Eventually(func() bool {
-		resp, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		resp, err := s.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.namespace,
 			Query:     query,
 		})
@@ -1899,7 +1899,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// reset it using v2 as the bad build ID
-	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.client.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace:       s.namespace,
 		VisibilityQuery: query,
 		JobId:           uuid.New(),
