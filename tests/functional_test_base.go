@@ -37,7 +37,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -57,7 +56,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -171,10 +169,6 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	if clusterConfig.EnableArchival {
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
-	}
-
-	if !UsingSQLAdvancedVisibility() {
-		s.waitForESReady()
 	}
 }
 
@@ -434,17 +428,4 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
-}
-
-func (s *FunctionalTestBase) waitForESReady() {
-	s.Require().EventuallyWithTf(func(t *assert.CollectT) {
-		esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
-		assert.NoError(t, err)
-		// WaitForYellowStatus is a blocking request, so set timeout equal to Eventually tick to cancel in-flight requests before retrying
-		ctx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
-		defer cancel()
-		status, err := esClient.WaitForYellowStatus(ctx, s.testClusterConfig.ESConfig.GetVisibilityIndex())
-		assert.NoError(t, err)
-		assert.True(t, status == "yellow" || status == "green")
-	}, 2*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
 }

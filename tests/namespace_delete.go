@@ -25,7 +25,6 @@
 package tests
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -33,7 +32,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -50,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -103,19 +100,6 @@ func (s *namespaceTestSuite) SetupSuite() {
 	s.frontendClient = s.cluster.GetFrontendClient()
 	s.adminClient = s.cluster.GetAdminClient()
 	s.operatorClient = s.cluster.GetOperatorClient()
-
-	if !UsingSQLAdvancedVisibility() {
-		s.Require().EventuallyWithTf(func(t *assert.CollectT) {
-			esClient, err := esclient.NewFunctionalTestsClient(s.clusterConfig.ESConfig, s.logger)
-			assert.NoError(t, err)
-			// WaitForYellowStatus is a blocking request, so set timeout equal to Eventually tick to cancel in-flight requests before retrying
-			ctx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
-			defer cancel()
-			status, err := esClient.WaitForYellowStatus(ctx, s.clusterConfig.ESConfig.GetVisibilityIndex())
-			assert.NoError(t, err)
-			assert.True(t, status == "yellow" || status == "green")
-		}, 2*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
-	}
 }
 
 func (s *namespaceTestSuite) TearDownSuite() {
