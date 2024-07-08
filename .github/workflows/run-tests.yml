@@ -46,9 +46,9 @@ jobs:
 
       - uses: arduino/setup-protoc@v3
 
-      - run: GOOS=windows GOARCH=amd64 make bins && make clean-bins
+      - run: GOOS=windows GOARCH=amd64 make bins clean-bins
 
-      - run: GOOS=darwin GOARCH=arm64 make bins && make clean-bins
+      - run: GOOS=darwin GOARCH=arm64 make bins clean-bins
 
       - run: make ci-build-misc
 
