@@ -30,13 +30,16 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/common/testing/updateutils"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -73,9 +76,15 @@ func (s *FunctionalSuite) SetupTest() {
 	s.UpdateUtils = updateutils.New(s.T())
 }
 
+func (s *FunctionalSuite) TearDownTest() {
+	// TODO: This is only for update_workflow.go tests.
+	//  Move it out to WorkflowUpdateSuite when it is created.
+	runtime.AssertNoGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage)
+}
+
 func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
-	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
 		WorkflowExecution: execution,
 		SignalName:        signalName,
@@ -89,7 +98,7 @@ func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.Workf
 func (s *FunctionalSuite) closeShard(wid string) {
 	s.T().Helper()
 
-	resp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+	resp, err := s.client.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace,
 	})
 	s.NoError(err)

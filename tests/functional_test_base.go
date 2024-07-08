@@ -72,7 +72,7 @@ type (
 		testClusterFactory     TestClusterFactory
 		testCluster            *TestCluster
 		testClusterConfig      *TestClusterConfig
-		engine                 FrontendClient
+		client                 FrontendClient
 		adminClient            AdminClient
 		operatorClient         operatorservice.OperatorServiceClient
 		httpAPIAddress         string
@@ -147,7 +147,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 			s.Require().NoError(err)
 		}
 
-		s.engine = NewFrontendClient(connection)
+		s.client = NewFrontendClient(connection)
 		s.adminClient = NewAdminClient(connection)
 		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
@@ -156,7 +156,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfig, s.Logger)
 		s.Require().NoError(err)
 		s.testCluster = cluster
-		s.engine = s.testCluster.GetFrontendClient()
+		s.client = s.testCluster.GetFrontendClient()
 		s.adminClient = s.testCluster.GetAdminClient()
 		s.operatorClient = s.testCluster.GetOperatorClient()
 		s.httpAPIAddress = cluster.host.FrontendHTTPAddress()
@@ -281,7 +281,7 @@ func (s *FunctionalTestBase) tearDownSuite() {
 		s.testCluster = nil
 	}
 
-	s.engine = nil
+	s.client = nil
 	s.adminClient = nil
 }
 
@@ -295,7 +295,7 @@ func (s *FunctionalTestBase) registerNamespace(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := s.client.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Description:                      namespace,
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
@@ -310,7 +310,7 @@ func (s *FunctionalTestBase) registerNamespace(
 	}
 
 	// Set up default alias for custom search attributes.
-	_, err = s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err = s.client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		Config: &namespacepb.NamespaceConfig{
 			CustomSearchAttributeAliases: map[string]string{
@@ -332,7 +332,7 @@ func (s *FunctionalTestBase) markNamespaceAsDeleted(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := s.client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			State: enumspb.NAMESPACE_STATE_DELETED,
@@ -347,7 +347,7 @@ func (s *FunctionalTestBase) randomizeStr(id string) string {
 }
 
 func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -356,7 +356,7 @@ func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.Wo
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err = s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:     namespace,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,

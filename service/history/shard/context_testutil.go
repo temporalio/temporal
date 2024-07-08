@@ -145,7 +145,6 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	}
 	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
 	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
-	taskCategoryRegistry.AddCategory(tasks.CategoryOutbound)
 
 	ctx := &ContextImpl{
 		shardID:             config.ShardInfo.GetShardId(),

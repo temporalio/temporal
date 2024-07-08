@@ -366,7 +366,7 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 		return true
 	}
 
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+	if errors.As(err, new(*serviceerror.NotFound)) {
 		return true
 	}
 
