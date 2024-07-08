@@ -43,10 +43,10 @@ type (
 		IsGeneric bool
 	}
 	settingPrecedence struct {
-		Name       string
-		GoArgs     string
-		GoArgNames string
-		Index      int
+		Name   string
+		GoArgs string
+		Expr   string
+		Index  int
 	}
 )
 
@@ -86,30 +86,51 @@ var (
 		{
 			Name:   "Global",
 			GoArgs: "",
+			Expr:   "[]Constraints{{}}",
 		},
 		{
 			Name:   "Namespace",
 			GoArgs: "namespace string",
+			Expr:   "[]Constraints{{Namespace: namespace}, {}}",
 		},
 		{
 			Name:   "NamespaceID",
 			GoArgs: "namespaceID string",
+			Expr:   "[]Constraints{{NamespaceID: namespaceID}, {}}",
 		},
 		{
 			Name:   "TaskQueue",
 			GoArgs: "namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType",
+			// A task-queue-name-only filter applies to a single task queue name across all
+			// namespaces, with higher precedence than a namespace-only filter. This is intended to
+			// be used by the default partition count and is probably not useful otherwise.
+			Expr: `[]Constraints{
+			{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType},
+			{Namespace: namespace, TaskQueueName: taskQueue},
+			{TaskQueueName: taskQueue},
+			{Namespace: namespace},
+			{},
+		}`,
 		},
 		{
 			Name:   "ShardID",
 			GoArgs: "shardID int32",
+			Expr:   "[]Constraints{{ShardID: shardID}, {}}",
 		},
 		{
 			Name:   "TaskType",
 			GoArgs: "taskType enumsspb.TaskType",
+			Expr:   "[]Constraints{{TaskType: taskType}, {}}",
 		},
 		{
 			Name:   "Destination",
 			GoArgs: "namespace string, destination string",
+			Expr: `[]Constraints{
+			{Namespace: namespace, Destination: destination},
+			{Destination: destination},
+			{Namespace: namespace},
+			{},
+		}`,
 		},
 	}
 )
@@ -199,13 +220,14 @@ func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFn[T] {
 func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFnWith{{.P.Name}}Filter[T] {
 {{- end}}
 	return func({{.P.GoArgs}}) T {
+		prec := {{.P.Expr}}
 		return matchAndConvert(
 			c,
 			s.key,
 			s.def,
 			s.cdef,
 			s.convert,
-			precedence{{.P.Name}}({{.P.GoArgNames}}),
+			prec,
 		)
 	}
 }
@@ -223,7 +245,7 @@ func (s {{.P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribable[T
 func (s {{.P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWith{{.P.Name}}Filter[T] {
 	return func({{.P.GoArgs}}, callback func(T)) (T, func()) {
 {{- end}}
-		prec := precedence{{.P.Name}}({{.P.GoArgNames}})
+		prec := {{.P.Expr}}
 		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
@@ -291,13 +313,7 @@ import (
 const PrecedenceUnknown Precedence = 0
 `, nil)
 	for idx, prec := range precedences {
-		// fill in Index and GoArgNames
 		prec.Index = idx + 1
-		var argNames []string
-		for _, argAndType := range strings.Split(prec.GoArgs, ",") {
-			argNames = append(argNames, strings.Split(strings.TrimSpace(argAndType), " ")[0])
-		}
-		prec.GoArgNames = strings.Join(argNames, ", ")
 		generatePrecEnum(w, prec)
 	}
 	for _, tp := range types {
