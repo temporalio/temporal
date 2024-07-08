@@ -25,10 +25,13 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	stdlog "log"
 	"os"
+	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
 	"gopkg.in/validator.v2"
 	"gopkg.in/yaml.v3"
 )
@@ -90,6 +93,8 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 	// TODO: remove log dependency.
 	stdlog.Printf("Loading config files=%v\n", files)
 
+	templateFuncs := sprig.FuncMap()
+
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied
 		// #nosec
@@ -97,7 +102,19 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 		if err != nil {
 			return err
 		}
-		err = yaml.Unmarshal(data, config)
+
+		tpl, err := template.New("config").Funcs(templateFuncs).Parse(string(data))
+		if err != nil {
+			return err
+		}
+
+		var rendered bytes.Buffer
+		err = tpl.Execute(&rendered, nil)
+		if err != nil {
+			return err
+		}
+
+		err = yaml.Unmarshal(rendered.Bytes(), config)
 		if err != nil {
 			return err
 		}

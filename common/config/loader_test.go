@@ -95,15 +95,15 @@ func (s *LoaderSuite) TestHierarchy() {
 		item1 string
 		item2 string
 	}{
-		{"", "", "hello_development_", "world_development_"},
-		{"", "dca", "hello_development_", "world_development_"},
-		{"", "pdx", "hello_development_", "world_development_"},
-		{"development", "", "hello_development_", "world_development_"},
-		{"development", "dca", "hello_development_", "world_development_"},
-		{"development", "pdx", "hello_development_", "world_development_"},
-		{"prod", "", "hello_prod_", "world_prod_"},
-		{"prod", "dca", "hello_prod_dca", "world_prod_dca"},
-		{"prod", "pdx", "hello_prod_", "world_prod_"},
+		{"", "", "HELLO_DEVELOPMENT_", "world_development_"},
+		{"", "dca", "HELLO_DEVELOPMENT_", "world_development_"},
+		{"", "pdx", "HELLO_DEVELOPMENT_", "world_development_"},
+		{"development", "", "HELLO_DEVELOPMENT_", "world_development_"},
+		{"development", "dca", "HELLO_DEVELOPMENT_", "world_development_"},
+		{"development", "pdx", "HELLO_DEVELOPMENT_", "world_development_"},
+		{"prod", "", "HELLO_PROD_", "world_prod_"},
+		{"prod", "dca", "HELLO_PROD_DCA", "world_prod_dca"},
+		{"prod", "pdx", "HELLO_PROD_", "world_prod_"},
 	}
 
 	for _, tc := range testCases {
@@ -131,6 +131,6 @@ func buildConfig(env, zone string) string {
 	item2 := concat("world", concat(env, zone))
 	return `
     items:
-      item1: ` + item1 + `
+      item1: {{ "` + item1 + `" | upper }}
       item2: ` + item2
 }
