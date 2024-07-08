@@ -171,14 +171,14 @@ func GetArchivalTaskTypeTagValue(
 func GetOutboundTaskTypeTagValue(task tasks.Task, isActive bool) string {
 	var prefix string
 	if isActive {
-		prefix = "Active"
+		prefix = "OutboundActive"
 	} else {
-		prefix = "Standby"
+		prefix = "OutboundStandby"
 	}
 
 	outbound, ok := task.(*tasks.StateMachineOutboundTask)
 	if !ok {
-		return prefix + "UnknownOutbound"
+		return prefix + "Unknown"
 	}
 	return prefix + "." + outbound.StateMachineTaskType()
 }
