@@ -55,14 +55,7 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
-const (
-	LockPriorityHigh LockPriority = 0
-	LockPriorityLow  LockPriority = 1
-)
-
 type (
-	LockPriority int
-
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
 
@@ -70,8 +63,8 @@ type (
 		LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
 
-		Lock(ctx context.Context, lockPriority LockPriority) error
-		Unlock(lockPriority LockPriority)
+		Lock(ctx context.Context, lockPriority locks.Priority) error
+		Unlock()
 
 		IsDirty() bool
 
@@ -170,7 +163,7 @@ type (
 		metricsHandler  metrics.Handler
 		config          *configs.Config
 
-		mutex          locks.PriorityMutex
+		lock           locks.PrioritySemaphore
 		MutableState   MutableState
 		updateRegistry update.Registry
 	}
@@ -191,35 +184,19 @@ func NewContext(
 		throttledLogger: throttledLogger,
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
 		config:          config,
-		mutex:           locks.NewPriorityMutex(),
+		lock:            locks.NewPrioritySemaphore(1),
 	}
 }
 
 func (c *ContextImpl) Lock(
 	ctx context.Context,
-	lockPriority LockPriority,
+	lockPriority locks.Priority,
 ) error {
-	switch lockPriority {
-	case LockPriorityHigh:
-		return c.mutex.LockHigh(ctx)
-	case LockPriorityLow:
-		return c.mutex.LockLow(ctx)
-	default:
-		panic(fmt.Sprintf("unknown lock priority: %v", lockPriority))
-	}
+	return c.lock.Acquire(ctx, lockPriority, 1)
 }
 
-func (c *ContextImpl) Unlock(
-	lockPriority LockPriority,
-) {
-	switch lockPriority {
-	case LockPriorityHigh:
-		c.mutex.UnlockHigh()
-	case LockPriorityLow:
-		c.mutex.UnlockLow()
-	default:
-		panic(fmt.Sprintf("unknown lock priority: %v", lockPriority))
-	}
+func (c *ContextImpl) Unlock() {
+	c.lock.Release(1)
 }
 
 func (c *ContextImpl) IsDirty() bool {
