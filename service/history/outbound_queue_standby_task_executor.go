@@ -25,8 +25,6 @@ package history
 import (
 	"context"
 	"errors"
-	"math"
-	"time"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -89,6 +87,13 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		}
 	}
 
+	nsName, err := e.shardContext.GetNamespaceRegistry().GetNamespaceName(
+		namespace.ID(task.GetNamespaceID()),
+	)
+	if err != nil {
+		return respond(err)
+	}
+
 	ref, smt, err := stateMachineTask(e.shardContext, task)
 	if err != nil {
 		return respond(err)
@@ -96,6 +101,11 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 
 	if err := validateTaskByClock(e.shardContext, task); err != nil {
 		return respond(err)
+	}
+
+	destination := ""
+	if dtask, ok := task.(tasks.HasDestination); ok {
+		destination = dtask.GetDestination()
 	}
 
 	actionFn := func(ctx context.Context) (any, error) {
@@ -115,17 +125,24 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 			}
 			return nil, err
 		}
+
 		// If there was no error from Access nor from the accessor function, then the task
 		// is still valid for processing based on the current state of the machine.
-		// The post action function needs a non-nil object so the task is retried properly.
-		return struct{}{}, nil
-	}
-
-	// MaxInt64 duration is 290+ years, so this is effectively equivalent to never
-	// discarding the task.
-	discardDelay := time.Duration(math.MaxInt64)
-	if e.config.OutboundStandbyDiscardTaskMissingEvents(task.GetType()) {
-		discardDelay = e.config.StandbyTaskMissingEventsDiscardDelay(task.GetType())
+		// The *likely* reasons are: a) delay in the replication stack; b) destination is down.
+		// In any case, the task needs to be retried.
+		var postActionInfoErr error = consts.ErrTaskRetry
+		if e.config.OutboundStandbyTaskMissingEventsDestinationDownErr(nsName.String(), destination) {
+			// Wrap the retry error with DestinationDownError so it can trigger the circuit breaker on
+			// the standby side. This won't do any harm, at most some delay processing the standby task.
+			// Assuming the dynamic config OutboundStandbyTaskMissingEventsDiscardDelay is long enough,
+			// it should give enough time for the active side to execute the task successfully, and the
+			// standby side to process it as well without discarding the task.
+			postActionInfoErr = queues.NewDestinationDownError(
+				"standby task executor returned retryable error",
+				postActionInfoErr,
+			)
+		}
+		return postActionInfoErr, nil
 	}
 
 	err = e.processTask(
@@ -135,8 +152,8 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		getStandbyPostActionFn(
 			task,
 			e.Now,
-			e.config.StandbyTaskMissingEventsResendDelay(task.GetType()),
-			discardDelay,
+			0, // We don't need resend delay since we don't do fetch history.
+			e.config.OutboundStandbyTaskMissingEventsDiscardDelay(nsName.String(), destination),
 			// We don't need to fetch history from remote for state machine to sync.
 			// So, just use the noop post action which will return a retry error
 			// if the task didn't succeed.
@@ -170,18 +187,6 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 
 	historyResendInfo, err := actionFn(ctx)
 	if err != nil {
-		if e.config.OutboundStandbyWrapErrTaskRetryWithDestionationDown(task.GetType()) &&
-			errors.Is(err, consts.ErrTaskRetry) {
-			// If the error is retryable, it means the task hasn't been processed on the active side yet.
-			// The *likely* reasons are: a) delay in the replication stack; b) destination is down.
-			// In any case, since the task is retryable, wrapping the error with DestinationDownError so
-			// it can trigger the circuit breaker on the standby side won't do any harm (at most delay
-			// processing the standby task a little bit).
-			// Assuming the dynamic config StandbyTaskMissingEventsDiscardDelay is long enough, it should
-			// give enough time for the active side to execute the task successfully, and the standby side
-			// to process it as well without discarding the task.
-			err = queues.NewDestinationDownError("standby task executor returned retryable error", err)
-		}
 		return err
 	}
 

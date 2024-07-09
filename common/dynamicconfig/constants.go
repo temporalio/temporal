@@ -25,6 +25,7 @@
 package dynamicconfig
 
 import (
+	"math"
 	"os"
 	"time"
 
@@ -1658,18 +1659,18 @@ Fields (see gobreaker reference for more details):
   if interval is 0, then it never clears the internal counts (default 0).
 - Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
-	OutboundStandbyWrapErrTaskRetryWithDestionationDown = NewTaskTypeBoolSetting(
-		"history.outboundQueue.wrapErrTaskRetryWithDestionationDown",
-		true,
-		`OutboundStandbyWrapErrTaskRetryWithDestionationDown enables wrapping ErrTaskRetry error when
-processing standby task with DestinationDownError`,
+	OutboundStandbyTaskMissingEventsDiscardDelay = NewDestinationDurationSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDiscardDelay",
+		// This is effectively equivalent to never discarding outbound tasks since it's 290+ years.
+		time.Duration(math.MaxInt64),
+		`OutboundStandbyTaskMissingEventsDiscardDelay is the equivalent of
+StandbyTaskMissingEventsDiscardDelay for outbound standby task processor.`,
 	)
-	OutboundStandbyDiscardTaskMissingEvents = NewTaskTypeBoolSetting(
-		"history.outboundQueue.discardTaskMissingEvents",
-		false,
-		`OutboundStandbyDiscardTaskMissingEvents enables discarding outbound tasks after
-StandbyTaskMissingEventsDiscardDelay. In normal operation with multi-cursor enabled,
-it should not be necessary to discard tasks.`,
+	OutboundStandbyTaskMissingEventsDestinationDownErr = NewDestinationBoolSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDestinationDownErr",
+		true,
+		`OutboundStandbyTaskMissingEventsDestinationDownErr enables returning DestinationDownError when
+the outbound standby task failed to be processed due to missing events.`,
 	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
