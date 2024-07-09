@@ -264,7 +264,7 @@ func (r *StreamReceiverImpl) ackMessage(
 		}
 		highPriorityFlowControlCommand := r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_HIGH)
 		if highPriorityFlowControlCommand == enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
-			r.logger.Warn(fmt.Sprintf("Pausing High Priority Tasks, current size: %v, lowWatermark: %v", r.highPriorityTaskTracker.Size(), highPriorityWaterMarkInfo.Watermark))
+			r.logger.Warn(fmt.Sprintf("pausing High Priority Tasks, current size: %v, lowWatermark: %v", r.highPriorityTaskTracker.Size(), highPriorityWaterMarkInfo.Watermark))
 		}
 		highPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
@@ -273,7 +273,7 @@ func (r *StreamReceiverImpl) ackMessage(
 		}
 		lowPriorityFlowControlCommand := r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_LOW)
 		if lowPriorityFlowControlCommand == enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
-			r.logger.Warn(fmt.Sprintf("Pausing Low Priority Tasks, current size: %v, lowWatermark: %v", r.lowPriorityTaskTracker.Size(), lowPriorityWaterMarkInfo.Watermark))
+			r.logger.Warn(fmt.Sprintf("pausing Low Priority Tasks, current size: %v, lowWatermark: %v", r.lowPriorityTaskTracker.Size(), lowPriorityWaterMarkInfo.Watermark))
 		}
 		lowPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,

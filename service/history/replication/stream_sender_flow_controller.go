@@ -132,7 +132,7 @@ func (s *SenderFlowControllerImpl) Wait(priority enums.TaskPriority) {
 		state.waiters++
 		s.logger.Info(fmt.Sprintf("%v sender is paused", priority.String()))
 		state.cond.Wait()
-		s.logger.Info(fmt.Sprintf("%v sender is resumed", priority.String()))
+		s.logger.Info(fmt.Sprintf("%s sender is resumed", priority.String()))
 		state.waiters--
 	}
 	state.mu.Unlock()
