@@ -30,7 +30,6 @@ import (
 	"context"
 
 	"go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -178,18 +177,6 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		return serviceerror.NewInternal("Failed to commit import transaction")
 	}
 	return nil
-}
-
-func isLastEventAtHistoryBoundary(
-	lastLocalEvent *historypb.HistoryEvent,
-	versionHistory *historyspb.VersionHistory,
-) bool {
-	for _, item := range versionHistory.Items {
-		if item.EventId == lastLocalEvent.EventId {
-			return true
-		}
-	}
-	return false
 }
 
 func invokeImportWorkflowExecutionCall(
