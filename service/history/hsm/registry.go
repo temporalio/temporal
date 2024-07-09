@@ -41,6 +41,8 @@ var ErrConcurrentTaskNotImplemented = errors.New("concurrent task not implemente
 // ErrNotRegistered is returned by a [Registry] when trying to get a type that is not registered.
 var ErrNotRegistered error = notRegisteredError{"not registered"}
 
+var ErrSerializationFailed = errors.New("serialization failed")
+
 // notRegisteredError is returned by a [Registry] when trying to get a type that is not registered.
 type notRegisteredError struct {
 	Message string
@@ -64,8 +66,9 @@ type Registry struct {
 	// The actual value is ImmediateExecutor[T].
 	immediateExecutors map[string]any
 	// The actual value is TimerExecutor[T].
-	timerExecutors map[string]any
-	events         map[enumspb.EventType]EventDefinition
+	timerExecutors  map[string]any
+	remoteExecutors map[string]any
+	events          map[enumspb.EventType]EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
@@ -140,6 +143,32 @@ func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T
 	return nil
 }
 
+func RegisterRemoteExecutor[T Task](r *Registry, executor RemoteExecutor[T]) error {
+	var task T
+	taskType := task.Type()
+	// The executors are registered in pairs, so only need to check in one map.
+	if existing, ok := r.remoteExecutors[taskType]; ok {
+		return fmt.Errorf(
+			"%w: executor already registered for task type %v: %v",
+			ErrDuplicateRegistration,
+			taskType,
+			existing,
+		)
+	}
+	// TODO(bergundy): Concurrent may be dependent on the task's state, this solution isn't failsafe.
+	if task.Concurrent() {
+		if _, ok := Task(task).(ConcurrentTask); !ok {
+			return fmt.Errorf(
+				"%w: %q does not implement ConcurrentTask interface",
+				ErrConcurrentTaskNotImplemented,
+				taskType,
+			)
+		}
+	}
+	r.remoteExecutors[taskType] = executor
+	return nil
+}
+
 // RegisterTimerExecutor registers a [TimerExecutor] for the given task type.
 // Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
 func RegisterTimerExecutor[T Task](r *Registry, executor TimerExecutor[T]) error {
@@ -193,6 +222,46 @@ func (r *Registry) execute(
 	if executor == nil {
 		return nil
 	}
+	fn := reflect.ValueOf(executor)
+	values := fn.Call(
+		[]reflect.Value{
+			reflect.ValueOf(ctx),
+			reflect.ValueOf(env),
+			reflect.ValueOf(ref),
+			reflect.ValueOf(task),
+		},
+	)
+	if !values[0].IsNil() {
+		//nolint:revive // type cast result is unchecked
+		return values[0].Interface().(error)
+	}
+	return nil
+}
+
+// ExecuteImmediateTask gets an [ImmediateExecutor] from the registry and invokes it.
+// Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
+func (r *Registry) ExecuteRemoteTask(
+	ctx context.Context,
+	env Environment,
+	ref Ref,
+	taskType string,
+	result []byte,
+) error {
+	executor, ok := r.immediateExecutors[taskType]
+	if !ok {
+		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, taskType)
+	}
+	serializer, ok := r.tasks[taskType]
+	if !ok {
+		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, taskType)
+	}
+
+	// TODO(Tianyu): A new kind required?
+	task, err := serializer.Deserialize(result, TaskKindOutbound{})
+	if err != nil {
+		return fmt.Errorf("%w: executor for task type %v", ErrSerializationFailed, taskType)
+	}
+
 	fn := reflect.ValueOf(executor)
 	values := fn.Call(
 		[]reflect.Value{

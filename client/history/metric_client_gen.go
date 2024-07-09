@@ -369,6 +369,20 @@ func (c *metricClient) ImportWorkflowExecution(
 	return c.client.ImportWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) InvokeStateMachineTask(
+	ctx context.Context,
+	request *historyservice.InvokeStateMachineTaskRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.InvokeStateMachineTaskResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientInvokeStateMachineTask")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.InvokeStateMachineTask(ctx, request, opts...)
+}
+
 func (c *metricClient) IsActivityTaskValid(
 	ctx context.Context,
 	request *historyservice.IsActivityTaskValidRequest,

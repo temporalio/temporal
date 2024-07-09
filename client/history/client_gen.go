@@ -418,6 +418,26 @@ func (c *clientImpl) ImportWorkflowExecution(
 	return response, nil
 }
 
+func (c *clientImpl) InvokeStateMachineTask(
+	ctx context.Context,
+	request *historyservice.InvokeStateMachineTaskRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.InvokeStateMachineTaskResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowId())
+	var response *historyservice.InvokeStateMachineTaskResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.InvokeStateMachineTask(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) IsActivityTaskValid(
 	ctx context.Context,
 	request *historyservice.IsActivityTaskValidRequest,

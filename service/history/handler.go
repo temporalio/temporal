@@ -2363,3 +2363,37 @@ func validateTaskToken(taskToken *tokenspb.Task) error {
 	}
 	return nil
 }
+
+func (h *Handler) InvokeStateMachineTask(ctx context.Context, request *historyservice.InvokeStateMachineTaskRequest) (_ *historyservice.InvokeStateMachineTaskResponse, retErr error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.NamespaceId), request.WorkflowId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	registry := shardContext.StateMachineRegistry()
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	ref := hsm.Ref{
+		WorkflowKey:     definition.NewWorkflowKey(request.NamespaceId, request.WorkflowId, request.RunId),
+		StateMachineRef: request.Ref,
+	}
+
+	err = registry.ExecuteRemoteTask(ctx, engine.StateMachineEnvironment(), ref, request.TaskType, request.Task)
+	// TODO(Tianyu): convert error?
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	// TODO(Tianyu): how to define / get a return value?
+	return &historyservice.InvokeStateMachineTaskResponse{}, nil
+}

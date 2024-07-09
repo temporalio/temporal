@@ -105,6 +105,7 @@ const (
 	HistoryService_AddTasks_FullMethodName                               = "/temporal.server.api.historyservice.v1.HistoryService/AddTasks"
 	HistoryService_ListTasks_FullMethodName                              = "/temporal.server.api.historyservice.v1.HistoryService/ListTasks"
 	HistoryService_CompleteNexusOperation_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation"
+	HistoryService_InvokeStateMachineTask_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineTask"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -315,6 +316,7 @@ type HistoryServiceClient interface {
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
 	CompleteNexusOperation(ctx context.Context, in *CompleteNexusOperationRequest, opts ...grpc.CallOption) (*CompleteNexusOperationResponse, error)
+	InvokeStateMachineTask(ctx context.Context, in *InvokeStateMachineTaskRequest, opts ...grpc.CallOption) (*InvokeStateMachineTaskResponse, error)
 }
 
 type historyServiceClient struct {
@@ -914,6 +916,15 @@ func (c *historyServiceClient) CompleteNexusOperation(ctx context.Context, in *C
 	return out, nil
 }
 
+func (c *historyServiceClient) InvokeStateMachineTask(ctx context.Context, in *InvokeStateMachineTaskRequest, opts ...grpc.CallOption) (*InvokeStateMachineTaskResponse, error) {
+	out := new(InvokeStateMachineTaskResponse)
+	err := c.cc.Invoke(ctx, HistoryService_InvokeStateMachineTask_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1122,6 +1133,7 @@ type HistoryServiceServer interface {
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
 	CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error)
+	InvokeStateMachineTask(context.Context, *InvokeStateMachineTaskRequest) (*InvokeStateMachineTaskResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1317,6 +1329,9 @@ func (UnimplementedHistoryServiceServer) ListTasks(context.Context, *ListTasksRe
 }
 func (UnimplementedHistoryServiceServer) CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) InvokeStateMachineTask(context.Context, *InvokeStateMachineTaskRequest) (*InvokeStateMachineTaskResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeStateMachineTask not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2473,6 +2488,24 @@ func _HistoryService_CompleteNexusOperation_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_InvokeStateMachineTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvokeStateMachineTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).InvokeStateMachineTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_InvokeStateMachineTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).InvokeStateMachineTask(ctx, req.(*InvokeStateMachineTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2727,6 +2760,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteNexusOperation",
 			Handler:    _HistoryService_CompleteNexusOperation_Handler,
+		},
+		{
+			MethodName: "InvokeStateMachineTask",
+			Handler:    _HistoryService_InvokeStateMachineTask_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

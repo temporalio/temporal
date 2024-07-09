@@ -541,6 +541,26 @@ func (mr *MockHistoryServiceClientMockRecorder) ImportWorkflowExecution(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).ImportWorkflowExecution), varargs...)
 }
 
+// InvokeStateMachineTask mocks base method.
+func (m *MockHistoryServiceClient) InvokeStateMachineTask(ctx context.Context, in *historyservice.InvokeStateMachineTaskRequest, opts ...grpc.CallOption) (*historyservice.InvokeStateMachineTaskResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "InvokeStateMachineTask", varargs...)
+	ret0, _ := ret[0].(*historyservice.InvokeStateMachineTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InvokeStateMachineTask indicates an expected call of InvokeStateMachineTask.
+func (mr *MockHistoryServiceClientMockRecorder) InvokeStateMachineTask(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeStateMachineTask", reflect.TypeOf((*MockHistoryServiceClient)(nil).InvokeStateMachineTask), varargs...)
+}
+
 // IsActivityTaskValid mocks base method.
 func (m *MockHistoryServiceClient) IsActivityTaskValid(ctx context.Context, in *historyservice.IsActivityTaskValidRequest, opts ...grpc.CallOption) (*historyservice.IsActivityTaskValidResponse, error) {
 	m.ctrl.T.Helper()
@@ -1839,6 +1859,21 @@ func (m *MockHistoryServiceServer) ImportWorkflowExecution(arg0 context.Context,
 func (mr *MockHistoryServiceServerMockRecorder) ImportWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).ImportWorkflowExecution), arg0, arg1)
+}
+
+// InvokeStateMachineTask mocks base method.
+func (m *MockHistoryServiceServer) InvokeStateMachineTask(arg0 context.Context, arg1 *historyservice.InvokeStateMachineTaskRequest) (*historyservice.InvokeStateMachineTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InvokeStateMachineTask", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.InvokeStateMachineTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InvokeStateMachineTask indicates an expected call of InvokeStateMachineTask.
+func (mr *MockHistoryServiceServerMockRecorder) InvokeStateMachineTask(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeStateMachineTask", reflect.TypeOf((*MockHistoryServiceServer)(nil).InvokeStateMachineTask), arg0, arg1)
 }
 
 // IsActivityTaskValid mocks base method.
