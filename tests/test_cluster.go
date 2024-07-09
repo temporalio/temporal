@@ -334,7 +334,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 		if err != nil {
 			return err
 		}
-		return esClient.Ping(context.TODO())
+		return esClient.Ping(ctx)
 	}
 
 	err := backoff.ThrottleRetry(
