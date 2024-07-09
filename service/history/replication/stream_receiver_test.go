@@ -261,8 +261,8 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(lowWatermarkInfo)
 	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH).Return(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME)
 	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW).Return(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE)
-	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
-	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.highPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+	s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.NoError(err)
 	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
