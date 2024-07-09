@@ -292,20 +292,11 @@ func (t resetTest) sendSignalAndProcessWFT(poller *TaskPoller) {
 }
 
 func (t resetTest) sendUpdateAndProcessWFT(updateId string, poller *TaskPoller) {
-	updateResponse := make(chan error)
-	pollResponse := make(chan error)
-	go func() {
-		_, err := t.FunctionalSuite.sendUpdateWaitPolicyAccepted(t.tv, updateId)
-		updateResponse <- err
-	}()
-	go func() {
-		// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
-		// required for the update request to return.
-		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
-		pollResponse <- err
-	}()
-	t.NoError(<-updateResponse)
-	t.NoError(<-pollResponse)
+	t.FunctionalSuite.sendUpdateNoErrorWaitPolicyAccepted(t.tv, updateId)
+	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
+	// required for the update request to return.
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	t.NoError(err)
 }
 
 func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
