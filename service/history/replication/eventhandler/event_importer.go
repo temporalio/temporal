@@ -109,6 +109,18 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 	blobSize := 0
 	var token []byte
 	var versionHistory *historyspb.VersionHistory
+	eventsVersion := common2.EmptyVersion
+	importFn := func() error {
+		res, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
+		if err != nil {
+			return err
+		}
+		token = res.Token
+		blobs = []*common.DataBlob{}
+		blobSize = 0
+		eventsVersion = common2.EmptyVersion
+		return nil
+	}
 	for historyIterator.HasNext() {
 		batch, err := historyIterator.Next()
 		if err != nil {
@@ -123,25 +135,27 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		if versionHistory != nil && !versionhistory.IsVersionHistoryItemsInSameBranch(versionHistory.Items, batch.VersionHistory.Items) {
 			return serviceerror.NewInternal("History Branch changed during importing")
 		}
-		versionHistory = batch.VersionHistory
-
-		blobSize++
-		blobs = append(blobs, batch.RawEventBatch)
 		events, err := e.serializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
 			return err
 		}
-
-		if blobSize >= historyImportBlobSize ||
-			len(blobs) >= historyImportPageSize ||
-			isLastEventAtHistoryBoundary(events[len(events)-1], versionHistory) { // Import API only take events that has same version
-			response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
-			if err != nil {
+		if len(events) == 0 {
+			continue
+		}
+		if eventsVersion != common2.EmptyVersion && eventsVersion != events[0].GetVersion() {
+			if err := importFn(); err != nil {
 				return err
 			}
-			blobs = []*common.DataBlob{}
-			blobSize = 0
-			token = response.Token
+		}
+		versionHistory = batch.VersionHistory
+		eventsVersion = events[0].GetVersion()
+		blobSize++
+		blobs = append(blobs, batch.RawEventBatch)
+
+		if blobSize >= historyImportBlobSize || len(blobs) >= historyImportPageSize {
+			if err := importFn(); err != nil {
+				return err
+			}
 		}
 	}
 	if len(blobs) != 0 {

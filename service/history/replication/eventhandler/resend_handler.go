@@ -248,11 +248,16 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 	}
 	var eventsBatch [][]*historypb.HistoryEvent
 	var versionHistory []*historyspb.VersionHistoryItem
+	eventsVersion := common.EmptyVersion
 	if headBatch != nil {
 		events, err := r.serializer.DeserializeEvents(headBatch.RawEventBatch)
 		if err != nil {
 			return err
 		}
+		if len(events) == 0 {
+			return serviceerror.NewInvalidArgument("Empty batch received from remote during resend")
+		}
+		eventsVersion = events[0].GetVersion()
 		eventsBatch = append(eventsBatch, events)
 		versionHistory = headBatch.VersionHistory.GetItems()
 	}
@@ -294,15 +299,21 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 		if err != nil {
 			return err
 		}
-		// check if version history changed during the batching process
-		if len(eventsBatch) != 0 && len(versionHistory) != 0 && !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.Items) {
-			err := applyFn()
-			if err != nil {
-				return err
+		if len(events) == 0 {
+			continue
+		}
+		if len(eventsBatch) != 0 && len(versionHistory) != 0 {
+			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.Items) ||
+				(eventsVersion != common.EmptyVersion && eventsVersion != events[0].Version) {
+				err := applyFn()
+				if err != nil {
+					return err
+				}
 			}
 		}
 		eventsBatch = append(eventsBatch, events)
 		versionHistory = batch.VersionHistory.Items
+		eventsVersion = events[0].Version
 		if len(eventsBatch) >= r.config.ReplicationResendMaxBatchCount() {
 			err := applyFn()
 			if err != nil {
