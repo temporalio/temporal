@@ -64,7 +64,7 @@ require (
 	golang.org/x/sync v0.7.0
 	golang.org/x/time v0.5.0
 	google.golang.org/api v0.182.0
-	google.golang.org/grpc v1.64.0
+	google.golang.org/grpc v1.64.1
 	google.golang.org/grpc/examples v0.0.0-20240531231403-5d7bd7aacb0c
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
