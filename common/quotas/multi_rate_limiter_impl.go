@@ -27,6 +27,7 @@ package quotas
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -181,4 +182,12 @@ func (rl *MultiRateLimiterImpl) Burst() int {
 		}
 	}
 	return result
+}
+
+func (rl *MultiRateLimiterImpl) TokensAt(t time.Time) int {
+	tokens := math.MaxInt
+	for _, rateLimiter := range rl.rateLimiters {
+		tokens = min(tokens, rateLimiter.TokensAt(t))
+	}
+	return tokens
 }
