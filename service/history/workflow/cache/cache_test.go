@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
@@ -115,7 +116,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		s.mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS1
@@ -125,7 +126,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		s.mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -140,7 +141,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		s.mockShard,
 		namespaceID,
 		&execution2,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.NotEqual(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -163,7 +164,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 		s.mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS1
@@ -175,7 +176,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 				s.mockShard,
 				namespaceID,
 				&execution1,
-				workflow.LockPriorityHigh,
+				locks.PriorityHigh,
 			)
 			s.NoError(err)
 			s.Nil(ctx.(*workflow.ContextImpl).MutableState)
@@ -201,7 +202,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		s.mockShard,
 		namespaceID,
 		&we,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 
@@ -216,7 +217,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		s.mockShard,
 		namespaceID,
 		&we2,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.Error(err2)
 
@@ -228,7 +229,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		s.mockShard,
 		namespaceID,
 		&we2,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err3)
 	release2(err3)
@@ -239,7 +240,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		s.mockShard,
 		namespaceID,
 		&we,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err4)
 	s.False(ctx == newContext)
@@ -260,7 +261,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		s.mockShard,
 		namespaceID,
 		&we,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	// since we are just testing whether the release function will clear the cache
@@ -278,7 +279,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		s.mockShard,
 		namespaceID,
 		&we,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 
@@ -293,7 +294,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		s.mockShard,
 		namespaceID,
 		&we,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Nil(ctx.(*workflow.ContextImpl).MutableState)
@@ -329,7 +330,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 				WorkflowId: workflowId,
 				RunId:      runID,
 			},
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		s.NoError(err)
 		// since each time the is reset to nil
@@ -355,7 +356,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 			WorkflowId: workflowId,
 			RunId:      runID,
 		},
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	// since we are just testing whether the release function will clear the cache
@@ -403,7 +404,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 					WorkflowId: workflowID,
 					RunId:      runID,
 				},
-				workflow.LockPriorityHigh,
+				locks.PriorityHigh,
 			)
 			if err == nil {
 				break
@@ -435,7 +436,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 		s.mockShard,
 		tests.NamespaceID,
 		tests.WorkflowID,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	defer currentRelease(nil)
@@ -452,7 +453,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	defer release(nil)
@@ -523,11 +524,11 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 
 			if tt.shouldLockBefore {
 				// lock the workflow to allow it to time out
-				err := workflowCtx.Lock(ctx, workflow.LockPriorityHigh)
+				err := workflowCtx.Lock(ctx, locks.PriorityHigh)
 				s.NoError(err)
 			}
 
-			if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, workflow.LockPriorityHigh); (err != nil) != tt.wantErr {
+			if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, locks.PriorityHigh); (err != nil) != tt.wantErr {
 				s.T().Errorf("CacheImpl.lockWorkflowExecution() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -561,7 +562,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 		mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS1
@@ -575,7 +576,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 		mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -590,7 +591,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 		mockShard,
 		namespaceID,
 		&execution2,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.Error(err)
 	s.ErrorIs(err, cache.ErrCacheFull)
@@ -627,7 +628,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS1
@@ -640,7 +641,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -657,7 +658,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		mockShard,
 		namespaceID,
 		&execution2,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS2
@@ -668,7 +669,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		mockShard,
 		namespaceID,
 		&execution2,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS2, ctx.(*workflow.ContextImpl).MutableState)
@@ -685,7 +686,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		mockShard,
 		namespaceID,
 		&execution3,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.Error(err)
 	s.ErrorIs(err, cache.ErrCacheFull)
@@ -700,7 +701,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	// Make sure execution 3 was evicted by checking if mutable state is nil.
@@ -713,7 +714,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		mockShard,
 		namespaceID,
 		&execution3,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS3
@@ -725,7 +726,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		mockShard,
 		namespaceID,
 		&execution3,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS3, ctx.(*workflow.ContextImpl).MutableState)
@@ -764,7 +765,7 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 		mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS1
@@ -776,7 +777,7 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 		mockShard,
 		namespaceID,
 		&execution1,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -811,7 +812,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
 		s.mockShard,
 		namespaceID,
 		&execution,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 
@@ -840,7 +841,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 		s.mockShard,
 		namespaceID,
 		&execution,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)

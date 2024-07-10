@@ -39,6 +39,7 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -207,6 +208,51 @@ func convertWorkflowStateReplicationTask(
 	)
 }
 
+func convertSyncHSMReplicationTask(
+	ctx context.Context,
+	shardContext shard.Context,
+	taskInfo *tasks.SyncHSMTask,
+	workflowCache wcache.Cache,
+) (*replicationspb.ReplicationTask, error) {
+	return generateStateReplicationTask(
+		ctx,
+		shardContext,
+		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+		workflowCache,
+		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
+			// HSM can be updated after workflow is completed
+			// so no check on workflow state here.
+
+			if mutableState.HasBufferedEvents() {
+				// we can't sync HSM when there's buffered events
+				// as current state could depend on those buffered events
+				return nil, nil
+			}
+
+			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+			if err != nil {
+				return nil, err
+			}
+
+			return &replicationspb.ReplicationTask{
+				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
+				SourceTaskId: taskInfo.TaskID,
+				Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{
+					SyncHsmAttributes: &replicationspb.SyncHSMAttributes{
+						NamespaceId:      taskInfo.NamespaceID,
+						WorkflowId:       taskInfo.WorkflowID,
+						RunId:            taskInfo.RunID,
+						VersionHistory:   versionhistory.CopyVersionHistory(currentVersionHistory),
+						StateMachineNode: common.CloneProto(mutableState.HSM().InternalRepr()),
+					},
+				},
+				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
+			}, nil
+		},
+	)
+}
+
 func convertHistoryReplicationTask(
 	ctx context.Context,
 	shardContext shard.Context,
@@ -312,7 +358,7 @@ func generateStateReplicationTask(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return nil, err
@@ -390,7 +436,7 @@ func getBranchToken(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return nil, nil, nil, err

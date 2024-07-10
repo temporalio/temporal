@@ -405,7 +405,7 @@ func (s *ClientFunctionalSuite) httpRequest(expectedStatus int, req *http.Reques
 func (s *ClientFunctionalSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
 	_, respBody := s.httpGet(
 		http.StatusOK,
-		"/namespaces/"+s.namespace+"/search-attributes",
+		"/cluster/namespaces/"+s.namespace+"/search-attributes",
 		"application/json",
 	)
 	s.T().Log(string(respBody))

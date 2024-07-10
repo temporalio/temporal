@@ -851,9 +851,9 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskScheduledEventAsHeartbeat
 }
 
 // AddWorkflowTaskStartedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, arg2 *v14.TaskQueue, arg3 string, arg4 *v10.WorkerVersionStamp, arg5 *v113.BuildIdRedirectInfo) (*v13.HistoryEvent, *WorkflowTaskInfo, error) {
+func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, arg2 *v14.TaskQueue, arg3 string, arg4 *v10.WorkerVersionStamp, arg5 *v113.BuildIdRedirectInfo, arg6 bool) (*v13.HistoryEvent, *WorkflowTaskInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(*WorkflowTaskInfo)
 	ret2, _ := ret[2].(error)
@@ -861,9 +861,9 @@ func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, 
 }
 
 // AddWorkflowTaskStartedEvent indicates an expected call of AddWorkflowTaskStartedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 }
 
 // AddWorkflowTaskTimedOutEvent mocks base method.
@@ -2736,6 +2736,20 @@ func (mr *MockMutableStateMockRecorder) LoadHistoryEvent(ctx, token interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadHistoryEvent", reflect.TypeOf((*MockMutableState)(nil).LoadHistoryEvent), ctx, token)
 }
 
+// NextTransitionCount mocks base method.
+func (m *MockMutableState) NextTransitionCount() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextTransitionCount")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// NextTransitionCount indicates an expected call of NextTransitionCount.
+func (mr *MockMutableStateMockRecorder) NextTransitionCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockMutableState)(nil).NextTransitionCount))
+}
+
 // PopTasks mocks base method.
 func (m *MockMutableState) PopTasks() map[tasks.Category][]tasks.Task {
 	m.ctrl.T.Helper()
@@ -2923,20 +2937,6 @@ func (m *MockMutableState) TaskQueueScheduleToStartTimeout(name string) (*v14.Ta
 func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueueScheduleToStartTimeout", reflect.TypeOf((*MockMutableState)(nil).TaskQueueScheduleToStartTimeout), name)
-}
-
-// TransitionCount mocks base method.
-func (m *MockMutableState) TransitionCount() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TransitionCount")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// TransitionCount indicates an expected call of TransitionCount.
-func (mr *MockMutableStateMockRecorder) TransitionCount() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransitionCount", reflect.TypeOf((*MockMutableState)(nil).TransitionCount))
 }
 
 // UpdateActivity mocks base method.

@@ -24,6 +24,10 @@
 
 package cluster
 
+import (
+	"github.com/google/uuid"
+)
+
 const (
 	// TestCurrentClusterInitialFailoverVersion is initial failover version for current cluster
 	TestCurrentClusterInitialFailoverVersion = int64(1)
@@ -39,6 +43,10 @@ const (
 	TestCurrentClusterFrontendAddress = "127.0.0.1:7134"
 	// TestAlternativeClusterFrontendAddress is the ip port address of alternative cluster
 	TestAlternativeClusterFrontendAddress = "127.0.0.1:8134"
+	// TestCurrentClusterFrontendHTTPAddress is the ip port HTTP address of current cluster. Currently, gRPC port+10. See tests/onebox.go:FrontendHTTPAddress
+	TestCurrentClusterFrontendHTTPAddress = "127.0.0.1:7144"
+	// TestAlternativeClusterFrontendHTTPAddress is the ip port HTTP address of the alternative cluster. Currently, gRPC port+10. See tests/onebox.go:FrontendHTTPAddress
+	TestAlternativeClusterFrontendHTTPAddress = "127.0.0.1:8144"
 )
 
 var (
@@ -50,13 +58,17 @@ var (
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             TestCurrentClusterFrontendAddress,
+			HTTPAddress:            TestCurrentClusterFrontendHTTPAddress,
 			ShardCount:             8,
+			ClusterID:              uuid.NewString(),
 		},
 		TestAlternativeClusterName: {
 			Enabled:                true,
 			InitialFailoverVersion: TestAlternativeClusterInitialFailoverVersion,
 			RPCAddress:             TestAlternativeClusterFrontendAddress,
+			HTTPAddress:            TestAlternativeClusterFrontendHTTPAddress,
 			ShardCount:             4,
+			ClusterID:              uuid.NewString(),
 		},
 	}
 
@@ -68,6 +80,8 @@ var (
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             TestCurrentClusterFrontendAddress,
+			HTTPAddress:            TestCurrentClusterFrontendHTTPAddress,
+			ClusterID:              uuid.NewString(),
 		},
 	}
 )

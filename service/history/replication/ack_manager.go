@@ -191,6 +191,8 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 	return *maxTaskID, maxVisibilityTimestamp
 }
 
+// TODO: deprecate this method
+// It's only used by the replication DLQ v1 logic.
 func (p *ackMgrImpl) GetTask(
 	ctx context.Context,
 	taskInfo *replicationspb.ReplicationTaskInfo,
@@ -204,7 +206,7 @@ func (p *ackMgrImpl) GetTask(
 				taskInfo.GetWorkflowId(),
 				taskInfo.GetRunId(),
 			),
-			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+			VisibilityTimestamp: time.Unix(0, 0),
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
 			ScheduledEventID:    taskInfo.ScheduledEventId,
@@ -216,7 +218,7 @@ func (p *ackMgrImpl) GetTask(
 				taskInfo.GetWorkflowId(),
 				taskInfo.GetRunId(),
 			),
-			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+			VisibilityTimestamp: time.Unix(0, 0),
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
 			FirstEventID:        taskInfo.FirstEventId,
@@ -233,6 +235,16 @@ func (p *ackMgrImpl) GetTask(
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
 			Priority:            taskInfo.GetPriority(),
+		})
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
+		return p.ConvertTask(ctx, &tasks.SyncHSMTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0),
+			TaskID:              taskInfo.TaskId,
 		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
@@ -433,6 +445,13 @@ func (p *ackMgrImpl) ConvertTask(
 			p.executionMgr,
 			p.logger,
 			p.config,
+		)
+	case *tasks.SyncHSMTask:
+		return convertSyncHSMReplicationTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.workflowCache,
 		)
 	default:
 		return nil, errUnknownReplicationTask

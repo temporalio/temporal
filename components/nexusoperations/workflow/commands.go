@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type commandHandler struct {
@@ -102,9 +103,9 @@ func (ch *commandHandler) HandleScheduleCommand(
 
 	if !validator.IsValidPayloadSize(attrs.Input.Size()) {
 		return workflow.FailWorkflowTaskError{
-			Cause:        enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-			Message:      "ScheduleNexusOperationCommandAttributes.Input exceeds size limit",
-			FailWorkflow: true,
+			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message:           "ScheduleNexusOperationCommandAttributes.Input exceeds size limit",
+			TerminateWorkflow: true,
 		}
 	}
 
@@ -123,6 +124,12 @@ func (ch *commandHandler) HandleScheduleCommand(
 	opTimeout := attrs.ScheduleToCloseTimeout.AsDuration()
 	if runTimeout > 0 && (opTimeout == 0 || opTimeout > runTimeout) {
 		attrs.ScheduleToCloseTimeout = ms.GetExecutionInfo().WorkflowRunTimeout
+		opTimeout = attrs.ScheduleToCloseTimeout.AsDuration()
+	}
+
+	// Trim timeout to max allowed timeout.
+	if maxTimeout := ch.config.MaxOperationScheduleToCloseTimeout(nsName); maxTimeout > 0 && opTimeout > maxTimeout {
+		attrs.ScheduleToCloseTimeout = durationpb.New(maxTimeout)
 	}
 
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {

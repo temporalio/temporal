@@ -126,7 +126,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockShard.SetStateMachineRegistry(reg)
 	s.stateMachineRegistry = reg
 
-	root, err := hsm.NewRoot(reg, StateMachineType.ID, s.mockMutableState, make(map[int32]*persistencespb.StateMachineMap), s.mockMutableState)
+	root, err := hsm.NewRoot(reg, StateMachineType, s.mockMutableState, make(map[string]*persistencespb.StateMachineMap), s.mockMutableState)
 	s.NoError(err)
 	s.mockMutableState.EXPECT().HSM().Return(root).AnyTimes()
 
@@ -146,7 +146,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	s.mockMutableState.EXPECT().TransitionCount().Return(int64(1)).AnyTimes()
+	s.mockMutableState.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
 
 	taskGeneratorProvider = &testTaskGeneratorProvider{
 		mockMutableState:  s.mockMutableState,

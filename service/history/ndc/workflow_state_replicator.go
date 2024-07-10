@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -84,6 +85,7 @@ func NewWorkflowStateReplicator(
 	logger log.Logger,
 ) *WorkflowStateReplicatorImpl {
 
+	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
 	return &WorkflowStateReplicatorImpl{
 		shardContext:      shardContext,
 		namespaceRegistry: shardContext.GetNamespaceRegistry(),
@@ -92,7 +94,7 @@ func NewWorkflowStateReplicator(
 		executionMgr:      shardContext.GetExecutionManager(),
 		historySerializer: eventSerializer,
 		transactionMgr:    NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
-		logger:            log.With(logger, tag.ComponentHistoryReplicator),
+		logger:            logger,
 	}
 }
 
@@ -117,7 +119,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
@@ -166,7 +168,23 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 				common.EmptyVersion,
 			)
 		}
-		return nil
+
+		// release the workflow lock here otherwise SyncHSM will deadlock
+		releaseFn(nil)
+
+		engine, err := r.shardContext.GetEngine(ctx)
+		if err != nil {
+			return err
+		}
+
+		// we don't care about activity state here as activity can't run after workflow is closed.
+		return engine.SyncHSM(ctx, &shard.SyncHSMRequest{
+			WorkflowKey: ms.GetWorkflowKey(),
+			StateMachineNode: &persistencespb.StateMachineNode{
+				Children: executionInfo.SubStateMachinesByType,
+			},
+			EventVersionHistory: incomingVersionHistory,
+		})
 	default:
 		return err
 	}
@@ -273,7 +291,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		r.shardContext,
 		namespaceID,
 		workflowID,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return common.EmptyEventTaskID, err
@@ -336,11 +354,14 @@ BackfillLoop:
 
 		if historyBlob.nodeID <= lastBatchNodeID {
 			// The history batch already in DB.
-			currentAncestor := sortedAncestors[sortedAncestorsIdx]
-			if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
-				// update ancestor
-				ancestors = append(ancestors, currentAncestor)
-				sortedAncestorsIdx++
+			if len(sortedAncestors) > sortedAncestorsIdx {
+				currentAncestor := sortedAncestors[sortedAncestorsIdx]
+
+				if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
+					// Update ancestor.
+					ancestors = append(ancestors, currentAncestor)
+					sortedAncestorsIdx++
+				}
 			}
 			continue BackfillLoop
 		}

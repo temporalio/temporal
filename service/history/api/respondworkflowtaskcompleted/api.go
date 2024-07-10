@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 
-	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -137,7 +137,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, consts.ErrDeserializingToken
 	}
 
-	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLease(
+	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		token.Clock,
 		func(mutableState workflow.MutableState) bool {
@@ -155,7 +155,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			token.WorkflowId,
 			token.RunId,
 		),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -176,14 +176,16 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" && !ms.IsStickyTaskQueueSet() {
+	assignedBuildId := ms.GetAssignedBuildId()
+	wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
+	if assignedBuildId != "" && !ms.IsStickyTaskQueueSet() {
 		// Worker versioning is used, make sure the task was completed by the right build ID, unless we're using a
-		// sticky queue in which case Matching will not send the build ID
+		// sticky queue in which case Matching will not send the build ID until old versioning is cleaned up
+		// TODO: remove !ms.IsStickyTaskQueueSet() from above condition after old WV cleanup [cleanup-old-wv]
 		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
-		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 		if wftCompletedBuildId != wftStartedBuildId {
 			workflowLease.GetReleaseFn()(nil)
-			return nil, serviceerror.NewNotFound("this workflow task was not dispatched to this Build ID")
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId))
 		}
 	}
 
@@ -277,7 +279,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		metrics.CompleteWorkflowTaskWithStickyEnabledCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-		ms.SetStickyTaskQueue(request.StickyAttributes.WorkerTaskQueue.GetName(), request.StickyAttributes.GetScheduleToStartTimeout())
+		if assignedBuildId == "" || assignedBuildId == wftCompletedBuildId {
+			// For versioned workflows, only set sticky queue if the WFT is completed by the WF's current build ID.
+			// It is possible that the WF has been redirected to another build ID since this WFT started, in that case
+			// we should not set sticky queue of the old build ID and keep the normal queue to let Matching send the
+			// next WFT to the right build ID.
+			ms.SetStickyTaskQueue(request.StickyAttributes.WorkerTaskQueue.GetName(), request.StickyAttributes.GetScheduleToStartTimeout())
+		}
 	}
 
 	var (
@@ -303,7 +311,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				fmt.Sprintf(
 					"binary %v is marked as bad deployment",
 					request.GetBinaryChecksum())),
-			nil)
+			false)
 	} else {
 		namespace := namespaceEntry.Name()
 		workflowSizeChecker := newWorkflowSizeChecker(
@@ -397,24 +405,22 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
-		var wtFailedEventID int64
-		ms, wtFailedEventID, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
+		ms, _, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
 		wtFailedShouldCreateNewTask = true
 		newMutableState = nil
 
-		if wtFailedCause.workflowFailure != nil {
-			// Flush buffer event before failing the workflow
+		if wtFailedCause.terminateWorkflow {
+			// Flush buffer event before terminating the workflow
 			ms.FlushBufferedEvents()
 
-			attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
-				Failure: wtFailedCause.workflowFailure,
-			}
-			if _, err := ms.AddFailWorkflowEvent(wtFailedEventID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
+			if err := workflow.TerminateWorkflow(ms, wtFailedCause.causeErr.Error(), nil,
+				consts.IdentityHistoryService, false); err != nil {
 				return nil, err
 			}
+
 			wtFailedShouldCreateNewTask = false
 		}
 	}
@@ -499,6 +505,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				request.Identity,
 				versioningStamp,
 				nil,
+				false,
 			)
 			if err != nil {
 				return nil, err
@@ -608,6 +615,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			request.Identity,
 			versioningStamp,
 			nil,
+			false,
 		)
 		if err != nil {
 			return nil, err

@@ -271,6 +271,8 @@ func (s *TaskSerializer) serializeReplicationTask(
 		replicationTask = s.replicationHistoryTaskToProto(task)
 	case *tasks.SyncWorkflowStateTask:
 		replicationTask = s.replicationSyncWorkflowStateTaskToProto(task)
+	case *tasks.SyncHSMTask:
+		replicationTask = s.replicationSyncHSMTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 	}
@@ -296,6 +298,8 @@ func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.Re
 		return s.replicationHistoryTaskFromProto(replicationTask), nil
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
 		return s.replicationSyncWorkflowStateTaskFromProto(replicationTask), nil
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
+		return s.replicationSyncHSMTaskFromProto(replicationTask), nil
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
 	}
@@ -894,14 +898,13 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
 
 func (s *TaskSerializer) stateMachineTimerTaskToProto(task *tasks.StateMachineTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:                 task.NamespaceID,
-		WorkflowId:                  task.WorkflowID,
-		RunId:                       task.RunID,
-		TaskId:                      task.TaskID,
-		VisibilityTime:              timestamppb.New(task.VisibilityTimestamp),
-		Version:                     task.Version,
-		MutableStateTransitionCount: task.MutableStateTransitionCount,
-		TaskType:                    task.GetType(),
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
+		TaskId:         task.TaskID,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		Version:        task.Version,
+		TaskType:       task.GetType(),
 	}
 }
 
@@ -930,10 +933,9 @@ func (s *TaskSerializer) stateMachineTimerTaskFromProto(info *persistencespb.Tim
 			info.WorkflowId,
 			info.RunId,
 		),
-		VisibilityTimestamp:         info.VisibilityTime.AsTime(),
-		TaskID:                      info.TaskId,
-		Version:                     info.Version,
-		MutableStateTransitionCount: info.MutableStateTransitionCount,
+		VisibilityTimestamp: info.VisibilityTime.AsTime(),
+		TaskID:              info.TaskId,
+		Version:             info.Version,
 	}
 }
 
@@ -1033,6 +1035,7 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		TaskId:                deleteVisibilityTask.TaskID,
 		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
+		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
 	}
 }
 
@@ -1048,6 +1051,7 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		VisibilityTimestamp:            deleteVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:                         deleteVisibilityTask.TaskId,
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
+		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
 	}
 }
 
@@ -1199,6 +1203,37 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 		Version:             syncWorkflowStateTask.Version,
 		TaskID:              syncWorkflowStateTask.TaskId,
 		Priority:            syncWorkflowStateTask.Priority,
+	}
+}
+
+func (s *TaskSerializer) replicationSyncHSMTaskToProto(
+	syncHSMTask *tasks.SyncHSMTask,
+) *persistencespb.ReplicationTaskInfo {
+	return &persistencespb.ReplicationTaskInfo{
+		NamespaceId:    syncHSMTask.WorkflowKey.NamespaceID,
+		WorkflowId:     syncHSMTask.WorkflowKey.WorkflowID,
+		RunId:          syncHSMTask.WorkflowKey.RunID,
+		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+		TaskId:         syncHSMTask.TaskID,
+		VisibilityTime: timestamppb.New(syncHSMTask.VisibilityTimestamp),
+	}
+}
+
+func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
+	syncHSMTask *persistencespb.ReplicationTaskInfo,
+) *tasks.SyncHSMTask {
+	visibilityTimestamp := time.Unix(0, 0)
+	if syncHSMTask.VisibilityTime != nil {
+		visibilityTimestamp = syncHSMTask.VisibilityTime.AsTime()
+	}
+	return &tasks.SyncHSMTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			syncHSMTask.NamespaceId,
+			syncHSMTask.WorkflowId,
+			syncHSMTask.RunId,
+		),
+		VisibilityTimestamp: visibilityTimestamp,
+		TaskID:              syncHSMTask.TaskId,
 	}
 }
 

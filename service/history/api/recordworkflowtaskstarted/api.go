@@ -77,7 +77,6 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		req.Clock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.WorkflowExecution.WorkflowId,
@@ -139,6 +138,13 @@ func Invoke(
 			currentTaskQueue := mutableState.CurrentTaskQueue()
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
 				currentTaskQueue.GetName() != req.PollRequest.TaskQueue.GetName() {
+				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
+				// Although it's ideal to check this for unversioned workflows as well, we can't rely on older clients
+				// setting the poller TQ kind.
+				if mutableState.GetAssignedBuildId() != "" && req.PollRequest.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+					return nil, serviceerrors.NewObsoleteDispatchBuildId("wrong sticky queue")
+				}
+				//
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
 				// and sticky queue never has partition, so it does not matter.
 				mutableState.ClearStickyTaskQueue()
@@ -151,6 +157,7 @@ func Invoke(
 				req.PollRequest.Identity,
 				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
 				req.GetBuildIdRedirectInfo(),
+				false,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history

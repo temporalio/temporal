@@ -107,6 +107,7 @@ type (
 		tracer                       trace.Tracer
 		taskQueueManager             persistence.HistoryTaskQueueManager
 		taskCategoryRegistry         tasks.TaskCategoryRegistry
+		dlqMetricsEmitter            *persistence.DLQMetricsEmitter
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -136,6 +137,7 @@ type (
 		TracerProvider               trace.TracerProvider
 		TaskQueueManager             persistence.HistoryTaskQueueManager
 		TaskCategoryRegistry         tasks.TaskCategoryRegistry
+		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -179,6 +181,7 @@ func (h *Handler) Start() {
 	// events notifier must starts before controller
 	h.eventNotifier.Start()
 	h.controller.Start()
+	h.dlqMetricsEmitter.Start()
 
 	h.startWG.Done()
 }
@@ -197,6 +200,7 @@ func (h *Handler) Stop() {
 	h.replicationTaskFetcherFactory.Stop()
 	h.controller.Stop()
 	h.eventNotifier.Stop()
+	h.dlqMetricsEmitter.Stop()
 }
 
 func (h *Handler) isStopped() bool {

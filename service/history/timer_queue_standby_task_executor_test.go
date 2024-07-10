@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -1619,6 +1620,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_ExecutesAllAvailableTimers() {
 	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterStateMachine(reg))
 	s.NoError(dummy.RegisterTaskSerializers(reg))
 
 	we := &commonpb.WorkflowExecution{
@@ -1631,15 +1633,15 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 
 	root, err := hsm.NewRoot(
 		reg,
-		workflow.StateMachineType.ID,
+		workflow.StateMachineType,
 		ms,
-		make(map[int32]*persistencespb.StateMachineMap),
+		make(map[string]*persistencespb.StateMachineMap),
 		ms,
 	)
 	s.NoError(err)
 
 	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
-	ms.EXPECT().TransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
 	ms.EXPECT().GetNextEventID().Return(int64(2))
 	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
@@ -1652,7 +1654,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	s.NoError(err)
 
 	dummyRoot, err := root.Child([]hsm.Key{
-		{Type: dummy.StateMachineType.ID, ID: "dummy"},
+		{Type: dummy.StateMachineType, ID: "dummy"},
 	})
 	s.NoError(err)
 	err = hsm.MachineTransition(dummyRoot, func(sm *dummy.Dummy) (hsm.TransitionOutput, error) {
@@ -1669,21 +1671,32 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	// Invalid reference, should be dropped.
 	invalidTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
-			MutableStateNamespaceFailoverVersion:   2,
-			MachineInitialNamespaceFailoverVersion: 1,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 1,
+			},
 		},
-		Type: dummy.TaskTypeTimer.ID,
+		Type: dummy.TaskTypeTimer,
 	}
 	staleTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
-				{Type: dummy.StateMachineType.ID, Id: "dummy"},
+				{Type: dummy.StateMachineType, Id: "dummy"},
 			},
-			MutableStateNamespaceFailoverVersion:   2,
-			MachineInitialNamespaceFailoverVersion: 2,
-			MachineTransitionCount:                 1,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineTransitionCount: 1,
 		},
-		Type: dummy.TaskTypeTimer.ID,
+		Type: dummy.TaskTypeTimer,
 	}
 
 	// Past deadline, should get executed.
@@ -1700,13 +1713,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateWorkflowExecution(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, workflow.LockPriorityLow,
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
-		WorkflowKey:                 tests.WorkflowKey,
-		Version:                     2,
-		MutableStateTransitionCount: 1,
+		WorkflowKey: tests.WorkflowKey,
+		Version:     2,
 	}
 
 	//nolint:revive // unchecked-type-assertion
@@ -1730,6 +1742,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_StaleStateMachine() {
 	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterStateMachine(reg))
 	s.NoError(dummy.RegisterTaskSerializers(reg))
 
 	we := &commonpb.WorkflowExecution{
@@ -1740,7 +1753,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	ms := workflow.NewMockMutableState(s.controller)
 	info := &persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 2, MaxTransitionCount: 2},
+			{NamespaceFailoverVersion: 2, TransitionCount: 2},
 		},
 		VersionHistories: &historypb.VersionHistories{
 			CurrentVersionHistoryIndex: 0,
@@ -1755,15 +1768,15 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	}
 	root, err := hsm.NewRoot(
 		reg,
-		workflow.StateMachineType.ID,
+		workflow.StateMachineType,
 		ms,
-		make(map[int32]*persistencespb.StateMachineMap),
+		make(map[string]*persistencespb.StateMachineMap),
 		ms,
 	)
 	s.NoError(err)
 
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	ms.EXPECT().TransitionCount().Return(int64(0)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes()
 	ms.EXPECT().GetNextEventID().Return(int64(2))
 	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
@@ -1780,13 +1793,17 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	validTask := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
-				{Type: dummy.StateMachineType.ID, Id: "dummy"},
+				{Type: dummy.StateMachineType, Id: "dummy"},
 			},
-			MutableStateNamespaceFailoverVersion: 2,
-			MutableStateTransitionCount:          1,
+			MutableStateVersionedTransition: nil,
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 1,
+				TransitionCount:          0,
+			},
+			MachineLastUpdateVersionedTransition: nil,
 			MachineTransitionCount:               0,
 		},
-		Type: dummy.TaskTypeTimer.ID,
+		Type: dummy.TaskTypeTimer,
 	}
 
 	// Past deadline, still valid task
@@ -1799,13 +1816,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateWorkflowExecution(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, workflow.LockPriorityLow,
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
-		WorkflowKey:                 tests.WorkflowKey,
-		Version:                     2,
-		MutableStateTransitionCount: 1,
+		WorkflowKey: tests.WorkflowKey,
+		Version:     2,
 	}
 
 	//nolint:revive // unchecked-type-assertion
@@ -1824,6 +1840,40 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	err = timerQueueStandbyTaskExecutor.executeStateMachineTimerTask(context.Background(), task)
 	s.ErrorIs(err, consts.ErrTaskRetry)
 	s.Equal(2, len(info.StateMachineTimers))
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_ZombieWorkflow() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	startedEvent, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId:  s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{},
+		},
+	)
+	s.Nil(err)
+	mutableState.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+
+	timerTask := &tasks.StateMachineTimerTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: s.now,
+		TaskID:              s.mustGenerateTaskID(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.ErrorIs(resp.ExecutionErr, consts.ErrWorkflowZombie)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(

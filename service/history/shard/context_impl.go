@@ -564,7 +564,7 @@ func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
 		return err
 	}
 
-	engine.AddSpeculativeWorkflowTaskTimeoutTask(task)
+	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{task.GetCategory(): []tasks.Task{task}})
 
 	return nil
 }
@@ -943,6 +943,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	key definition.WorkflowKey,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
+	workflowCloseTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
@@ -1019,6 +1020,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							WorkflowKey:                    key,
 							VisibilityTimestamp:            s.timeSource.Now(),
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
+							CloseTime:                      workflowCloseTime,
 						},
 					},
 				}
@@ -1248,6 +1250,7 @@ func (s *ContextImpl) updateShardInfo(
 
 	// update lastUpdate here so that we don't have to grab shard lock again if UpdateShard is successful
 	previousLastUpdate := s.lastUpdated
+	prevTasksCompletedSinceLastUpdate := s.tasksCompletedSinceLastUpdate
 	metrics.TasksCompletedPerShardInfoUpdate.With(s.metricsHandler).Record(int64(s.tasksCompletedSinceLastUpdate))
 	metrics.TimeBetweenShardInfoUpdates.With(s.metricsHandler).Record(now.Sub(previousLastUpdate))
 
@@ -1273,8 +1276,9 @@ func (s *ContextImpl) updateShardInfo(
 	if err != nil {
 		s.wLock()
 		defer s.wUnlock()
-		// revert lastUpdated time so that operation can be retried
-		s.lastUpdated = util.MaxTime(previousLastUpdate, s.lastUpdated)
+		// revert update shard properties so that operation can be retried
+		s.lastUpdated = previousLastUpdate
+		s.tasksCompletedSinceLastUpdate = prevTasksCompletedSinceLastUpdate
 		return s.handleWriteErrorLocked(request.PreviousRangeID, err)
 	}
 
@@ -1524,7 +1528,13 @@ func (s *ContextImpl) rUnlock() {
 func (s *ContextImpl) ioSemaphoreAcquire(
 	ctx context.Context,
 ) (retErr error) {
-	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	priority := locks.PriorityHigh
+	callerInfo := headers.GetCallerInfo(ctx)
+	if callerInfo.CallerType == headers.CallerTypePreemptable {
+		priority = locks.PriorityLow
+	}
+
+	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope), metrics.PriorityTag(priority))
 	metrics.SemaphoreRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -1534,11 +1544,6 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
-	priority := locks.PriorityHigh
-	callerInfo := headers.GetCallerInfo(ctx)
-	if callerInfo.CallerType == headers.CallerTypePreemptable {
-		priority = locks.PriorityLow
-	}
 	return s.ioSemaphore.Acquire(ctx, priority, 1)
 }
 
@@ -2126,7 +2131,20 @@ func newContext(
 			false,
 		)
 	}
+	shardContext.initLastUpdatesTime()
 	return shardContext, nil
+}
+
+func (s *ContextImpl) initLastUpdatesTime() {
+	// We need to set lastUpdate time to "now" - "wait between shard updates time" +  "first update interval".
+	// This is done to make sure that first shard update` will happen around "first update interval" after "now".
+	// The idea is to allow queue to persist even in the case of (relativly) constantly
+	// moving shards between hosts.
+	// Note: it still may prevent queue from progressing if shard moving rate is too high
+	lastUpdated := s.timeSource.Now()
+	lastUpdated = lastUpdated.Add(-1 * s.config.ShardUpdateMinInterval())
+	lastUpdated = lastUpdated.Add(s.config.ShardFirstUpdateInterval())
+	s.lastUpdated = lastUpdated
 }
 
 // TODO: why do we need a deep copy here?

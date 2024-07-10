@@ -143,15 +143,15 @@ type additionalQueueFactories struct {
 func getOptionalQueueFactories(
 	registry tasks.TaskCategoryRegistry,
 	archivalParams ArchivalQueueFactoryParams,
-	callbackParams outboundQueueFactoryParams,
+	outboundParams outboundQueueFactoryParams,
 	config *configs.Config,
 ) additionalQueueFactories {
 	factories := []QueueFactory{}
 	if _, ok := registry.GetCategoryByID(tasks.CategoryIDArchival); ok {
 		factories = append(factories, NewArchivalQueueFactory(archivalParams))
 	}
-	if _, ok := registry.GetCategoryByID(tasks.CategoryIDOutbound); ok {
-		factories = append(factories, NewOutboundQueueFactory(callbackParams))
+	if config.EnableNexus() {
+		factories = append(factories, NewOutboundQueueFactory(outboundParams))
 	}
 	return additionalQueueFactories{
 		Factories: factories,

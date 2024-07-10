@@ -366,7 +366,7 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 		return true
 	}
 
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+	if errors.As(err, new(*serviceerror.NotFound)) {
 		return true
 	}
 
@@ -687,11 +687,11 @@ func (e *executableImpl) GetDestination() string {
 }
 
 // StateMachineTaskType returns the embedded task's state machine task type if it exists. Defaults to 0.
-func (e *executableImpl) StateMachineTaskType() int32 {
+func (e *executableImpl) StateMachineTaskType() string {
 	if t, ok := e.Task.(tasks.HasStateMachineTaskType); ok {
 		return t.StateMachineTaskType()
 	}
-	return 0
+	return ""
 }
 
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
@@ -733,20 +733,20 @@ func (e *executableImpl) backoffDuration(
 		common.IsInternalError(err) {
 		// using a different reschedule policy to slow down retry
 		// as immediate retry typically won't resolve the issue.
-		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt)
+		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt, err)
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt)
+		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt, err)
 	}
 
-	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt)
+	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt, err)
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon system resource exhausted error and pick the longer backoff duration
 		backoffDuration = max(
 			backoffDuration,
-			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount),
+			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount, err),
 		)
 	}
 
@@ -801,15 +801,20 @@ func EstimateTaskMetricTag(
 type CircuitBreakerExecutable struct {
 	Executable
 	cb circuitbreaker.TwoStepCircuitBreaker
+
+	metricsHandler metrics.Handler
 }
 
 func NewCircuitBreakerExecutable(
 	e Executable,
 	cb circuitbreaker.TwoStepCircuitBreaker,
+	metricsHandler metrics.Handler,
 ) *CircuitBreakerExecutable {
 	return &CircuitBreakerExecutable{
 		Executable: e,
 		cb:         cb,
+
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -818,7 +823,9 @@ func NewCircuitBreakerExecutable(
 func (e *CircuitBreakerExecutable) Execute() error {
 	doneCb, err := e.cb.Allow()
 	if err != nil {
-		return err
+		metrics.CircuitBreakerExecutableBlocked.With(e.metricsHandler).Record(1)
+		// Return resource a exhausted error to ensure that this task is retried less aggressively and does not go to the DLQ.
+		return fmt.Errorf("%w: %w", serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "circuit breaker rejection"), err)
 	}
 
 	defer func() {
@@ -830,12 +837,12 @@ func (e *CircuitBreakerExecutable) Execute() error {
 	}()
 
 	err = e.Executable.Execute()
-	destinationDownErr, destinationDown := err.(*DestinationDownError)
-	if destinationDown {
+	var destinationDownErr *DestinationDownError
+	if errors.As(err, &destinationDownErr) {
 		err = destinationDownErr.Unwrap()
 	}
 
-	doneCb(!destinationDown)
+	doneCb(destinationDownErr == nil)
 	return err
 }
 
