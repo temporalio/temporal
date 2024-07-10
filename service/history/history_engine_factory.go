@@ -80,7 +80,7 @@ func (f *historyEngineFactory) CreateEngine(
 	if shard.GetConfig().EnableHostLevelHistoryCache() {
 		wfCache = f.WorkflowCache
 	} else {
-		wfCache = f.NewCacheFn(shard.GetConfig(), shard.GetMetricsHandler())
+		wfCache = f.NewCacheFn(shard.GetConfig(), shard.GetLogger(), shard.GetMetricsHandler())
 	}
 
 	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, wfCache)
