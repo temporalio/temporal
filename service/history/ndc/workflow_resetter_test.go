@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -602,6 +603,11 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(mutableState)
+	smReg := hsm.NewRegistry()
+	workflow.RegisterStateMachine(smReg)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	mutableState.EXPECT().HSM().Return(root).AnyTimes()
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
@@ -724,6 +730,11 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(mutableState)
+	smReg := hsm.NewRegistry()
+	workflow.RegisterStateMachine(smReg)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	mutableState.EXPECT().HSM().Return(root).AnyTimes()
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
@@ -789,6 +800,11 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	smReg := hsm.NewRegistry()
+	workflow.RegisterStateMachine(smReg)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	mutableState.EXPECT().HSM().Return(root).AnyTimes()
 
 	nextRunID, err := s.workflowResetter.reapplyEventsFromBranch(
 		context.Background(),
@@ -890,7 +906,13 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		}
 	}
 
-	_, err := reapplyEvents(ms, nil, events, nil, "")
+	smReg := hsm.NewRegistry()
+	workflow.RegisterStateMachine(smReg)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+
+	_, err = reapplyEvents(ms, nil, smReg, events, nil, "")
 	s.NoError(err)
 }
 
@@ -1021,6 +1043,11 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 	resetMutableState.EXPECT().RefreshExpirationTimeoutTask(ctx).Return(nil).AnyTimes()
 	resetMutableState.EXPECT().GetPendingChildExecutionInfos().Return(executionInfos)
 	resetMutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule).AnyTimes()
+	smReg := hsm.NewRegistry()
+	workflow.RegisterStateMachine(smReg)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	resetMutableState.EXPECT().HSM().Return(root).AnyTimes()
 
 	workflowTaskStart := &workflow.WorkflowTaskInfo{
 		ScheduledEventID: workflowTaskSchedule.ScheduledEventID,

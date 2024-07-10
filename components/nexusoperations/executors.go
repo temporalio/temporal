@@ -306,6 +306,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 						NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 							ScheduledEventId: eventID,
 							OperationId:      result.Pending.ID,
+							RequestId:        operation.RequestId,
 						},
 					}
 				})
@@ -365,6 +366,7 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 			},
 		),
 		ScheduledEventId: eventID,
+		RequestId:        operation.RequestId,
 	}
 	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 		// nolint:revive // We must mutate here even if the linter doesn't like it.
@@ -421,6 +423,7 @@ func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, ta
 						},
 					),
 					ScheduledEventId: eventID,
+					RequestId:        op.RequestId,
 				},
 			}
 		})
