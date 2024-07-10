@@ -59,6 +59,9 @@ func (f *flowControlTestSuite) SetupTest() {
 	}
 
 	f.config = tests.NewDynamicConfig()
+	f.config.ReplicationReceiverMaxOutstandingTaskCount = func() int {
+		return 50
+	}
 	f.controller = NewReceiverFlowControl(signals, f.config)
 	f.maxOutStandingTasks = f.config.ReplicationReceiverMaxOutstandingTaskCount()
 }

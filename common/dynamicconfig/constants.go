@@ -2137,7 +2137,7 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
-		50,
+		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
