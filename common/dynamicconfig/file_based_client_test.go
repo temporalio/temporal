@@ -25,7 +25,6 @@
 package dynamicconfig_test
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -301,19 +300,6 @@ func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
 	s.Error(err)
 }
 
-type MockFileInfo struct {
-	FileName     string
-	IsDirectory  bool
-	ModTimeValue time.Time
-}
-
-func (mfi MockFileInfo) Name() string       { return mfi.FileName }
-func (mfi MockFileInfo) Size() int64        { return int64(8) }
-func (mfi MockFileInfo) Mode() os.FileMode  { return os.ModePerm }
-func (mfi MockFileInfo) ModTime() time.Time { return mfi.ModTimeValue }
-func (mfi MockFileInfo) IsDir() bool        { return mfi.IsDirectory }
-func (mfi MockFileInfo) Sys() interface{}   { return nil }
-
 func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 	dynamicconfig.NewNamespaceFloatSetting(testGetFloat64PropertyKey, 0, "")
@@ -327,8 +313,8 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
-	originFileInfo := &MockFileInfo{ModTimeValue: time.Now()}
-	updatedFileInfo := &MockFileInfo{ModTimeValue: originFileInfo.ModTimeValue.Add(updateInterval + time.Second)}
+	originModTime := time.Now()
+	updatedModTime := originModTime.Add(updateInterval + time.Second)
 
 	originFileData := []byte(`
 testGetFloat64PropertyKey:
@@ -369,7 +355,7 @@ testGetBoolPropertyKey:
     namespace: samples-namespace
 `)
 
-	reader.EXPECT().Stat().Return(originFileInfo, nil).Times(2)
+	reader.EXPECT().GetModTime().Return(originModTime, nil).Times(2)
 	reader.EXPECT().ReadFile().Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(6)
@@ -380,7 +366,7 @@ testGetBoolPropertyKey:
 		}, mockLogger, s.doneCh)
 	s.NoError(err)
 
-	reader.EXPECT().Stat().Return(updatedFileInfo, nil)
+	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: { constraints: {} value: 12 } newValue: { constraints: {} value: 13 }", gomock.Any())
@@ -404,8 +390,8 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedTypedValue() {
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
-	originFileInfo := &MockFileInfo{ModTimeValue: time.Now()}
-	updatedFileInfo := &MockFileInfo{ModTimeValue: originFileInfo.ModTimeValue.Add(updateInterval + time.Second)}
+	originModTime := time.Now()
+	updatedModTime := originModTime.Add(updateInterval + time.Second)
 
 	originFileData := []byte(`
 history.fakeRetryPolicy:
@@ -424,7 +410,7 @@ history.fakeRetryPolicy:
     MaximumAttempts: 0
 `)
 
-	reader.EXPECT().Stat().Return(originFileInfo, nil).Times(2)
+	reader.EXPECT().GetModTime().Return(originModTime, nil).Times(2)
 	reader.EXPECT().ReadFile().Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(2)
@@ -435,7 +421,7 @@ history.fakeRetryPolicy:
 		}, mockLogger, s.doneCh)
 	s.NoError(err)
 
-	reader.EXPECT().Stat().Return(updatedFileInfo, nil)
+	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: history.fakeretrypolicy oldValue: { constraints: {} value: map[BackoffCoefficient:3 InitialIntervalInSeconds:1 MaximumAttempts:0 MaximumIntervalCoefficient:100] } newValue: { constraints: {} value: map[BackoffCoefficient:2 InitialIntervalInSeconds:3 MaximumAttempts:0 MaximumIntervalCoefficient:100] }", gomock.Any())
@@ -457,8 +443,8 @@ func (s *fileBasedClientSuite) TestUpdate_NewEntry() {
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
-	originFileInfo := &MockFileInfo{ModTimeValue: time.Now()}
-	updatedFileInfo := &MockFileInfo{ModTimeValue: originFileInfo.ModTimeValue.Add(updateInterval + time.Second)}
+	originModTime := time.Now()
+	updatedModTime := originModTime.Add(updateInterval + time.Second)
 
 	originFileData := []byte(`
 testGetFloat64PropertyKey:
@@ -478,7 +464,7 @@ testGetIntPropertyKey:
   constraints: {}
 `)
 
-	reader.EXPECT().Stat().Return(originFileInfo, nil).Times(2)
+	reader.EXPECT().GetModTime().Return(originModTime, nil).Times(2)
 	reader.EXPECT().ReadFile().Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {} value: 12 }", gomock.Any())
@@ -490,7 +476,7 @@ testGetIntPropertyKey:
 		}, mockLogger, s.doneCh)
 	s.NoError(err)
 
-	reader.EXPECT().Stat().Return(updatedFileInfo, nil)
+	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {{Namespace:samples-namespace}} value: 22 }", gomock.Any())
@@ -513,8 +499,8 @@ func (s *fileBasedClientSuite) TestUpdate_ChangeOrder_ShouldNotWriteLog() {
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
-	originFileInfo := &MockFileInfo{ModTimeValue: time.Now()}
-	updatedFileInfo := &MockFileInfo{ModTimeValue: originFileInfo.ModTimeValue.Add(updateInterval + time.Second)}
+	originModTime := time.Now()
+	updatedModTime := originModTime.Add(updateInterval + time.Second)
 
 	originFileData := []byte(`
 testGetFloat64PropertyKey:
@@ -541,7 +527,7 @@ testGetFloat64PropertyKey:
   constraints: {}
 `)
 
-	reader.EXPECT().Stat().Return(originFileInfo, nil).Times(2)
+	reader.EXPECT().GetModTime().Return(originModTime, nil).Times(2)
 	reader.EXPECT().ReadFile().Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(4)
@@ -552,7 +538,7 @@ testGetFloat64PropertyKey:
 		}, mockLogger, s.doneCh)
 	s.NoError(err)
 
-	reader.EXPECT().Stat().Return(updatedFileInfo, nil)
+	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(1)

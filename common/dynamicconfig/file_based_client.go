@@ -52,7 +52,7 @@ const (
 
 type (
 	FileReader interface {
-		Stat() (os.FileInfo, error)
+		GetModTime() (time.Time, error)
 		ReadFile() ([]byte, error)
 	}
 
@@ -154,14 +154,14 @@ func (fc *fileBasedClient) init() error {
 // This is public mainly for testing. The update loop will call this periodically, you don't
 // have to call it explicitly.
 func (fc *fileBasedClient) Update() error {
-	info, err := fc.reader.Stat()
+	modtime, err := fc.reader.GetModTime()
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
-	if !info.ModTime().After(fc.lastUpdatedTime) {
+	if !modtime.After(fc.lastUpdatedTime) {
 		return nil
 	}
-	fc.lastUpdatedTime = info.ModTime()
+	fc.lastUpdatedTime = modtime
 
 	contents, err := fc.reader.ReadFile()
 	if err != nil {
@@ -240,7 +240,7 @@ func (fc *fileBasedClient) validateStaticConfig(config *FileBasedClientConfig) e
 	if config == nil {
 		return errors.New("configuration for dynamic config client is nil")
 	}
-	if _, err := fc.reader.Stat(); err != nil {
+	if _, err := fc.reader.GetModTime(); err != nil {
 		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)
 	}
 	if config.PollInterval < minPollInterval {
@@ -477,8 +477,12 @@ func (r *osReader) ReadFile() ([]byte, error) {
 	return os.ReadFile(r.path)
 }
 
-func (r *osReader) Stat() (os.FileInfo, error) {
-	return os.Stat(r.path)
+func (r *osReader) GetModTime() (time.Time, error) {
+	fi, err := os.Stat(r.path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return fi.ModTime(), nil
 }
 
 func (lr *LoadResult) warn(err error) *LoadResult {

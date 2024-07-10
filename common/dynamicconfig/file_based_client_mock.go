@@ -29,8 +29,8 @@
 package dynamicconfig
 
 import (
-	os "os"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -58,6 +58,21 @@ func (m *MockFileReader) EXPECT() *MockFileReaderMockRecorder {
 	return m.recorder
 }
 
+// GetModTime mocks base method.
+func (m *MockFileReader) GetModTime() (time.Time, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetModTime")
+	ret0, _ := ret[0].(time.Time)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetModTime indicates an expected call of GetModTime.
+func (mr *MockFileReaderMockRecorder) GetModTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModTime", reflect.TypeOf((*MockFileReader)(nil).GetModTime))
+}
+
 // ReadFile mocks base method.
 func (m *MockFileReader) ReadFile() ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -71,19 +86,4 @@ func (m *MockFileReader) ReadFile() ([]byte, error) {
 func (mr *MockFileReaderMockRecorder) ReadFile() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadFile", reflect.TypeOf((*MockFileReader)(nil).ReadFile))
-}
-
-// Stat mocks base method.
-func (m *MockFileReader) Stat() (os.FileInfo, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stat")
-	ret0, _ := ret[0].(os.FileInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Stat indicates an expected call of Stat.
-func (mr *MockFileReaderMockRecorder) Stat() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockFileReader)(nil).Stat))
 }
