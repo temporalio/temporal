@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -102,12 +103,13 @@ type (
 		ProcessToolBox
 
 		// immutable data
-		taskID            int64
-		metricsTag        string
-		taskCreationTime  time.Time
-		taskReceivedTime  time.Time
-		sourceClusterName string
-		taskPriority      enumsspb.TaskPriority
+		taskID              int64
+		metricsTag          string
+		taskCreationTime    time.Time
+		taskReceivedTime    time.Time
+		sourceClusterName   string
+		taskPriority        enumsspb.TaskPriority
+		versionedTransition *persistence.VersionedTransition
 
 		// mutable data
 		taskState int32
@@ -430,18 +432,34 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
+		if e.versionedTransition != nil && e.versionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
+			if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
+				return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.versionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
+			}
+			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+			if err != nil {
+				return "", false, err
+			}
+		}
 	case *serviceerror.NamespaceNotFound:
 		if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
 			return "", false, nil
 		}
-
-		namespaceEntry, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+		_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
 			e.Logger.Info("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
 			return "", false, nil
 		}
 	default:
 		return "", false, err
+	}
+	namespaceEntry, err = e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		return "", false, err
+	}
+	// need to make sure ns in cache is up-to-date
+	if e.versionedTransition != nil && namespaceEntry.FailoverVersion() < e.versionedTransition.NamespaceFailoverVersion {
+		return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.versionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
