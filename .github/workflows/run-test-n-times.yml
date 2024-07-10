@@ -64,8 +64,8 @@ jobs:
 
       - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
 
-  functional-test:
-    name: Functional test
+  functional-test-n-times:
+    name: Functional test n-times
     needs: [misc-checks, cache-docker-images]
     strategy:
       fail-fast: false
