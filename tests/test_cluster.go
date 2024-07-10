@@ -334,6 +334,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 		if err != nil {
 			return err
 		}
+
 		return esClient.Ping(ctx)
 	}
 
