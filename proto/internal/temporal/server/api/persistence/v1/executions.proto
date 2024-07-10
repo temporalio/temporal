@@ -505,9 +505,17 @@ message Callback {
         map<string, string> header = 2;
     }
 
+    message Scheduler {
+        string namespace_id = 1;
+        string workflow_id = 2;
+        string run_id = 3;
+        temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+    }
+
     reserved 1; // For a generic callback mechanism to be added later.
     oneof variant {
         Nexus nexus = 2;
+        Scheduler scheduler = 3;
     }
 }
 

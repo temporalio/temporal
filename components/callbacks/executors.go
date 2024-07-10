@@ -25,6 +25,7 @@ package callbacks
 import (
 	"context"
 	"fmt"
+	historypb "go.temporal.io/api/history/v1"
 	"io"
 	"net/http"
 	"slices"
@@ -49,6 +50,10 @@ var retryable4xxErrorTypes = []int{
 
 type CanGetNexusCompletion interface {
 	GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error)
+}
+
+type CanGetCompletionEvent interface {
+	GetCompletionEvent(ctx context.Context) (*historypb.HistoryEvent, error)
 }
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
@@ -86,6 +91,18 @@ type (
 	taskExecutor struct {
 		TaskExecutorOptions
 	}
+
+	invocationResult int
+
+	callbackInvokable interface {
+		Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error)
+	}
+)
+
+const (
+	Ok invocationResult = iota
+	Retry
+	Failed
 )
 
 func (e taskExecutor) executeInvocationTask(
@@ -99,7 +116,7 @@ func (e taskExecutor) executeInvocationTask(
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadInvocationArgs(ctx, env, ref)
+	invokable, err := e.loadInvocationArgs(ctx, env, ref)
 	if err != nil {
 		return err
 	}
@@ -110,9 +127,21 @@ func (e taskExecutor) executeInvocationTask(
 	)
 	defer cancel()
 
-	request, err := nexus.NewCompletionHTTPRequest(callCtx, args.url, args.completion)
+	result, err := invokable.Invoke(callCtx, ns, e, task)
+	
+	return e.saveResult(callCtx, env, ref, result, err)
+}
+
+type nexusInvocationArgs struct {
+	url        string
+	header     map[string]string
+	completion nexus.OperationCompletion
+}
+
+func (args nexusInvocationArgs) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error) {
+	request, err := nexus.NewCompletionHTTPRequest(ctx, args.url, args.completion)
 	if err != nil {
-		return queues.NewUnprocessableTaskError(
+		return Failed, queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
 		)
 	}
@@ -124,7 +153,7 @@ func (e taskExecutor) executeInvocationTask(
 	}
 
 	caller := e.CallerProvider(queues.NamespaceIDAndDestination{
-		NamespaceID: ref.WorkflowKey.GetNamespaceID(),
+		NamespaceID: ns.ID().String(),
 		Destination: task.Destination,
 	})
 	// Make the call and record metrics.
@@ -133,7 +162,7 @@ func (e taskExecutor) executeInvocationTask(
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination)
-	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(callCtx, response, callErr))
+	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(ctx, response, callErr))
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
 
@@ -143,60 +172,49 @@ func (e taskExecutor) executeInvocationTask(
 		// propagate errors to the machine.
 		if _, callErr = io.Copy(io.Discard, response.Body); callErr == nil {
 			callErr = response.Body.Close()
+			if isRetryableHTTPResponse(response) {
+				return Retry, queues.NewDestinationDownError(
+					fmt.Sprintf("response returned retryable status code %d", response.StatusCode),
+					err,
+				)
+			}
+			return Ok, nil
 		}
 	}
-
-	if callErr != nil || response.StatusCode >= 400 {
-		status := "unknown"
-		retryable := callErr != nil
-		if response != nil {
-			status = response.Status
-			retryable = isRetryableHTTPResponse(response)
-		}
-		e.Logger.Error("Callback request failed", tag.Error(callErr), tag.NewStringTag("status", status), tag.NewBoolTag("retryable", retryable))
-	}
-
-	err = e.saveResult(ctx, env, ref, response, callErr)
-
-	if callErr != nil {
-		err = queues.NewDestinationDownError(callErr.Error(), err)
-	} else if isRetryableHTTPResponse(response) {
-		err = queues.NewDestinationDownError(
-			fmt.Sprintf("response returned retryable status code %d", response.StatusCode),
-			err,
-		)
-	}
-	return err
-}
-
-type invocationArgs struct {
-	url        string
-	header     map[string]string
-	completion nexus.OperationCompletion
+	status := response.Status
+	retryable := isRetryableHTTPResponse(response)
+	e.Logger.Error("Callback request failed", tag.Error(callErr), tag.NewStringTag("status", status), tag.NewBoolTag("retryable", retryable))
+	return Failed, queues.NewDestinationDownError(callErr.Error(), err)
 }
 
 func (e taskExecutor) loadInvocationArgs(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-) (args invocationArgs, err error) {
+) (invokable callbackInvokable, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		callback, err := hsm.MachineData[Callback](node)
 		if err != nil {
 			return err
 		}
-		target, err := hsm.MachineData[CanGetNexusCompletion](node.Parent)
-		if err != nil {
-			return err
-		}
+
 		switch variant := callback.GetCallback().GetVariant().(type) {
 		case *persistencespb.Callback_Nexus_:
-			args.url = variant.Nexus.GetUrl()
-			args.header = variant.Nexus.GetHeader()
-			args.completion, err = target.GetNexusCompletion(ctx)
+			target, err := hsm.MachineData[CanGetNexusCompletion](node.Parent)
 			if err != nil {
 				return err
 			}
+			args := nexusInvocationArgs{
+				url:    variant.Nexus.GetUrl(),
+				header: variant.Nexus.GetHeader(),
+			}
+			args.completion, err = target.GetNexusCompletion(ctx)
+			invokable = args
+			if err != nil {
+				return err
+			}
+		case *persistencespb.Callback_SchedulerCallback_:
+
 		default:
 			return queues.NewUnprocessableTaskError(
 				fmt.Sprintf("unprocessable callback variant: %v", variant),
@@ -211,28 +229,28 @@ func (e taskExecutor) saveResult(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-	response *http.Response,
+	result invocationResult,
 	callErr error,
 ) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
-			if callErr == nil {
-				if response.StatusCode >= 200 && response.StatusCode < 300 {
-					return TransitionSucceeded.Apply(callback, EventSucceeded{})
-				}
-				callErr = fmt.Errorf("request failed with: %v", response.Status) // nolint:goerr113
-				if !isRetryableHTTPResponse(response) {
-					return TransitionFailed.Apply(callback, EventFailed{
-						Time: env.Now(),
-						Err:  callErr,
-					})
-				}
+			switch result {
+			case Ok:
+				return TransitionSucceeded.Apply(callback, EventSucceeded{})
+			case Retry:
+				return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
+					Time:        env.Now(),
+					Err:         callErr,
+					RetryPolicy: e.Config.RetryPolicy(),
+				})
+			case Failed:
+				return TransitionFailed.Apply(callback, EventFailed{
+					Time: env.Now(),
+					Err:  callErr,
+				})
+			default:
+				return hsm.TransitionOutput{}, fmt.Errorf("unrecognized callback result %v", result)
 			}
-			return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
-				Time:        env.Now(),
-				Err:         callErr,
-				RetryPolicy: e.Config.RetryPolicy(),
-			})
 		})
 	})
 }

@@ -2389,11 +2389,12 @@ func (h *Handler) InvokeStateMachineTask(ctx context.Context, request *historyse
 		StateMachineRef: request.Ref,
 	}
 
-	err = registry.ExecuteRemoteTask(ctx, engine.StateMachineEnvironment(), ref, request.TaskType, request.Task)
+	bytes, err := registry.ExecuteRemoteTask(ctx, engine.StateMachineEnvironment(), ref, request.TaskType, request.Task)
 	// TODO(Tianyu): convert error?
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	// TODO(Tianyu): how to define / get a return value?
-	return &historyservice.InvokeStateMachineTaskResponse{}, nil
+	return &historyservice.InvokeStateMachineTaskResponse{
+		Response: bytes,
+	}, nil
 }

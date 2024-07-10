@@ -83,5 +83,6 @@ type ImmediateExecutor[T Task] func(ctx context.Context, env Environment, ref Re
 type TimerExecutor[T Task] func(env Environment, node *Node, task T) error
 
 // RemoteExecutor is a special variant of ImmediateExecutor that is invoked remotely.
-// Implementations should be registered via [RegisterImmediateExecutors] to handle specific task types.
-type RemoteExecutor[T Task] func(ctx context.Context, env Environment, ref Ref, task T) error
+// Implementations should be registered via [RegisterRemoteExecutors] to handle specific task types.
+// TODO(Tianyu): Return value should not be []byte in the long run
+type RemoteExecutor[T Task] func(ctx context.Context, env Environment, ref Ref, task T) ([]byte, error)

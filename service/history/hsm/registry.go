@@ -143,6 +143,8 @@ func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T
 	return nil
 }
 
+// RegisterRemoteExecutor registers an [RemoteExecutor] for the given task type.
+// Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
 func RegisterRemoteExecutor[T Task](r *Registry, executor RemoteExecutor[T]) error {
 	var task T
 	taskType := task.Type()
@@ -238,28 +240,28 @@ func (r *Registry) execute(
 	return nil
 }
 
-// ExecuteImmediateTask gets an [ImmediateExecutor] from the registry and invokes it.
+// ExecuteRemoteTask gets an [RemoteExecutor] from the registry and invokes it.
 // Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
 func (r *Registry) ExecuteRemoteTask(
 	ctx context.Context,
 	env Environment,
 	ref Ref,
 	taskType string,
-	result []byte,
-) error {
-	executor, ok := r.immediateExecutors[taskType]
+	serializedTask []byte,
+) ([]byte, error) {
+	executor, ok := r.remoteExecutors[taskType]
 	if !ok {
-		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, taskType)
+		return nil, fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, taskType)
 	}
 	serializer, ok := r.tasks[taskType]
 	if !ok {
-		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, taskType)
+		return nil, fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, taskType)
 	}
 
 	// TODO(Tianyu): A new kind required?
-	task, err := serializer.Deserialize(result, TaskKindOutbound{})
+	task, err := serializer.Deserialize(serializedTask, TaskKindOutbound{})
 	if err != nil {
-		return fmt.Errorf("%w: executor for task type %v", ErrSerializationFailed, taskType)
+		return nil, fmt.Errorf("%w: executor for task type %v", ErrSerializationFailed, taskType)
 	}
 
 	fn := reflect.ValueOf(executor)
@@ -271,11 +273,8 @@ func (r *Registry) ExecuteRemoteTask(
 			reflect.ValueOf(task),
 		},
 	)
-	if !values[0].IsNil() {
-		//nolint:revive // type cast result is unchecked
-		return values[0].Interface().(error)
-	}
-	return nil
+	//nolint:revive // type cast result is unchecked
+	return values[0].Interface().([]byte), values[1].Interface().(error)
 }
 
 // ExecuteTimerTask gets a [TimerExecutor] from the registry and invokes it.
