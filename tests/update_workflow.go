@@ -158,7 +158,7 @@ func (s *FunctionalSuite) waitUpdateAdmitted(tv *testvars.TestVars, updateID str
 			s.GreaterOrEqual(pollResp.Stage, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
 			return true
 		}
-		if pollErr.Error() != fmt.Sprintf("update \"%v\" not found", tv.UpdateID(updateID)) {
+		if pollErr.Error() != fmt.Sprintf("update %q not found", tv.UpdateID(updateID)) {
 			s.T().Log("received error from Update poll: ", pollErr)
 			return true
 		}
