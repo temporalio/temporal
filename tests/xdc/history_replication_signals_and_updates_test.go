@@ -745,7 +745,7 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilAccepted(ctx context.Context, up
 
 func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -760,7 +760,7 @@ func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 
 func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -775,7 +775,7 @@ func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 
 func (c *hrsuTestCluster) pollAndErrorWhileProcessingWorkflowTask() error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),

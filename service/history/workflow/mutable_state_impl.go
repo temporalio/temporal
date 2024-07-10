@@ -37,7 +37,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/api/history/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -879,7 +878,7 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 
 // AddHistoryEvent adds any history event to this workflow execution.
 // The provided setAttributes function should be used to set the attributes on the event.
-func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes func(*history.HistoryEvent)) *history.HistoryEvent {
+func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
 	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
 	if event.EventId != common.BufferedEventID {
 		ms.writeEventToCache(event)
@@ -1363,7 +1362,6 @@ func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time
 		}
 		return completionEvent.GetEventTime().AsTime(), nil
 	}
-
 	return ms.executionInfo.CloseTime.AsTime(), nil
 }
 

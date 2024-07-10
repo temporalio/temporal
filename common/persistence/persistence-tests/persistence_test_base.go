@@ -278,7 +278,7 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.ShardMgr.Close()
 	s.ExecutionManager.Close()
 	s.NexusEndpointManager.Close()
-	s.NamespaceReplicationQueue.Stop()
+	s.NamespaceReplicationQueue.Close()
 	s.Factory.Close()
 	s.DefaultTestCluster.TearDownTestDatabase()
 }

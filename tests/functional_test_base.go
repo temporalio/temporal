@@ -70,7 +70,7 @@ type (
 		testClusterFactory     TestClusterFactory
 		testCluster            *TestCluster
 		testClusterConfig      *TestClusterConfig
-		engine                 FrontendClient
+		client                 FrontendClient
 		adminClient            AdminClient
 		operatorClient         operatorservice.OperatorServiceClient
 		httpAPIAddress         string
@@ -106,8 +106,6 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 }
 
 func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
-	checkTestShard(s.T())
-
 	s.testClusterFactory = NewTestClusterFactory()
 
 	params := ApplyTestClusterParams(options)
@@ -145,7 +143,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 			s.Require().NoError(err)
 		}
 
-		s.engine = NewFrontendClient(connection)
+		s.client = NewFrontendClient(connection)
 		s.adminClient = NewAdminClient(connection)
 		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
@@ -154,7 +152,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfig, s.Logger)
 		s.Require().NoError(err)
 		s.testCluster = cluster
-		s.engine = s.testCluster.GetFrontendClient()
+		s.client = s.testCluster.GetFrontendClient()
 		s.adminClient = s.testCluster.GetAdminClient()
 		s.operatorClient = s.testCluster.GetOperatorClient()
 		s.httpAPIAddress = cluster.host.FrontendHTTPAddress()
@@ -170,6 +168,16 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
+}
+
+// All test suites that inherit FunctionalTestBase and overwrite SetupTest must
+// call this base FunctionalTestBase.SetupTest function to distribute the tests
+// into partitions. Otherwise, the test suite will be executed multiple times
+// in each partition.
+// Furthermore, all test suites in the "tests/" directory that don't inherit
+// from FunctionalTestBase must implement SetupTest that calls checkTestShard.
+func (s *FunctionalTestBase) SetupTest() {
+	checkTestShard(s.T())
 }
 
 func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
@@ -211,7 +219,7 @@ func checkTestShard(t *testing.T) {
 		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
-	// This was determined empirically to distribute our existing test names + run times
+	// This was determined empirically to distribute our existing test names
 	// reasonably well. This can be adjusted from time to time.
 	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
 	const salt = "-salt-26"
@@ -275,7 +283,7 @@ func (s *FunctionalTestBase) tearDownSuite() {
 		s.testCluster = nil
 	}
 
-	s.engine = nil
+	s.client = nil
 	s.adminClient = nil
 }
 
@@ -289,7 +297,7 @@ func (s *FunctionalTestBase) registerNamespace(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := s.client.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Description:                      namespace,
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
@@ -304,7 +312,7 @@ func (s *FunctionalTestBase) registerNamespace(
 	}
 
 	// Set up default alias for custom search attributes.
-	_, err = s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err = s.client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		Config: &namespacepb.NamespaceConfig{
 			CustomSearchAttributeAliases: map[string]string{
@@ -326,7 +334,7 @@ func (s *FunctionalTestBase) markNamespaceAsDeleted(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := s.client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			State: enumspb.NAMESPACE_STATE_DELETED,
@@ -341,7 +349,7 @@ func (s *FunctionalTestBase) randomizeStr(id string) string {
 }
 
 func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -350,7 +358,7 @@ func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.Wo
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err = s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:     namespace,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,

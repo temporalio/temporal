@@ -72,7 +72,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -138,7 +138,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -176,7 +176,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	}
 
 	// Reset workflow execution
-	_, err = s.engine.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	_, err = s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -285,27 +285,18 @@ func (t resetTest) sendSignalAndProcessWFT(poller *TaskPoller) {
 		Input:             t.tv.Any().Payloads(),
 		Identity:          t.tv.WorkerIdentity(),
 	}
-	_, err := t.engine.SignalWorkflowExecution(NewContext(), signalRequest)
+	_, err := t.client.SignalWorkflowExecution(NewContext(), signalRequest)
 	t.NoError(err)
 	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	t.NoError(err)
 }
 
 func (t resetTest) sendUpdateAndProcessWFT(updateId string, poller *TaskPoller) {
-	updateResponse := make(chan error)
-	pollResponse := make(chan error)
-	go func() {
-		_, err := t.FunctionalSuite.sendUpdateWaitPolicyAccepted(t.tv, updateId)
-		updateResponse <- err
-	}()
-	go func() {
-		// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
-		// required for the update request to return.
-		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
-		pollResponse <- err
-	}()
-	t.NoError(<-updateResponse)
-	t.NoError(<-pollResponse)
+	t.FunctionalSuite.sendUpdateNoErrorWaitPolicyAccepted(t.tv, updateId)
+	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
+	// required for the update request to return.
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	t.NoError(err)
 }
 
 func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
@@ -364,7 +355,7 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 }
 
 func (t resetTest) reset(eventId int64) string {
-	resp, err := t.engine.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resp, err := t.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 t.namespace,
 		WorkflowExecution:         t.tv.WorkflowExecution(),
 		Reason:                    "reset execution from test",
@@ -383,7 +374,7 @@ func (t *resetTest) run() {
 	t.tv = t.FunctionalSuite.startWorkflow(t.tv)
 
 	poller := &TaskPoller{
-		Engine:              t.engine,
+		Client:              t.client,
 		Namespace:           t.namespace,
 		TaskQueue:           t.tv.TaskQueue(),
 		Identity:            t.tv.WorkerIdentity(),
@@ -543,7 +534,7 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	runID := we.RunId
 
@@ -568,7 +559,7 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if len(resetRunID) == 0 {
 			signalRequest.RequestId = uuid.New()
-			_, err := s.engine.SignalWorkflowExecution(NewContext(), signalRequest)
+			_, err := s.client.SignalWorkflowExecution(NewContext(), signalRequest)
 			s.NoError(err)
 
 			// events layout
@@ -577,7 +568,7 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 			//  3. WorkflowTaskStarted
 			//  x. WorkflowExecutionSignaled
 
-			resp, err := s.engine.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+			resp, err := s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 				Namespace: s.namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: workflowID,
@@ -606,7 +597,7 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -691,10 +682,10 @@ func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 		Identity:            identity,
 	}
 
-	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -730,7 +721,7 @@ func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -752,7 +743,7 @@ func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 	//  5. WorkflowTaskCompleted
 
 	// Reset workflow execution
-	_, err = s.engine.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	_, err = s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

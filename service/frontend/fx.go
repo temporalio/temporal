@@ -537,6 +537,7 @@ func VisibilityManagerProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	namespaceRegistry namespace.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -545,6 +546,7 @@ func VisibilityManagerProvider(
 		nil, // frontend visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -840,8 +842,9 @@ func NexusEndpointClientProvider(
 func NexusEndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	nexusEndpointManager persistence.NexusEndpointManager,
-	logger log.Logger,
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) nexus.EndpointRegistry {
 	registryConfig := nexus.NewEndpointRegistryConfig(dc)
 	return nexus.NewEndpointRegistry(
@@ -849,6 +852,7 @@ func NexusEndpointRegistryProvider(
 		matchingClient,
 		nexusEndpointManager,
 		logger,
+		metricsHandler,
 	)
 }
 
