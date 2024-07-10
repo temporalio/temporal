@@ -191,7 +191,8 @@ func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
 		if setting == nil {
 			continue
 		}
-		for _, sub := range c.subscriptions[key] {
+		// use setting.Key instead of key to avoid changing case again
+		for _, sub := range c.subscriptions[setting.Key()] {
 			setting.dispatchUpdate(c, sub, cvs)
 		}
 	}

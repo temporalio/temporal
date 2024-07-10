@@ -105,10 +105,11 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 
 func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
-		logger: logger,
-		reader: reader,
-		config: config,
-		doneCh: doneCh,
+		logger:        logger,
+		reader:        reader,
+		config:        config,
+		doneCh:        doneCh,
+		subscriptions: make(map[int]ClientUpdateFunc),
 	}
 
 	err := client.init()
