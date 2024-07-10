@@ -50,6 +50,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -188,14 +189,14 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
 		s.workflowID,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	).Return(wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
@@ -301,14 +302,14 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
 		s.workflowID,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	).Return(wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
@@ -482,7 +483,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -563,7 +564,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM(
 		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{

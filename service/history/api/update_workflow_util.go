@@ -30,6 +30,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -48,7 +49,7 @@ func GetAndUpdateWorkflowWithNew(
 		ctx,
 		reqClock,
 		workflowKey,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -73,7 +74,7 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 		reqClock,
 		consistencyCheckFn,
 		workflowKey,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err

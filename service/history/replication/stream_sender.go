@@ -96,6 +96,7 @@ func NewStreamSender(
 		shardContext.GetLogger(),
 		tag.TargetCluster(clientClusterName), // client is the target cluster (passive cluster)
 		tag.TargetShardID(clientShardKey.ShardID),
+		tag.ShardID(serverShardKey.ShardID), // server is the source cluster (active cluster)
 	)
 	return &StreamSenderImpl{
 		server:                  server,
