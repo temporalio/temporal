@@ -459,7 +459,7 @@ type (
 	}
 )
 
-var _ dynamicconfig.SubscribableClient = (*testSubscribableClient)(nil)
+var _ dynamicconfig.NotifyingClient = (*testSubscribableClient)(nil)
 
 func TestSubscriptionSuite(t *testing.T) {
 	suite.Run(t, new(subscriptionSuite))

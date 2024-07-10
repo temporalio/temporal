@@ -46,10 +46,10 @@ import (
 )
 
 var _ Client = (*fileBasedClient)(nil)
+var _ NotifyingClient = (*fileBasedClient)(nil)
 
 const (
 	minPollInterval = time.Second * 5
-	fileMode        = 0644 // used for update config file
 )
 
 type (
@@ -124,7 +124,7 @@ func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
 	return values[strings.ToLower(key.String())]
 }
 
-func (fc *fileBasedClient) Subscribe(subscriptionKey any, f ClientUpdateFunc) (cancel func()) {
+func (fc *fileBasedClient) Subscribe(f ClientUpdateFunc) (cancel func()) {
 	fc.subscriptionLock.Lock()
 	defer fc.subscriptionLock.Unlock()
 

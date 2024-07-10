@@ -51,9 +51,9 @@ type (
 		GetValue(key Key) []ConstrainedValue
 	}
 
-	// SubscribableClient is an optional interface that a Client can also implement, that adds
+	// NotifyingClient is an optional interface that a Client can also implement, that adds
 	// support for faster notifications of dynamic config changes.
-	SubscribableClient interface {
+	NotifyingClient interface {
 		// Adds a subscription to all updates from this Client. `update` will be called on any
 		// change to the current value set. The caller should call `cancel` to cancel the
 		// subscription. Calls to `update` will not be made concurrently.

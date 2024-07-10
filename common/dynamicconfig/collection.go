@@ -121,8 +121,8 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	}
 	s := DynamicConfigSubscriptionCallback.Get(c)()
 	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
-	if subcli, ok := client.(SubscribableClient); ok {
-		c.cancelClientSubscription = subcli.Subscribe(c.keysChanged)
+	if notifyingClient, ok := client.(NotifyingClient); ok {
+		c.cancelClientSubscription = notifyingClient.Subscribe(c.keysChanged)
 	} else {
 		c.poller.Go(c.pollForChanges)
 	}
