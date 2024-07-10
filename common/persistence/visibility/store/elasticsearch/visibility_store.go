@@ -59,8 +59,8 @@ const (
 	PersistenceName = "elasticsearch"
 
 	delimiter                    = "~"
-	scrollKeepAliveInterval      = "1m"
-	pointInTimeKeepAliveInterval = "1m"
+	ScrollKeepAliveInterval      = "1m"
+	PointInTimeKeepAliveInterval = "1m"
 )
 
 type (
@@ -76,7 +76,7 @@ type (
 		metricsHandler                 metrics.Handler
 	}
 
-	visibilityPageToken struct {
+	VisibilityPageToken struct {
 		SearchAfter []interface{}
 
 		// For ScanWorkflowExecutions API.
@@ -192,6 +192,10 @@ func (s *VisibilityStore) GetIndexName() string {
 
 func (s *VisibilityStore) GetEsClient() client.Client {
 	return s.esClient
+}
+
+func (s *VisibilityStore) GetSearchAttributesProvider() searchattribute.Provider {
+	return s.searchAttributesProvider
 }
 
 func (s *VisibilityStore) ValidateCustomSearchAttributes(
@@ -384,14 +388,14 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	p, err := s.buildSearchParametersV2(request, s.getListFieldSorter)
+	p, err := s.BuildSearchParametersV2(request, s.GetListFieldSorter)
 	if err != nil {
 		return nil, err
 	}
 
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, convertElasticsearchClientError("ListWorkflowExecutions failed", err)
+		return nil, ConvertElasticsearchClientError("ListWorkflowExecutions failed", err)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
@@ -417,21 +421,21 @@ func (s *VisibilityStore) scanWorkflowExecutionsWithScroll(
 		scrollErr    error
 	)
 
-	p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
+	p, err := s.BuildSearchParametersV2(request, s.GetScanFieldSorter)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(request.NextPageToken) == 0 {
-		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, scrollKeepAliveInterval)
+		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, ScrollKeepAliveInterval)
 	} else if p.ScrollID != "" {
-		searchResult, scrollErr = s.esClient.Scroll(ctx, p.ScrollID, scrollKeepAliveInterval)
+		searchResult, scrollErr = s.esClient.Scroll(ctx, p.ScrollID, ScrollKeepAliveInterval)
 	} else {
 		return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
 	}
 
 	if scrollErr != nil && scrollErr != io.EOF {
-		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", scrollErr)
+		return nil, ConvertElasticsearchClientError("ScanWorkflowExecutions failed", scrollErr)
 	}
 
 	// Both io.IOF and empty hits list indicate that this is a last page.
@@ -439,7 +443,7 @@ func (s *VisibilityStore) scanWorkflowExecutionsWithScroll(
 		scrollErr == io.EOF {
 		err := s.esClient.CloseScroll(ctx, searchResult.ScrollId)
 		if err != nil {
-			return nil, convertElasticsearchClientError("Unable to close scroll", err)
+			return nil, ConvertElasticsearchClientError("Unable to close scroll", err)
 		}
 	}
 
@@ -450,32 +454,32 @@ func (s *VisibilityStore) scanWorkflowExecutionsWithPit(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
+	p, err := s.BuildSearchParametersV2(request, s.GetScanFieldSorter)
 	if err != nil {
 		return nil, err
 	}
 
 	// First call doesn't have token with PointInTimeID.
 	if len(request.NextPageToken) == 0 {
-		pitID, err := s.esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
+		pitID, err := s.esClient.OpenPointInTime(ctx, s.index, PointInTimeKeepAliveInterval)
 		if err != nil {
-			return nil, convertElasticsearchClientError("Unable to create point in time", err)
+			return nil, ConvertElasticsearchClientError("Unable to create point in time", err)
 		}
-		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
+		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, PointInTimeKeepAliveInterval)
 	} else if p.PointInTime == nil {
 		return nil, serviceerror.NewInvalidArgument("pointInTimeId must present in pagination token")
 	}
 
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", err)
+		return nil, ConvertElasticsearchClientError("ScanWorkflowExecutions failed", err)
 	}
 
 	// Number hits smaller than the page size indicate that this is the last page.
 	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
 		_, err := s.esClient.ClosePointInTime(ctx, searchResult.PitId)
 		if err != nil {
-			return nil, convertElasticsearchClientError("Unable to close point in time", err)
+			return nil, ConvertElasticsearchClientError("Unable to close point in time", err)
 		}
 	}
 
@@ -497,7 +501,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 
 	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
 	if err != nil {
-		return nil, convertElasticsearchClientError("CountWorkflowExecutions failed", err)
+		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err)
 	}
 
 	response := &manager.CountWorkflowExecutionsResponse{Count: count}
@@ -554,7 +558,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	docID := GetDocID(request.WorkflowID, request.RunID)
 	result, err := s.esClient.Get(ctx, s.index, docID)
 	if err != nil {
-		return nil, convertElasticsearchClientError("GetWorkflowExecution failed", err)
+		return nil, ConvertElasticsearchClientError("GetWorkflowExecution failed", err)
 	}
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
@@ -570,7 +574,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 		)
 	}
 
-	workflowExecutionInfo, err := s.parseESDoc(result.Id, result.Source, typeMap, request.Namespace)
+	workflowExecutionInfo, err := s.ParseESDoc(result.Id, result.Source, typeMap, request.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -631,7 +635,7 @@ func (s *VisibilityStore) buildSearchParameters(
 	return params, nil
 }
 
-func (s *VisibilityStore) buildSearchParametersV2(
+func (s *VisibilityStore) BuildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 ) (*client.SearchParameters, error) {
@@ -688,7 +692,7 @@ func (s *VisibilityStore) buildSearchParametersV2(
 
 func (s *VisibilityStore) processPageToken(
 	params *client.SearchParameters,
-	pageToken *visibilityPageToken,
+	pageToken *VisibilityPageToken,
 	namespaceName namespace.Name,
 ) error {
 	if pageToken == nil {
@@ -705,7 +709,7 @@ func (s *VisibilityStore) processPageToken(
 		params.SearchAfter = pageToken.SearchAfter
 		params.PointInTime = elastic.NewPointInTimeWithKeepAlive(
 			pageToken.PointInTimeID,
-			pointInTimeKeepAliveInterval,
+			PointInTimeKeepAliveInterval,
 		)
 		return nil
 	}
@@ -789,7 +793,7 @@ func (s *VisibilityStore) convertQuery(
 	return queryParams, nil
 }
 
-func (s *VisibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
+func (s *VisibilityStore) GetScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	// custom order is not supported by Scan API
 	if len(fieldSorts) > 0 {
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
@@ -798,7 +802,7 @@ func (s *VisibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]ela
 	return docSorter, nil
 }
 
-func (s *VisibilityStore) getListFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
+func (s *VisibilityStore) GetListFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	if len(fieldSorts) == 0 {
 		return defaultSorter, nil
 	}
@@ -832,7 +836,7 @@ func (s *VisibilityStore) getListWorkflowExecutionsResponse(
 	}
 	var lastHitSort []interface{}
 	for _, hit := range searchResult.Hits.Hits {
-		workflowExecutionInfo, err := s.parseESDoc(hit.Id, hit.Source, typeMap, namespace)
+		workflowExecutionInfo, err := s.ParseESDoc(hit.Id, hit.Source, typeMap, namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -841,7 +845,7 @@ func (s *VisibilityStore) getListWorkflowExecutionsResponse(
 	}
 
 	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
-		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
+		response.NextPageToken, err = s.SerializePageToken(&VisibilityPageToken{
 			SearchAfter:   lastHitSort,
 			ScrollID:      searchResult.ScrollId,
 			PointInTimeID: searchResult.PitId,
@@ -854,12 +858,12 @@ func (s *VisibilityStore) getListWorkflowExecutionsResponse(
 	return response, nil
 }
 
-func (s *VisibilityStore) deserializePageToken(data []byte) (*visibilityPageToken, error) {
+func (s *VisibilityStore) deserializePageToken(data []byte) (*VisibilityPageToken, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
 
-	var token *visibilityPageToken
+	var token *VisibilityPageToken
 	dec := json.NewDecoder(bytes.NewReader(data))
 	// UseNumber will not lose precision on big int64.
 	dec.UseNumber()
@@ -870,7 +874,7 @@ func (s *VisibilityStore) deserializePageToken(data []byte) (*visibilityPageToke
 	return token, nil
 }
 
-func (s *VisibilityStore) serializePageToken(token *visibilityPageToken) ([]byte, error) {
+func (s *VisibilityStore) SerializePageToken(token *VisibilityPageToken) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -944,7 +948,7 @@ func (s *VisibilityStore) GenerateESDoc(
 }
 
 //nolint:revive // cyclomatic complexity
-func (s *VisibilityStore) parseESDoc(
+func (s *VisibilityStore) ParseESDoc(
 	docID string,
 	docSource json.RawMessage,
 	saTypeMap searchattribute.NameTypeMap,
@@ -1238,7 +1242,7 @@ func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interfac
 	panic(fmt.Sprintf("Unknown field type: %v", t))
 }
 
-func convertElasticsearchClientError(message string, err error) error {
+func ConvertElasticsearchClientError(message string, err error) error {
 	errMessage := fmt.Sprintf("%s: %s", message, detailedErrorMessage(err))
 	switch e := err.(type) {
 	case *elastic.Error:
