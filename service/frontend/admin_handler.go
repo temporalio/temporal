@@ -1011,6 +1011,7 @@ func (adh *AdminHandler) DescribeCluster(
 		InitialFailoverVersion:   metadata.GetInitialFailoverVersion(),
 		IsGlobalNamespaceEnabled: metadata.GetIsGlobalNamespaceEnabled(),
 		Tags:                     metadata.GetTags(),
+		HttpAddress:              metadata.GetHttpAddress(),
 	}, nil
 }
 
@@ -1021,7 +1022,6 @@ func (adh *AdminHandler) ListClusters(
 	request *adminservice.ListClustersRequest,
 ) (_ *adminservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1150,7 +1150,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
-			HttpAddress:              request.GetFrontendHttpAddress(),
+			HttpAddress:              resp.GetHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
