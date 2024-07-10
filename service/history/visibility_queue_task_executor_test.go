@@ -540,6 +540,14 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 		})
 		s.Assert().NoError(err)
 	})
+	s.Run("WorkflowCloseTime=1970-01-01T00:00:00Z", func() {
+		s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
+		err := s.execute(&tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey: workflowKey,
+			CloseTime:   time.Unix(0, 0).UTC(),
+		})
+		s.Assert().NoError(err)
+	})
 	s.Run("MultiCursorQueue", func() {
 		const highWatermark int64 = 5
 		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, 1, &persistencespb.QueueState{
