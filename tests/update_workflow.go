@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/consts"
 )
 
 func (s *FunctionalSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
@@ -157,8 +158,12 @@ func (s *FunctionalSuite) waitUpdateAdmitted(tv *testvars.TestVars, updateID str
 			s.GreaterOrEqual(pollResp.Stage, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
 			return true
 		}
-		var notFoundErr *serviceerror.NotFound
-		s.ErrorAs(pollErr, &notFoundErr) // poll beat send in race
+		if pollErr.Error() != fmt.Sprintf("update \"%v\" not found", tv.UpdateID(updateID)) {
+			s.T().Log("received error from Update poll: ", pollErr)
+			return true
+		}
+
+		// Poll beat send in race - poll again!
 		return false
 	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", updateID)
 }
@@ -894,6 +899,148 @@ func (s *FunctionalSuite) TestUpdateWorkflow_RunningWorkflowTask_NewNotEmptySpec
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
  14 WorkflowExecutionCompleted`, events)
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_CompletedWorkflow() {
+	s.Run("receive outcome from completed Update", func() {
+		tv := testvars.New(s.T())
+		tv = s.startWorkflow(tv)
+
+		wtHandlerCalls := 0
+		wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			wtHandlerCalls++
+			switch wtHandlerCalls {
+			case 1:
+				// Completes first WT with empty command list.
+				return nil, nil
+			case 2:
+				res := s.UpdateAcceptCompleteCommands(tv, "1")
+				res = append(res, &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+				})
+				return res, nil
+			default:
+				s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+				return nil, nil
+			}
+		}
+
+		msgHandlerCalls := 0
+		msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			msgHandlerCalls++
+			switch msgHandlerCalls {
+			case 1:
+				return nil, nil
+			case 2:
+				return s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"), nil
+			default:
+				s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+				return nil, nil
+			}
+		}
+
+		poller := &TaskPoller{
+			Client:              s.client,
+			Namespace:           s.namespace,
+			TaskQueue:           tv.TaskQueue(),
+			Identity:            tv.WorkerIdentity(),
+			WorkflowTaskHandler: wtHandler,
+			MessageHandler:      msgHandler,
+			Logger:              s.Logger,
+			T:                   s.T(),
+		}
+
+		// Drain first WT.
+		_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+		s.NoError(err)
+
+		// Send Update request.
+		updateResultCh := s.sendUpdateNoError(tv, "1")
+
+		// Complete Update and Workflow.
+		_, err = poller.PollAndProcessWorkflowTask(WithoutRetries)
+		s.NoError(err)
+
+		// Receive Update result.
+		updateResult1 := <-updateResultCh
+		s.NotNil(updateResult1.GetOutcome().GetSuccess())
+
+		// Send same Update request again, receiving the same Update result.
+		updateResultCh = s.sendUpdateNoError(tv, "1")
+		updateResult2 := <-updateResultCh
+		s.EqualValues(updateResult1.GetOutcome(), updateResult2.GetOutcome())
+	})
+
+	s.Run("receive error from accepted Update", func() {
+		tv := testvars.New(s.T())
+		tv = s.startWorkflow(tv)
+
+		wtHandlerCalls := 0
+		wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			wtHandlerCalls++
+			switch wtHandlerCalls {
+			case 1:
+				// Completes first WT with empty command list.
+				return nil, nil
+			case 2:
+				res := s.UpdateAcceptCommands(tv, "1")
+				res = append(res, &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+				})
+				return res, nil
+			default:
+				s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+				return nil, nil
+			}
+		}
+
+		msgHandlerCalls := 0
+		msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			msgHandlerCalls++
+			switch msgHandlerCalls {
+			case 1:
+				return nil, nil
+			case 2:
+				return s.UpdateAcceptMessages(tv, task.Messages[0], "1"), nil
+			default:
+				s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+				return nil, nil
+			}
+		}
+
+		poller := &TaskPoller{
+			Client:              s.client,
+			Namespace:           s.namespace,
+			TaskQueue:           tv.TaskQueue(),
+			Identity:            tv.WorkerIdentity(),
+			WorkflowTaskHandler: wtHandler,
+			MessageHandler:      msgHandler,
+			Logger:              s.Logger,
+			T:                   s.T(),
+		}
+
+		// Drain first WT.
+		_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+		s.NoError(err)
+
+		// Send Update request.
+		updateResultCh := s.sendUpdate(NewContext(), tv, "1")
+
+		// Accept Update and complete Workflow.
+		_, err = poller.PollAndProcessWorkflowTask(WithoutRetries)
+		s.NoError(err)
+
+		// Receive Update result.
+		updateResult1 := <-updateResultCh
+		s.Error(updateResult1.err, consts.ErrWorkflowCompleted)
+
+		// Send same Update request again, receiving the same error.
+		updateResultCh = s.sendUpdate(NewContext(), tv, "1")
+		updateResult2 := <-updateResultCh
+		s.Error(updateResult2.err, consts.ErrWorkflowCompleted)
+	})
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
