@@ -30,10 +30,10 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
-var _ Task = (*BackfillHistoryTask)(nil)
+var _ Task = (*SyncVersionedTransitionTask)(nil)
 
 type (
-	BackfillHistoryTask struct {
+	SyncVersionedTransitionTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -46,30 +46,30 @@ type (
 	}
 )
 
-func (a *BackfillHistoryTask) GetKey() Key {
+func (a *SyncVersionedTransitionTask) GetKey() Key {
 	return NewImmediateKey(a.TaskID)
 }
 
-func (a *BackfillHistoryTask) GetTaskID() int64 {
+func (a *SyncVersionedTransitionTask) GetTaskID() int64 {
 	return a.TaskID
 }
 
-func (a *BackfillHistoryTask) SetTaskID(id int64) {
+func (a *SyncVersionedTransitionTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-func (a *BackfillHistoryTask) GetVisibilityTime() time.Time {
+func (a *SyncVersionedTransitionTask) GetVisibilityTime() time.Time {
 	return a.VisibilityTimestamp
 }
 
-func (a *BackfillHistoryTask) SetVisibilityTime(timestamp time.Time) {
+func (a *SyncVersionedTransitionTask) SetVisibilityTime(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 
-func (a *BackfillHistoryTask) GetCategory() Category {
+func (a *SyncVersionedTransitionTask) GetCategory() Category {
 	return CategoryReplication
 }
 
-func (a *BackfillHistoryTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY
+func (a *SyncVersionedTransitionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION
 }

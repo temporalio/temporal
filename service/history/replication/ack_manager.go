@@ -246,8 +246,8 @@ func (p *ackMgrImpl) GetTask(
 			VisibilityTimestamp: time.Unix(0, 0),
 			TaskID:              taskInfo.TaskId,
 		})
-	case enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY:
-		return p.ConvertTask(ctx, &tasks.BackfillHistoryTask{
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
+		return p.ConvertTask(ctx, &tasks.SyncVersionedTransitionTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				taskInfo.GetNamespaceId(),
 				taskInfo.GetWorkflowId(),
@@ -463,8 +463,8 @@ func (p *ackMgrImpl) ConvertTask(
 			task,
 			p.workflowCache,
 		)
-	case *tasks.BackfillHistoryTask:
-		return convertBackfillHistoryReplicationTask(
+	case *tasks.SyncVersionedTransitionTask:
+		return convertSyncVersionedTransitionTask(
 			ctx,
 			p.shardContext,
 			task,

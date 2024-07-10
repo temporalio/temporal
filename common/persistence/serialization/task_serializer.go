@@ -1243,12 +1243,17 @@ func (s *TaskSerializer) replicationBackfillHistoryTaskToProto(
 	backfillHistoryTask *tasks.BackfillHistoryTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    backfillHistoryTask.WorkflowKey.NamespaceID,
-		WorkflowId:     backfillHistoryTask.WorkflowKey.WorkflowID,
-		RunId:          backfillHistoryTask.WorkflowKey.RunID,
-		TaskType:       enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
-		TaskId:         backfillHistoryTask.TaskID,
-		VisibilityTime: timestamppb.New(backfillHistoryTask.VisibilityTimestamp),
+		NamespaceId:         backfillHistoryTask.WorkflowKey.NamespaceID,
+		WorkflowId:          backfillHistoryTask.WorkflowKey.WorkflowID,
+		RunId:               backfillHistoryTask.WorkflowKey.RunID,
+		TaskType:            enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
+		TaskId:              backfillHistoryTask.TaskID,
+		VisibilityTime:      timestamppb.New(backfillHistoryTask.VisibilityTimestamp),
+		VersionedTransition: backfillHistoryTask.VersionedTransition,
+		FirstEventId:        backfillHistoryTask.FirstEventID,
+		NextEventId:         backfillHistoryTask.NextEventID,
+		Version:             backfillHistoryTask.Version,
+		NewRunId:            backfillHistoryTask.NewRunID,
 	}
 }
 
@@ -1267,6 +1272,11 @@ func (s *TaskSerializer) replicationBackfillHistoryTaskFromProto(
 		),
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              backfillHistoryTask.TaskId,
+		VersionedTransition: backfillHistoryTask.VersionedTransition,
+		FirstEventID:        backfillHistoryTask.FirstEventId,
+		NextEventID:         backfillHistoryTask.NextEventId,
+		Version:             backfillHistoryTask.Version,
+		NewRunID:            backfillHistoryTask.NewRunId,
 	}
 }
 

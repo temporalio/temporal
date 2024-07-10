@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -65,7 +66,8 @@ const (
 
 var (
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrUnknownReplicationTask     = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrCorruptedHistoryEventBatch = errors.New("corrupted history event batch, empty events")
 )
 
 type (
@@ -418,7 +420,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 
 		if len(events) == 0 {
 			p.logger.Error("Empty events in a batch")
-			return nil, fmt.Errorf("corrupted history event batch, empty events")
+			return nil, ErrCorruptedHistoryEventBatch
 		}
 		firstEvent := events[0]
 		lastEvent := events[len(events)-1]
@@ -501,7 +503,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 
 			if len(events) == 0 {
 				p.logger.Error("Empty events in a batch")
-				return nil, fmt.Errorf("corrupted history event batch, empty events")
+				return nil, ErrCorruptedHistoryEventBatch
 			}
 			eventBatches = append(eventBatches, events)
 		}
@@ -515,16 +517,17 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
-				NamespaceId:    taskAttributes.GetNamespaceId(),
-				WorkflowId:     taskAttributes.GetWorkflowId(),
-				RunId:          taskAttributes.GetRunId(),
-				TaskId:         replicationTask.GetSourceTaskId(),
-				TaskType:       enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
-				FirstEventId:   firstEvent.GetEventId(),
-				NextEventId:    nextEventID,
-				Version:        firstEvent.GetVersion(),
-				VisibilityTime: replicationTask.GetVisibilityTime(),
-				NewRunId:       taskAttributes.GetNewRunId(),
+				NamespaceId:         taskAttributes.GetNamespaceId(),
+				WorkflowId:          taskAttributes.GetWorkflowId(),
+				RunId:               taskAttributes.GetRunId(),
+				TaskId:              replicationTask.GetSourceTaskId(),
+				TaskType:            enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
+				FirstEventId:        firstEvent.GetEventId(),
+				NextEventId:         nextEventID,
+				Version:             firstEvent.GetVersion(),
+				VisibilityTime:      replicationTask.GetVisibilityTime(),
+				NewRunId:            taskAttributes.GetNewRunId(),
+				VersionedTransition: taskAttributes.VersionedTransition,
 				// BranchToken & NewRunBranchToken should also be populated but are deprecated
 			},
 		}, nil

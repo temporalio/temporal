@@ -154,6 +154,10 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
+	case *serviceerrors.SyncState:
+		// TODO: call SyncState.
+
+		return e.Execute()
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),

@@ -235,11 +235,13 @@ func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
 	if err != nil {
 		return err
 	}
-
 	if namespaceEntry.FailoverVersion() < request.VersionedHistory.NamespaceFailoverVersion {
-		// TODO: trigger SyncState.
-		// TODO: should we retry?
-		return nil
+		return serviceerrors.NewSyncState(
+			mutableStateMissingMessage,
+			request.NamespaceID,
+			request.WorkflowID,
+			request.RunID,
+		)
 	}
 
 	task, err := newReplicationTaskFromBatch(

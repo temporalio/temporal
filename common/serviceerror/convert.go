@@ -57,6 +57,8 @@ func FromStatus(st *status.Status) error {
 			return newShardOwnershipLost(st, errDetails)
 		case *errordetails.RetryReplicationFailure:
 			return newRetryReplication(st, errDetails)
+		case *errordetails.SyncStateFailure:
+			return newSyncState(st, errDetails)
 		}
 	case codes.Unavailable:
 		switch errDetails.(type) {
