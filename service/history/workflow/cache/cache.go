@@ -84,13 +84,17 @@ type (
 		) (workflow.Context, ReleaseCacheFunc, error)
 	}
 
-	CacheImpl struct {
+	cacheImpl struct {
 		cache.Cache
 
+		logger                    log.Logger
 		nonUserContextLockTimeout time.Duration
 	}
+	cacheItem struct {
+		wfContext workflow.Context
+	}
 
-	NewCacheFn func(config *configs.Config, handler metrics.Handler) Cache
+	NewCacheFn func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache
 
 	Key struct {
 		// Those are exported because some unit tests uses the cache directly.
@@ -113,6 +117,7 @@ const (
 
 func NewHostLevelCache(
 	config *configs.Config,
+	logger log.Logger,
 	handler metrics.Handler,
 ) Cache {
 	maxSize := config.HistoryHostLevelCacheMaxSize()
@@ -123,12 +128,14 @@ func NewHostLevelCache(
 		maxSize,
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
+		logger,
 		handler,
 	)
 }
 
 func NewShardLevelCache(
 	config *configs.Config,
+	logger log.Logger,
 	handler metrics.Handler,
 ) Cache {
 	maxSize := config.HistoryShardLevelCacheMaxSize()
@@ -139,6 +146,7 @@ func NewShardLevelCache(
 		maxSize,
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
+		logger,
 		handler,
 	)
 }
@@ -147,19 +155,21 @@ func newCache(
 	size int,
 	ttl time.Duration,
 	nonUserContextLockTimeout time.Duration,
+	logger log.Logger,
 	handler metrics.Handler,
 ) Cache {
 	opts := &cache.Options{}
 	opts.TTL = ttl
 	opts.Pin = true
 
-	return &CacheImpl{
+	return &cacheImpl{
 		Cache:                     cache.NewWithMetrics(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
+		logger:                    logger,
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }
 
-func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
+func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
 	shardContext shard.Context,
 	namespaceID namespace.ID,
@@ -201,7 +211,7 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 	return weReleaseFn, err
 }
 
-func (c *CacheImpl) GetOrCreateWorkflowExecution(
+func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
 	shardContext shard.Context,
 	namespaceID namespace.ID,
@@ -237,7 +247,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	return weCtx, weReleaseFunc, err
 }
 
-func (c *CacheImpl) Put(
+func (c *cacheImpl) Put(
 	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
@@ -245,16 +255,17 @@ func (c *CacheImpl) Put(
 	handler metrics.Handler,
 ) (workflow.Context, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	existing, err := c.PutIfNotExist(cacheKey, workflowCtx)
+	item := &cacheItem{wfContext: workflowCtx}
+	existing, err := c.PutIfNotExist(cacheKey, item)
 	if err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
 		return nil, err
 	}
 	//nolint:revive
-	return existing.(workflow.Context), nil
+	return existing.(*cacheItem).wfContext, nil
 }
 
-func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
+func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	shardContext shard.Context,
 	namespaceID namespace.ID,
@@ -264,8 +275,12 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	lockPriority locks.Priority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
-	if !cacheHit {
+	item, cacheHit := c.Get(cacheKey).(*cacheItem)
+
+	var workflowCtx workflow.Context
+	if cacheHit {
+		workflowCtx = item.wfContext
+	} else {
 		metrics.CacheMissCounter.With(handler).Record(1)
 		workflowCtx = workflow.NewContext(
 			shardContext.GetConfig(),
@@ -295,7 +310,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	return workflowCtx, releaseFunc, nil
 }
 
-func (c *CacheImpl) lockWorkflowExecution(
+func (c *cacheImpl) lockWorkflowExecution(
 	ctx context.Context,
 	workflowCtx workflow.Context,
 	cacheKey Key,
@@ -327,7 +342,7 @@ func (c *CacheImpl) lockWorkflowExecution(
 	return nil
 }
 
-func (c *CacheImpl) makeReleaseFunc(
+func (c *cacheImpl) makeReleaseFunc(
 	cacheKey Key,
 	shardContext shard.Context,
 	context workflow.Context,
@@ -370,7 +385,7 @@ func (c *CacheImpl) makeReleaseFunc(
 	}
 }
 
-func (c *CacheImpl) validateWorkflowExecutionInfo(
+func (c *cacheImpl) validateWorkflowExecutionInfo(
 	ctx context.Context,
 	shardContext shard.Context,
 	namespaceID namespace.ID,
@@ -403,7 +418,7 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	return nil
 }
 
-func (c *CacheImpl) validateWorkflowID(
+func (c *cacheImpl) validateWorkflowID(
 	workflowID string,
 ) error {
 	if workflowID == "" {
@@ -415,6 +430,23 @@ func (c *CacheImpl) validateWorkflowID(
 		return serviceerror.NewNotFound("Workflow not exists.")
 	}
 
+	return nil
+}
+
+func (c *cacheItem) CacheSize() int {
+	if sg, ok := c.wfContext.(cache.SizeGetter); ok {
+		return sg.CacheSize()
+	}
+	return 0
+}
+
+func (c *cacheItem) OnPut() error {
+	// TODO: will be used in follow-up PR
+	return nil
+}
+
+func (c *cacheItem) OnEvict() error {
+	// TODO: will be used in follow-up PR
 	return nil
 }
 

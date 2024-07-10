@@ -58,7 +58,7 @@ type Cache interface {
 	Size() int
 }
 
-// Options control the behavior of the cache
+// Options control the behavior of the cache.
 type Options struct {
 	// TTL controls the time-to-live for a given cache entry.  Cache entries that
 	// are older than the TTL will not be returned.
@@ -71,7 +71,7 @@ type Options struct {
 	TimeSource clock.TimeSource
 }
 
-// SimpleOptions provides options that can be used to configure SimpleCache
+// SimpleOptions provides options that can be used to configure SimpleCache.
 type SimpleOptions struct {
 	// RemovedFunc is an optional function called when an element
 	// is scheduled for deletion
@@ -84,7 +84,7 @@ type SimpleOptions struct {
 // deletion, Cache calls go f(i)
 type RemovedFunc func(interface{})
 
-// Iterator represents the interface for cache iterators
+// Iterator represents the interface for cache iterators.
 type Iterator interface {
 	// Close closes the iterator
 	// and releases any allocated resources
@@ -95,7 +95,7 @@ type Iterator interface {
 	Next() Entry
 }
 
-// Entry represents a key-value entry within the map
+// Entry represents a key-value entry within the map.
 type Entry interface {
 	// Key represents the key
 	Key() interface{}
@@ -103,4 +103,14 @@ type Entry interface {
 	Value() interface{}
 	// CreateTime represents the time when the entry is created
 	CreateTime() time.Time
+}
+
+// PutCallback has a callback that is invoked when being written to the cache.
+type PutCallback interface {
+	OnPut() error
+}
+
+// EvictCallback has a callback that is invoked when being evicted from the cache.
+type EvictCallback interface {
+	OnEvict() error
 }
