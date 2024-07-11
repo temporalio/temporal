@@ -65,5 +65,8 @@ type (
 
 		// Burst returns the burst for this rate limiter
 		Burst() int
+
+		// TokensAt returns the number of tokens that will be available at time t
+		TokensAt(t time.Time) int
 	}
 )

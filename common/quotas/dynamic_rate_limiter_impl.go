@@ -161,3 +161,7 @@ func (d *DynamicRateLimiterImpl) maybeRefresh() {
 		// noop
 	}
 }
+
+func (d *DynamicRateLimiterImpl) TokensAt(t time.Time) int {
+	return d.rateLimiter.TokensAt(t)
+}
