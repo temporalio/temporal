@@ -25,24 +25,18 @@
 package cache
 
 import (
-	"go.temporal.io/server/common/log"
-
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/workflow"
 )
 
-var Module = fx.Options(
-	fx.Provide(func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache {
-		return NewHostLevelCache(config, logger, handler)
-	}),
-	fx.Provide(NewCacheFnProvider),
-)
+// GetMutableState returns the MutableState for the given key from the cache.
+// Exported for testing purposes.
+func GetMutableState(cache Cache, key Key) workflow.MutableState {
+	return cache.(*cacheImpl).Get(key).(*cacheItem).wfContext.(*workflow.ContextImpl).MutableState
+}
 
-// NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.
-func NewCacheFnProvider() NewCacheFn {
-	return func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache {
-		return NewShardLevelCache(config, logger, handler)
-	}
+// PutContextIfNotExist puts the given workflow Context into the cache, if it doens't already exist.
+// Exported for testing purposes.
+func PutContextIfNotExist(cache Cache, key Key, value workflow.Context) error {
+	_, err := cache.(*cacheImpl).PutIfNotExist(key, &cacheItem{wfContext: value})
+	return err
 }
