@@ -13,6 +13,18 @@ on:
       commit:
         description: "Commit SHA"
         required: true
+      run_single_functional_test:
+        description: "Whether to run a single test. If so, the rest of the input fields are required."
+        type: boolean
+        default: false
+      n_runs:
+        description: "Number of times to repeat the single test"
+        type: number
+        default: 1
+      test_name:
+        description: "Name of the test suite to run, include -testify.m flag here if desired (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite -testify.m=TestUpdateWorkflow')"
+        type: string
+
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: run-tests-${{ github.head_ref || github.run_id }}
@@ -50,6 +62,17 @@ jobs:
 
       - run: make build-tests
 
+      - name: build functional test matrix
+        id: json
+        run: |
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then shard_index='{ "shard_index": [0] }'; else shard_index='{ "shard_index": [0, 1, 2] }'; fi
+          echo "shard_index=$shard_index" >> "$GITHUB_OUTPUT"
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then total_shards=1; else total_shards=3; fi
+          echo "total_shards=$total_shards" >> "$GITHUB_OUTPUT"
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"; fi
+          echo "single_test_args=$single_test_args" >> "$GITHUB_OUTPUT"
+
+
   cache-docker-images:
     name: Cache Docker images
     strategy:
@@ -70,6 +93,7 @@ jobs:
       - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
 
   unit-test:
+    if: ${{ inputs.run_single_functional_test }} == 'false'
     name: Unit test
     needs: misc-checks
     strategy:
@@ -97,6 +121,7 @@ jobs:
         run: make upload-test-results
 
   integration-test:
+    if: ${{ inputs.run_single_functional_test }} == 'false'
     name: Integration test
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -144,7 +169,7 @@ jobs:
       matrix:
         runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
-        shard_index: [0, 1, 2]
+        shard_index: ${{ fromJson(needs.misc-checks.outputs.shard_index) }}
         include:
           - name: cass_es
             persistence_type: nosql
@@ -172,10 +197,11 @@ jobs:
             containers: [postgresql]
     runs-on: ${{ matrix.runs-on }}
     env:
-      TEST_TOTAL_SHARDS: 3
+      TEST_TOTAL_SHARDS: ${{ needs.misc-checks.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      SINGLE_TEST_ARGS: ${{ needs.misc-checks.outputs.single_test_args }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         with:
@@ -210,6 +236,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-xdc:
+    if: ${{ inputs.run_single_functional_test }} == 'false'
     name: Functional test xdc
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -277,6 +304,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-ndc:
+    if: ${{ inputs.run_single_functional_test }} == 'false'
     name: Functional test ndc
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -339,6 +367,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   test-status:
+    if: ${{ inputs.run_single_functional_test }} == 'false'
     name: Test Status
     needs:
       - unit-test
@@ -347,7 +376,6 @@ jobs:
       - functional-test-xdc
       - functional-test-ndc
     runs-on: ubuntu-20.04
-    if: always()
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}
     steps:
