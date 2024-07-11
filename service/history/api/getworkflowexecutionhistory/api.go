@@ -62,21 +62,22 @@ func Invoke(
 		return nil, err
 	}
 
-	// this function returns the following 7 things,
+	// this function returns the following 8 things:
 	// 1. the current branch token (to use to retrieve history events)
 	// 2. the workflow run ID
 	// 3. the last first event ID (the event ID of the last batch of events in the history)
 	// 4. the last first event transaction id
 	// 5. the next event ID
 	// 6. whether the workflow is running
-	// 7. error if any
+	// 7. transient/speculative workflow task info
+	// 8. error if any
 	queryHistory := func(
 		namespaceUUID namespace.ID,
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
 		versionHistoryItem *historyspb.VersionHistoryItem,
-	) ([]byte, string, int64, int64, bool, *historyspb.VersionHistoryItem, error) {
+	) ([]byte, string, int64, int64, bool, *historyspb.VersionHistoryItem, *historyspb.TransientWorkflowTaskInfo, error) {
 		response, err := api.GetOrPollMutableState(
 			ctx,
 			shardContext,
@@ -91,17 +92,17 @@ func Invoke(
 			eventNotifier,
 		)
 		if err != nil {
-			return nil, "", 0, 0, false, nil, err
+			return nil, "", 0, 0, false, nil, nil, err
 		}
 
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
 		if err != nil {
-			return nil, "", 0, 0, false, nil, err
+			return nil, "", 0, 0, false, nil, nil, err
 		}
 		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 		if err != nil {
-			return nil, "", 0, 0, false, nil, err
+			return nil, "", 0, 0, false, nil, nil, err
 		}
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
@@ -109,6 +110,7 @@ func Invoke(
 			response.GetNextEventId(),
 			isWorkflowRunning,
 			lastVersionHistoryItem,
+			response.GetTransientWorkflowTask(),
 			nil
 	}
 
@@ -140,7 +142,7 @@ func Invoke(
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, err =
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.TransientWorkflowTask, err =
 				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem)
 			if err != nil {
 				return nil, err
@@ -154,7 +156,7 @@ func Invoke(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, err =
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.TransientWorkflowTask, err =
 			queryHistory(namespaceID, execution, queryNextEventID, nil, nil)
 		if err != nil {
 			return nil, err

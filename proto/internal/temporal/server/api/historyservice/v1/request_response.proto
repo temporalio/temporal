@@ -160,6 +160,7 @@ message GetMutableStateResponse {
     string inherited_build_id = 23;
     repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 26;
 }
 
 message PollMutableStateRequest {
