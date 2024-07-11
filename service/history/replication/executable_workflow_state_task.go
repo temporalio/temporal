@@ -82,6 +82,7 @@ func NewExecutableWorkflowStateTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			priority,
+			nil,
 		),
 		req: &historyservice.ReplicateWorkflowStateRequest{
 			NamespaceId:   namespaceID,

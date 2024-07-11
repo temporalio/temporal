@@ -300,6 +300,20 @@ func (mr *MockRegistryMockRecorder) GetPingChecks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPingChecks", reflect.TypeOf((*MockRegistry)(nil).GetPingChecks))
 }
 
+// RefreshSingleCacheKey mocks base method.
+func (m *MockRegistry) RefreshSingleCacheKey(namespaceName Name, namespaceId ID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshSingleCacheKey", namespaceName, namespaceId)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshSingleCacheKey indicates an expected call of RefreshSingleCacheKey.
+func (mr *MockRegistryMockRecorder) RefreshSingleCacheKey(namespaceName, namespaceId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshSingleCacheKey", reflect.TypeOf((*MockRegistry)(nil).RefreshSingleCacheKey), namespaceName, namespaceId)
+}
+
 // RegisterStateChangeCallback mocks base method.
 func (m *MockRegistry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn) {
 	m.ctrl.T.Helper()
