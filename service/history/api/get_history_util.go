@@ -222,6 +222,7 @@ func GetHistory(
 	return executionHistory, nextPageToken, nil
 }
 
+// TODO: need transient support too
 func GetHistoryReverse(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
