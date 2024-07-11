@@ -238,14 +238,29 @@ func GetMutableState(
 func MutableStateToGetResponse(
 	mutableState workflow.MutableState,
 ) (*historyservice.GetMutableStateResponse, error) {
-	currentBranchToken, err := mutableState.GetCurrentBranchToken()
-	if err != nil {
+	// NOTE: fields of GetMutableStateResponse (returned value) are accessed outside of workflow lock
+	// and, therefore, MUST be copied by value from mutableState fields.
+
+	var currentBranchToken []byte
+	if cbt, err := mutableState.GetCurrentBranchToken(); err != nil {
 		return nil, err
+	} else {
+		currentBranchToken = make([]byte, len(cbt))
+		copy(currentBranchToken, cbt)
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
+
+	var mostRecentWorkerVersionStamp *commonpb.WorkerVersionStamp
+	if mrwvs := mutableState.GetExecutionInfo().GetMostRecentWorkerVersionStamp(); mrwvs != nil {
+		mostRecentWorkerVersionStamp = &commonpb.WorkerVersionStamp{
+			BuildId:       mrwvs.GetBuildId(),
+			UseVersioning: mrwvs.GetUseVersioning(),
+		}
+	}
+
 	return &historyservice.GetMutableStateResponse{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: mutableState.GetExecutionInfo().WorkflowId,
@@ -276,6 +291,6 @@ func MutableStateToGetResponse(
 		FirstExecutionRunId:          executionInfo.FirstExecutionRunId,
 		AssignedBuildId:              mutableState.GetAssignedBuildId(),
 		InheritedBuildId:             mutableState.GetInheritedBuildId(),
-		MostRecentWorkerVersionStamp: executionInfo.GetMostRecentWorkerVersionStamp(),
+		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 	}, nil
 }
