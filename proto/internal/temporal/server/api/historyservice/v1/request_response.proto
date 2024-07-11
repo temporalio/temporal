@@ -918,7 +918,7 @@ message CompleteNexusOperationRequest {
 message CompleteNexusOperationResponse {
 }
 
-message InvokeStateMachineTaskRequest {
+message InvokeStateMachineMethodRequest {
     // TODO(Tianyu): This is the same as NexusOperationsCompletion but obviously is not about Nexus. This is because
     // State machine signaling is a generalization of the Nexus mechanisms. Perhaps eventually they should be merged.
     // Namespace UUID.
@@ -931,14 +931,10 @@ message InvokeStateMachineTaskRequest {
     // staleness checks.
     temporal.server.api.persistence.v1.StateMachineRef ref = 4;
 
-    string task_type = 5;
-    // TODO(Tianyu): Any reason to make it a payload?
-    // The signal to send to the state machine
-    bytes task = 6;
+    string method_name = 5;
+    bytes input = 6;
 }
 
-message InvokeStateMachineTaskResponse {
-    // Return value of the state machine signal, if any
-    // TODO(Tianyu): Any reason to make it a payload?
+message InvokeStateMachineMethodResponse {
     bytes response = 1;
 }

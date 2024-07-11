@@ -395,15 +395,15 @@ func (c *retryableClient) ImportWorkflowExecution(
 	return resp, err
 }
 
-func (c *retryableClient) InvokeStateMachineTask(
+func (c *retryableClient) InvokeStateMachineMethod(
 	ctx context.Context,
-	request *historyservice.InvokeStateMachineTaskRequest,
+	request *historyservice.InvokeStateMachineMethodRequest,
 	opts ...grpc.CallOption,
-) (*historyservice.InvokeStateMachineTaskResponse, error) {
-	var resp *historyservice.InvokeStateMachineTaskResponse
+) (*historyservice.InvokeStateMachineMethodResponse, error) {
+	var resp *historyservice.InvokeStateMachineMethodResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.InvokeStateMachineTask(ctx, request, opts...)
+		resp, err = c.client.InvokeStateMachineMethod(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

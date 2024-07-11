@@ -56,6 +56,19 @@ func (notRegisteredError) IsTerminalTaskError() bool {
 	return true
 }
 
+type RemoteExecutor[I any, O any] func(ctx context.Context, env Environment, ref Ref, input I) (O, error)
+
+type RemoteMethod[I any, O any] interface {
+	Name() string
+	SerializeOutput(output O) ([]byte, error)
+	DeserializeInput(data []byte) (I, error)
+}
+
+type RemoteMethodDefinition[I any, O any] struct {
+	method   RemoteMethod[I, O]
+	executor RemoteExecutor[I, O]
+}
+
 // Registry maintains a mapping from state machine type to a [StateMachineDefinition] and task type to [TaskSerializer].
 // Registry methods are **not** protected by a lock and all registration is expected to happen in a single thread on
 // startup for performance reasons.
@@ -143,31 +156,25 @@ func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T
 	return nil
 }
 
-// RegisterRemoteExecutor registers an [RemoteExecutor] for the given task type.
+// RegisterRemoteMethod registers an [RemoteExecutor] for the given remote method definition.
 // Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
-func RegisterRemoteExecutor[T Task](r *Registry, executor RemoteExecutor[T]) error {
-	var task T
-	taskType := task.Type()
+func RegisterRemoteMethod[I any, O any, R RemoteMethod[I, O]](r *Registry, executor RemoteExecutor[I, O]) error {
+	var method R
+	methodName := method.Name()
 	// The executors are registered in pairs, so only need to check in one map.
-	if existing, ok := r.remoteExecutors[taskType]; ok {
+	if existing, ok := r.remoteExecutors[methodName]; ok {
 		return fmt.Errorf(
 			"%w: executor already registered for task type %v: %v",
 			ErrDuplicateRegistration,
-			taskType,
+			methodName,
 			existing,
 		)
 	}
-	// TODO(bergundy): Concurrent may be dependent on the task's state, this solution isn't failsafe.
-	if task.Concurrent() {
-		if _, ok := Task(task).(ConcurrentTask); !ok {
-			return fmt.Errorf(
-				"%w: %q does not implement ConcurrentTask interface",
-				ErrConcurrentTaskNotImplemented,
-				taskType,
-			)
-		}
+
+	r.remoteExecutors[methodName] = RemoteMethodDefinition[I, O]{
+		method:   method,
+		executor: executor,
 	}
-	r.remoteExecutors[taskType] = executor
 	return nil
 }
 
@@ -240,41 +247,45 @@ func (r *Registry) execute(
 	return nil
 }
 
-// ExecuteRemoteTask gets an [RemoteExecutor] from the registry and invokes it.
+// ExecuteRemoteMethod gets an [RemoteExecutor] from the registry and invokes it.
 // Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
-func (r *Registry) ExecuteRemoteTask(
+func (r *Registry) ExecuteRemoteMethod(
 	ctx context.Context,
 	env Environment,
 	ref Ref,
 	taskType string,
-	serializedTask []byte,
+	serializedInput []byte,
 ) ([]byte, error) {
-	executor, ok := r.remoteExecutors[taskType]
+	defnRaw, ok := r.remoteExecutors[taskType]
 	if !ok {
-		return nil, fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, taskType)
-	}
-	serializer, ok := r.tasks[taskType]
-	if !ok {
-		return nil, fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, taskType)
+		return nil, fmt.Errorf("%w: executor for remote method %v", ErrNotRegistered, taskType)
 	}
 
-	// TODO(Tianyu): A new kind required?
-	task, err := serializer.Deserialize(serializedTask, TaskKindOutbound{})
+	defn := defnRaw.(RemoteMethodDefinition[any, any])
+
+	input, err := defn.method.DeserializeInput(serializedInput)
 	if err != nil {
-		return nil, fmt.Errorf("%w: executor for task type %v", ErrSerializationFailed, taskType)
+		return nil, fmt.Errorf("%w: executor for remote method %v", ErrSerializationFailed, taskType)
 	}
 
-	fn := reflect.ValueOf(executor)
+	fn := reflect.ValueOf(defn.executor)
 	values := fn.Call(
 		[]reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.ValueOf(env),
 			reflect.ValueOf(ref),
-			reflect.ValueOf(task),
+			reflect.ValueOf(input),
 		},
 	)
-	//nolint:revive // type cast result is unchecked
-	return values[0].Interface().([]byte), values[1].Interface().(error)
+	if !values[1].IsNil() {
+		return nil, values[1].Interface().(error)
+	}
+
+	output, err := defn.method.SerializeOutput(values[0].Interface())
+	if err != nil {
+		return nil, fmt.Errorf("%w: executor for remote method %v", ErrSerializationFailed, taskType)
+	} //nolint:revive // type cast result is unchecked
+	return output, nil
 }
 
 // ExecuteTimerTask gets a [TimerExecutor] from the registry and invokes it.

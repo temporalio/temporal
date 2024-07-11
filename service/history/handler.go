@@ -2364,7 +2364,7 @@ func validateTaskToken(taskToken *tokenspb.Task) error {
 	return nil
 }
 
-func (h *Handler) InvokeStateMachineTask(ctx context.Context, request *historyservice.InvokeStateMachineTaskRequest) (_ *historyservice.InvokeStateMachineTaskResponse, retErr error) {
+func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *historyservice.InvokeStateMachineMethodRequest) (_ *historyservice.InvokeStateMachineMethodResponse, retErr error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
 	h.startWG.Wait()
 
@@ -2389,12 +2389,12 @@ func (h *Handler) InvokeStateMachineTask(ctx context.Context, request *historyse
 		StateMachineRef: request.Ref,
 	}
 
-	bytes, err := registry.ExecuteRemoteTask(ctx, engine.StateMachineEnvironment(), ref, request.TaskType, request.Task)
+	bytes, err := registry.ExecuteRemoteMethod(ctx, engine.StateMachineEnvironment(), ref, request.MethodName, request.Input)
 	// TODO(Tianyu): convert error?
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	return &historyservice.InvokeStateMachineTaskResponse{
+	return &historyservice.InvokeStateMachineMethodResponse{
 		Response: bytes,
 	}, nil
 }

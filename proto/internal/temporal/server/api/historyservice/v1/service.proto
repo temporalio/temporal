@@ -355,6 +355,6 @@ service HistoryService {
     rpc CompleteNexusOperation (CompleteNexusOperationRequest) returns (CompleteNexusOperationResponse) {
     }
 
-    rpc InvokeStateMachineTask (InvokeStateMachineTaskRequest) returns (InvokeStateMachineTaskResponse) {
+    rpc InvokeStateMachineMethod (InvokeStateMachineMethodRequest) returns (InvokeStateMachineMethodResponse) {
     }
 }
