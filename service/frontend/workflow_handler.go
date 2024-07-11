@@ -2488,7 +2488,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 
 	queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(request.TaskToken)
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	if queryTaskToken.GetTaskQueue() == "" || queryTaskToken.GetTaskId() == "" {
 		return nil, errInvalidTaskToken
@@ -4382,7 +4382,7 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// NamespaceValidatorInterceptor does this for us.
 	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	if tt.GetTaskQueue() == "" || tt.GetTaskId() == "" {
 		return nil, errInvalidTaskToken
@@ -4423,7 +4423,7 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	// NamespaceValidatorInterceptor does this for us.
 	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	if tt.GetTaskQueue() == "" || tt.GetTaskId() == "" {
 		return nil, errInvalidTaskToken

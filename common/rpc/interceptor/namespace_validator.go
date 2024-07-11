@@ -343,7 +343,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req inter
 	if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
 		taskToken, err := ni.tokenSerializer.DeserializeQueryTaskToken(taskTokenBytes)
 		if err != nil {
-			return nil, err
+			return nil, errDeserializingToken
 		}
 		namespaceID = namespace.ID(taskToken.GetNamespaceId())
 	} else {
