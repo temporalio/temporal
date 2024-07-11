@@ -30,10 +30,12 @@ import (
 	"sync"
 
 	"github.com/golang/mock/gomock"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -159,6 +161,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 		queueMetricEmitter:  sync.Once{},
+		finalizer:           finalizer.NewFinalizer(t.GetLogger()),
 
 		state:              contextStateAcquired,
 		engineFuture:       future.NewFuture[Engine](),

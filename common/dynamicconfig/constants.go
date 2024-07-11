@@ -1358,6 +1358,12 @@ will temporarily delay closing shards after a membership update, awaiting a
 shard ownership lost error from persistence. If set to zero, shards will not delay closing.
 Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
 	)
+	ShardFinalizerTimeLimit = NewGlobalDurationSetting(
+		"history.shardFinalizerTimeLimit",
+		2*time.Second,
+		`ShardFinalizerTimeLimit configures if and for how long the shard will attempt
+to cleanup any of its associated data, such as workflow contexts. If set to zero, the finalizer is disabled.`,
+	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",
 		false,

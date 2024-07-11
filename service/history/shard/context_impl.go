@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
@@ -71,6 +72,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -118,6 +120,7 @@ type (
 		engineFactory       EngineFactory
 		engineFuture        *future.FutureImpl[Engine]
 		queueMetricEmitter  sync.Once
+		finalizer           *finalizer.Finalizer
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -337,6 +340,10 @@ func (s *ContextImpl) GenerateTaskID() (int64, error) {
 	defer s.wUnlock()
 
 	return s.generateTaskIDLocked()
+}
+
+func (s *ContextImpl) GetFinalizer() *finalizer.Finalizer {
+	return s.finalizer
 }
 
 func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
@@ -1476,6 +1483,10 @@ func (s *ContextImpl) FinishStop() {
 	// an Engine here, we won't ever have one.
 	_ = s.transition(contextRequestFinishStop{})
 
+	s.finalizer.Run(
+		goro.NewAdaptivePool(cclock.NewRealTimeSource(), 5, 15, 10*time.Millisecond, 10),
+		s.config.ShardFinalizerTimeLimit())
+
 	// use a context that we know is cancelled so that this doesn't block
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 
@@ -2079,6 +2090,7 @@ func newContext(
 		ioConcurrency = 1
 	}
 
+	taggedLogger := log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity))
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
@@ -2088,7 +2100,8 @@ func newContext(
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
-		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
+		finalizer:               finalizer.NewFinalizer(taggedLogger),
+		contextTaggedLogger:     taggedLogger,
 		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:           factory,
 		persistenceShardManager: persistenceShardManager,
