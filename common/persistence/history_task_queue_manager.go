@@ -30,6 +30,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
@@ -56,6 +58,8 @@ const (
 	//	- ShardID
 	//	- Blob (a serialized task) <-- when this cannot be deserialized
 	ErrMsgDeserializeHistoryTask = "failed to deserialize history task blob"
+	// ErrMsgFailedToParseCategoryID is returned when category id cannot be parsed as an integer value.
+	ErrMsgFailedToParseCategoryID = "failed to parse category id from queue name"
 )
 
 var (
@@ -64,6 +68,7 @@ var (
 	ErrEnqueueTaskRequestTaskIsNil  = errors.New("enqueue task request task is nil")
 	ErrQueueAlreadyExists           = errors.New("queue already exists")
 	ErrShardIDInvalid               = errors.New("shard ID must be greater than 0")
+	ErrInvalidQueueName             = errors.New("invalid queue name, expected 4 fields")
 )
 
 func NewHistoryTaskQueueManager(queue QueueV2, serializer serialization.Serializer) *HistoryTaskQueueManagerImpl {
@@ -265,4 +270,16 @@ func GetHistoryTaskQueueName(
 ) string {
 	hash := combineUnique(sourceCluster, targetCluster)[:clusterNamesHashSuffixLength]
 	return fmt.Sprintf("%d_%s_%s_%s", categoryID, sourceCluster, targetCluster, hash)
+}
+
+func GetHistoryTaskQueueCategoryID(queueName string) (int, error) {
+	fields := strings.Split(queueName, "_")
+	if len(fields) != 4 {
+		return 0, fmt.Errorf("%w: %s", ErrInvalidQueueName, queueName)
+	}
+	category, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return 0, fmt.Errorf("%v: %w", ErrMsgFailedToParseCategoryID, err)
+	}
+	return category, nil
 }

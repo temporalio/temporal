@@ -154,7 +154,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.version).Return(mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -537,6 +537,14 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 		err := s.execute(&tasks.DeleteExecutionVisibilityTask{
 			WorkflowKey:                    workflowKey,
 			CloseExecutionVisibilityTaskID: 0,
+		})
+		s.Assert().NoError(err)
+	})
+	s.Run("WorkflowCloseTime=1970-01-01T00:00:00Z", func() {
+		s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
+		err := s.execute(&tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey: workflowKey,
+			CloseTime:   time.Unix(0, 0).UTC(),
 		})
 		s.Assert().NoError(err)
 	})

@@ -45,7 +45,6 @@ type TLSFunctionalSuite struct {
 
 func (s *TLSFunctionalSuite) SetupSuite() {
 	s.setupSuite("testdata/tls_cluster.yaml")
-
 }
 
 func (s *TLSFunctionalSuite) TearDownSuite() {
@@ -53,6 +52,8 @@ func (s *TLSFunctionalSuite) TearDownSuite() {
 }
 
 func (s *TLSFunctionalSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -67,7 +68,9 @@ func (s *TLSFunctionalSuite) SetupTest() {
 }
 
 func (s *TLSFunctionalSuite) TearDownTest() {
-	s.sdkClient.Close()
+	if s.sdkClient != nil {
+		s.sdkClient.Close()
+	}
 }
 
 func (s *TLSFunctionalSuite) TestGRPCMTLS() {

@@ -225,10 +225,6 @@ func (adh *AdminHandler) Start() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
-
-	// Start namespace replication queue cleanup
-	// If the queue does not start, we can still call stop()
-	adh.namespaceReplicationQueue.Start()
 }
 
 // Stop stops the handler
@@ -240,9 +236,6 @@ func (adh *AdminHandler) Stop() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
-
-	// Calling stop if the queue does not start is ok
-	adh.namespaceReplicationQueue.Stop()
 }
 
 // AddSearchAttributes add search attribute to the cluster.

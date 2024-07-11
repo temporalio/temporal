@@ -68,5 +68,7 @@ func (s *FunctionalTestBaseSuite) TestWithFxOptionsForService() {
 }
 
 func (s *FunctionalTestBaseSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	s.Assertions = require.New(s.T())
 }

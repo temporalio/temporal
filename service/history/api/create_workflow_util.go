@@ -95,7 +95,7 @@ func NewWorkflowWithSignal(
 	// This workflow is created for the hsm attached to it and will not generate actual workflow tasks.
 	// This is a bit of a hacky way to distinguish between a "real" workflow and a top level state machine.
 	// This code will change as the scheduler HSM project progresses.
-	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId)
+	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.StartRequest.Namespace)
 	if hsmOnlyWorkflow {
 		args := schedule.StartScheduleArgs{}
 		if err := sdk.PreferProtoDataConverter.FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
@@ -103,11 +103,12 @@ func NewWorkflowWithSignal(
 		}
 
 		// Key ID is left empty as the scheduler machine is a singleton.
-		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerhsm.NewScheduler(&args))
+		tweakables := shard.GetConfig().HsmSchedulerTweakables(startRequest.StartRequest.Namespace)
+		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerhsm.NewScheduler(&args, &tweakables))
 		if err != nil {
 			return nil, err
 		}
-		err = hsm.MachineTransition(node, func(scheduler schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
+		err = hsm.MachineTransition(node, func(scheduler *schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
 			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
 		})
 		if err != nil {

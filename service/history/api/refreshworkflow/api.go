@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
@@ -50,7 +51,7 @@ func Invoke(
 		ctx,
 		nil,
 		workflowKey,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err

@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
@@ -62,8 +63,9 @@ const NexusCallbackSourceHeader = "Nexus-Callback-Source"
 func EndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	endpointManager persistence.NexusEndpointManager,
-	logger log.Logger,
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) commonnexus.EndpointRegistry {
 	registryConfig := commonnexus.NewEndpointRegistryConfig(dc)
 	return commonnexus.NewEndpointRegistry(
@@ -71,6 +73,7 @@ func EndpointRegistryProvider(
 		matchingClient,
 		endpointManager,
 		logger,
+		metricsHandler,
 	)
 }
 

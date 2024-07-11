@@ -171,6 +171,8 @@ type Config struct {
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
 	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedPropertyFnWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
+	OutboundStandbyTaskMissingEventsDiscardDelay        dynamicconfig.DurationPropertyFnWithDestinationFilter
+	OutboundStandbyTaskMissingEventsDestinationDownErr  dynamicconfig.BoolPropertyFnWithDestinationFilter
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -348,9 +350,11 @@ type Config struct {
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFnWithNamespaceFilter[schedulerhsm.Tweakables]
 }
 
 // NewConfig returns new service config with default values
@@ -486,6 +490,8 @@ func NewConfig(
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),
 		OutboundQueueHostSchedulerMaxTaskRPS:                dynamicconfig.OutboundQueueHostSchedulerMaxTaskRPS.Get(dc),
 		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Get(dc),
+		OutboundStandbyTaskMissingEventsDestinationDownErr:  dynamicconfig.OutboundStandbyTaskMissingEventsDestinationDownErr.Get(dc),
+		OutboundStandbyTaskMissingEventsDiscardDelay:        dynamicconfig.OutboundStandbyTaskMissingEventsDiscardDelay.Get(dc),
 
 		ReplicatorProcessorMaxPollInterval:                  dynamicconfig.ReplicatorProcessorMaxPollInterval.Get(dc),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient.Get(dc),
@@ -634,10 +640,12 @@ func NewConfig(
 		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
 		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
-		SendRawWorkflowHistory:         dynamicconfig.SendRawWorkflowHistory.Get(dc),
-		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
 
 		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
+		HsmSchedulerTweakables:      schedulerhsm.CurrentTweakables.Get(dc),
 	}
 
 	return cfg

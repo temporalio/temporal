@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -614,7 +615,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
 			return 0, nil, err

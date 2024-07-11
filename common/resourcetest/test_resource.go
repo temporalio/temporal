@@ -142,8 +142,6 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 	executionMgr := persistence.NewMockExecutionManager(controller)
 	executionMgr.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
-	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
-	namespaceReplicationQueue.EXPECT().Stop().AnyTimes()
 
 	membershipMonitor := membership.NewMockMonitor(controller)
 	hostInfoProvider := membership.NewMockHostInfoProvider(controller)

@@ -207,6 +207,10 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	_, err = h.HistoryClient.CompleteNexusOperation(ctx, hr)
 	if err != nil {
 		logger.Error("failed to process nexus completion request", tag.Error(err))
+		var namespaceInactiveErr *serviceerror.NamespaceNotActive
+		if errors.As(err, &namespaceInactiveErr) {
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
+		}
 		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
 		}

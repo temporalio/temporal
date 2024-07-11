@@ -51,9 +51,9 @@ const (
 )
 
 type (
-	fileReader interface {
-		Stat(src string) (os.FileInfo, error)
-		ReadFile(src string) ([]byte, error)
+	FileReader interface {
+		GetModTime() (time.Time, error)
+		ReadFile() ([]byte, error)
 	}
 
 	// FileBasedClientConfig is the config for the file based dynamic config client.
@@ -69,13 +69,14 @@ type (
 	fileBasedClient struct {
 		values          atomic.Value // configValueMap
 		logger          log.Logger
-		reader          fileReader
+		reader          FileReader
 		lastUpdatedTime time.Time
 		config          *FileBasedClientConfig
 		doneCh          <-chan interface{}
 	}
 
 	osReader struct {
+		path string
 	}
 
 	// Results of processing and loading dynamic config file contents.
@@ -94,10 +95,14 @@ func ValidateFile(contents []byte) *LoadResult {
 
 // NewFileBasedClient creates a file based client.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
-	return NewFileBasedClientWithReader(&osReader{}, config, logger, doneCh)
+	if config == nil {
+		return nil, errors.New("configuration for dynamic config client is nil")
+	}
+	reader := &osReader{path: config.Filepath}
+	return NewFileBasedClientWithReader(reader, config, logger, doneCh)
 }
 
-func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
+func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
 		logger: logger,
 		reader: reader,
@@ -149,16 +154,16 @@ func (fc *fileBasedClient) init() error {
 // This is public mainly for testing. The update loop will call this periodically, you don't
 // have to call it explicitly.
 func (fc *fileBasedClient) Update() error {
-	info, err := fc.reader.Stat(fc.config.Filepath)
+	modtime, err := fc.reader.GetModTime()
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
-	if !info.ModTime().After(fc.lastUpdatedTime) {
+	if !modtime.After(fc.lastUpdatedTime) {
 		return nil
 	}
-	fc.lastUpdatedTime = info.ModTime()
+	fc.lastUpdatedTime = modtime
 
-	contents, err := fc.reader.ReadFile(fc.config.Filepath)
+	contents, err := fc.reader.ReadFile()
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
@@ -235,7 +240,7 @@ func (fc *fileBasedClient) validateStaticConfig(config *FileBasedClientConfig) e
 	if config == nil {
 		return errors.New("configuration for dynamic config client is nil")
 	}
-	if _, err := fc.reader.Stat(config.Filepath); err != nil {
+	if _, err := fc.reader.GetModTime(); err != nil {
 		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)
 	}
 	if config.PollInterval < minPollInterval {
@@ -468,12 +473,16 @@ func convertYamlConstraints(key string, m map[string]any, precedence Precedence,
 	return cs
 }
 
-func (r *osReader) ReadFile(src string) ([]byte, error) {
-	return os.ReadFile(src)
+func (r *osReader) ReadFile() ([]byte, error) {
+	return os.ReadFile(r.path)
 }
 
-func (r *osReader) Stat(src string) (os.FileInfo, error) {
-	return os.Stat(src)
+func (r *osReader) GetModTime() (time.Time, error) {
+	fi, err := os.Stat(r.path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return fi.ModTime(), nil
 }
 
 func (lr *LoadResult) warn(err error) *LoadResult {

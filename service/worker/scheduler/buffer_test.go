@@ -59,124 +59,124 @@ func TestProcessBuffer(t *testing.T) {
 
 func (s *processBufferSuite) TestProcessBufferEmpty() {
 	buffer := []*job{}
-	action := processBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Nil(action.nonOverlappingStart)
-	s.Empty(action.newBuffer)
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Nil(action.NonOverlappingStart)
+	s.Empty(action.NewBuffer)
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessSkipRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP}}
-	action := processBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Nil(action.nonOverlappingStart)
-	s.Empty(action.newBuffer)
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Nil(action.NonOverlappingStart)
+	s.Empty(action.NewBuffer)
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessSkipNotRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP}}
-	action := processBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Equal(3, action.nonOverlappingStart.id)
-	s.Empty(action.newBuffer)
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Equal(3, action.NonOverlappingStart.id)
+	s.Empty(action.NewBuffer)
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessBufferOneRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE}}
-	action := processBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Nil(action.nonOverlappingStart)
-	s.Equal([]int{3}, jobIds(action.newBuffer))
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Nil(action.NonOverlappingStart)
+	s.Equal([]int{3}, jobIds(action.NewBuffer))
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessBufferOneNotRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE}}
-	action := processBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Equal(3, action.nonOverlappingStart.id)
-	s.Equal([]int{5}, jobIds(action.newBuffer))
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Equal(3, action.NonOverlappingStart.id)
+	s.Equal([]int{5}, jobIds(action.NewBuffer))
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessBufferAllRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL}}
-	action := processBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Nil(action.nonOverlappingStart)
-	s.Equal([]int{3, 5, 7}, jobIds(action.newBuffer))
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Nil(action.NonOverlappingStart)
+	s.Equal([]int{3, 5, 7}, jobIds(action.NewBuffer))
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessBufferAllNotRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL}}
-	action := processBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Equal(3, action.nonOverlappingStart.id)
-	s.Equal([]int{5, 7}, jobIds(action.newBuffer))
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Equal(3, action.NonOverlappingStart.id)
+	s.Equal([]int{5, 7}, jobIds(action.NewBuffer))
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessCancelRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER}}
-	action := processBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Nil(action.nonOverlappingStart)
-	s.Equal([]int{3, 5, 7}, jobIds(action.newBuffer))
-	s.True(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Nil(action.NonOverlappingStart)
+	s.Equal([]int{3, 5, 7}, jobIds(action.NewBuffer))
+	s.True(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessCancelNotRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER}}
-	action := processBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
+	action := ProcessBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
 	// optimization: 3 and 5 don't even get started since they would be immediately cancelled
-	s.Equal(7, action.nonOverlappingStart.id)
-	s.Empty(action.newBuffer)
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	s.Equal(7, action.NonOverlappingStart.id)
+	s.Empty(action.NewBuffer)
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessTerminateRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER}}
-	action := processBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
-	s.Nil(action.nonOverlappingStart)
-	s.Equal([]int{3, 5, 7}, jobIds(action.newBuffer))
-	s.False(action.needCancel)
-	s.True(action.needTerminate)
+	action := ProcessBuffer(buffer, true, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
+	s.Nil(action.NonOverlappingStart)
+	s.Equal([]int{3, 5, 7}, jobIds(action.NewBuffer))
+	s.False(action.NeedCancel)
+	s.True(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessTerminateNotRunning() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER}}
-	action := processBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
-	s.Empty(action.overlappingStarts)
+	action := ProcessBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
+	s.Empty(action.OverlappingStarts)
 	// optimization: 3 and 5 don't even get started since they would be immediately terminated
-	s.Equal(7, action.nonOverlappingStart.id)
-	s.Empty(action.newBuffer)
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	s.Equal(7, action.NonOverlappingStart.id)
+	s.Empty(action.NewBuffer)
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessAllowAll() {
 	buffer := []*job{{3, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL}, {5, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL}, {7, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL}}
-	action := processBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
-	s.Equal([]int{3, 5, 7}, jobIds(action.overlappingStarts))
-	s.Nil(action.nonOverlappingStart)
-	s.Empty(action.newBuffer)
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, false, identity[enumspb.ScheduleOverlapPolicy])
+	s.Equal([]int{3, 5, 7}, jobIds(action.OverlappingStarts))
+	s.Nil(action.NonOverlappingStart)
+	s.Empty(action.NewBuffer)
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 func (s *processBufferSuite) TestProcessWithResolve() {
@@ -184,12 +184,12 @@ func (s *processBufferSuite) TestProcessWithResolve() {
 	terminate := func(enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
 		return enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER
 	}
-	action := processBuffer(buffer, false, terminate)
-	s.Empty(action.overlappingStarts)
-	s.Equal(7, action.nonOverlappingStart.id)
-	s.Empty(action.newBuffer)
-	s.False(action.needCancel)
-	s.False(action.needTerminate)
+	action := ProcessBuffer(buffer, false, terminate)
+	s.Empty(action.OverlappingStarts)
+	s.Equal(7, action.NonOverlappingStart.id)
+	s.Empty(action.NewBuffer)
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
 }
 
 // TODO: add test cases for mixed policies

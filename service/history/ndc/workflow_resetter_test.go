@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -115,7 +116,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler),
 		s.logger,
 	)
 	s.workflowResetter.stateRebuilder = s.mockStateRebuilder
@@ -706,8 +707,8 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	}, nil)
 
 	resetContext := workflow.NewMockContext(s.controller)
-	resetContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
-	resetContext.EXPECT().Unlock(workflow.LockPriorityHigh)
+	resetContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	resetContext.EXPECT().Unlock()
 	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	resetMutableState := workflow.NewMockMutableState(s.controller)
 	resetContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(resetMutableState, nil)
@@ -717,7 +718,8 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	_, _ = s.workflowResetter.workflowCache.(*wcache.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
+	err := wcache.PutContextIfNotExist(s.workflowResetter.workflowCache, resetContextCacheKey, resetContext)
+	s.NoError(err)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()

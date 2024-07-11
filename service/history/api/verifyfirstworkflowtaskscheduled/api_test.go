@@ -39,12 +39,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/api"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -112,7 +113,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) SetupTest() {
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(
 		s.shardContext,
-		wcache.NewHostLevelCache(s.shardContext.GetConfig(), metrics.NoopMetricsHandler))
+		wcache.NewHostLevelCache(s.shardContext.GetConfig(), s.shardContext.GetLogger(), metrics.NoopMetricsHandler))
 	s.mockEventsCache = s.shardContext.MockEventsCache
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = s.shardContext.GetLogger()

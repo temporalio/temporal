@@ -25,6 +25,7 @@
 package dynamicconfig
 
 import (
+	"math"
 	"os"
 	"time"
 
@@ -834,6 +835,18 @@ server hosts for it to take effect.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
+	NexusReadThroughCacheSize = NewGlobalIntSetting(
+		"system.nexusReadThroughCacheSize",
+		100,
+		`The size of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
+used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
+	NexusReadThroughCacheTTL = NewGlobalDurationSetting(
+		"system.nexusReadThroughCacheTTL",
+		30*time.Second,
+		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
+used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
@@ -1096,7 +1109,7 @@ This can help reduce effects of task queue movement.`,
 	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
-		24*365*10*time.Hour,
+		5*time.Second,
 		`MatchingBacklogNegligibleAge if the head of backlog gets older than this we stop sync match and
 forwarding to ensure more equal dispatch order among partitions.`,
 	)
@@ -1646,6 +1659,19 @@ Fields (see gobreaker reference for more details):
   if interval is 0, then it never clears the internal counts (default 0).
 - Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
+	OutboundStandbyTaskMissingEventsDiscardDelay = NewDestinationDurationSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDiscardDelay",
+		// This is effectively equivalent to never discarding outbound tasks since it's 290+ years.
+		time.Duration(math.MaxInt64),
+		`OutboundStandbyTaskMissingEventsDiscardDelay is the equivalent of
+StandbyTaskMissingEventsDiscardDelay for outbound standby task processor.`,
+	)
+	OutboundStandbyTaskMissingEventsDestinationDownErr = NewDestinationBoolSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDestinationDownErr",
+		true,
+		`OutboundStandbyTaskMissingEventsDestinationDownErr enables returning DestinationDownError when
+the outbound standby task failed to be processed due to missing events.`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",
@@ -2125,13 +2151,23 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
-		50,
+		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
 		"history.ReplicationResendMaxBatchCount",
 		10,
 		`Maximum number of resend events batch for a single replication request`,
+	)
+	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
+		"history.workflowIdReuseMinimalInterval",
+		1*time.Second,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
+	)
+	EnableWorkflowIdReuseStartTimeValidation = NewNamespaceBoolSetting(
+		"history.enableWorkflowIdReuseStartTimeValidation",
+		false,
+		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
 
 	// keys for worker
@@ -2375,10 +2411,5 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
-	)
-	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
-		"system.workflowIdReuseMinimalInterval",
-		1*time.Second,
-		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
 )

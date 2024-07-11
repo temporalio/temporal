@@ -59,8 +59,9 @@ const (
 	DCRedirectionRoleTagValue = "dc_redirection"
 	BlobstoreRoleTagValue     = "blobstore"
 
-	MutableStateCacheTypeTagValue = "mutablestate"
-	EventsCacheTypeTagValue       = "events"
+	MutableStateCacheTypeTagValue                     = "mutablestate"
+	EventsCacheTypeTagValue                           = "events"
+	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
@@ -959,6 +960,10 @@ var (
 	DLQWrites                                      = NewCounterDef(
 		"dlq_writes",
 		WithDescription("The number of times a message is enqueued to DLQ. DLQ can be inspected using tdbg dlq command."),
+	)
+	DLQMessageCount = NewGaugeDef(
+		"dlq_message_count",
+		WithDescription("The number of messages currently in DLQ."),
 	)
 	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
 	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")

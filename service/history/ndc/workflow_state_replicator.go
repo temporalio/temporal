@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -118,7 +119,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
@@ -290,7 +291,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		r.shardContext,
 		namespaceID,
 		workflowID,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return common.EmptyEventTaskID, err
