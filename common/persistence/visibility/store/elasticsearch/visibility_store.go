@@ -254,16 +254,10 @@ func (s *VisibilityStore) RecordWorkflowExecutionClosed(
 	request *store.InternalRecordWorkflowExecutionClosedRequest,
 ) error {
 	visibilityTaskKey := GetVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc, err := s.GenerateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	doc, err := s.GenerateClosedESDoc(request, visibilityTaskKey)
 	if err != nil {
 		return err
 	}
-
-	doc[searchattribute.CloseTime] = request.CloseTime
-	doc[searchattribute.ExecutionDuration] = request.ExecutionDuration
-	doc[searchattribute.HistoryLength] = request.HistoryLength
-	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
-	doc[searchattribute.HistorySizeBytes] = request.HistorySizeBytes
 
 	return s.addBulkIndexRequestAndWait(ctx, request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
@@ -943,6 +937,24 @@ func (s *VisibilityStore) GenerateESDoc(
 		}
 		doc[saName] = saValue
 	}
+
+	return doc, nil
+}
+
+func (s *VisibilityStore) GenerateClosedESDoc(
+	request *store.InternalRecordWorkflowExecutionClosedRequest,
+	visibilityTaskKey string,
+) (map[string]interface{}, error) {
+	doc, err := s.GenerateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	if err != nil {
+		return nil, err
+	}
+
+	doc[searchattribute.CloseTime] = request.CloseTime
+	doc[searchattribute.ExecutionDuration] = request.ExecutionDuration
+	doc[searchattribute.HistoryLength] = request.HistoryLength
+	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
+	doc[searchattribute.HistorySizeBytes] = request.HistorySizeBytes
 
 	return doc, nil
 }
