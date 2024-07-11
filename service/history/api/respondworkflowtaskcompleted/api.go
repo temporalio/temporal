@@ -416,7 +416,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// Flush buffer event before terminating the workflow
 			ms.FlushBufferedEvents()
 
-			if err := workflow.TerminateWorkflow(ms, wtFailedCause.causeErr.Error(), nil,
+			if err := workflow.TerminateWorkflow(ms, wtFailedCause.Message(), nil,
 				consts.IdentityHistoryService, false); err != nil {
 				return nil, err
 			}
