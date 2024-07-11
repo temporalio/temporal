@@ -672,7 +672,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ShardC
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() {
 	var rpcAddress = uuid.New()
-	var FrontendHttpAddress = uuid.New()
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 	var recordVersion int64 = 5
@@ -701,7 +700,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() 
 			HistoryShardCount:        16,
 			ClusterId:                clusterId,
 			ClusterAddress:           rpcAddress,
-			HttpAddress:              FrontendHttpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -709,8 +707,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() 
 		Version: recordVersion,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: FrontendHttpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
 }
