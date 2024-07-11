@@ -25,12 +25,7 @@
 package history
 
 import (
-	"net"
-
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/common"
@@ -104,27 +99,9 @@ var Module = fx.Options(
 )
 
 func ServiceProvider(
-	grpcServerOptions []grpc.ServerOption,
-	serviceConfig *configs.Config,
-	visibilityMgr manager.VisibilityManager,
-	handler *Handler,
-	logger log.SnTaggedLogger,
-	grpcListener net.Listener,
-	membershipMonitor membership.Monitor,
-	metricsHandler metrics.Handler,
-	healthServer *health.Server,
+	args ServiceArgs,
 ) *Service {
-	return NewService(
-		grpcServerOptions,
-		serviceConfig,
-		visibilityMgr,
-		handler,
-		logger,
-		grpcListener,
-		membershipMonitor,
-		metricsHandler,
-		healthServer,
-	)
+	return NewService(args)
 }
 
 func ServiceResolverProvider(
