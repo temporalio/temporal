@@ -117,7 +117,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler),
 		s.logger,
 	)
 	s.workflowResetter.stateRebuilder = s.mockStateRebuilder
@@ -724,7 +724,8 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	_, _ = s.workflowResetter.workflowCache.(*wcache.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
+	err := wcache.PutContextIfNotExist(s.workflowResetter.workflowCache, resetContextCacheKey, resetContext)
+	s.NoError(err)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
