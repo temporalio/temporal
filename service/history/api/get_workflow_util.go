@@ -7,8 +7,10 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -352,6 +354,7 @@ func MutableStateToGetResponse(
 	executionInfo := mutableState.GetExecutionInfo()
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
+	currentWorkflowTask := mutableState.GetPendingWorkflowTask()
 
 	var mostRecentWorkerVersionStamp *commonpb.WorkerVersionStamp
 	if mrwvs := mutableState.GetExecutionInfo().GetMostRecentWorkerVersionStamp(); mrwvs != nil {
@@ -360,6 +363,12 @@ func MutableStateToGetResponse(
 			UseVersioning: mrwvs.GetUseVersioning(),
 		}
 	}
+
+	tranOrSpecWFTFromMS := mutableState.GetTransientWorkflowTaskInfo(currentWorkflowTask, "")
+	tranOrSpecWFT := &historyspb.TransientWorkflowTaskInfo{
+		HistorySuffix: make([]*historypb.HistoryEvent, len(tranOrSpecWFTFromMS.GetHistorySuffix())),
+	}
+	copy(tranOrSpecWFT.HistorySuffix, tranOrSpecWFTFromMS.HistorySuffix)
 
 	return &historyservice.GetMutableStateResponse{
 		Execution: &commonpb.WorkflowExecution{
@@ -394,5 +403,6 @@ func MutableStateToGetResponse(
 		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
 		VersioningInfo:               mutableState.GetExecutionInfo().VersioningInfo,
+		TransientWorkflowTask:        tranOrSpecWFTFromMS,
 	}, nil
 }
