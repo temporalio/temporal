@@ -273,8 +273,8 @@ func (s *TaskSerializer) serializeReplicationTask(
 		replicationTask = s.replicationSyncWorkflowStateTaskToProto(task)
 	case *tasks.SyncHSMTask:
 		replicationTask = s.replicationSyncHSMTaskToProto(task)
-	case *tasks.BackfillHistoryTask:
-		replicationTask = s.replicationBackfillHistoryTaskToProto(task)
+	case *tasks.SyncVersionedTransitionTask:
+		replicationTask = s.replicationSyncVersionedTransitionTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 	}
@@ -303,7 +303,7 @@ func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.Re
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
 		return s.replicationSyncHSMTaskFromProto(replicationTask), nil
 	case enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY:
-		return s.replicationBackfillHistoryTaskFromProto(replicationTask), nil
+		return s.replicationSyncVersionedTransitionTaskFromProto(replicationTask), nil
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
 	}
@@ -1239,32 +1239,32 @@ func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) replicationBackfillHistoryTaskToProto(
-	backfillHistoryTask *tasks.BackfillHistoryTask,
+func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
+	backfillHistoryTask *tasks.SyncVersionedTransitionTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:         backfillHistoryTask.WorkflowKey.NamespaceID,
-		WorkflowId:          backfillHistoryTask.WorkflowKey.WorkflowID,
-		RunId:               backfillHistoryTask.WorkflowKey.RunID,
-		TaskType:            enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
-		TaskId:              backfillHistoryTask.TaskID,
-		VisibilityTime:      timestamppb.New(backfillHistoryTask.VisibilityTimestamp),
-		VersionedTransition: backfillHistoryTask.VersionedTransition,
-		FirstEventId:        backfillHistoryTask.FirstEventID,
-		NextEventId:         backfillHistoryTask.NextEventID,
-		Version:             backfillHistoryTask.Version,
-		NewRunId:            backfillHistoryTask.NewRunID,
+		NamespaceId:    backfillHistoryTask.WorkflowKey.NamespaceID,
+		WorkflowId:     backfillHistoryTask.WorkflowKey.WorkflowID,
+		RunId:          backfillHistoryTask.WorkflowKey.RunID,
+		TaskType:       enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
+		TaskId:         backfillHistoryTask.TaskID,
+		VisibilityTime: timestamppb.New(backfillHistoryTask.VisibilityTimestamp),
+		// VersionedTransition: backfillHistoryTask.VersionedTransition,
+		FirstEventId: backfillHistoryTask.FirstEventID,
+		NextEventId:  backfillHistoryTask.NextEventID,
+		Version:      backfillHistoryTask.Version,
+		NewRunId:     backfillHistoryTask.NewRunID,
 	}
 }
 
-func (s *TaskSerializer) replicationBackfillHistoryTaskFromProto(
+func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 	backfillHistoryTask *persistencespb.ReplicationTaskInfo,
-) *tasks.BackfillHistoryTask {
+) *tasks.SyncVersionedTransitionTask {
 	visibilityTimestamp := time.Unix(0, 0)
 	if backfillHistoryTask.VisibilityTime != nil {
 		visibilityTimestamp = backfillHistoryTask.VisibilityTime.AsTime()
 	}
-	return &tasks.BackfillHistoryTask{
+	return &tasks.SyncVersionedTransitionTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			backfillHistoryTask.NamespaceId,
 			backfillHistoryTask.WorkflowId,
@@ -1272,11 +1272,11 @@ func (s *TaskSerializer) replicationBackfillHistoryTaskFromProto(
 		),
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              backfillHistoryTask.TaskId,
-		VersionedTransition: backfillHistoryTask.VersionedTransition,
-		FirstEventID:        backfillHistoryTask.FirstEventId,
-		NextEventID:         backfillHistoryTask.NextEventId,
-		Version:             backfillHistoryTask.Version,
-		NewRunID:            backfillHistoryTask.NewRunId,
+		// VersionedTransition: backfillHistoryTask.VersionedTransition,
+		FirstEventID: backfillHistoryTask.FirstEventId,
+		NextEventID:  backfillHistoryTask.NextEventId,
+		Version:      backfillHistoryTask.Version,
+		NewRunID:     backfillHistoryTask.NewRunId,
 	}
 }
 

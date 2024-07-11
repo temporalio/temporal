@@ -191,14 +191,37 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) MarkPoisonPill() error {
-
-	replicationTaskInfo := e.toReplicationTaskInfo()
-
 	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
+		taskInfo := &persistencespb.ReplicationTaskInfo{
+			NamespaceId:         e.NamespaceID,
+			WorkflowId:          e.WorkflowID,
+			RunId:               e.RunID,
+			TaskId:              e.ExecutableTask.TaskID(),
+			TaskType:            enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
+			VisibilityTime:      timestamppb.New(e.TaskCreationTime()),
+			NewRunId:            e.taskAttr.NewRunId,
+			VersionedTransition: e.taskAttr.VersionedTransition,
+		}
+		events, newRunEvents, err := e.getDeserializedEvents()
+		if err != nil {
+			taskInfo.FirstEventId = -1
+			taskInfo.NextEventId = -1
+			taskInfo.Version = -1
+			e.Logger.Error("MarkPoisonPill reached max attempts, deserialize failed",
+				tag.SourceCluster(e.SourceClusterName()),
+				tag.ReplicationTask(taskInfo),
+				tag.Error(err),
+			)
+			return nil
+		}
+		taskInfo.FirstEventId = events[0][0].GetEventId()
+		taskInfo.NextEventId = events[len(events)-1][len(events[len(events)-1])-1].GetEventId() + 1
+		taskInfo.Version = events[0][0].GetVersion()
 		e.Logger.Error("MarkPoisonPill reached max attempts",
 			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(replicationTaskInfo),
-			tag.NewAnyTag("backfill-history-events-task-attr", e.taskAttr),
+			tag.ReplicationTask(taskInfo),
+			tag.NewAnyTag("NewRunFirstEventId", newRunEvents[0].GetEventId()),
+			tag.NewAnyTag("NewRunLastEventId", newRunEvents[len(newRunEvents)-1].GetEventId()),
 		)
 		return nil
 	}
@@ -212,7 +235,48 @@ func (e *ExecutableBackfillHistoryEventsTask) MarkPoisonPill() error {
 		return err
 	}
 
-	e.Logger.Error("enqueue backfill history events replication task to DLQ",
+	eventBatches := [][]*historypb.HistoryEvent{}
+	for _, eventsBlob := range e.taskAttr.EventBatches {
+		events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+		if err != nil {
+			e.Logger.Error("unable to enqueue sync versioned transition replication task to DLQ, ser/de error",
+				tag.ShardID(shardContext.GetShardID()),
+				tag.WorkflowNamespaceID(e.NamespaceID),
+				tag.WorkflowID(e.WorkflowID),
+				tag.WorkflowRunID(e.RunID),
+				tag.TaskID(e.ExecutableTask.TaskID()),
+				tag.Error(err),
+			)
+			return nil
+		} else if len(events) == 0 {
+			e.Logger.Error("unable to enqueue sync versioned transition replication task to DLQ, no events",
+				tag.ShardID(shardContext.GetShardID()),
+				tag.WorkflowNamespaceID(e.NamespaceID),
+				tag.WorkflowID(e.WorkflowID),
+				tag.WorkflowRunID(e.RunID),
+				tag.TaskID(e.ExecutableTask.TaskID()),
+			)
+			return nil
+		}
+		eventBatches = append(eventBatches, events)
+	}
+
+	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+	taskInfo := &persistencespb.ReplicationTaskInfo{
+		NamespaceId:         e.NamespaceID,
+		WorkflowId:          e.WorkflowID,
+		RunId:               e.RunID,
+		TaskId:              e.ExecutableTask.TaskID(),
+		TaskType:            enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
+		VisibilityTime:      timestamppb.New(e.TaskCreationTime()),
+		NewRunId:            e.taskAttr.NewRunId,
+		VersionedTransition: e.taskAttr.VersionedTransition,
+		FirstEventId:        eventBatches[0][0].GetEventId(),
+		NextEventId:         eventBatches[len(eventBatches)-1][len(eventBatches[len(eventBatches)-1])-1].GetEventId() + 1,
+		Version:             eventBatches[0][0].GetVersion(),
+	}
+
+	e.Logger.Error("enqueue sync versioned transition replication task to DLQ",
 		tag.ShardID(shardContext.GetShardID()),
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),
@@ -223,19 +287,7 @@ func (e *ExecutableBackfillHistoryEventsTask) MarkPoisonPill() error {
 	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), replicationTaskInfo)
-}
-
-func (e *ExecutableBackfillHistoryEventsTask) toReplicationTaskInfo() *persistencespb.ReplicationTaskInfo {
-	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    e.NamespaceID,
-		WorkflowId:     e.WorkflowID,
-		RunId:          e.RunID,
-		TaskType:       enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
-		TaskId:         e.ExecutableTask.TaskID(),
-		VisibilityTime: timestamppb.New(e.TaskCreationTime()),
-	}
+	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {

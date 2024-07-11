@@ -348,14 +348,6 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 				TaskId:      task.TaskID,
 			})
-		case *tasks.BackfillHistoryTask:
-			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
-				NamespaceId: task.NamespaceID,
-				WorkflowId:  task.WorkflowID,
-				RunId:       task.RunID,
-				TaskType:    enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
-				TaskId:      task.TaskID,
-			})
 		default:
 			panic(fmt.Sprintf("Unknown repication task type: %v", task))
 		}
