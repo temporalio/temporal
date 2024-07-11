@@ -60,6 +60,7 @@ var (
 	errNamespaceTooLong           = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
 	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
+	errDeserializingToken         = serviceerror.NewInvalidArgument("Error deserializing task token.")
 
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
@@ -348,7 +349,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req inter
 	} else {
 		taskToken, err := ni.tokenSerializer.Deserialize(taskTokenBytes)
 		if err != nil {
-			return nil, err
+			return nil, errDeserializingToken
 		}
 		namespaceID = namespace.ID(taskToken.GetNamespaceId())
 	}
