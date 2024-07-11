@@ -62,7 +62,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -99,7 +99,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -151,7 +151,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -246,7 +246,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -354,7 +354,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -366,7 +366,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		if !continueAsNewAndSignal {
 			continueAsNewAndSignal = true
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
-			_, err := s.engine.SignalWorkflowExecution(NewContext(),
+			_, err := s.client.SignalWorkflowExecution(NewContext(),
 				&workflowservice.SignalWorkflowExecutionRequest{
 					Namespace: s.namespace,
 					WorkflowExecution: &commonpb.WorkflowExecution{
@@ -400,7 +400,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,

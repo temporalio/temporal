@@ -25,6 +25,7 @@
 package dynamicconfig
 
 import (
+	"math"
 	"os"
 	"time"
 
@@ -1658,6 +1659,19 @@ Fields (see gobreaker reference for more details):
   if interval is 0, then it never clears the internal counts (default 0).
 - Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
+	OutboundStandbyTaskMissingEventsDiscardDelay = NewDestinationDurationSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDiscardDelay",
+		// This is effectively equivalent to never discarding outbound tasks since it's 290+ years.
+		time.Duration(math.MaxInt64),
+		`OutboundStandbyTaskMissingEventsDiscardDelay is the equivalent of
+StandbyTaskMissingEventsDiscardDelay for outbound standby task processor.`,
+	)
+	OutboundStandbyTaskMissingEventsDestinationDownErr = NewDestinationBoolSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDestinationDownErr",
+		true,
+		`OutboundStandbyTaskMissingEventsDestinationDownErr enables returning DestinationDownError when
+the outbound standby task failed to be processed due to missing events.`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",
@@ -2137,7 +2151,7 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
-		50,
+		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(

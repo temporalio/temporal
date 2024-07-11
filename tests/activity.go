@@ -86,7 +86,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -132,7 +132,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 		s.Equal(activityName, task.ActivityType.GetName())
 		for i := 0; i < 10; i++ {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
-			_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+			_, err := s.client.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				Namespace: s.namespace,
 				TaskToken: task.TaskToken,
 				Details:   payloads.EncodeString("details"),
@@ -145,7 +145,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -214,7 +214,7 @@ func (s *FunctionalSuite) TestActivityRetry() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -313,7 +313,7 @@ func (s *FunctionalSuite) TestActivityRetry() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -324,7 +324,7 @@ func (s *FunctionalSuite) TestActivityRetry() {
 	}
 
 	poller2 := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -335,7 +335,7 @@ func (s *FunctionalSuite) TestActivityRetry() {
 	}
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -423,7 +423,7 @@ func (s *FunctionalSuite) TestActivityRetry_Infinite() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -480,7 +480,7 @@ func (s *FunctionalSuite) TestActivityRetry_Infinite() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -526,7 +526,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -579,7 +579,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -628,7 +628,7 @@ func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
@@ -685,7 +685,7 @@ func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 		s.Equal(activityName, task.ActivityType.GetName())
 		for i := 0; i < 10; i++ {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
-			response, err := s.engine.RecordActivityTaskHeartbeat(NewContext(),
+			response, err := s.client.RecordActivityTaskHeartbeat(NewContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
 					Namespace: s.namespace,
 					TaskToken: task.TaskToken,
@@ -702,7 +702,7 @@ func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -719,7 +719,7 @@ func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 	go func() {
 		s.Logger.Info("Trying to cancel the task in a different thread")
 		// Send signal so that worker can send an activity cancel
-		_, err1 := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, err1 := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -771,7 +771,7 @@ func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecutionn", tag.WorkflowRunID(we.GetRunId()))
@@ -829,7 +829,7 @@ func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -845,7 +845,7 @@ func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 	// Send signal so that worker can send an activity cancel
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -951,7 +951,7 @@ func (s *ClientFunctionalSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	runId := workflowRun.GetRunID()
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.engine.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: wfId,
@@ -1008,7 +1008,7 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 		Identity:            workerIdentity,
 	}
 
-	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
 	workflowComplete := false
@@ -1049,7 +1049,7 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		activityStartedSignal <- true // signal the start of activity task.
 		<-heartbeatSignalChan         // wait for signal before sending heartbeat.
-		_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err := s.client.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: s.namespace,
 			TaskToken: task.TaskToken,
 			Details:   payloads.EncodeString("details"),
@@ -1063,7 +1063,7 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            "", // Do not send the worker identity.
@@ -1084,7 +1084,7 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 	}()
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,

@@ -384,7 +384,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	}
 
 	poller := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           ns,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -532,7 +532,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	}
 
 	poller := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           ns,
 		TaskQueue:           taskQueue,
 		Identity:            identity,

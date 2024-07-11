@@ -28,7 +28,9 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"time"
 
 	"go.temporal.io/server/api/enums/v1"
 	replicationpb "go.temporal.io/server/api/replication/v1"
@@ -112,7 +114,9 @@ func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControl
 func (s *SenderFlowControllerImpl) Wait(priority enums.TaskPriority) {
 	state, ok := s.flowControlStates[priority]
 	waitForRateLimiter := func(rateLimiter quotas.RateLimiter) {
-		err := rateLimiter.Wait(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // to avoid infinite wait
+		defer cancel()
+		err := rateLimiter.Wait(ctx)
 		if err != nil {
 			s.logger.Error("error waiting for rate limiter", tag.Error(err))
 		}
@@ -126,7 +130,9 @@ func (s *SenderFlowControllerImpl) Wait(priority enums.TaskPriority) {
 	state.mu.Lock()
 	if !state.resume {
 		state.waiters++
+		s.logger.Info(fmt.Sprintf("%v sender is paused", priority.String()))
 		state.cond.Wait()
+		s.logger.Info(fmt.Sprintf("%s sender is resumed", priority.String()))
 		state.waiters--
 	}
 	state.mu.Unlock()

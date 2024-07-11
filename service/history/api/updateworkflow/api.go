@@ -35,8 +35,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"go.temporal.io/server/common/metrics"
-
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -46,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
@@ -132,14 +131,23 @@ func (u *Updater) ApplyRequest(
 	updateReg update.Registry,
 	ms workflow.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
-	if !ms.IsWorkflowExecutionRunning() {
-		return nil, consts.ErrWorkflowCompleted
-	}
-	u.wfKey = ms.GetWorkflowKey()
-
-	if u.req.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != u.req.GetRequest().GetFirstExecutionRunId() {
+	if u.req.GetRequest().GetFirstExecutionRunId() != "" &&
+		ms.GetExecutionInfo().GetFirstExecutionRunId() != u.req.GetRequest().GetFirstExecutionRunId() {
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
+
+	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+
+	if !ms.IsWorkflowExecutionRunning() {
+		// If the WF is not running anymore, use an existing Update, if it exists for the requested ID.
+		// This ensures that repeated Update requests with the same ID see the same result.
+		if u.upd = updateReg.Find(ctx, updateID); u.upd != nil {
+			return &api.UpdateWorkflowAction{Noop: true}, nil
+		}
+		return nil, consts.ErrWorkflowCompleted
+	}
+
+	u.wfKey = ms.GetWorkflowKey()
 
 	if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
 		// If workflow task is constantly failing, the update to that workflow will also fail.
@@ -166,7 +174,6 @@ func (u *Updater) ApplyRequest(
 		return nil, consts.ErrWorkflowClosing
 	}
 
-	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
 	var (
 		alreadyExisted bool
 		err            error
@@ -223,11 +230,11 @@ func (u *Updater) ApplyRequest(
 func (u *Updater) OnSuccess(
 	ctx context.Context,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	// Speculative WT was created and needs to be added directly to matching w/o transfer task.
-	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
-	//   Helper function needs to be extracted to avoid code duplication.
 	usesSpeculativeWFT := u.scheduledEventID != common.EmptyEventID
 	if usesSpeculativeWFT {
+		// Speculative WFT was created and needs to be added directly to matching w/o transfer task.
+		// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
+		//   Helper function needs to be extracted to avoid code duplication.
 		metrics.WorkflowExecutionUpdateSpeculativeWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
 
 		err := u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
@@ -257,8 +264,6 @@ func (u *Updater) OnSuccess(
 			// If subsequent attempt succeeds within current context timeout, caller of this API will get a valid response.
 			err = nil
 		}
-	} else {
-		metrics.WorkflowExecutionUpdateNormalWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
 	}
 
 	namespaceID := namespace.ID(u.req.GetNamespaceId())

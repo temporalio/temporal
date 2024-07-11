@@ -34,9 +34,6 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -162,62 +159,6 @@ func matchAndConvert[T any](
 		// Return typedVal anyway since we have to return something.
 	}
 	return typedVal
-}
-
-func precedenceGlobal() []Constraints {
-	return []Constraints{
-		{},
-	}
-}
-
-func precedenceNamespace(namespace string) []Constraints {
-	return []Constraints{
-		{Namespace: namespace},
-		{},
-	}
-}
-
-func precedenceNamespaceID(namespaceID string) []Constraints {
-	return []Constraints{
-		{NamespaceID: namespaceID},
-		{},
-	}
-}
-
-func precedenceTaskQueue(namespace string, taskQueue string, taskType enumspb.TaskQueueType) []Constraints {
-	return []Constraints{
-		{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskType},
-		{Namespace: namespace, TaskQueueName: taskQueue},
-		// A task-queue-name-only filter applies to a single task queue name across all
-		// namespaces, with higher precedence than a namespace-only filter. This is intended to
-		// be used by defaultNumTaskQueuePartitions and is probably not useful otherwise.
-		{TaskQueueName: taskQueue},
-		{Namespace: namespace},
-		{},
-	}
-}
-
-func precedenceDestination(namespace string, destination string) []Constraints {
-	return []Constraints{
-		{Namespace: namespace, Destination: destination},
-		{Destination: destination},
-		{Namespace: namespace},
-		{},
-	}
-}
-
-func precedenceShardID(shardID int32) []Constraints {
-	return []Constraints{
-		{ShardID: shardID},
-		{},
-	}
-}
-
-func precedenceTaskType(taskType enumsspb.TaskType) []Constraints {
-	return []Constraints{
-		{TaskType: taskType},
-		{},
-	}
 }
 
 func convertInt(val any) (int, error) {
