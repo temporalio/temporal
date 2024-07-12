@@ -29,6 +29,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -57,7 +58,10 @@ func Operation(operation string) ZapTag {
 
 // Error returns tag for Error
 func Error(err error) ZapTag {
-	return NewErrorTag(err)
+	return ZapTag{
+		// NOTE: zap already chosen "error" as key
+		field: zap.Error(err),
+	}
 }
 
 // ServiceErrorType returns tag for ServiceErrorType
