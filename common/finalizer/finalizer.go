@@ -45,9 +45,8 @@ var (
 
 type Finalizer struct {
 	logger    log.Logger
-	mu        sync.Mutex
-	wg        sync.WaitGroup
-	finalized atomic.Bool
+	mu        sync.Mutex  // lock protects access to callbacks map
+	finalized atomic.Bool // indicating if finalizer has been executed
 	callbacks map[string]func(context.Context) error
 }
 
@@ -60,6 +59,8 @@ func NewFinalizer(
 	}
 }
 
+// Register adds a callback to the finalizer.
+// Returns an error if the ID is already registered, or when the finalizer already ran.
 func (f *Finalizer) Register(
 	id string,
 	callback func(context.Context) error,
@@ -78,6 +79,8 @@ func (f *Finalizer) Register(
 	return nil
 }
 
+// Deregister removes a callback from the finalizer.
+// Returns an error if the ID is not found, or when the finalizer already ran.
 func (f *Finalizer) Deregister(
 	id string,
 ) (err error) {
@@ -95,6 +98,9 @@ func (f *Finalizer) Deregister(
 	return nil
 }
 
+// Run executes all registered callback functions within the given timeout (zero timeout skips execution).
+// It can only be invoked once; calling it again has no effect.
+// Returns the number of completed callbacks.
 func (f *Finalizer) Run(
 	pool *goro.AdaptivePool,
 	timeout time.Duration,
@@ -125,8 +131,7 @@ func (f *Finalizer) Run(
 	defer cancel()
 	go func() {
 		for _, callback := range f.callbacks {
-			// NOTE: Once the pool is stopped due to a timeout,
-			// any remaining callbacks will not be invoked anymore.
+			// NOTE: Once the pool is stopped due to a timeout, any remaining callbacks will not be invoked anymore.
 			pool.Do(func() {
 				defer wg.Done()
 				defer completionCounter.Add(1)
