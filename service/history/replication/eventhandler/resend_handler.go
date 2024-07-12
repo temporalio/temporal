@@ -300,7 +300,7 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 			return err
 		}
 		if len(events) == 0 {
-			continue
+			return serviceerror.NewInvalidArgument("Empty batch received from remote during resend")
 		}
 		if len(eventsBatch) != 0 && len(versionHistory) != 0 {
 			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.Items) ||

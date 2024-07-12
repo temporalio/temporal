@@ -139,7 +139,7 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 			return err
 		}
 		if len(events) == 0 {
-			continue
+			return serviceerror.NewInternal("Empty events received when importing")
 		}
 		if eventsVersion != common2.EmptyVersion && eventsVersion != events[0].GetVersion() {
 			if err := importFn(); err != nil {
@@ -148,25 +148,23 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		}
 		versionHistory = batch.VersionHistory
 		eventsVersion = events[0].GetVersion()
-		blobSize++
+		blobSize += len(batch.RawEventBatch.Data)
 		blobs = append(blobs, batch.RawEventBatch)
 
-		if blobSize >= historyImportBlobSize || len(blobs) >= historyImportPageSize {
+		if blobSize >= historyImportPageSize || len(blobs) >= historyImportBlobSize {
 			if err := importFn(); err != nil {
 				return err
 			}
 		}
 	}
 	if len(blobs) != 0 {
-		response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
+		err = importFn()
 		if err != nil {
 			return err
 		}
-		token = response.Token
 	}
 
 	// call with empty event blob to commit the import
-	blobs = []*common.DataBlob{}
 	response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
 	if err != nil || len(response.Token) != 0 {
 		e.logger.Error("failed to commit import action",
