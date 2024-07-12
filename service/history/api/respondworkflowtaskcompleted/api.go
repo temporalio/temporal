@@ -793,7 +793,7 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	taskToken, err := handler.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
-		return nil, err
+		return nil, consts.ErrDeserializingToken
 	}
 
 	taskToken = tasktoken.NewWorkflowTaskToken(

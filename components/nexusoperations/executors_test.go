@@ -113,6 +113,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: 1,
 					OperationId:      "op-id",
+					RequestId:        op.RequestId,
 				}, events[0].GetNexusOperationStartedEventAttributes())
 			},
 		},
@@ -148,6 +149,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				attrs := &historypb.NexusOperationCompletedEventAttributes{
 					ScheduledEventId: 1,
 					Result:           mustToPayload(t, "result"),
+					RequestId:        op.RequestId,
 				}
 				protorequire.ProtoEqual(t, attrs, events[0].GetNexusOperationCompletedEventAttributes())
 			},
@@ -169,6 +171,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, events[0].EventType)
 				attrs := &historypb.NexusOperationFailedEventAttributes{
 					ScheduledEventId: 1,
+					RequestId:        op.RequestId,
 					Failure: &failurepb.Failure{
 						Message: "nexus operation completed unsuccessfully",
 						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
@@ -215,6 +218,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, events[0].EventType)
 				attrs := &historypb.NexusOperationCanceledEventAttributes{
 					ScheduledEventId: 1,
+					RequestId:        op.RequestId,
 					Failure: &failurepb.Failure{
 						Message: "nexus operation completed unsuccessfully",
 						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
@@ -315,7 +319,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatencyHistogram.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
@@ -436,6 +440,7 @@ func TestProcessTimeoutTask(t *testing.T) {
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
 		ScheduledEventId: 1,
+		RequestId:        op.RequestId,
 		Failure: &failurepb.Failure{
 			Message: "nexus operation completed unsuccessfully",
 			FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
@@ -580,7 +585,7 @@ func TestProcessCancelationTask(t *testing.T) {
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatencyHistogram.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
