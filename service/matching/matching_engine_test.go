@@ -28,17 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/service/history/consts"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/worker_versioning"
 
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
@@ -51,7 +46,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/cluster/clustertest"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/consts"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
