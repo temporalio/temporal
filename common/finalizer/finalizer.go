@@ -118,32 +118,39 @@ func (f *Finalizer) Run(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	totalCount := len(f.callbacks)
+	totalCount := int32(len(f.callbacks))
 	f.logger.Info("finalizer starting",
-		tag.NewInt("items", totalCount),
+		tag.NewInt32("items", totalCount),
 		tag.NewDurationTag("timeout", timeout))
 
-	var completionCounter atomic.Int32
-	var wg sync.WaitGroup
-	wg.Add(totalCount)
-
+	completionChannel := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	go func() {
 		for _, callback := range f.callbacks {
 			// NOTE: Once the pool is stopped due to a timeout, any remaining callbacks will not be invoked anymore.
 			pool.Do(func() {
-				defer wg.Done()
-				defer completionCounter.Add(1)
+				defer func() { completionChannel <- struct{}{} }()
 				_ = callback(ctx)
 			})
 		}
 	}()
 
+	var completionCounter atomic.Int32
 	done := make(chan struct{})
 	go func() {
-		wg.Wait()
-		close(done)
+		for {
+			select {
+			case <-completionChannel:
+				completed := completionCounter.Add(1)
+				if completed == totalCount {
+					close(done)
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
 	}()
 
 	var completed int32
@@ -157,7 +164,7 @@ func (f *Finalizer) Run(
 		completed = completionCounter.Load()
 		f.logger.Error("finalizer timed out",
 			tag.NewInt32("completed-items", completed),
-			tag.NewInt32("unfinished-items", int32(totalCount)-completed))
+			tag.NewInt32("unfinished-items", totalCount-completed))
 	}
 	return completed
 }
