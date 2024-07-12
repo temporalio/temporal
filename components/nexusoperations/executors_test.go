@@ -315,7 +315,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatencyHistogram.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
@@ -580,7 +580,7 @@ func TestProcessCancelationTask(t *testing.T) {
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatencyHistogram.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
