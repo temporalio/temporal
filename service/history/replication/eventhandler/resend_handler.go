@@ -234,6 +234,7 @@ func (r *resendHandlerImpl) resendRemoteGeneratedHistoryEvents(
 	return r.replicateRemoteGeneratedEvents(ctx, namespaceID, workflowID, runID, nil, historyEventIterator)
 }
 
+//nolint:revive // cognitive complexity 35 (> max enabled 25)
 func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 	ctx context.Context,
 	namespaceID namespace.ID,

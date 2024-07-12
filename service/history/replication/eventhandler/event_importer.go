@@ -81,6 +81,7 @@ func NewEventImporter(
 	}
 }
 
+//nolint:revive // cognitive complexity 30 (> max enabled 25)
 func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 	ctx context.Context,
 	remoteCluster string,
