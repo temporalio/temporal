@@ -143,6 +143,8 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	if executionManager == nil {
 		executionManager = t.ExecutionMgr
 	}
+	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
+	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
 
 	ctx := &ContextImpl{
 		shardID:             config.ShardInfo.GetShardId(),
@@ -167,6 +169,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		clusterMetadata:         clusterMetadata,
 		timeSource:              t.TimeSource,
 		namespaceRegistry:       registry,
+		stateMachineRegistry:    hsm.NewRegistry(),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),
@@ -175,7 +178,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		payloadSerializer:       t.GetPayloadSerializer(),
 		archivalMetadata:        t.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,
-		taskCategoryRegistry:    tasks.NewDefaultTaskCategoryRegistry(),
+		taskCategoryRegistry:    taskCategoryRegistry,
 		ioSemaphore:             locks.NewPrioritySemaphore(1),
 	}
 	ctx.taskKeyManager = newTaskKeyManager(

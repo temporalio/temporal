@@ -58,6 +58,15 @@ import (
 	"go.temporal.io/server/service/history/queues"
 )
 
+var endpointEntry = &persistence.NexusEndpointEntry{
+	Id: "enpdoint-id",
+	Endpoint: &persistence.NexusEndpoint{
+		Spec: &persistence.NexusEndpointSpec{
+			Name: "endpoint",
+		},
+	},
+}
+
 func mustToPayload(t *testing.T, input any) *commonpb.Payload {
 	conv := converter.GetDefaultDataConverter()
 	payload, err := conv.ToPayload(input)
@@ -104,6 +113,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: 1,
 					OperationId:      "op-id",
+					RequestId:        op.RequestId,
 				}, events[0].GetNexusOperationStartedEventAttributes())
 			},
 		},
@@ -139,6 +149,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				attrs := &historypb.NexusOperationCompletedEventAttributes{
 					ScheduledEventId: 1,
 					Result:           mustToPayload(t, "result"),
+					RequestId:        op.RequestId,
 				}
 				protorequire.ProtoEqual(t, attrs, events[0].GetNexusOperationCompletedEventAttributes())
 			},
@@ -160,6 +171,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, events[0].EventType)
 				attrs := &historypb.NexusOperationFailedEventAttributes{
 					ScheduledEventId: 1,
+					RequestId:        op.RequestId,
 					Failure: &failurepb.Failure{
 						Message: "nexus operation completed unsuccessfully",
 						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
@@ -206,6 +218,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, events[0].EventType)
 				attrs := &historypb.NexusOperationCanceledEventAttributes{
 					ScheduledEventId: 1,
+					RequestId:        op.RequestId,
 					Failure: &failurepb.Failure{
 						Message: "nexus operation completed unsuccessfully",
 						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
@@ -265,7 +278,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:             "service not found",
+			name:             "endpoint not found",
 			endpointNotFound: true,
 			requestTimeout:   time.Hour,
 			destinationDown:  false,
@@ -303,23 +316,32 @@ func TestProcessInvocationTask(t *testing.T) {
 				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint-name"),
+					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatencyHistogram.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint-name"),
+					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
 			}
 
 			endpointReg := nexustest.FakeEndpointRegistry{
 				OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+					require.Equal(t, "endpoint-id", endpointID)
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
-					return nil, nil // The endpoint isn't used here, it's okay to return nil.
+					return endpointEntry, nil
+				},
+				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+					require.Equal(t, "endpoint", endpointName)
+					require.Equal(t, "ns-id", namespaceID.String())
+					if tc.endpointNotFound {
+						return nil, serviceerror.NewNotFound("endpoint not found")
+					}
+					return endpointEntry, nil
 				},
 			}
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
@@ -337,7 +359,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
-				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
@@ -353,7 +375,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
 					StateMachineRef: &persistence.StateMachineRef{},
 				},
-				nexusoperations.InvocationTask{Destination: "endpoint-name"},
+				nexusoperations.InvocationTask{EndpointName: "endpoint-id"},
 			)
 			if tc.destinationDown {
 				var destinationDownErr *queues.DestinationDownError
@@ -418,6 +440,7 @@ func TestProcessTimeoutTask(t *testing.T) {
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
 		ScheduledEventId: 1,
+		RequestId:        op.RequestId,
 		Failure: &failurepb.Failure{
 			Message: "nexus operation completed unsuccessfully",
 			FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
@@ -507,7 +530,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
-			name:              "service not found",
+			name:              "endpoint not found",
 			endpointNotFound:  true,
 			requestTimeout:    time.Hour,
 			destinationDown:   false,
@@ -559,22 +582,31 @@ func TestProcessCancelationTask(t *testing.T) {
 				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint-name"),
+					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatencyHistogram.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint-name"),
+					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
 			}
 			endpointReg := nexustest.FakeEndpointRegistry{
 				OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+					require.Equal(t, "endpoint-id", endpointID)
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
-					return nil, nil // The endpoint isn't used here, it's okay to return nil.
+					return endpointEntry, nil
+				},
+				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+					require.Equal(t, "endpoint", endpointName)
+					require.Equal(t, "ns-id", namespaceID.String())
+					if tc.endpointNotFound {
+						return nil, serviceerror.NewNotFound("endpoint not found")
+					}
+					return endpointEntry, nil
 				},
 			}
 
@@ -590,7 +622,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				MetricsHandler:    metricsHandler,
 				Logger:            log.NewNoopLogger(),
 				EndpointRegistry:  endpointReg,
-				ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
@@ -606,7 +638,7 @@ func TestProcessCancelationTask(t *testing.T) {
 					WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
 					StateMachineRef: &persistence.StateMachineRef{},
 				},
-				nexusoperations.CancelationTask{Destination: "endpoint-name"},
+				nexusoperations.CancelationTask{EndpointName: "endpoint-id"},
 			)
 			if tc.destinationDown {
 				require.IsType(t, &queues.DestinationDownError{}, err)
@@ -662,10 +694,10 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		NamespaceRegistry: namespaceRegistry,
 		EndpointRegistry: nexustest.FakeEndpointRegistry{
 			OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
-				return nil, nil // The endpoint isn't used here, it's okay to return nil.
+				return endpointEntry, nil
 			},
 		},
-		ClientProvider: func(ctx context.Context, nid queues.NamespaceIDAndDestination, service string) (*nexus.Client, error) {
+		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
 		},
 	}))
@@ -677,7 +709,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 			WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
 			StateMachineRef: &persistence.StateMachineRef{},
 		},
-		nexusoperations.CancelationTask{Destination: "endpoint-name"},
+		nexusoperations.CancelationTask{EndpointName: "endpoint-name"},
 	)
 	require.ErrorIs(t, err, consts.ErrStaleReference)
 }

@@ -25,6 +25,7 @@
 package dynamicconfig
 
 import (
+	"math"
 	"os"
 	"time"
 
@@ -37,6 +38,23 @@ import (
 )
 
 var (
+	// keys for dynamic config itself
+	DynamicConfigSubscriptionCallback = NewGlobalTypedSetting(
+		"dynamicconfig.subscriptionCallback",
+		subscriptionCallbackSettings{
+			MinWorkers:   10,
+			MaxWorkers:   100,
+			TargetDelay:  10 * time.Millisecond,
+			ShrinkFactor: 1000, // 10 seconds
+		},
+		`Settings for dynamic config subscription dispatch. Requires server restart.`,
+	)
+	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
+		"dynamicconfig.subscriptionPollInterval",
+		time.Minute,
+		`Poll interval for emulating subscriptions on non-subscribable Client.`,
+	)
+
 	// keys for admin
 
 	AdminEnableListHistoryTasks = NewGlobalBoolSetting(
@@ -834,6 +852,18 @@ server hosts for it to take effect.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
+	NexusReadThroughCacheSize = NewGlobalIntSetting(
+		"system.nexusReadThroughCacheSize",
+		100,
+		`The size of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
+used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
+	NexusReadThroughCacheTTL = NewGlobalDurationSetting(
+		"system.nexusReadThroughCacheTTL",
+		30*time.Second,
+		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
+used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
@@ -1096,7 +1126,7 @@ This can help reduce effects of task queue movement.`,
 	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
-		24*365*10*time.Hour,
+		5*time.Second,
 		`MatchingBacklogNegligibleAge if the head of backlog gets older than this we stop sync match and
 forwarding to ensure more equal dispatch order among partitions.`,
 	)
@@ -1391,12 +1421,6 @@ for the entire queue but only trigger a queue action to unload tasks. Ideally th
 limit should not be hit and task unloading should happen once critical count is exceeded. But
 since queue action is async, we need this hard limit.`,
 	)
-	ContinueAsNewMinInterval = NewNamespaceDurationSetting(
-		"history.continueAsNewMinInterval",
-		time.Second,
-		`ContinueAsNewMinInterval is the minimal interval between continue_as_new executions.
-This is needed to prevent tight loop continue_as_new spin. Default is 1s.`,
-	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
 		"history.taskSchedulerEnableRateLimiter",
@@ -1652,6 +1676,19 @@ Fields (see gobreaker reference for more details):
   if interval is 0, then it never clears the internal counts (default 0).
 - Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
+	OutboundStandbyTaskMissingEventsDiscardDelay = NewDestinationDurationSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDiscardDelay",
+		// This is effectively equivalent to never discarding outbound tasks since it's 290+ years.
+		time.Duration(math.MaxInt64),
+		`OutboundStandbyTaskMissingEventsDiscardDelay is the equivalent of
+StandbyTaskMissingEventsDiscardDelay for outbound standby task processor.`,
+	)
+	OutboundStandbyTaskMissingEventsDestinationDownErr = NewDestinationBoolSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDestinationDownErr",
+		true,
+		`OutboundStandbyTaskMissingEventsDestinationDownErr enables returning DestinationDownError when
+the outbound standby task failed to be processed due to missing events.`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",
@@ -1840,6 +1877,12 @@ state. The total size is determined by the sum of the size, in bytes, of each Hi
 		"history.shardUpdateMinInterval",
 		5*time.Minute,
 		`ShardUpdateMinInterval is the minimal time interval which the shard info can be updated`,
+	)
+	ShardFirstUpdateInterval = NewGlobalDurationSetting(
+		"history.shardFirstUpdateInterval",
+		10*time.Second,
+		`ShardFirstUpdateInterval is the time interval after which the first shard info update will happen.
+		It should be smaller than ShardUpdateMinInterval`,
 	)
 	ShardUpdateMinTasksCompleted = NewGlobalIntSetting(
 		"history.shardUpdateMinTasksCompleted",
@@ -2125,13 +2168,23 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
-		50,
+		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
 		"history.ReplicationResendMaxBatchCount",
 		10,
 		`Maximum number of resend events batch for a single replication request`,
+	)
+	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
+		"history.workflowIdReuseMinimalInterval",
+		1*time.Second,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
+	)
+	EnableWorkflowIdReuseStartTimeValidation = NewNamespaceBoolSetting(
+		"history.enableWorkflowIdReuseStartTimeValidation",
+		false,
+		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
 
 	// keys for worker
@@ -2375,10 +2428,5 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
-	)
-	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
-		"system.workflowIdReuseMinimalInterval",
-		1*time.Second,
-		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
 	)
 )

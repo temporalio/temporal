@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 )
@@ -47,8 +48,8 @@ func (b *backend) GetCurrentVersion() int64 {
 	return 1
 }
 
-func (b *backend) TransitionCount() int64 {
-	return 2
+func (b *backend) NextTransitionCount() int64 {
+	return 3
 }
 
 func (b *backend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
@@ -143,6 +144,7 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, root.Dirty()) // Should now be dirty again.
 	require.Equal(t, 1, len(root.Outputs()))
+	require.Equal(t, int64(1), root.Outputs()[0].Outputs[0].TransitionCount)
 	require.Equal(t, []hsm.Key{key}, root.Outputs()[0].Path)
 
 	// Cache when loaded from persistence.
@@ -182,15 +184,29 @@ func TestNode_Path(t *testing.T) {
 }
 
 func TestNode_AddChild(t *testing.T) {
-	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	nodeBackend := &backend{}
+
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), nodeBackend)
 	require.NoError(t, err)
 
 	_, err = root.AddChild(hsm.Key{Type: "not-found", ID: "dont-care"}, "data")
 	require.ErrorIs(t, err, hsm.ErrNotRegistered)
+
 	_, err = root.AddChild(hsm.Key{Type: def1.Type(), ID: "dont-care"}, "data")
 	require.ErrorContains(t, err, "invalid state type")
-	_, err = root.AddChild(hsm.Key{Type: def1.Type(), ID: "id"}, hsmtest.NewData(hsmtest.State1))
+
+	childNode, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "id"}, hsmtest.NewData(hsmtest.State1))
 	require.NoError(t, err)
+	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: nodeBackend.GetCurrentVersion(),
+		TransitionCount:          nodeBackend.NextTransitionCount(),
+	}, childNode.InternalRepr().InitialVersionedTransition)
+	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: nodeBackend.GetCurrentVersion(),
+		TransitionCount:          nodeBackend.NextTransitionCount(),
+	}, childNode.InternalRepr().LastUpdateVersionedTransition)
+	require.Equal(t, int64(0), childNode.InternalRepr().TransitionCount)
+
 	_, err = root.AddChild(hsm.Key{Type: def1.Type(), ID: "id"}, hsmtest.NewData(hsmtest.State1))
 	require.ErrorIs(t, err, hsm.ErrStateMachineAlreadyExists)
 }
@@ -261,6 +277,123 @@ func TestNode_Walk(t *testing.T) {
 	require.Equal(t, 5, nodeCount)
 }
 
+func TestNode_Sync(t *testing.T) {
+	currentState := hsmtest.State2
+	currentInitialVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 100,
+		TransitionCount:          23,
+	}
+	currentLastUpdateVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 100,
+		TransitionCount:          25,
+	}
+	incomingLastUpdateVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 200,
+		TransitionCount:          50,
+	}
+
+	testCases := []struct {
+		name                               string
+		incomingInitialVersionedTransition *persistencespb.VersionedTransition
+		incomingState                      hsmtest.State
+		expectedErr                        error
+	}{
+		{
+			name: "NodeMisMatch/InitialVersionMismatch",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 200,
+				TransitionCount:          23,
+			},
+			incomingState: hsmtest.State1,
+			expectedErr:   hsm.ErrInitialTransitionMismatch,
+		},
+		{
+			name: "NodeMismatch/InitialTransitionCountMismatch",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 100,
+				TransitionCount:          32,
+			},
+			incomingState: hsmtest.State1,
+			expectedErr:   hsm.ErrInitialTransitionMismatch,
+		},
+		{
+			name: "NodeMatch/TransitionHistoryDisabled",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 100,
+				// transition history disabled for incoming node,
+				// should only compare initial failover version
+				TransitionCount: 0,
+			},
+			incomingState: hsmtest.State1,
+			expectedErr:   nil,
+		},
+		{
+			name: "NodeMatch/SyncNewerState",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 100,
+				TransitionCount:          23,
+			},
+			incomingState: hsmtest.State3,
+			expectedErr:   nil,
+		},
+		{
+			name: "NodeMatch/SyncOlderState",
+			incomingInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 100,
+				TransitionCount:          23,
+			},
+			// Sync method() is force sync and can sync to older state.
+			incomingState: hsmtest.State1,
+			expectedErr:   nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			initNode := func(
+				state hsmtest.State,
+				initialVersionedTransition *persistencespb.VersionedTransition,
+				lastUpdateVersionedTransition *persistencespb.VersionedTransition,
+			) *hsm.Node {
+				node, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(state), make(map[string]*persistencespb.StateMachineMap), &backend{})
+				require.NoError(t, err)
+
+				node.InternalRepr().InitialVersionedTransition = initialVersionedTransition
+				node.InternalRepr().LastUpdateVersionedTransition = lastUpdateVersionedTransition
+
+				return node
+			}
+
+			currentNode := initNode(currentState, currentInitialVersionedTransition, currentLastUpdateVersionedTransition)
+			incomingNode := initNode(tc.incomingState, tc.incomingInitialVersionedTransition, incomingLastUpdateVersionedTransition)
+
+			currentNodeTransitionCount := currentNode.InternalRepr().TransitionCount
+
+			err := currentNode.Sync(incomingNode)
+			if tc.expectedErr != nil {
+				require.ErrorIs(t, err, tc.expectedErr)
+				return
+			}
+
+			require.NoError(t, err)
+
+			incomingData, err := def1.Serialize(hsmtest.NewData(tc.incomingState))
+			require.NoError(t, err)
+			require.Equal(t, incomingData, currentNode.InternalRepr().Data)
+			protorequire.ProtoEqual(t, incomingNode.InternalRepr().LastUpdateVersionedTransition, currentNode.InternalRepr().LastUpdateVersionedTransition)
+			require.Equal(t, currentNodeTransitionCount+1, currentNode.InternalRepr().TransitionCount)
+
+			paos := currentNode.Outputs()
+			require.Len(t, paos, 1)
+			pao := paos[0]
+			require.Equal(t, currentNode.Path(), pao.Path)
+			require.Len(t, pao.Outputs, 1)
+			require.Len(t, pao.Outputs[0].Tasks, 2)
+		})
+	}
+}
+
 func TestMachineData(t *testing.T) {
 	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
@@ -291,7 +424,7 @@ func TestMachineTransition(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "test")
 	require.Equal(t, int64(0), root.InternalRepr().TransitionCount)
-	require.Equal(t, int64(0), root.InternalRepr().LastUpdateMutableStateTransitionCount)
+	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{}, root.InternalRepr().LastUpdateVersionedTransition)
 	d, err := hsm.MachineData[*hsmtest.Data](root)
 	require.NoError(t, err)
 	// Got the pre-mutation value back.
@@ -304,9 +437,10 @@ func TestMachineTransition(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), root.InternalRepr().TransitionCount)
-	// 3 = 2 - which is a constant returned by our test backend - and an increment of 1 to account for backend
-	// incrementing its own transition count at the end of a transaction.
-	require.Equal(t, int64(3), root.InternalRepr().LastUpdateMutableStateTransitionCount)
+	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 1,
+		TransitionCount:          3,
+	}, root.InternalRepr().LastUpdateVersionedTransition)
 	d, err = hsm.MachineData[*hsmtest.Data](root)
 	require.NoError(t, err)
 	require.Equal(t, hsmtest.State2, d.State())

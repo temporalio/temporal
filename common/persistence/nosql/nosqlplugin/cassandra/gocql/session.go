@@ -28,7 +28,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -203,9 +202,7 @@ func (s *session) handleError(
 ) {
 	switch err {
 	case gocql.ErrNoConnections,
-		gocql.ErrSessionClosed,
-		gocql.ErrConnectionClosed,
-		syscall.ECONNRESET:
+		gocql.ErrSessionClosed:
 		s.refresh()
 	default:
 		// noop

@@ -346,7 +346,7 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 			m.endpointsByName[entry.Endpoint.Spec.Name] = entry
 		}
 
-		if pageToken == nil {
+		if len(pageToken) == 0 {
 			break
 		}
 	}

@@ -46,6 +46,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -231,7 +232,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 		s.shardContext,
 		s.namespace.ID(),
 		s.request.StartRequest.WorkflowId,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -374,16 +375,26 @@ func (s *Starter) resolveDuplicateWorkflowID(
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
 
-	currentWorkflowStartTime, err := s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
-	if err != nil {
-		return nil, err
+	currentWorkflowStartTime := time.Time{}
+	if s.shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(s.namespace.Name().String()) {
+		var err error
+		currentWorkflowStartTime, err = s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	workflowKey := definition.NewWorkflowKey(
+		s.namespace.ID().String(),
+		workflowID,
+		currentWorkflowConditionFailed.RunID,
+	)
 
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
-		workflowID,
+		workflowKey,
+		s.namespace,
 		creationParams.runID,
-		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
 		currentWorkflowConditionFailed.RequestID,
@@ -411,7 +422,6 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			s.namespace.ID().String(),
 			workflowID,
@@ -517,7 +527,7 @@ func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (_ tim
 		s.shardContext,
 		s.namespace.ID(),
 		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return workflowStartTime, err
@@ -543,7 +553,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (_ *mut
 		s.shardContext,
 		s.namespace.ID(),
 		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err

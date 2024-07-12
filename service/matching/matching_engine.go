@@ -120,27 +120,28 @@ type (
 
 	// Implements matching.Engine
 	matchingEngineImpl struct {
-		status              int32
-		taskManager         persistence.TaskManager
-		historyClient       resource.HistoryClient
-		matchingRawClient   resource.MatchingRawClient
-		tokenSerializer     common.TaskTokenSerializer
-		historySerializer   serialization.Serializer
-		logger              log.Logger
-		throttledLogger     log.ThrottledLogger
-		namespaceRegistry   namespace.Registry
-		hostInfoProvider    membership.HostInfoProvider
-		serviceResolver     membership.ServiceResolver
-		membershipChangedCh chan *membership.ChangedEvent
-		clusterMeta         cluster.Metadata
-		timeSource          clock.TimeSource
-		visibilityManager   manager.VisibilityManager
-		nexusEndpointClient *nexusEndpointClient
-		metricsHandler      metrics.Handler
-		partitionsLock      sync.RWMutex // locks mutation of partitions
-		partitions          map[tqid.PartitionKey]taskQueuePartitionManager
-		gaugeMetrics        gaugeMetrics // per-namespace task queue counters
-		config              *Config
+		status                        int32
+		taskManager                   persistence.TaskManager
+		historyClient                 resource.HistoryClient
+		matchingRawClient             resource.MatchingRawClient
+		tokenSerializer               common.TaskTokenSerializer
+		historySerializer             serialization.Serializer
+		logger                        log.Logger
+		throttledLogger               log.ThrottledLogger
+		namespaceRegistry             namespace.Registry
+		hostInfoProvider              membership.HostInfoProvider
+		serviceResolver               membership.ServiceResolver
+		membershipChangedCh           chan *membership.ChangedEvent
+		clusterMeta                   cluster.Metadata
+		timeSource                    clock.TimeSource
+		visibilityManager             manager.VisibilityManager
+		nexusEndpointClient           *nexusEndpointClient
+		nexusEndpointsOwnershipLostCh chan struct{}
+		metricsHandler                metrics.Handler
+		partitionsLock                sync.RWMutex // locks mutation of partitions
+		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
+		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
+		config                        *Config
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
 		// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
@@ -177,6 +178,9 @@ var (
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
+
+	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
+	nexusEndpointsTablePartitionRoutingKey = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey()
 )
 
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
@@ -200,24 +204,25 @@ func NewEngine(
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
-		status:              common.DaemonStatusInitialized,
-		taskManager:         taskManager,
-		historyClient:       historyClient,
-		matchingRawClient:   matchingRawClient,
-		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
-		historySerializer:   serialization.NewSerializer(),
-		logger:              log.With(logger, tag.ComponentMatchingEngine),
-		throttledLogger:     log.With(throttledLogger, tag.ComponentMatchingEngine),
-		namespaceRegistry:   namespaceRegistry,
-		hostInfoProvider:    hostInfoProvider,
-		serviceResolver:     resolver,
-		membershipChangedCh: make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
-		clusterMeta:         clusterMeta,
-		timeSource:          clock.NewRealTimeSource(), // No need to mock this at the moment
-		visibilityManager:   visibilityManager,
-		nexusEndpointClient: newEndpointClient(nexusEndpointManager),
-		metricsHandler:      scopedMetricsHandler,
-		partitions:          make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		status:                        common.DaemonStatusInitialized,
+		taskManager:                   taskManager,
+		historyClient:                 historyClient,
+		matchingRawClient:             matchingRawClient,
+		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
+		historySerializer:             serialization.NewSerializer(),
+		logger:                        log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:               log.With(throttledLogger, tag.ComponentMatchingEngine),
+		namespaceRegistry:             namespaceRegistry,
+		hostInfoProvider:              hostInfoProvider,
+		serviceResolver:               resolver,
+		membershipChangedCh:           make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
+		clusterMeta:                   clusterMeta,
+		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:             visibilityManager,
+		nexusEndpointClient:           newEndpointClient(nexusEndpointManager),
+		nexusEndpointsOwnershipLostCh: make(chan struct{}),
+		metricsHandler:                scopedMetricsHandler,
+		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
@@ -281,6 +286,8 @@ func (e *matchingEngineImpl) watchMembership() {
 		if delay == 0 {
 			continue
 		}
+
+		e.notifyIfNexusEndpointsOwnershipLost()
 
 		// Check all our loaded partitions to see if we lost ownership of any of them.
 		e.partitionsLock.RLock()
@@ -1747,7 +1754,7 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
-		return nil, serviceerror.NewNotFound("nexus task not found or already expired")
+		return nil, serviceerror.NewNotFound("Nexus task not found or already expired")
 	}
 	resultCh <- &nexusResult{
 		successfulWorkerResponse: request,
@@ -1760,7 +1767,7 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
-		return nil, serviceerror.NewNotFound("nexus task not found or already expired")
+		return nil, serviceerror.NewNotFound("Nexus task not found or already expired")
 	}
 	resultCh <- &nexusResult{
 		failedWorkerResponse: request,
@@ -1770,29 +1777,60 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 }
 
 func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *matchingservice.CreateNexusEndpointRequest) (*matchingservice.CreateNexusEndpointResponse, error) {
-	return e.nexusEndpointClient.CreateNexusEndpoint(ctx, &internalCreateNexusEndpointRequest{
+	// Write API, let persistence verify table ownership.
+	res, err := e.nexusEndpointClient.CreateNexusEndpoint(ctx, &internalCreateNexusEndpointRequest{
 		spec:       request.GetSpec(),
 		clusterID:  e.clusterMeta.GetClusterID(),
 		timeSource: e.timeSource,
 	})
+	if err != nil {
+		e.logger.Error("Failed to create Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
+	} else {
+		e.logger.Info("Created Nexus endpoint", tag.Endpoint(request.GetSpec().GetName()))
+	}
+	return res, err
 }
 
 func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *matchingservice.UpdateNexusEndpointRequest) (*matchingservice.UpdateNexusEndpointResponse, error) {
-	return e.nexusEndpointClient.UpdateNexusEndpoint(ctx, &internalUpdateNexusEndpointRequest{
+	// Write API, let persistence verify table ownership.
+	res, err := e.nexusEndpointClient.UpdateNexusEndpoint(ctx, &internalUpdateNexusEndpointRequest{
 		endpointID: request.GetId(),
 		version:    request.GetVersion(),
 		spec:       request.GetSpec(),
 		clusterID:  e.clusterMeta.GetClusterID(),
 		timeSource: e.timeSource,
 	})
+	if err != nil {
+		e.logger.Error("Failed to update Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
+	} else {
+		e.logger.Info("Updated Nexus endpoint", tag.Endpoint(request.GetSpec().GetName()))
+	}
+	return res, err
 }
 
 func (e *matchingEngineImpl) DeleteNexusEndpoint(ctx context.Context, request *matchingservice.DeleteNexusEndpointRequest) (*matchingservice.DeleteNexusEndpointResponse, error) {
-	return e.nexusEndpointClient.DeleteNexusEndpoint(ctx, request)
+	// Write API, let persistence verify table ownership.
+	res, err := e.nexusEndpointClient.DeleteNexusEndpoint(ctx, request)
+	if err != nil {
+		e.logger.Error("Failed to delete Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetId()))
+	} else {
+		e.logger.Info("Deleted Nexus endpoint", tag.Endpoint(request.GetId()))
+	}
+	return res, err
 }
 
 func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *matchingservice.ListNexusEndpointsRequest) (*matchingservice.ListNexusEndpointsResponse, error) {
 	lastKnownVersion := request.LastKnownTableVersion
+	// Read API, verify table ownership via membership.
+	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
+	if err != nil {
+		e.logger.Error("Failed to check Nexus endpoints ownerhip", tag.Error(err))
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot verify ownership of Nexus endpoints table: %v", err))
+	}
+	if !isOwner {
+		e.logger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
+		return nil, serviceerror.NewFailedPrecondition("matching node doesn't think it's the Nexus endpoints table owner")
+	}
 
 	if request.Wait {
 		if request.NextPageToken != nil {
@@ -1816,6 +1854,8 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 		if request.Wait && lastKnownVersion == resp.TableVersion {
 			// long-poll: wait for data to change/appear
 			select {
+			case <-ownershipLostCh:
+				return nil, serviceerror.NewFailedPrecondition("Nexus endpoints table ownership lost")
 			case <-ctx.Done():
 				return resp, nil
 			case <-tableVersionChanged:
@@ -1824,6 +1864,32 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 		}
 
 		return resp, err
+	}
+}
+
+func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct{}, error) {
+	// Get the channel before checking the condition to prevent the channel from being closed while we're running this
+	// check.
+	ch := e.nexusEndpointsOwnershipLostCh
+	self := e.hostInfoProvider.HostInfo().Identity()
+	owner, err := e.serviceResolver.Lookup(nexusEndpointsTablePartitionRoutingKey)
+	if err != nil {
+		return false, nil, fmt.Errorf("cannot resolve Nexus endpoints partition owner: %w", err)
+	}
+	return owner.Identity() == self, ch, nil
+}
+
+func (e *matchingEngineImpl) notifyIfNexusEndpointsOwnershipLost() {
+	// We don't care about the channel returned here. This method is ensured to only be called from the single
+	// watchMembership method and is the only way the channel may be replace.
+	isOwner, _, err := e.checkNexusEndpointsOwnership()
+	if err != nil {
+		e.logger.Error("Failed to check Nexus endpoints ownerhip", tag.Error(err))
+		return
+	}
+	if !isOwner {
+		close(e.nexusEndpointsOwnershipLostCh)
+		e.nexusEndpointsOwnershipLostCh = make(chan struct{})
 	}
 }
 

@@ -38,6 +38,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -241,7 +242,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		&workflowExecution,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err

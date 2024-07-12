@@ -546,3 +546,40 @@ func (this *TaskQueueUserDataAttributes) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type SyncHSMAttributes to the protobuf v3 wire format
+func (val *SyncHSMAttributes) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncHSMAttributes from the protobuf v3 wire format
+func (val *SyncHSMAttributes) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncHSMAttributes) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncHSMAttributes values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncHSMAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncHSMAttributes
+	switch t := that.(type) {
+	case *SyncHSMAttributes:
+		that1 = t
+	case SyncHSMAttributes:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

@@ -45,6 +45,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/pollupdate"
@@ -61,9 +62,8 @@ type (
 		GetWorkflowContextFunc func(
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
-			consistencyPredicate api.MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
+			lockPriority locks.Priority,
 		) (api.WorkflowLease, error)
 	}
 
@@ -90,11 +90,10 @@ func (mockUpdateEventStore) CanAddEvent() bool                       { return tr
 func (m mockWFConsistencyChecker) GetWorkflowLease(
 	ctx context.Context,
 	clock *clockspb.VectorClock,
-	pred api.MutableStateConsistencyPredicate,
 	wfKey definition.WorkflowKey,
-	prio workflow.LockPriority,
+	prio locks.Priority,
 ) (api.WorkflowLease, error) {
-	return m.GetWorkflowContextFunc(ctx, clock, pred, wfKey, prio)
+	return m.GetWorkflowContextFunc(ctx, clock, wfKey, prio)
 }
 
 func (m mockWorkflowLeaseCtx) GetReleaseFn() wcache.ReleaseCacheFunc {
@@ -132,9 +131,8 @@ func TestPollOutcome(t *testing.T) {
 		GetWorkflowContextFunc: func(
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
-			consistencyPredicate api.MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
+			lockPriority locks.Priority,
 		) (api.WorkflowLease, error) {
 			return apiCtx, nil
 		},

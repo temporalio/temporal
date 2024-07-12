@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -123,6 +124,7 @@ type (
 		nDCHistoryImporter         ndc.HistoryImporter
 		nDCActivityStateReplicator ndc.ActivityStateReplicator
 		nDCWorkflowStateReplicator ndc.WorkflowStateReplicator
+		nDCHSMStateReplicator      ndc.HSMStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
@@ -223,7 +225,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsHandler(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.StateMachineRegistry(), shard.GetMetricsHandler(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
@@ -255,6 +257,11 @@ func NewEngineWithShardContext(
 			workflowCache,
 			historyEngImpl.eventsReapplier,
 			eventSerializer,
+			logger,
+		)
+		historyEngImpl.nDCHSMStateReplicator = ndc.NewHSMStateReplicator(
+			shard,
+			workflowCache,
 			logger,
 		)
 	}
@@ -718,15 +725,22 @@ func (e *historyEngineImpl) ReplicateHistoryEvents(
 func (e *historyEngineImpl) SyncActivity(
 	ctx context.Context,
 	request *historyservice.SyncActivityRequest,
-) (retError error) {
+) error {
 	return e.nDCActivityStateReplicator.SyncActivityState(ctx, request)
 }
 
 func (e *historyEngineImpl) SyncActivities(
 	ctx context.Context,
 	request *historyservice.SyncActivitiesRequest,
-) (retError error) {
+) error {
 	return e.nDCActivityStateReplicator.SyncActivitiesState(ctx, request)
+}
+
+func (e *historyEngineImpl) SyncHSM(
+	ctx context.Context,
+	request *shard.SyncHSMRequest,
+) error {
+	return e.nDCHSMStateReplicator.SyncHSMState(ctx, request)
 }
 
 // ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
@@ -814,13 +828,14 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		}
 
 		if len(tasksByCategory) > 0 {
-			e.queueProcessors[category].NotifyNewTasks(tasksByCategory)
+			proc, ok := e.queueProcessors[category]
+			if !ok {
+				e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
+				continue
+			}
+			proc.NotifyNewTasks(tasksByCategory)
 		}
 	}
-}
-
-func (e *historyEngineImpl) AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
-	e.queueProcessors[tasks.CategoryMemoryTimer].NotifyNewTasks([]tasks.Task{task})
 }
 
 func (e *historyEngineImpl) GetReplicationMessages(

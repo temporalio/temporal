@@ -146,7 +146,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	s.mockMutableState.EXPECT().TransitionCount().Return(int64(1)).AnyTimes()
+	s.mockMutableState.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
 
 	taskGeneratorProvider = &testTaskGeneratorProvider{
 		mockMutableState:  s.mockMutableState,

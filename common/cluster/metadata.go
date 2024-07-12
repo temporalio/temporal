@@ -456,6 +456,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
 				newClusterInfo.HTTPAddress == oldClusterInfo.HTTPAddress &&
 				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
+				newClusterInfo.ClusterID == oldClusterInfo.ClusterID &&
 				maps.Equal(newClusterInfo.Tags, oldClusterInfo.Tags) {
 				// key cluster info does not change
 				continue
@@ -577,6 +578,7 @@ func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResp
 		InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
 		RPCAddress:             getClusterResp.GetClusterAddress(),
 		HTTPAddress:            getClusterResp.GetHttpAddress(),
+		ClusterID:              getClusterResp.GetClusterId(),
 		ShardCount:             getClusterResp.GetHistoryShardCount(),
 		Tags:                   getClusterResp.GetTags(),
 		version:                getClusterResp.Version,

@@ -167,6 +167,13 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectBackoff:                false,
 		},
 		{
+			name:                         "NotFoundErrorWrapped",
+			taskErr:                      fmt.Errorf("%w: some reason", consts.ErrWorkflowCompleted),
+			expectError:                  false,
+			expectedAttemptNoUserLatency: attemptNoUserLatency,
+			expectBackoff:                false,
+		},
+		{
 			name:                         "ResourceExhaustedError",
 			taskErr:                      consts.ErrResourceExhaustedBusyWorkflow,
 			expectError:                  true,

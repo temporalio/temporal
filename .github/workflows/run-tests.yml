@@ -19,7 +19,11 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   cancel-in-progress: true
 
 env:
-  COMMIT: ${{ github.event.inputs.commit || github.sha }}
+  # For workflow_dispatch: use the given commit.
+  # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
+  # For push: use the pushed commit.
+  COMMIT: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
+  PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
@@ -37,7 +41,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
-          submodules: true
+          # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
+          fetch-depth: 100
 
       - uses: actions/setup-go@v5
         with:
@@ -46,7 +51,11 @@ jobs:
 
       - uses: arduino/setup-protoc@v3
 
-      - run: make ci-build-misc
+      - run: GOOS=windows GOARCH=amd64 make clean-bins bins
+
+      - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
+
+      - run: make clean-bins ci-build-misc
 
       - run: make build-tests
 
@@ -197,7 +206,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
-        timeout-minutes: 25
+        timeout-minutes: 30 # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
 
       - name: Upload test results
