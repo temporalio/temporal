@@ -86,31 +86,37 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	})
 	// Make the call and record metrics.
 	startTime := time.Now()
-	response, callErr := caller(request)
+	response, err := caller(request)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination)
-	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(ctx, response, callErr))
+	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(ctx, response, err))
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
 
-	if callErr == nil {
+	if err == nil {
 		// Body is not read but should be discarded to keep the underlying TCP connection alive.
 		// Just in case something unexpected happens while discarding or closing the body,
 		// propagate errors to the machine.
-		if _, callErr = io.Copy(io.Discard, response.Body); callErr == nil {
-			callErr = response.Body.Close()
-			if isRetryableHTTPResponse(response) {
-				return Retry, queues.NewDestinationDownError(
-					fmt.Sprintf("response returned retryable status code %d", response.StatusCode),
-					err,
-				)
-			}
-			return Ok, nil
+		if _, err = io.Copy(io.Discard, response.Body); err == nil {
+			err = response.Body.Close()
 		}
 	}
-	status := response.Status
+
+	if err != nil {
+		err = queues.NewDestinationDownError(err.Error(), err)
+		return Retry, err
+	}
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		return Ok, nil
+	}
+
 	retryable := isRetryableHTTPResponse(response)
-	e.Logger.Error("Callback request failed", tag.Error(callErr), tag.NewStringTag("status", status), tag.NewBoolTag("retryable", retryable))
-	return Failed, queues.NewDestinationDownError(callErr.Error(), err)
+	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
+	if retryable {
+		err = queues.NewDestinationDownError(
+			fmt.Sprintf("response returned retryable status code %d", response.StatusCode), err)
+		return Retry, err
+	}
+	return Failed, queues.NewDestinationDownError(fmt.Sprintf("request failed with: %v", response.Status), err)
 }

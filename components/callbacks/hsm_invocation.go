@@ -24,13 +24,17 @@ package callbacks
 
 import (
 	"context"
+	"fmt"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"time"
 )
 
 type CanGetCompletionEvent interface {
@@ -47,18 +51,18 @@ func isRetryableRpcResponse(err error) bool {
 	if ok {
 		switch st.Code() {
 		// TODO(Tianyu): Are there other types of retryable errors, and are these always retryable?
-		case codes.Unavailable:
-		case codes.DeadlineExceeded:
-		case codes.ResourceExhausted:
-		case codes.Aborted:
-		case codes.Internal:
+		case codes.Unavailable,
+			codes.DeadlineExceeded,
+			codes.ResourceExhausted,
+			codes.Aborted,
+			codes.Internal:
 			return true
 		default:
 			return false
 		}
 	}
 	// Not a gRPC induced error
-	// TODO(Tianyu): Can handler return some kind of non-gRPC retryable error?
+	// TODO(Tianyu): Can handler return some kind of non-gRPC error?
 	return false
 }
 
@@ -69,7 +73,7 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 	}
 
 	request := historyservice.InvokeStateMachineMethodRequest{
-		NamespaceId: ns.ID().String(),
+		NamespaceId: s.hsm.NamespaceId,
 		WorkflowId:  s.hsm.WorkflowId,
 		RunId:       s.hsm.RunId,
 		Ref:         s.hsm.Ref,
@@ -77,15 +81,23 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 		Input:       completionEventSerialized,
 	}
 
+	startTime := time.Now()
 	// TODO(Tianyu): Will we want to log the response somewhere?
 	_, err = e.HistoryClient.InvokeStateMachineMethod(ctx, &request)
-	// TODO(Tianyu): Add metrics
+
+	// Log down metrics about the call
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(task.Destination)
+	statusCodeTag := metrics.StringTag("hsm-callback", fmt.Sprintf("status:%d", status.Code(err)))
+	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
+	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+
 	if err != nil {
 		e.Logger.Error("Callback request failed", tag.Error(err))
 		if isRetryableRpcResponse(err) {
-			return Retry, err
+			return Retry, queues.NewDestinationDownError(err.Error(), err)
 		}
-		return Failed, err
+		return Failed, queues.NewDestinationDownError(err.Error(), err)
 	}
 	return Ok, nil
 }

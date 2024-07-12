@@ -112,7 +112,16 @@ func (e taskExecutor) executeInvocationTask(
 
 	result, err := invokable.Invoke(callCtx, ns, e, task)
 
-	return e.saveResult(callCtx, env, ref, result, err)
+	saveErr := e.saveResult(callCtx, env, ref, result, err)
+	if saveErr != nil {
+		return saveErr
+	}
+
+	// If the request permanently failed there is no need to raise the error
+	if result == Failed {
+		return nil
+	}
+	return err
 }
 
 func (e taskExecutor) loadInvocationArgs(
