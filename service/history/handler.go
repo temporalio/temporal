@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/api/listqueues"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/replication"
@@ -160,8 +161,6 @@ var (
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-
-	errDeserializeTaskTokenMessage = "Error to deserialize task token. Error: %v."
 
 	errShuttingDown = serviceerror.NewUnavailable("Shutting down")
 )
@@ -273,7 +272,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	heartbeatRequest := request.HeartbeatRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	err0 = validateTaskToken(taskToken)
@@ -386,7 +385,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	completeRequest := request.CompleteRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	err0 = validateTaskToken(taskToken)
@@ -425,7 +424,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	failRequest := request.FailedRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	err0 = validateTaskToken(taskToken)
@@ -464,7 +463,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	cancelRequest := request.CancelRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	err0 = validateTaskToken(taskToken)
@@ -503,7 +502,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	completeRequest := request.CompleteRequest
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	h.logger.Debug("RespondWorkflowTaskCompleted",
@@ -548,7 +547,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 	failedRequest := request.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	h.logger.Debug("RespondWorkflowTaskFailed",
