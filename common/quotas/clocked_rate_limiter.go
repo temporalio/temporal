@@ -147,3 +147,7 @@ func (l ClockedRateLimiter) SetLimitAt(t time.Time, newLimit rate.Limit) {
 func (l ClockedRateLimiter) SetBurstAt(t time.Time, newBurst int) {
 	l.rateLimiter.SetBurstAt(t, newBurst)
 }
+
+func (l ClockedRateLimiter) TokensAt(t time.Time) int {
+	return int(l.rateLimiter.TokensAt(t))
+}
