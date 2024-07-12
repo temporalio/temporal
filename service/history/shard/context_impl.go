@@ -1483,19 +1483,20 @@ func (s *ContextImpl) FinishStop() {
 	// an Engine here, we won't ever have one.
 	_ = s.transition(contextRequestFinishStop{})
 
-	s.finalizer.Run(
-		goro.NewAdaptivePool(cclock.NewRealTimeSource(), 5, 15, 10*time.Millisecond, 10),
-		s.config.ShardFinalizerTimeout())
-
-	// use a context that we know is cancelled so that this doesn't block
+	// Use a context that we know is cancelled so that this doesn't block.
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 
-	// Stop the engine if it was running (outside the lock but before returning)
+	// Stop the engine if it was running (outside the lock but before returning).
 	if engine != nil {
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardEngine)
 		engine.Stop()
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
 	}
+
+	// Run finalizer to cleanup any of the shard's associated resources that are registered.
+	s.finalizer.Run(
+		goro.NewAdaptivePool(cclock.NewRealTimeSource(), 5, 15, 10*time.Millisecond, 10),
+		s.config.ShardFinalizerTimeout())
 }
 
 func (s *ContextImpl) IsValid() bool {
