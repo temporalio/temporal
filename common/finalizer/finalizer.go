@@ -124,16 +124,14 @@ func (f *Finalizer) Run(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	go func() {
-		for _, cb := range f.callbacks {
-			func(callback func(context.Context) error) {
-				// NOTE: Once the pool is stopped due to a timeout,
-				// any remaining callbacks will not be invoked anymore.
-				pool.Do(func() {
-					defer wg.Done()
-					defer completionCounter.Add(1)
-					_ = callback(ctx)
-				})
-			}(cb)
+		for _, callback := range f.callbacks {
+			// NOTE: Once the pool is stopped due to a timeout,
+			// any remaining callbacks will not be invoked anymore.
+			pool.Do(func() {
+				defer wg.Done()
+				defer completionCounter.Add(1)
+				_ = callback(ctx)
+			})
 		}
 	}()
 
