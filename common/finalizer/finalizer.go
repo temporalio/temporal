@@ -105,7 +105,7 @@ func (f *Finalizer) Run(
 	}
 
 	if timeout == 0 {
-		f.logger.Warn("finalizer skipped: non-zero timeout")
+		f.logger.Warn("finalizer skipped: zero timeout")
 		return 0
 	}
 
