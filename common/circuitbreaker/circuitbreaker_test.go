@@ -58,11 +58,11 @@ func TestDynamicSettings(t *testing.T) {
 
 	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(Settings{})
 	tscb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
-	cb1 := tscb.cb
+	cb1 := tscb.cb.Load()
 
 	// should not change
 	tscb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
-	cb2 := tscb.cb
+	cb2 := tscb.cb.Load()
 	s.Equal(cb2, cb1)
 
 	// should change
@@ -71,6 +71,6 @@ func TestDynamicSettings(t *testing.T) {
 		Interval:    3600 * time.Second,
 		Timeout:     30 * time.Second,
 	})
-	cb3 := tscb.cb
+	cb3 := tscb.cb.Load()
 	s.NotEqual(cb3, cb2)
 }
