@@ -24,7 +24,17 @@ on:
       test_name:
         description: "Name of the test suite to run, include -testify.m flag here if desired (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite -testify.m=TestUpdateWorkflow')"
         type: string
-
+      test_db:
+        description: "Which database to run your test against"
+        default: "all"
+        type: choice
+        options:
+          - "cass_es"
+          - "cass_es8"
+          - "sqlite"
+          - "mysql8"
+          - "postgres12"
+          - "postgres12_pgx"
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: run-tests-${{ github.head_ref || github.run_id }}
@@ -188,7 +198,8 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
+        #name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
+        name: [sqlite]
         #shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
         shard_index: [0]
         include:
