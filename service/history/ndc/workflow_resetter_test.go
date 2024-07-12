@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -104,13 +105,16 @@ func (s *workflowResetterSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockStateRebuilder = NewMockStateRebuilder(s.controller)
 
+	config := tests.NewDynamicConfig()
+	config.ShardFinalizerTimeout = dynamicconfig.GetDurationPropertyFn(0) // disabling Shard cleanup to keep tests simple
+
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
 			ShardId: 0,
 			RangeId: 1,
 		},
-		tests.NewDynamicConfig(),
+		config,
 	)
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockTransaction = workflow.NewMockTransaction(s.controller)
@@ -717,14 +721,15 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext.EXPECT().Unlock()
 	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	resetMutableState := workflow.NewMockMutableState(s.controller)
-	resetContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(resetMutableState, nil)
-	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
-	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	resetContextCacheKey := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	err := wcache.PutContextIfNotExist(s.workflowResetter.workflowCache, resetContextCacheKey, resetContext)
+	resetContext.EXPECT().GetWorkflowKey().Return(resetContextCacheKey.WorkflowKey)
+	resetContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(resetMutableState, nil)
+	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
+	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
+	err := wcache.PutContextIfNotExist(s.mockShard, s.workflowResetter.workflowCache, resetContextCacheKey, resetContext)
 	s.NoError(err)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
