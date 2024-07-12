@@ -350,6 +350,21 @@ func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
 	return resp, err
 }
 
+func (c *retryableClient) HealthCheck(
+	ctx context.Context,
+	request *adminservice.HealthCheckRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.HealthCheckResponse, error) {
+	var resp *adminservice.HealthCheckResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.HealthCheck(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ImportWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.ImportWorkflowExecutionRequest,

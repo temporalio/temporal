@@ -173,5 +173,7 @@ service AdminService {
     rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {}
 
     rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {}
+
+    rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {}
 }
 

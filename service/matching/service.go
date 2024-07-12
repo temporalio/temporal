@@ -93,7 +93,7 @@ func (s *Service) Start() {
 
 	matchingservice.RegisterMatchingServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
-	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+	s.healthServer.SetServingStatus(ServiceName, healthpb.HealthCheckResponse_SERVING)
 
 	go func() {
 		s.logger.Info("Starting to serve on matching listener")
@@ -122,7 +122,7 @@ func (s *Service) Stop() {
 	if err != nil {
 		s.logger.Error("ShutdownHandler: Failed to evict self from membership ring", tag.Error(err))
 	}
-	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+	s.healthServer.SetServingStatus(ServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 
 	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(max(s.config.ShutdownDrainDuration(), waitTime))

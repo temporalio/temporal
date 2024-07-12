@@ -552,3 +552,11 @@ message ListQueuesResponse {
   repeated QueueInfo queues = 1;
   bytes next_page_token = 2;
 }
+
+message HealthCheckRequest {
+  string service_name = 1;
+}
+
+message HealthCheckResponse {
+  temporal.server.api.enums.v1.HealthState state = 1;
+}

@@ -52,6 +52,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/common"
 
 	commonspb "go.temporal.io/server/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -167,6 +168,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		health.NewServer(),
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
+		common.NewMockRPCFactory(s.controller),
 		tasks.NewDefaultTaskCategoryRegistry(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()

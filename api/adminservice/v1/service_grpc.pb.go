@@ -80,6 +80,7 @@ const (
 	AdminService_CancelDLQJob_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/CancelDLQJob"
 	AdminService_AddTasks_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
 	AdminService_ListQueues_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
+	AdminService_HealthCheck_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/HealthCheck"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -165,6 +166,7 @@ type AdminServiceClient interface {
 	CancelDLQJob(ctx context.Context, in *CancelDLQJobRequest, opts ...grpc.CallOption) (*CancelDLQJobResponse, error)
 	AddTasks(ctx context.Context, in *AddTasksRequest, opts ...grpc.CallOption) (*AddTasksResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
+	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
 }
 
 type adminServiceClient struct {
@@ -539,6 +541,15 @@ func (c *adminServiceClient) ListQueues(ctx context.Context, in *ListQueuesReque
 	return out, nil
 }
 
+func (c *adminServiceClient) HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
+	out := new(HealthCheckResponse)
+	err := c.cc.Invoke(ctx, AdminService_HealthCheck_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -622,6 +633,7 @@ type AdminServiceServer interface {
 	CancelDLQJob(context.Context, *CancelDLQJobRequest) (*CancelDLQJobResponse, error)
 	AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
+	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -742,6 +754,9 @@ func (UnimplementedAdminServiceServer) AddTasks(context.Context, *AddTasksReques
 }
 func (UnimplementedAdminServiceServer) ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListQueues not implemented")
+}
+func (UnimplementedAdminServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1448,6 +1463,24 @@ func _AdminService_ListQueues_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HealthCheckRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).HealthCheck(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_HealthCheck_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).HealthCheck(ctx, req.(*HealthCheckRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1602,6 +1635,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListQueues",
 			Handler:    _AdminService_ListQueues_Handler,
+		},
+		{
+			MethodName: "HealthCheck",
+			Handler:    _AdminService_HealthCheck_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

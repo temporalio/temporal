@@ -62,7 +62,7 @@ type (
 )
 
 const (
-	serviceName = "temporal.api.workflowservice.v1.MatchingService"
+	ServiceName = "temporal.api.workflowservice.v1.MatchingService"
 )
 
 var (

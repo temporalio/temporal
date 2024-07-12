@@ -127,6 +127,7 @@ type (
 		saManager                  searchattribute.Manager
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
+		healthCheckClientFactory   HealthCheckClientFactory
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -159,6 +160,7 @@ type (
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
+		RpcFactory                          common.RPCFactory
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -212,7 +214,12 @@ func NewAdminHandler(
 		saManager:                  args.SaManager,
 		clusterMetadata:            args.ClusterMetadata,
 		healthServer:               args.HealthServer,
-		taskCategoryRegistry:       args.CategoryRegistry,
+		healthCheckClientFactory: NewHealthCheckClientFactory(
+			args.MembershipMonitor,
+			args.RpcFactory,
+			args.Config,
+		),
+		taskCategoryRegistry: args.CategoryRegistry,
 	}
 }
 
@@ -243,6 +250,36 @@ func (adh *AdminHandler) Stop() {
 
 	// Calling stop if the queue does not start is ok
 	adh.namespaceReplicationQueue.Stop()
+}
+
+func (adh *AdminHandler) HealthCheck(
+	ctx context.Context,
+	request *adminservice.HealthCheckRequest,
+) (_ *adminservice.HealthCheckResponse, retError error) {
+
+	var client *HealthCheckClient
+	switch request.GetServiceName() {
+	case string(primitives.FrontendService):
+		client, retError = adh.healthCheckClientFactory.GetFrontendClients()
+		if retError != nil {
+			return nil, retError
+		}
+	case string(primitives.HistoryService):
+		// TODO: health check to history
+	case string(primitives.MatchingService):
+		client, retError = adh.healthCheckClientFactory.GetMatchingClients()
+		if retError != nil {
+			return nil, retError
+		}
+	default:
+		// TODO: check all services
+	}
+	if client != nil {
+		healthStatus := client.Check(ctx)
+		return &adminservice.HealthCheckResponse{State: healthStatus}, nil
+	}
+
+	return &adminservice.HealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.

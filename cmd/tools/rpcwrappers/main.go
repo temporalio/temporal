@@ -35,10 +35,11 @@ import (
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"golang.org/x/exp/slices"
 )
 
 type (
@@ -96,6 +97,7 @@ var (
 		"client.history.StreamWorkflowReplicationMessages":          true,
 		"metricsClient.history.StreamWorkflowReplicationMessages":   true,
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
+		"client.admin.HealthCheck":                                  true,
 
 		// these are non-standard implementations. do not generate.
 		"client.history.DescribeHistoryHost":    true,
@@ -105,12 +107,14 @@ var (
 		"client.history.DeleteDLQTasks":         true,
 		"client.history.ListQueues":             true,
 		"client.history.ListTasks":              true,
+		"client.history.HealthCheck":            true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
 		"client.matching.PollActivityTaskQueue": true,
 		"client.matching.PollWorkflowTaskQueue": true,
 		"client.matching.QueryWorkflow":         true,
+		"client.matching.HealthCheck":           true,
 		// these do forwarding stats. too complicated.
 		"metricsClient.matching.AddActivityTask":       true,
 		"metricsClient.matching.AddWorkflowTask":       true,
