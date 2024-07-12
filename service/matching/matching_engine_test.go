@@ -404,8 +404,6 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
 
 	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "STQ", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
 
-	//s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
 
 	runID := uuid.NewRandom().String()
@@ -444,7 +442,7 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
 		}
 	}()
 	wg.Wait()
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 	partition, err := tqid.PartitionFromProto(addRequest.TaskQueue, addRequest.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.NoError(err)
 
@@ -469,10 +467,10 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
 		nil, expectedError)
 
 	_, syncMath, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-	//now history still generate error, but in this case task should be moved to backlog queue
+
+	// now history still generate error, but in this case task should be moved to backlog queue
 	s.Nil(err)
 	s.False(syncMath)
-
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
