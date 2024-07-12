@@ -1485,7 +1485,7 @@ func (s *ContextImpl) FinishStop() {
 
 	s.finalizer.Run(
 		goro.NewAdaptivePool(cclock.NewRealTimeSource(), 5, 15, 10*time.Millisecond, 10),
-		s.config.ShardFinalizerTimeLimit())
+		s.config.ShardFinalizerTimeout())
 
 	// use a context that we know is cancelled so that this doesn't block
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)

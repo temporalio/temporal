@@ -4931,7 +4931,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_RetryUpdateRequestOnShardClosure() 
 		s.Run(tc.Name, func() {
 			if !tc.AbortUpdatesOnShardClosure {
 				// Disabling the shard finalizer. Pending updates will NOT be aborted when the shard closes.
-				s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.ShardFinalizerTimeLimit, 0)
+				s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.ShardFinalizerTimeout, 0)
 			}
 
 			tv := testvars.New(s.T())
