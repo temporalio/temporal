@@ -384,11 +384,11 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(SINGLE_TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-n-times: prepare-coverage-test
-	@printf $(COLOR) "Run functional test $(TEST_NAME) $(N_TEST_RUNS) times with $(PERSISTENCE_DRIVER) driver..."
+	@printf $(COLOR) "Run functional test $(TEST_NAME) $(N_RUNS) times with $(PERSISTENCE_DRIVER) driver..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) -test.run $(TEST_NAME) -count $(N_TEST_RUNS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
