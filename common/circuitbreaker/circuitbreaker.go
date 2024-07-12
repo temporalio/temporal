@@ -24,6 +24,7 @@ package circuitbreaker
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/sony/gobreaker"
 
@@ -47,9 +48,9 @@ type (
 		readyToTrip   func(counts gobreaker.Counts) bool
 		onStateChange func(name string, from gobreaker.State, to gobreaker.State)
 
-		cb              *gobreaker.TwoStepCircuitBreaker
-		cbLock          *sync.RWMutex
-		dynamicSettings dynamicconfig.CircuitBreakerSettings
+		cb       atomic.Pointer[gobreaker.TwoStepCircuitBreaker]
+		cbLock   sync.Mutex
+		settings dynamicconfig.CircuitBreakerSettings
 	}
 
 	Settings struct {
@@ -70,8 +71,6 @@ func NewTwoStepCircuitBreakerWithDynamicSettings(
 		name:          settings.Name,
 		readyToTrip:   settings.ReadyToTrip,
 		onStateChange: settings.OnStateChange,
-
-		cbLock: &sync.RWMutex{},
 	}
 }
 
@@ -80,39 +79,32 @@ func (c *TwoStepCircuitBreakerWithDynamicSettings) UpdateSettings(
 ) {
 	c.cbLock.Lock()
 	defer c.cbLock.Unlock()
-	if c.cb != nil && ds == c.dynamicSettings {
+	if c.cb.Load() != nil && ds == c.settings {
 		return // no change
 	}
-	c.dynamicSettings = ds
-	c.cb = gobreaker.NewTwoStepCircuitBreaker(gobreaker.Settings{
+	c.settings = ds
+	c.cb.Store(gobreaker.NewTwoStepCircuitBreaker(gobreaker.Settings{
 		Name:          c.name,
 		MaxRequests:   uint32(ds.MaxRequests),
 		Interval:      ds.Interval,
 		Timeout:       ds.Timeout,
 		ReadyToTrip:   c.readyToTrip,
 		OnStateChange: c.onStateChange,
-	})
+	}))
 }
 
 func (c *TwoStepCircuitBreakerWithDynamicSettings) Name() string {
-	return c.cb.Name()
+	return c.cb.Load().Name()
 }
 
 func (c *TwoStepCircuitBreakerWithDynamicSettings) State() gobreaker.State {
-	return c.cb.State()
+	return c.cb.Load().State()
 }
 
 func (c *TwoStepCircuitBreakerWithDynamicSettings) Counts() gobreaker.Counts {
-	return c.cb.Counts()
+	return c.cb.Load().Counts()
 }
 
 func (c *TwoStepCircuitBreakerWithDynamicSettings) Allow() (done func(success bool), err error) {
-	cb := c.getInternalCircuitBreaker()
-	return cb.Allow()
-}
-
-func (c *TwoStepCircuitBreakerWithDynamicSettings) getInternalCircuitBreaker() *gobreaker.TwoStepCircuitBreaker {
-	c.cbLock.RLock()
-	defer c.cbLock.RUnlock()
-	return c.cb
+	return c.cb.Load().Allow()
 }
