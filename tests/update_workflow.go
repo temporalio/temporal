@@ -180,13 +180,18 @@ func (s *FunctionalSuite) pollUpdate(tv *testvars.TestVars, updateID string, wai
 	})
 }
 
-func (s *FunctionalSuite) clearWorkflowContext(tv *testvars.TestVars) *adminservice.DescribeMutableStateResponse {
-	resp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
-		Namespace: s.namespace,
-		Execution: tv.WorkflowExecution(),
-	})
-	s.NoError(err)
-	return resp
+// Simulating a graceful shard closure. The shard finalizer will clear the workflow context,
+// any update requests are aborted and the frontend retries any in-flight update requests.
+func (s *FunctionalSuite) clearUpdateRegistryAndAbortPendingUpdates(tv *testvars.TestVars) {
+	s.closeShard(tv.WorkflowID())
+}
+
+// Simulating an unexpected loss of the update registry due to a crash. The shard finalizer won't run,
+// therefore the workflow context is NOT cleared, pending update requests are NOT aborted and will time out.
+func (s *FunctionalSuite) loseUpdateRegistryAndAbandonPendingUpdates(tv *testvars.TestVars) {
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.ShardFinalizerTimeout, 0)
+	defer s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.ShardFinalizerTimeout)
+	s.closeShard(tv.WorkflowID())
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_AcceptComplete() {
@@ -3134,7 +3139,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
   7 WorkflowTaskFailed
   8 WorkflowExecutionTerminated`, events)
 
-	msResp := s.clearWorkflowContext(tv)
+	msResp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: tv.WorkflowExecution(),
+	})
+	s.NoError(err)
 	s.EqualValues(7, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WTFailed event")
 }
 
@@ -3215,7 +3224,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
   5 WorkflowExecutionTerminated // Speculative WTScheduled event is not written to history if WF is terminated.
 `, events)
 
-	msResp := s.clearWorkflowContext(tv)
+	msResp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: tv.WorkflowExecution(),
+	})
+	s.NoError(err)
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
@@ -3467,7 +3480,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
 `, events)
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_LostBecauseOfClearedWorkflowContext() {
+func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_LostUpdate() {
 	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
@@ -3505,7 +3518,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Lo
 		case 1:
 			return nil, nil
 		case 2:
-			s.Empty(task.Messages, "update must be lost due to cleared workflow context")
+			s.Empty(task.Messages, "update lost due to lost update registry")
 			return nil, nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
@@ -3535,8 +3548,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Lo
 	s.True(common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
 	s.Nil(updateResult.response)
 
-	// Clear workflow context. Speculative WFT and update registry disappear.
-	s.clearWorkflowContext(tv)
+	// Lose update registry. Speculative WFT and update registry disappear.
+	s.loseUpdateRegistryAndAbandonPendingUpdates(tv)
 
 	// Ensure, there is no WFT.
 	pollCtx, cancel := context.WithTimeout(NewContext(), common.MinLongPollTimeout*2)
@@ -3575,7 +3588,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Lo
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_LostBecauseOfClearedWorkflowContext() {
+func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_LostUpdate() {
 	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
@@ -3597,8 +3610,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Lost
   6 WorkflowTaskStarted
 `, task.History)
 
-			// Clear workflow context. Update is lost and NotFound error will be returned to RespondWorkflowTaskCompleted.
-			s.clearWorkflowContext(tv)
+			// Lose update registry. Update is lost and NotFound error will be returned to RespondWorkflowTaskCompleted.
+			s.loseUpdateRegistryAndAbandonPendingUpdates(tv)
 
 			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
@@ -3633,10 +3646,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Lost
 
 			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 3:
-			updRequestMsg := task.Messages[0]
-			s.EqualValues(6, updRequestMsg.GetEventId())
-
-			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+			s.Empty(task.Messages, "no messages since update registry was lost")
+			return nil, nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
 			return nil, nil
@@ -3699,7 +3710,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Lost
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResurrectedAfterContextCleared() {
+func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResurrectedAfterRegistryCleared() {
 	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
@@ -3714,8 +3725,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResur
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
 `, task.History)
-			// Clear workflow context. Update registry is lost but update will be resurrected in registry from acceptance message.
-			s.clearWorkflowContext(tv)
+			// Clear update registry. Update will be resurrected in registry from acceptance message.
+			s.clearUpdateRegistryAndAbortPendingUpdates(tv)
 
 			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 2:
@@ -4147,7 +4158,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_B
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
-		Workflow context is cleared, speculative WT is disappeared from server.
+		Update registry is cleared, speculative WT disappears from server.
 		Update is retired and second speculative WT is scheduled but not dispatched yet.
 		An activity completes, it converts the 2nd speculative WT into normal one.
 		The first speculative WT responds back, server fails request because WorkflowTaskStarted event Id is mismatched.
@@ -4220,10 +4231,10 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_B
 	  6 WorkflowTaskScheduled
 	  7 WorkflowTaskStarted`, wt2.History)
 
-	// Clear workflow context. Speculative WFT and update registry disappear.
-	s.clearWorkflowContext(tv)
+	// Clear update registry. Speculative WFT disappears from server.
+	s.clearUpdateRegistryAndAbortPendingUpdates(tv)
 
-	// Wait for update to retry and recreate. This will create a 3rd WFT as speculative.
+	// Wait for update request to be retry by frontend and recreated in registry. This will create a 3rd WFT as speculative.
 	s.waitUpdateAdmitted(tv, "1")
 
 	// Before polling for the 3rd speculative WT, process activity. This will convert 3rd speculative WT to normal WT.
@@ -4349,10 +4360,10 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_B
 	  5 WorkflowTaskScheduled
 	  6 WorkflowTaskStarted`, wt2.History)
 
-	// Clear workflow context. Speculative WFT and update registry disappear.
-	s.clearWorkflowContext(tv)
+	// Clear update registry. Speculative WFT disappears from server.
+	s.clearUpdateRegistryAndAbortPendingUpdates(tv)
 
-	// Wait for update to retry and recreate. This will create a 3rd WFT as speculative.
+	// Wait for update request to be retry by frontend and recreated in registry. This will create a 3rd WFT as speculative.
 	s.waitUpdateAdmitted(tv, "1")
 
 	// Poll for the 3rd speculative WT.
@@ -4458,8 +4469,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_N
 	  5 WorkflowTaskScheduled
 	  6 WorkflowTaskStarted`, wt2.History)
 
-	// Clear workflow context. Speculative WFT and update registry disappear.
-	s.clearWorkflowContext(tv)
+	// Clear update registry. Speculative WFT disappears from server.
+	s.clearUpdateRegistryAndAbortPendingUpdates(tv)
 
 	// Make sure UpdateWorkflowExecution call for the update "1" is retried and new (3rd) WFT is created as speculative with updateID=1.
 	s.waitUpdateAdmitted(tv, "1")
@@ -4910,126 +4921,4 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOfAdmi
 
 	history := s.getHistory(s.namespace, tv.WorkflowExecution())
 	s.EqualHistoryEvents(expectedHistory, history)
-}
-
-func (s *FunctionalSuite) TestUpdateWorkflow_RetryUpdateRequestOnShardClosure() {
-	testCases := []struct {
-		Name                       string
-		AbortUpdatesOnShardClosure bool
-	}{
-		{
-			Name:                       "abort pending updates on shard closure",
-			AbortUpdatesOnShardClosure: true, // this is the default behavior
-		},
-		{
-			Name:                       "don't abort pending updates on shard closure",
-			AbortUpdatesOnShardClosure: false, // this can happen if the shard finalizer can't complete its work in time
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Run(tc.Name, func() {
-			if !tc.AbortUpdatesOnShardClosure {
-				// Disabling the shard finalizer. Pending updates will NOT be aborted when the shard closes.
-				s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.ShardFinalizerTimeout, 0)
-			}
-
-			tv := testvars.New(s.T())
-
-			tv = s.startWorkflow(tv)
-
-			wtHandlerCalls := 0
-			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-				wtHandlerCalls++
-				switch wtHandlerCalls {
-				case 1:
-					return nil, nil // Completes first WFT with empty command list.
-				case 2, 3:
-					if wtHandlerCalls == 2 {
-						// If the shard finalizer is enabled,
-						// the workflow context is cleared, update request is aborted and frontend retries update request.
-						//
-						// If the shard finalizer is disabled,
-						// the workflow context is NOT cleared, the update is NOT aborted and the update request will time out.
-						s.closeShard(tv.WorkflowID())
-					}
-
-					// same event history for both update request attempts
-					s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted
-`, task.History)
-
-					return nil, nil
-				default:
-					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
-					return nil, nil
-				}
-			}
-
-			msgHandlerCalls := 0
-			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-				msgHandlerCalls++
-				switch msgHandlerCalls {
-				case 1:
-					s.Empty(task.Messages)
-					return nil, nil
-				case 2, 3: // pre and post shard closure
-					s.NotEmpty(task.Messages)
-					return nil, nil
-				default:
-					s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
-					return nil, nil
-				}
-			}
-
-			poller := &TaskPoller{
-				Client:              s.client,
-				Namespace:           s.namespace,
-				TaskQueue:           tv.TaskQueue(),
-				Identity:            tv.WorkerIdentity(),
-				WorkflowTaskHandler: wtHandler,
-				MessageHandler:      msgHandler,
-				Logger:              s.Logger,
-				T:                   s.T(),
-			}
-
-			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask()
-			s.NoError(err)
-
-			ctx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
-			defer cancel()
-			updateResultCh := s.sendUpdate(ctx, tv, tv.UpdateID())
-
-			// Process 1st update attempt. This WFT is lost due to the shard closure.
-			_, err = poller.PollAndProcessWorkflowTask()
-			s.Error(err)
-			s.IsType(&serviceerror.NotFound{}, err)
-			s.ErrorContains(err, "Workflow task not found")
-
-			if tc.AbortUpdatesOnShardClosure {
-				// Process 2nd update attempt (retried by frontend).
-				_, err = poller.PollAndProcessWorkflowTask(WithoutRetries)
-				s.NoError(err)
-
-				// Update request completed.
-				updateResult := <-updateResultCh
-				s.NoError(updateResult.err)
-
-				s.Equal(3, wtHandlerCalls)
-			} else {
-				// Update request timed out.
-				updateResult := <-updateResultCh
-				s.Error(updateResult.err)
-				s.True(common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
-
-				s.Equal(2, wtHandlerCalls)
-			}
-		})
-	}
 }
