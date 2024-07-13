@@ -854,6 +854,7 @@ var (
 	StartToCloseTimeoutCounter                    = NewCounterDef("start_to_close_timeout")
 	ScheduleToCloseTimeoutCounter                 = NewCounterDef("schedule_to_close_timeout")
 	NewTimerNotifyCounter                         = NewCounterDef("new_timer_notifications")
+	StateMachineTimerProcessingFailuresCounter    = NewCounterDef("state_machine_timer_processing_failures")
 	AcquireShardsCounter                          = NewCounterDef("acquire_shards_count")
 	AcquireShardsLatency                          = NewTimerDef("acquire_shards_latency")
 	MembershipChangedCounter                      = NewCounterDef("membership_changed_count")
