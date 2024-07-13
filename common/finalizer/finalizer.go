@@ -123,17 +123,20 @@ func (f *Finalizer) Run(
 		tag.NewInt("items", totalCount),
 		tag.NewDurationTag("timeout", timeout))
 
-	completionChannel := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	done := make(chan struct{})
+	completionChannel := make(chan struct{})
 	go func() {
 		for _, callback := range f.callbacks {
-			// NOTE: Once the pool is stopped due to a timeout, any remaining callbacks will not be invoked anymore.
+			// NOTE: Once `pool.Stop` is called due to a timeout, any remaining calls to `pool.Do` will do nothing.
 			pool.Do(func() {
 				defer func() { completionChannel <- struct{}{} }()
 				_ = callback(ctx)
 			})
 		}
+		done <- struct{}{}
 	}()
 
 	var completed int
@@ -155,5 +158,9 @@ loop:
 			break loop
 		}
 	}
+
+	// ensure that goroutine completed and does not access callbacks anymore before releasing the lock
+	<-done
+
 	return completed
 }
