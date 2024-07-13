@@ -168,6 +168,9 @@ func newCache(
 		OnPut: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
+			if item.finalizer == nil {
+				return // should only happen in unit tests
+			}
 			wfKey := item.wfContext.GetWorkflowKey()
 			err := item.finalizer.Register(wfKey.String(), func(ctx context.Context) error {
 				if err := item.wfContext.Lock(ctx, locks.PriorityHigh); err != nil {
@@ -184,6 +187,9 @@ func newCache(
 		OnEvict: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
+			if item.finalizer == nil {
+				return // should only happen in unit tests
+			}
 			wfKey := item.wfContext.GetWorkflowKey()
 			err := item.finalizer.Deregister(wfKey.String())
 			if err != nil {

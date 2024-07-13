@@ -1494,9 +1494,11 @@ func (s *ContextImpl) FinishStop() {
 	}
 
 	// Run finalizer to cleanup any of the shard's associated resources that are registered.
-	s.finalizer.Run(
-		goro.NewAdaptivePool(cclock.NewRealTimeSource(), 5, 15, 10*time.Millisecond, 10),
-		s.config.ShardFinalizerTimeout())
+	if s.finalizer != nil {
+		s.finalizer.Run(
+			goro.NewAdaptivePool(cclock.NewRealTimeSource(), 5, 15, 10*time.Millisecond, 10),
+			s.config.ShardFinalizerTimeout())
+	}
 }
 
 func (s *ContextImpl) IsValid() bool {

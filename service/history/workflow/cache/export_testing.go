@@ -25,7 +25,6 @@
 package cache
 
 import (
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -37,7 +36,7 @@ func GetMutableState(cache Cache, key Key) workflow.MutableState {
 
 // PutContextIfNotExist puts the given workflow Context into the cache, if it doens't already exist.
 // Exported for testing purposes.
-func PutContextIfNotExist(shardCtx *shard.ContextTest, cache Cache, key Key, value workflow.Context) error {
-	_, err := cache.(*cacheImpl).PutIfNotExist(key, &cacheItem{wfContext: value, finalizer: shardCtx.GetFinalizer()})
+func PutContextIfNotExist(cache Cache, key Key, value workflow.Context) error {
+	_, err := cache.(*cacheImpl).PutIfNotExist(key, &cacheItem{wfContext: value})
 	return err
 }
