@@ -269,7 +269,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 					// tasks to be stuck. We'll accept this limitation for now.
 					return 0, err
 				}
-				// TODO(bergundy): Metric?
+				metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(1, metrics.OperationTag(timer.GetType()))
 				t.logger.Warn("Skipped state machine timer", tag.Error(err))
 			}
 		}

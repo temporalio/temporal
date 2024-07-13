@@ -169,6 +169,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
 		require.NoError(t, err)
 		require.Equal(t, 1, len(desc.PendingNexusOperations))
 		op := desc.PendingNexusOperations[0]
+		require.Equal(t, pollResp.History.Events[scheduledEventIdx].EventId, op.ScheduledEventId)
 		require.Equal(t, endpointName, op.Endpoint)
 		require.Equal(t, "service", op.Service)
 		require.Equal(t, "operation", op.Operation)
