@@ -198,7 +198,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [sqlite]
+        name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
         #shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
         shard_index: [0]
         include:
