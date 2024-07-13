@@ -104,7 +104,7 @@ func (f *Finalizer) Deregister(
 func (f *Finalizer) Run(
 	pool *goro.AdaptivePool,
 	timeout time.Duration,
-) int32 {
+) int {
 	if !f.finalized.CompareAndSwap(false, true) {
 		f.logger.Warn("finalizer skipped: called more than once")
 		return 0
@@ -118,9 +118,9 @@ func (f *Finalizer) Run(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	totalCount := int32(len(f.callbacks))
+	totalCount := len(f.callbacks)
 	f.logger.Info("finalizer starting",
-		tag.NewInt32("items", totalCount),
+		tag.NewInt("items", totalCount),
 		tag.NewDurationTag("timeout", timeout))
 
 	completionChannel := make(chan struct{})
@@ -136,35 +136,24 @@ func (f *Finalizer) Run(
 		}
 	}()
 
-	var completionCounter atomic.Int32
-	done := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-completionChannel:
-				completed := completionCounter.Add(1)
-				if completed == totalCount {
-					close(done)
-					return
-				}
-			case <-ctx.Done():
-				return
+	var completed int
+loop:
+	for {
+		select {
+		case <-completionChannel:
+			completed += 1
+			if completed == totalCount {
+				f.logger.Info("finalizer completed",
+					tag.NewInt("completed-items", completed))
+				break loop
 			}
+		case <-ctx.Done():
+			pool.Stop()
+			f.logger.Error("finalizer timed out",
+				tag.NewInt("completed-items", completed),
+				tag.NewInt("unfinished-items", totalCount-completed))
+			break loop
 		}
-	}()
-
-	var completed int32
-	select {
-	case <-done:
-		completed = completionCounter.Load()
-		f.logger.Info("finalizer completed",
-			tag.NewInt32("completed-items", completed))
-	case <-ctx.Done():
-		pool.Stop()
-		completed = completionCounter.Load()
-		f.logger.Error("finalizer timed out",
-			tag.NewInt32("completed-items", completed),
-			tag.NewInt32("unfinished-items", totalCount-completed))
 	}
 	return completed
 }

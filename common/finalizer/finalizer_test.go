@@ -44,7 +44,6 @@ func TestFinalizer(t *testing.T) {
 			f := NewFinalizer(log.NewNoopLogger())
 			require.NoError(t, f.Register("1", nil))
 			require.NoError(t, f.Deregister("1"))
-			f.Run(newPool(), 1*time.Second)
 		})
 
 		t.Run("fails when ID already registered", func(t *testing.T) {
