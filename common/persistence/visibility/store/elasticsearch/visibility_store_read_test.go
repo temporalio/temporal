@@ -653,7 +653,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		Hits: &elastic.SearchHits{
 			TotalHits: &elastic.TotalHits{},
 		}}
-	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 1)
+	resp, err := s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -676,14 +676,14 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	}
 	searchResult.Hits.Hits = []*elastic.SearchHit{searchHit}
 	searchResult.Hits.TotalHits.Value = 1
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 1)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1)
 	s.NoError(err)
 	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SearchAfter: []interface{}{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"}})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for last page hits
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 2)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(1, len(resp.Executions))
@@ -694,7 +694,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		searchResult.Hits.Hits = append(searchResult.Hits.Hits, searchHit)
 	}
 	numOfHits := len(searchResult.Hits.Hits)
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
@@ -704,7 +704,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(int64(1547596872371234567), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
 	// for last page
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(numOfHits, len(resp.Executions))

@@ -392,7 +392,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, ConvertElasticsearchClientError("ListWorkflowExecutions failed", err)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
 }
 
 func (s *VisibilityStore) ScanWorkflowExecutions(
@@ -441,7 +441,7 @@ func (s *VisibilityStore) scanWorkflowExecutionsWithScroll(
 		}
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
 }
 
 func (s *VisibilityStore) scanWorkflowExecutionsWithPit(
@@ -477,7 +477,7 @@ func (s *VisibilityStore) scanWorkflowExecutionsWithPit(
 		}
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
 }
 
 func (s *VisibilityStore) CountWorkflowExecutions(
@@ -810,7 +810,7 @@ func (s *VisibilityStore) GetListFieldSorter(fieldSorts []elastic.Sorter) ([]ela
 	return res, nil
 }
 
-func (s *VisibilityStore) getListWorkflowExecutionsResponse(
+func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	searchResult *elastic.SearchResult,
 	namespace namespace.Name,
 	pageSize int,
