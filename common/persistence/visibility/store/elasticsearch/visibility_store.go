@@ -59,8 +59,8 @@ const (
 	PersistenceName = "elasticsearch"
 
 	delimiter                    = "~"
-	ScrollKeepAliveInterval      = "1m"
-	PointInTimeKeepAliveInterval = "1m"
+	scrollKeepAliveInterval      = "1m"
+	pointInTimeKeepAliveInterval = "1m"
 )
 
 type (
@@ -76,7 +76,7 @@ type (
 		metricsHandler                 metrics.Handler
 	}
 
-	VisibilityPageToken struct {
+	visibilityPageToken struct {
 		SearchAfter []interface{}
 
 		// For ScanWorkflowExecutions API.
@@ -415,15 +415,15 @@ func (s *VisibilityStore) scanWorkflowExecutionsWithScroll(
 		scrollErr    error
 	)
 
-	p, err := s.BuildSearchParametersV2(request, s.GetScanFieldSorter)
+	p, err := s.BuildSearchParametersV2(request, s.getScanFieldSorter)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(request.NextPageToken) == 0 {
-		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, ScrollKeepAliveInterval)
+		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, scrollKeepAliveInterval)
 	} else if p.ScrollID != "" {
-		searchResult, scrollErr = s.esClient.Scroll(ctx, p.ScrollID, ScrollKeepAliveInterval)
+		searchResult, scrollErr = s.esClient.Scroll(ctx, p.ScrollID, scrollKeepAliveInterval)
 	} else {
 		return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
 	}
@@ -448,18 +448,18 @@ func (s *VisibilityStore) scanWorkflowExecutionsWithPit(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	p, err := s.BuildSearchParametersV2(request, s.GetScanFieldSorter)
+	p, err := s.BuildSearchParametersV2(request, s.getScanFieldSorter)
 	if err != nil {
 		return nil, err
 	}
 
 	// First call doesn't have token with PointInTimeID.
 	if len(request.NextPageToken) == 0 {
-		pitID, err := s.esClient.OpenPointInTime(ctx, s.index, PointInTimeKeepAliveInterval)
+		pitID, err := s.esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
 		if err != nil {
 			return nil, ConvertElasticsearchClientError("Unable to create point in time", err)
 		}
-		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, PointInTimeKeepAliveInterval)
+		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
 	} else if p.PointInTime == nil {
 		return nil, serviceerror.NewInvalidArgument("pointInTimeId must present in pagination token")
 	}
@@ -686,7 +686,7 @@ func (s *VisibilityStore) BuildSearchParametersV2(
 
 func (s *VisibilityStore) processPageToken(
 	params *client.SearchParameters,
-	pageToken *VisibilityPageToken,
+	pageToken *visibilityPageToken,
 	namespaceName namespace.Name,
 ) error {
 	if pageToken == nil {
@@ -703,7 +703,7 @@ func (s *VisibilityStore) processPageToken(
 		params.SearchAfter = pageToken.SearchAfter
 		params.PointInTime = elastic.NewPointInTimeWithKeepAlive(
 			pageToken.PointInTimeID,
-			PointInTimeKeepAliveInterval,
+			pointInTimeKeepAliveInterval,
 		)
 		return nil
 	}
@@ -787,7 +787,7 @@ func (s *VisibilityStore) convertQuery(
 	return queryParams, nil
 }
 
-func (s *VisibilityStore) GetScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
+func (s *VisibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	// custom order is not supported by Scan API
 	if len(fieldSorts) > 0 {
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
@@ -839,7 +839,7 @@ func (s *VisibilityStore) getListWorkflowExecutionsResponse(
 	}
 
 	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
-		response.NextPageToken, err = s.SerializePageToken(&VisibilityPageToken{
+		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter:   lastHitSort,
 			ScrollID:      searchResult.ScrollId,
 			PointInTimeID: searchResult.PitId,
@@ -852,12 +852,12 @@ func (s *VisibilityStore) getListWorkflowExecutionsResponse(
 	return response, nil
 }
 
-func (s *VisibilityStore) deserializePageToken(data []byte) (*VisibilityPageToken, error) {
+func (s *VisibilityStore) deserializePageToken(data []byte) (*visibilityPageToken, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
 
-	var token *VisibilityPageToken
+	var token *visibilityPageToken
 	dec := json.NewDecoder(bytes.NewReader(data))
 	// UseNumber will not lose precision on big int64.
 	dec.UseNumber()
@@ -868,7 +868,7 @@ func (s *VisibilityStore) deserializePageToken(data []byte) (*VisibilityPageToke
 	return token, nil
 }
 
-func (s *VisibilityStore) SerializePageToken(token *VisibilityPageToken) ([]byte, error) {
+func (s *VisibilityStore) serializePageToken(token *visibilityPageToken) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
