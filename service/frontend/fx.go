@@ -94,7 +94,7 @@ var Module = fx.Options(
 	// coverage to catch misconfiguration.
 	// A more robust approach would require using fx groups but we shouldn't overcomplicate until this becomes an issue.
 	fx.Provide(MuxRouterProvider),
-	fx.Provide(dynamicconfig.NewCollection),
+	fx.Provide(dynamicconfig.Module),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),

@@ -2537,7 +2537,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards)
+	return NewConfig(dc.NewNoopCollection(), numHistoryShards)
 }
 
 func updateRequest(

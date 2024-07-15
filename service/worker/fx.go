@@ -86,7 +86,7 @@ var Module = fx.Options(
 		},
 	),
 	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(dynamicconfig.NewCollection),
+	fx.Provide(dynamicconfig.Module),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
