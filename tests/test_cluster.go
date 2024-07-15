@@ -374,7 +374,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	logger.Info("Index template created.")
 
 	logger.Info("Creating index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	_, err = esClient.CreateIndex(ctx, esConfig.GetVisibilityIndex())
+	_, err = esClient.CreateIndex(ctx, esConfig.GetVisibilityIndex(), nil)
 	if err != nil {
 		return err
 	}
@@ -397,7 +397,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 }
 
 func waitForYellowStatus(esClient esclient.IntegrationTestsClient, index string) error {
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	status, err := esClient.WaitForYellowStatus(ctxWithTimeout, index)
 	if err != nil {

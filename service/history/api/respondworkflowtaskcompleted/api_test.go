@@ -141,7 +141,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = mockShard.GetLogger()
 
-	s.workflowCache = wcache.NewHostLevelCache(mockShard.GetConfig(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(mockShard.GetConfig(), mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.workflowTaskCompletedHandler = NewWorkflowTaskCompletedHandler(
 		mockShard,
 		common.NewProtoTaskTokenSerializer(),

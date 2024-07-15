@@ -25,6 +25,7 @@
 package dynamicconfig
 
 import (
+	"math"
 	"os"
 	"time"
 
@@ -37,6 +38,23 @@ import (
 )
 
 var (
+	// keys for dynamic config itself
+	DynamicConfigSubscriptionCallback = NewGlobalTypedSetting(
+		"dynamicconfig.subscriptionCallback",
+		subscriptionCallbackSettings{
+			MinWorkers:   10,
+			MaxWorkers:   100,
+			TargetDelay:  10 * time.Millisecond,
+			ShrinkFactor: 1000, // 10 seconds
+		},
+		`Settings for dynamic config subscription dispatch. Requires server restart.`,
+	)
+	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
+		"dynamicconfig.subscriptionPollInterval",
+		time.Minute,
+		`Poll interval for emulating subscriptions on non-subscribable Client.`,
+	)
+
 	// keys for admin
 
 	AdminEnableListHistoryTasks = NewGlobalBoolSetting(
@@ -1658,6 +1676,19 @@ Fields (see gobreaker reference for more details):
   if interval is 0, then it never clears the internal counts (default 0).
 - Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
 	)
+	OutboundStandbyTaskMissingEventsDiscardDelay = NewDestinationDurationSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDiscardDelay",
+		// This is effectively equivalent to never discarding outbound tasks since it's 290+ years.
+		time.Duration(math.MaxInt64),
+		`OutboundStandbyTaskMissingEventsDiscardDelay is the equivalent of
+StandbyTaskMissingEventsDiscardDelay for outbound standby task processor.`,
+	)
+	OutboundStandbyTaskMissingEventsDestinationDownErr = NewDestinationBoolSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDestinationDownErr",
+		true,
+		`OutboundStandbyTaskMissingEventsDestinationDownErr enables returning DestinationDownError when
+the outbound standby task failed to be processed due to missing events.`,
+	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
 		"history.visibilityTaskBatchSize",
@@ -2137,7 +2168,7 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
-		50,
+		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
