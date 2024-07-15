@@ -37,6 +37,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -448,7 +449,7 @@ func (s *FunctionalTestBase) waitForESReady() {
 	s.Require().NoErrorf(err, "error getting ES functional test client")
 	attempts := 0
 	start := time.Now()
-	s.Require().Eventuallyf(func() bool {
+	require.Eventuallyf(s.T(), func() bool {
 		attempts++
 		// WaitForYellowStatus is a blocking request, so set timeout equal to Eventually tick to cancel in-flight requests before retrying
 		ctx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
