@@ -41,19 +41,19 @@ func TestFinalizer(t *testing.T) {
 
 	t.Run("register", func(t *testing.T) {
 		t.Run("succeeds", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 			require.NoError(t, f.Register("1", nil))
 			require.NoError(t, f.Deregister("1"))
 		})
 
 		t.Run("fails when ID already registered", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 			require.NoError(t, f.Register("1", nil))
 			require.ErrorIs(t, f.Register("1", nil), FinalizerDuplicateIdErr)
 		})
 
 		t.Run("fails after already run before", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 			f.Run(newPool(), 1*time.Second)
 			require.ErrorIs(t, f.Register("1", nil), FinalizerAlreadyDoneErr)
 		})
@@ -61,19 +61,19 @@ func TestFinalizer(t *testing.T) {
 
 	t.Run("deregister", func(t *testing.T) {
 		t.Run("succeeds", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 			require.NoError(t, f.Register("1", nil))
 			require.NoError(t, f.Deregister("1"))
 			require.Zero(t, f.Run(newPool(), 1*time.Second))
 		})
 
 		t.Run("fails if callback does not exist", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 			require.ErrorIs(t, f.Deregister("does-not-exist"), FinalizerUnknownIdErr)
 		})
 
 		t.Run("fails after already run before", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 			f.Run(newPool(), 1*time.Second)
 			require.ErrorIs(t, f.Deregister("1"), FinalizerAlreadyDoneErr)
 		})
@@ -81,7 +81,7 @@ func TestFinalizer(t *testing.T) {
 
 	t.Run("run", func(t *testing.T) {
 		t.Run("invokes all callbacks", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 
 			var completed atomic.Int32
 			for i := 0; i < 5; i += 1 {
@@ -100,7 +100,7 @@ func TestFinalizer(t *testing.T) {
 		})
 
 		t.Run("returns once timeout has been reached", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 			timeout := 50 * time.Millisecond
 
 			require.NoError(t, f.Register(
@@ -122,7 +122,7 @@ func TestFinalizer(t *testing.T) {
 		})
 
 		t.Run("does not execute more than once", func(t *testing.T) {
-			f := NewFinalizer(log.NewNoopLogger())
+			f := newFinalizer()
 			require.NoError(t, f.Register(
 				"0",
 				func(ctx context.Context) error {
@@ -132,6 +132,10 @@ func TestFinalizer(t *testing.T) {
 			require.Zero(t, f.Run(newPool(), 1*time.Second), "expected no callbacks to complete") // 2nd call
 		})
 	})
+}
+
+func newFinalizer() *Finalizer {
+	return New(log.NewNoopLogger())
 }
 
 func newPool() *goro.AdaptivePool {

@@ -2103,7 +2103,7 @@ func newContext(
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
-		finalizer:               finalizer.NewFinalizer(taggedLogger),
+		finalizer:               finalizer.New(taggedLogger),
 		contextTaggedLogger:     taggedLogger,
 		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:           factory,

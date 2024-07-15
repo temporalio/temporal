@@ -27,7 +27,6 @@ package finalizer
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -45,12 +44,12 @@ var (
 
 type Finalizer struct {
 	logger    log.Logger
-	mu        sync.Mutex  // lock protects access to callbacks map
-	finalized atomic.Bool // indicating if finalizer has been executed
+	mu        sync.Mutex
+	finalized bool
 	callbacks map[string]func(context.Context) error
 }
 
-func NewFinalizer(
+func New(
 	logger log.Logger,
 ) *Finalizer {
 	return &Finalizer{
@@ -60,17 +59,18 @@ func NewFinalizer(
 }
 
 // Register adds a callback to the finalizer.
-// Returns an error if the ID is already registered, or when the finalizer already ran.
+// Returns an error if the ID is already registered, or when the finalizer is/was already running.
 func (f *Finalizer) Register(
 	id string,
 	callback func(context.Context) error,
 ) error {
-	if f.finalized.Load() {
-		return FinalizerAlreadyDoneErr
-	}
-
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.finalized {
+		// aborting immediately once the finalizer is/was running
+		return FinalizerAlreadyDoneErr
+	}
 
 	if _, ok := f.callbacks[id]; ok {
 		return FinalizerDuplicateIdErr
@@ -80,16 +80,17 @@ func (f *Finalizer) Register(
 }
 
 // Deregister removes a callback from the finalizer.
-// Returns an error if the ID is not found, or when the finalizer already ran.
+// Returns an error if the ID is not found, or when the finalizer is/was already running.
 func (f *Finalizer) Deregister(
 	id string,
 ) (err error) {
-	if f.finalized.Load() {
-		return FinalizerAlreadyDoneErr
-	}
-
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.finalized {
+		// aborting immediately once the finalizer is/was running
+		return FinalizerAlreadyDoneErr
+	}
 
 	if _, ok := f.callbacks[id]; !ok {
 		return FinalizerUnknownIdErr
@@ -105,30 +106,36 @@ func (f *Finalizer) Run(
 	pool *goro.AdaptivePool,
 	timeout time.Duration,
 ) int {
-	if !f.finalized.CompareAndSwap(false, true) {
-		f.logger.Warn("finalizer skipped: called more than once")
-		return 0
-	}
-
 	if timeout == 0 {
-		f.logger.Warn("finalizer skipped: zero timeout")
+		f.logger.Info("finalizer skipped: zero timeout")
 		return 0
 	}
 
 	f.mu.Lock()
-	defer f.mu.Unlock()
+	if f.finalized {
+		f.logger.Warn("finalizer skipped: called more than once")
+		f.mu.Unlock()
+		return 0
+	}
+	f.finalized = true
+	f.mu.Unlock() // unlocking immediately to unblock any calls to Register/Deregister
 
 	totalCount := len(f.callbacks)
-	f.logger.Info("finalizer starting",
-		tag.NewInt("items", totalCount),
-		tag.NewDurationTag("timeout", timeout))
+	if totalCount == 0 {
+		f.logger.Debug("finalizer skipped: no callbacks")
+		return 0
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	done := make(chan struct{})
+	f.logger.Info("finalizer starting",
+		tag.NewInt("items", totalCount),
+		tag.NewDurationTag("timeout", timeout))
+
 	completionChannel := make(chan struct{})
 	go func() {
+		defer func() { f.logger.Info("finalizer loop ended") }()
 		for _, callback := range f.callbacks {
 			// NOTE: Once `pool.Stop` is called due to a timeout, any remaining calls to `pool.Do` will do nothing.
 			pool.Do(func() {
@@ -136,31 +143,28 @@ func (f *Finalizer) Run(
 				_ = callback(ctx)
 			})
 		}
-		done <- struct{}{}
 	}()
 
-	var completed int
-loop:
+	var completedCallbacks int
 	for {
 		select {
 		case <-completionChannel:
-			completed += 1
-			if completed == totalCount {
+			completedCallbacks += 1
+
+			if completedCallbacks == totalCount {
 				f.logger.Info("finalizer completed",
-					tag.NewInt("completed-items", completed))
-				break loop
+					tag.NewInt("completed", completedCallbacks))
+				return completedCallbacks
 			}
+
 		case <-ctx.Done():
 			pool.Stop()
+
 			f.logger.Error("finalizer timed out",
-				tag.NewInt("completed-items", completed),
-				tag.NewInt("unfinished-items", totalCount-completed))
-			break loop
+				tag.NewInt("completed", completedCallbacks),
+				tag.NewInt("unfinished", totalCount-completedCallbacks))
+
+			return completedCallbacks
 		}
 	}
-
-	// ensure that goroutine completed and does not access callbacks anymore before releasing the lock
-	<-done
-
-	return completed
 }
