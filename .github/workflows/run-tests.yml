@@ -18,15 +18,15 @@ on:
         type: boolean
         default: false
       n_runs:
-        description: "Number of times to repeat the single test"
+        description: "[Single Test Only] Number of times to repeat the single test"
         type: number
         default: 1
       test_name:
-        description: "Name of the test suite to run, include -testify.m flag here if desired (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite -testify.m=TestUpdateWorkflow')"
+        description: "[Single Test Only] Name of the test suite to run, include -testify.m flag here if desired (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite -testify.m=TestUpdateWorkflow')"
         type: string
       test_db:
-        description: "Which database to run your test against"
-        default: "all"
+        description: "[Single Test Only] Which database to run your test against"
+        default: "sqlite"
         type: choice
         options:
           - "cass_es"
@@ -72,16 +72,6 @@ jobs:
       - run: make ci-build-misc
 
       - run: make build-tests
-
-      - name: build functional test matrix
-        id: json
-        run: |
-          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then shard_index='{ "shard_index": [0] }'; else shard_index='{ "shard_index": [0, 1, 2] }'; fi
-          echo "shard_index=$shard_index" >> "$GITHUB_OUTPUT"
-          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then total_shards=1; else total_shards=3; fi
-          echo "total_shards=$total_shards" >> "$GITHUB_OUTPUT"
-          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"; fi
-          echo "single_test_args=$single_test_args" >> "$GITHUB_OUTPUT"
 
 
   cache-docker-images:
