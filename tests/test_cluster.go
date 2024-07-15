@@ -397,7 +397,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 }
 
 func waitForYellowStatus(esClient esclient.IntegrationTestsClient, index string) error {
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	status, err := esClient.WaitForYellowStatus(ctxWithTimeout, index)
 	if err != nil {
