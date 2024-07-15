@@ -38,6 +38,7 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -454,9 +455,11 @@ func (s *FunctionalTestBase) waitForESReady() {
 		// WaitForYellowStatus is a blocking request, so set timeout equal to Eventually tick to cancel in-flight requests before retrying
 		ctx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
 		defer cancel()
+		deadline, _ := ctx.Deadline()
+		s.Logger.Info(fmt.Sprintf("DEBUG: WaitForYellowStatus ctx timeout=%v", time.Until(deadline)))
 		status, err := esClient.WaitForYellowStatus(ctx, s.testClusterConfig.ESConfig.GetVisibilityIndex())
-		assert.NoError(t, err)
-		assert.True(t, status == "yellow" || status == "green")
+		require.NoError(t, err)
+		require.True(t, status == "yellow" || status == "green")
 	}, 5*time.Minute, 1*time.Second, fmt.Sprintf("timed out waiting for elastic search to be healthy after duration=%v and attempts=%d", time.Since(start), attempts))
 	s.Logger.Info(fmt.Sprintf("elastic search responded with healthy status after duration=%v and attempts=%d", time.Since(start), attempts))
 }
