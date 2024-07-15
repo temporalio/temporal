@@ -445,11 +445,11 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 }
 
 func (s *FunctionalTestBase) waitForESReady() {
+	esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
+	s.Require().NoErrorf(err, "error getting ES functional test client")
 	attempts := 0
 	s.Require().EventuallyWithTf(func(t *assert.CollectT) {
 		attempts++
-		esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
-		assert.NoError(t, err)
 		// WaitForYellowStatus is a blocking request, so set timeout equal to Eventually tick to cancel in-flight requests before retrying
 		ctx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
 		defer cancel()
