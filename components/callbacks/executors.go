@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.uber.org/fx"
-	"net/http"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -197,7 +196,7 @@ func (e taskExecutor) saveResult(
 					Err:  callErr,
 				})
 			default:
-				return hsm.TransitionOutput{}, fmt.Errorf("unrecognized callback result %v", result)
+				return hsm.TransitionOutput{}, queues.NewUnprocessableTaskError(fmt.Sprintf("unrecognized callback result %v", result))
 			}
 		})
 	})

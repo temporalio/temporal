@@ -51,6 +51,7 @@ type hsmInvocation struct {
 func isRetryableRpcResponse(err error) bool {
 	st, ok := status.FromError(err)
 	if ok {
+		// nolint:exhaustive
 		switch st.Code() {
 		// TODO(Tianyu): Are there other types of retryable errors, and are these always retryable?
 		case codes.Unavailable,
