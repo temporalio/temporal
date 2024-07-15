@@ -25,6 +25,8 @@ package callbacks
 import (
 	"context"
 	"fmt"
+	"net/http"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.uber.org/fx"
 
