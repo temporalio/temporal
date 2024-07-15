@@ -143,6 +143,20 @@ func (mr *MockRateLimiterMockRecorder) ReserveN(now, numToken interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReserveN", reflect.TypeOf((*MockRateLimiter)(nil).ReserveN), now, numToken)
 }
 
+// TokensAt mocks base method.
+func (m *MockRateLimiter) TokensAt(t time.Time) int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TokensAt", t)
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// TokensAt indicates an expected call of TokensAt.
+func (mr *MockRateLimiterMockRecorder) TokensAt(t interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TokensAt", reflect.TypeOf((*MockRateLimiter)(nil).TokensAt), t)
+}
+
 // Wait mocks base method.
 func (m *MockRateLimiter) Wait(ctx context.Context) error {
 	m.ctrl.T.Helper()
