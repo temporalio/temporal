@@ -272,21 +272,18 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	// replication lag is only meaningful for non-low priority tasks as for low priority task, we may delay processing
-	if e.taskPriority != enumsspb.TASK_PRIORITY_LOW {
-		metrics.ReplicationLatency.With(e.MetricsHandler).Record(
-			now.Sub(e.taskCreationTime),
-			metrics.OperationTag(e.metricsTag),
-			nsTag,
-			metrics.SourceClusterTag(e.sourceClusterName),
-		)
-		metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
-			e.taskReceivedTime.Sub(e.taskCreationTime),
-			metrics.OperationTag(e.metricsTag),
-			nsTag,
-			metrics.SourceClusterTag(e.sourceClusterName),
-		)
-	}
+	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
+		now.Sub(e.taskCreationTime),
+		metrics.OperationTag(e.metricsTag),
+		nsTag,
+		metrics.SourceClusterTag(e.sourceClusterName),
+	)
+	metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
+		e.taskReceivedTime.Sub(e.taskCreationTime),
+		metrics.OperationTag(e.metricsTag),
+		nsTag,
+		metrics.SourceClusterTag(e.sourceClusterName),
+	)
 	// TODO consider emit attempt metrics
 }
 
