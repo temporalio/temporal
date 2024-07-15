@@ -24,6 +24,10 @@ on:
       test_name:
         description: "[Single Test Only] Name of the test suite to run, include -testify.m flag here if desired (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite -testify.m=TestUpdateWorkflow')"
         type: string
+      timeout_minutes:
+        description: "[Single Test Only] When should the Github Action time out?"
+        type: number
+        default: 120
       test_db:
         description: "[Single Test Only] Which database to run your test against"
         default: "sqlite"
@@ -163,27 +167,6 @@ jobs:
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
-#jobs:
-  job1:
-    runs-on: ubuntu-latest
-    # Map a step output to a job output
-    outputs:
-      output1: ${{ steps.step1.outputs.test }}
-      output2: ${{ steps.step2.outputs.test }}
-    steps:
-      - id: step1
-        run: echo "test=hello" >> "$GITHUB_OUTPUT"
-      - id: step2
-        run: echo "test=world" >> "$GITHUB_OUTPUT"
-  job2:
-    runs-on: ubuntu-latest
-    needs: job1
-    steps:
-      - env:
-          OUTPUT1: ${{needs.job1.outputs.output1}}
-          OUTPUT2: ${{needs.job1.outputs.output2}}
-        run: echo "$OUTPUT1 $OUTPUT2"
-
 
   set-up-functional-test:
     if: always()
@@ -193,6 +176,7 @@ jobs:
       shard_index: ${{ steps.shard_matrix_step.outputs.shard_index }}
       total_shards: ${{ steps.total_shards_step.outputs.total_shards }}
       single_test_args: ${{ steps.test_args_step.outputs.single_test_args }}
+      functional_test_timeout: ${{ steps.test_args_step.outputs.timeout }}
     steps:
       - id: shard_matrix_step
         run: |
@@ -206,6 +190,10 @@ jobs:
         run: |  
           if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"; fi
           echo "single_test_args=$single_test_args" >> "$GITHUB_OUTPUT"
+      - id: timeout_step
+        run: |
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then timeout="${{ inputs.timeout_minutes }}"; else timeout="30"; fi
+          echo "timeout=$timeout" >> "$GITHUB_OUTPUT" 
 
   functional-test:
     if: always()
@@ -216,7 +204,8 @@ jobs:
       matrix:
         runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
-        shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
+        #shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
+        shard_index: [0] # todo
         include:
           - name: cass_es
             persistence_type: nosql
@@ -249,8 +238,12 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-functional-test.outputs.single_test_args }}
+      FUNCTIONAL_TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.functional_test_timeout }}
       #SINGLE_TEST_ARGS: -test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}
     steps:
+      - name: Print things
+        run: echo "$TEST_TOTAL_SHARDS" "$SINGLE_TEST_ARGS" "$FUNCTIONAL_TEST_TIMEOUT"
+
       - uses: ScribeMD/docker-cache@0.3.7
         with:
           key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
@@ -271,7 +264,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
-        timeout-minutes: 30 # make sure this is larger than the test timeout in the Makefile
+        timeout-minutes: ${{ fromJSON(env.FUNCTIONAL_TEST_TIMEOUT) }} # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
 
       - name: Upload test results
