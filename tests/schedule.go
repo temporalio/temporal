@@ -101,8 +101,6 @@ func (s *ScheduleFunctionalSuite) TearDownSuite() {
 }
 
 func (s *ScheduleFunctionalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
@@ -124,12 +122,8 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 }
 
 func (s *ScheduleFunctionalSuite) TearDownTest() {
-	if s.worker != nil {
-		s.worker.Stop()
-	}
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
+	s.worker.Stop()
+	s.sdkClient.Close()
 }
 
 func (s *ScheduleFunctionalSuite) TestBasics() {

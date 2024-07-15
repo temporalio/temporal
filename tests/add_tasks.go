@@ -164,8 +164,6 @@ func (s *AddTasksSuite) TearDownSuite() {
 }
 
 func (s *AddTasksSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
 	s.Assertions = require.New(s.T())
 }
 

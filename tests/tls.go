@@ -52,8 +52,6 @@ func (s *TLSFunctionalSuite) TearDownSuite() {
 }
 
 func (s *TLSFunctionalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -68,9 +66,7 @@ func (s *TLSFunctionalSuite) SetupTest() {
 }
 
 func (s *TLSFunctionalSuite) TearDownTest() {
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
+	s.sdkClient.Close()
 }
 
 func (s *TLSFunctionalSuite) TestGRPCMTLS() {

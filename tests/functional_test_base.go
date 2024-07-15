@@ -108,6 +108,8 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 }
 
 func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
+	checkTestShard(s.T())
+
 	s.testClusterFactory = NewTestClusterFactory()
 
 	params := ApplyTestClusterParams(options)
@@ -176,16 +178,6 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	}
 }
 
-// All test suites that inherit FunctionalTestBase and overwrite SetupTest must
-// call this base FunctionalTestBase.SetupTest function to distribute the tests
-// into partitions. Otherwise, the test suite will be executed multiple times
-// in each partition.
-// Furthermore, all test suites in the "tests/" directory that don't inherit
-// from FunctionalTestBase must implement SetupTest that calls checkTestShard.
-func (s *FunctionalTestBase) SetupTest() {
-	checkTestShard(s.T())
-}
-
 func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
 	return s.registerNamespace(name, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, "")
 }
@@ -225,7 +217,7 @@ func checkTestShard(t *testing.T) {
 		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
-	// This was determined empirically to distribute our existing test names
+	// This was determined empirically to distribute our existing test names + run times
 	// reasonably well. This can be adjusted from time to time.
 	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
 	const salt = "-salt-26"
