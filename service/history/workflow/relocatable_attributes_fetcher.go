@@ -26,6 +26,7 @@ package workflow
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 
@@ -92,15 +93,19 @@ func (f *relocatableAttributesFetcher) Fetch(
 	// If we have processed close visibility task, then we need to fetch the search attributes and memo from the
 	// persistence backend because we have already deleted them from the mutable state.
 	executionState := mutableState.GetExecutionState()
-	visResponse, err := f.visibilityManager.GetWorkflowExecution(
-		ctx,
-		&manager.GetWorkflowExecutionRequest{
-			NamespaceID: mutableState.GetNamespaceEntry().ID(),
-			Namespace:   mutableState.GetNamespaceEntry().Name(),
-			RunID:       executionState.GetRunId(),
-			WorkflowID:  executionInfo.GetWorkflowId(),
-		},
-	)
+	request := &manager.GetWorkflowExecutionRequest{
+		NamespaceID: mutableState.GetNamespaceEntry().ID(),
+		Namespace:   mutableState.GetNamespaceEntry().Name(),
+		RunID:       executionState.GetRunId(),
+		WorkflowID:  executionInfo.GetWorkflowId(),
+	}
+
+	closeTime := executionInfo.GetCloseTime().AsTime()
+	if closeTime.After(time.Unix(0, 0)) {
+		request.CloseTime = &closeTime
+	}
+
+	visResponse, err := f.visibilityManager.GetWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, err
 	}
