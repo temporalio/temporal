@@ -26,6 +26,7 @@ package describeworkflow
 
 import (
 	"context"
+	"strconv"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -384,11 +385,26 @@ func Invoke(
 				NextAttemptScheduleTime: cancelation.NextAttemptScheduleTime,
 			}
 		}
+		// We store nexus operations in the tree by their string formatted scheduled event ID.
+		scheduledEventID, err := strconv.ParseInt(node.Key.ID, 10, 64)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to determine Nexus operation scheduled event ID while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+
+		}
+
 		result.PendingNexusOperations = append(result.PendingNexusOperations, &workflowpb.PendingNexusOperationInfo{
 			Endpoint:                op.Endpoint,
 			Service:                 op.Service,
 			Operation:               op.Operation,
 			OperationId:             op.OperationId,
+			ScheduledEventId:        scheduledEventID,
 			ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
 			ScheduledTime:           op.ScheduledTime,
 			State:                   state,
