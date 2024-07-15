@@ -1858,6 +1858,10 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 	namespaceEntry := tests.GlobalNamespaceEntry
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
+	stateMachineDef := hsmtest.NewDefinition("test")
+	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
+	s.NoError(err)
+
 	completWorkflowTaskFn := func(ms MutableState) *historypb.HistoryEvent {
 		workflowTaskInfo := ms.GetStartedWorkflowTask()
 		completedEvent, err := ms.AddWorkflowTaskCompletedEvent(
@@ -1870,6 +1874,16 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		)
 		s.NoError(err)
 		return completedEvent
+	}
+
+	buildHSMFn := func(ms MutableState) {
+		hsmRoot := ms.HSM()
+		child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
+		s.NoError(err)
+		_, err = child1.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1_1"}, hsmtest.NewData(hsmtest.State2))
+		s.NoError(err)
+		_, err = hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_2"}, hsmtest.NewData(hsmtest.State3))
+		s.NoError(err)
 	}
 
 	testCases := []struct {
@@ -2128,27 +2142,41 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 			},
 		},
 		{
-			name: "HSM",
+			name: "HSM/CloseAsMutation",
 			testFn: func(ms MutableState) {
 				completWorkflowTaskFn(ms)
-				hsmRoot := s.mutableState.HSM()
-				stateMachineDef := hsmtest.NewDefinition("test")
-				err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
-				s.NoError(err)
-				child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
-				s.NoError(err)
-				_, err = child1.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1_1"}, hsmtest.NewData(hsmtest.State2))
-				s.NoError(err)
-				_, err = hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_2"}, hsmtest.NewData(hsmtest.State3))
-				s.NoError(err)
+				buildHSMFn(ms)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
 				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
 				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
 
-				err = hsmRoot.Walk(func(n *hsm.Node) error {
+				err = ms.HSM().Walk(func(n *hsm.Node) error {
+					if n.Parent == nil {
+						// skip root which is entire mutable state
+						return nil
+					}
+					protorequire.ProtoEqual(s.T(), currentVersionedTransition, n.InternalRepr().LastUpdateVersionedTransition)
+					return nil
+				})
+				s.NoError(err)
+			},
+		},
+		{
+			name: "HSM/CloseAsSnapshot",
+			testFn: func(ms MutableState) {
+				completWorkflowTaskFn(ms)
+				buildHSMFn(ms)
+
+				_, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				err = ms.HSM().Walk(func(n *hsm.Node) error {
 					if n.Parent == nil {
 						// skip root which is entire mutable state
 						return nil
