@@ -75,6 +75,7 @@ jobs:
 
 
   cache-docker-images:
+    if: always()
     name: Cache Docker images
     strategy:
       fail-fast: false
@@ -162,21 +163,47 @@ jobs:
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
-  set-up-functional-test:
-    name: Set up functional test
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on: [ubuntu-20.04]
-    runs-on: ${{ matrix.runs-on }}
+#jobs:
+  job1:
+    runs-on: ubuntu-latest
+    # Map a step output to a job output
+    outputs:
+      output1: ${{ steps.step1.outputs.test }}
+      output2: ${{ steps.step2.outputs.test }}
     steps:
-      - name: build functional test matrix
-        id: json
+      - id: step1
+        run: echo "test=hello" >> "$GITHUB_OUTPUT"
+      - id: step2
+        run: echo "test=world" >> "$GITHUB_OUTPUT"
+  job2:
+    runs-on: ubuntu-latest
+    needs: job1
+    steps:
+      - env:
+          OUTPUT1: ${{needs.job1.outputs.output1}}
+          OUTPUT2: ${{needs.job1.outputs.output2}}
+        run: echo "$OUTPUT1 $OUTPUT2"
+
+
+  set-up-functional-test:
+    if: always()
+    name: Set up functional test
+    runs-on: ubuntu-20.04
+    outputs:
+      shard_index: ${{ steps.shard_matrix_step.outputs.shard_index }}
+      total_shards: ${{ steps.total_shards_step.outputs.total_shards }}
+      single_test_args: ${{ steps.test_args_step.outputs.single_test_args }}
+    steps:
+      - id: shard_matrix_step
         run: |
           if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then shard_index='{ "shard_index": [0] }'; else shard_index='{ "shard_index": [0, 1, 2] }'; fi
           echo "shard_index=$shard_index" >> "$GITHUB_OUTPUT"
+      - id: total_shards_step
+        run: |  
           if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then total_shards=1; else total_shards=3; fi
           echo "total_shards=$total_shards" >> "$GITHUB_OUTPUT"
+      - id: test_args_step
+        run: |  
           if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"; fi
           echo "single_test_args=$single_test_args" >> "$GITHUB_OUTPUT"
 
@@ -189,8 +216,7 @@ jobs:
       matrix:
         runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
-        #shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
-        shard_index: [0]
+        shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
         include:
           - name: cass_es
             persistence_type: nosql
@@ -218,13 +244,12 @@ jobs:
             containers: [postgresql]
     runs-on: ${{ matrix.runs-on }}
     env:
-      #TEST_TOTAL_SHARDS: ${{ needs.set-up-functional-test.outputs.total_shards }}
-      TEST_TOTAL_SHARDS: 1
+      TEST_TOTAL_SHARDS: ${{ needs.set-up-functional-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      #SINGLE_TEST_ARGS: ${{ needs.set-up-functional-test.outputs.single_test_args }}
-      SINGLE_TEST_ARGS: -test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}
+      SINGLE_TEST_ARGS: ${{ needs.set-up-functional-test.outputs.single_test_args }}
+      #SINGLE_TEST_ARGS: -test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         with:
