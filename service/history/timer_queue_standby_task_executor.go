@@ -86,6 +86,7 @@ func newTimerQueueStandbyTaskExecutor(
 			logger,
 			metricProvider,
 			config,
+			false,
 		),
 		clusterName:        clusterName,
 		nDCHistoryResender: nDCHistoryResender,
