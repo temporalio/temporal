@@ -183,6 +183,17 @@ func GetOutboundTaskTypeTagValue(task tasks.Task, isActive bool) string {
 	return prefix + "." + outbound.StateMachineTaskType()
 }
 
+func GetTimerStateMachineTaskTypeTagValue(taskType string, isActive bool) string {
+	var prefix string
+	if isActive {
+		prefix = "TimerActive"
+	} else {
+		prefix = "TimerStandby"
+	}
+
+	return prefix + "." + taskType
+}
+
 func getTaskTypeTagValue(
 	executable Executable,
 	isActive bool,
