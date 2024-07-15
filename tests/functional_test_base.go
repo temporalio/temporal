@@ -456,6 +456,6 @@ func (s *FunctionalTestBase) waitForESReady() {
 		status, err := esClient.WaitForYellowStatus(ctx, s.testClusterConfig.ESConfig.GetVisibilityIndex())
 		assert.NoError(t, err)
 		assert.True(t, status == "yellow" || status == "green")
-	}, 3*time.Minute, 1*time.Second, fmt.Sprintf("timed out waiting for elastic search to be healthy after attempts=%v", attempts))
-	s.Logger.Info(fmt.Sprintf("elastic search responded with healthy status after attempts=%v", attempts))
+	}, 5*time.Minute, 1*time.Second, fmt.Sprintf("timed out waiting for elastic search to be healthy after attempts=%d", attempts))
+	s.Logger.Info(fmt.Sprintf("elastic search responded with healthy status after attempts=%d", attempts))
 }
