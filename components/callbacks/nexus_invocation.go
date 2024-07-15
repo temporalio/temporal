@@ -105,7 +105,6 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	}
 
 	if err != nil {
-		err = queues.NewDestinationDownError(err.Error(), err)
 		return Retry, err
 	}
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
@@ -113,11 +112,10 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	}
 
 	retryable := isRetryableHTTPResponse(response)
+	err = fmt.Errorf("request failed with: %v", response.Status) // nolint:goerr113
 	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
-		err = queues.NewDestinationDownError(
-			fmt.Sprintf("response returned retryable status code %d", response.StatusCode), err)
 		return Retry, err
 	}
-	return Failed, queues.NewDestinationDownError(fmt.Sprintf("request failed with: %v", response.Status), err)
+	return Failed, err
 }

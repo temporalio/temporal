@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/queues"
 )
 
 type CanGetCompletionEvent interface {
@@ -98,9 +97,9 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 	if err != nil {
 		e.Logger.Error("Callback request failed", tag.Error(err))
 		if isRetryableRpcResponse(err) {
-			return Retry, queues.NewDestinationDownError(err.Error(), err)
+			return Retry, err
 		}
-		return Failed, queues.NewDestinationDownError(err.Error(), err)
+		return Failed, err
 	}
 	return Ok, nil
 }

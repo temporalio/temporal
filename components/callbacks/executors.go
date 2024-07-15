@@ -122,7 +122,10 @@ func (e taskExecutor) executeInvocationTask(
 	if result == Failed {
 		return nil
 	}
-	return err
+	if err != nil {
+		return queues.NewDestinationDownError(err.Error(), err)
+	}
+	return nil
 }
 
 func (e taskExecutor) loadInvocationArgs(
