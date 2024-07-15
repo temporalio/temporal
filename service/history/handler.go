@@ -2389,9 +2389,8 @@ func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *history
 	}
 
 	bytes, err := registry.ExecuteRemoteMethod(ctx, engine.StateMachineEnvironment(), ref, request.MethodName, request.Input)
-	// TODO(Tianyu): convert error?
 	if err != nil {
-		return nil, h.convertError(err)
+		return nil, err
 	}
 	return &historyservice.InvokeStateMachineMethodResponse{
 		Response: bytes,

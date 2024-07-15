@@ -259,8 +259,9 @@ func (r *Registry) ExecuteRemoteMethod(
 	defnRaw, ok := r.remoteExecutors[taskType]
 	if !ok {
 		return nil, fmt.Errorf("%w: executor for remote method %v", ErrNotRegistered, taskType)
-	}
 
+	}
+	//nolint:revive // type cast result is unchecked
 	defn := defnRaw.(RemoteMethodDefinition[any, any])
 
 	input, err := defn.method.DeserializeInput(serializedInput)
@@ -277,10 +278,12 @@ func (r *Registry) ExecuteRemoteMethod(
 			reflect.ValueOf(input),
 		},
 	)
+	//nolint:revive // type cast result is unchecked
 	if !values[1].IsNil() {
 		return nil, values[1].Interface().(error)
 	}
 
+	//nolint:revive // type cast result is unchecked
 	output, err := defn.method.SerializeOutput(values[0].Interface())
 	if err != nil {
 		return nil, fmt.Errorf("%w: executor for remote method %v", ErrSerializationFailed, taskType)
