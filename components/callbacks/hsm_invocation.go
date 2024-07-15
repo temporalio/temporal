@@ -25,6 +25,11 @@ package callbacks
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
@@ -32,9 +37,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/queues"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"time"
 )
 
 type CanGetCompletionEvent interface {

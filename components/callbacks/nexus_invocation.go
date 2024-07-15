@@ -25,11 +25,12 @@ package callbacks
 import (
 	"context"
 	"fmt"
-	"github.com/nexus-rpc/sdk-go/nexus"
 	"io"
 	"net/http"
 	"slices"
 	"time"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
 
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log/tag"
