@@ -445,7 +445,9 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 }
 
 func (s *FunctionalTestBase) waitForESReady() {
+	attempts := 0
 	s.Require().EventuallyWithTf(func(t *assert.CollectT) {
+		attempts++
 		esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
 		assert.NoError(t, err)
 		// WaitForYellowStatus is a blocking request, so set timeout equal to Eventually tick to cancel in-flight requests before retrying
@@ -454,5 +456,6 @@ func (s *FunctionalTestBase) waitForESReady() {
 		status, err := esClient.WaitForYellowStatus(ctx, s.testClusterConfig.ESConfig.GetVisibilityIndex())
 		assert.NoError(t, err)
 		assert.True(t, status == "yellow" || status == "green")
-	}, 2*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
+	}, 3*time.Minute, 1*time.Second, fmt.Sprintf("timed out waiting for elastic search to be healthy after attempts=%v", attempts))
+	s.Logger.Info(fmt.Sprintf("elastic search responded with healthy status after attempts=%v", attempts))
 }
