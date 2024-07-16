@@ -52,8 +52,9 @@ func isRetryableRpcResponse(err error) bool {
 	if ok {
 		// nolint:exhaustive
 		switch st.Code() {
-		// TODO(Tianyu): Are there other types of retryable errors, and are these always retryable?
-		case codes.Unavailable,
+		case codes.Canceled,
+			codes.Unknown,
+			codes.Unavailable,
 			codes.DeadlineExceeded,
 			codes.ResourceExhausted,
 			codes.Aborted,
@@ -71,7 +72,7 @@ func isRetryableRpcResponse(err error) bool {
 func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error) {
 	completionEventSerialized, err := s.completionEvent.Marshal()
 	if err != nil {
-		return Failed, err
+		return failed, fmt.Errorf("failed to serialize completion event: %v", err) //nolint:goerr113
 	}
 
 	request := historyservice.InvokeStateMachineMethodRequest{
@@ -90,16 +91,17 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 	// Log down metrics about the call
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination)
-	statusCodeTag := metrics.StringTag("hsm-callback", fmt.Sprintf("status:%d", status.Code(err)))
+	statusCodeTag := metrics.NexusOutcomeTag(fmt.Sprintf("status:%d", status.Code(err)))
+
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
 
 	if err != nil {
 		e.Logger.Error("Callback request failed", tag.Error(err))
 		if isRetryableRpcResponse(err) {
-			return Retry, err
+			return retry, err
 		}
-		return Failed, err
+		return failed, err
 	}
-	return Ok, nil
+	return ok, nil
 }

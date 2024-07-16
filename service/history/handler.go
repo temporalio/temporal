@@ -2393,6 +2393,6 @@ func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *history
 		return nil, err
 	}
 	return &historyservice.InvokeStateMachineMethodResponse{
-		Response: bytes,
+		Output: bytes,
 	}, nil
 }

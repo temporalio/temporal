@@ -70,7 +70,7 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error) {
 	request, err := nexus.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
-		return Failed, queues.NewUnprocessableTaskError(
+		return failed, queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
 		)
 	}
@@ -105,17 +105,17 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	}
 
 	if err != nil {
-		return Retry, err
+		return retry, err
 	}
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return Ok, nil
+		return ok, nil
 	}
 
 	retryable := isRetryableHTTPResponse(response)
 	err = fmt.Errorf("request failed with: %v", response.Status) // nolint:goerr113
 	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
-		return Retry, err
+		return retry, err
 	}
-	return Failed, err
+	return failed, err
 }

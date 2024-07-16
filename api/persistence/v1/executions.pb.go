@@ -3343,11 +3343,18 @@ type Callback_Hsm struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	NamespaceId string           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId  string           `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId       string           `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Ref         *StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
-	Method      string           `protobuf:"bytes,5,opt,name=method,proto3" json:"method,omitempty"`
+	// namespace id of the target state machine.
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// ID of the workflow that the target state machine is attached to.
+	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// Run id of said workflow.
+	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// A reference to the state machine.
+	Ref *StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
+	// The method name to invoke. Methods must be explicitly registered for the target state machine in the state
+	// machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
+	// workflow.
+	Method string `protobuf:"bytes,5,opt,name=method,proto3" json:"method,omitempty"`
 }
 
 func (x *Callback_Hsm) Reset() {

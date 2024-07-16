@@ -244,13 +244,13 @@ func Invoke(
 	relocatableAttributes, err := workflow.RelocatableAttributesFetcherProvider(persistenceVisibilityMgr).Fetch(ctx, mutableState)
 	if err != nil {
 		shard.GetLogger().Error(
-			"Failed to fetch relocatable attributes",
+			"failed to fetch relocatable attributes",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(executionInfo.WorkflowId),
 			tag.WorkflowRunID(executionState.RunId),
 			tag.Error(err),
 		)
-		return nil, serviceerror.NewInternal("Failed to fetch memo and search attributes")
+		return nil, serviceerror.NewInternal("failed to fetch memo and search attributes")
 	}
 	result.WorkflowExecutionInfo.Memo = &commonpb.Memo{
 		Fields: clonePayloadMap(relocatableAttributes.Memo.GetFields()),

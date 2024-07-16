@@ -91,7 +91,7 @@ func TestValidTransitions(t *testing.T) {
 	cbTask := out.Tasks[0].(callbacks.InvocationTask)
 	require.Equal(t, "http://address:666", cbTask.Destination)
 
-	// Store the pre-succeeded state to test Failed later
+	// Store the pre-succeeded state to test failed later
 	dup := callbacks.Callback{common.CloneProto(callback.CallbackInfo)}
 
 	// Succeeded
@@ -114,7 +114,7 @@ func TestValidTransitions(t *testing.T) {
 	// Increment the time to ensure it's updated in the transition
 	currentTime = currentTime.Add(time.Second)
 
-	// Failed
+	// failed
 	out, err = callbacks.TransitionFailed.Apply(callback, callbacks.EventFailed{Time: currentTime, Err: fmt.Errorf("failed")})
 	require.NoError(t, err)
 

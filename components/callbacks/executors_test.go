@@ -25,6 +25,11 @@ package callbacks_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
 	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -34,9 +39,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	"net/http"
-	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -242,14 +244,14 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 		name                  string
 		expectedError         error
 		destinationDown       bool
-		expectedMetricOutcome string
+		expectedMetricOutcome codes.Code
 		assertOutcome         func(*testing.T, callbacks.Callback)
 	}{
 		{
 			name:                  "success",
 			expectedError:         nil,
 			destinationDown:       false,
-			expectedMetricOutcome: "status:0",
+			expectedMetricOutcome: codes.OK,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
 			},
@@ -258,7 +260,7 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 			name:                  "retryable-error",
 			expectedError:         status.Error(codes.Unavailable, "fake error"),
 			destinationDown:       true,
-			expectedMetricOutcome: "status:14",
+			expectedMetricOutcome: codes.Unavailable,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
@@ -267,7 +269,7 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 			name:                  "non-retryable-error",
 			expectedError:         status.Error(codes.NotFound, "fake error"),
 			destinationDown:       false,
-			expectedMetricOutcome: "status:5",
+			expectedMetricOutcome: codes.NotFound,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -296,13 +298,13 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 			metricsHandler.EXPECT().Counter(callbacks.RequestCounter.Name()).Return(counter)
 			counter.EXPECT().Record(int64(1),
 				metrics.NamespaceTag("namespace-name"),
-				metrics.DestinationTag("http://localhost"),
-				metrics.StringTag("hsm-callback", tc.expectedMetricOutcome))
+				metrics.DestinationTag(""),
+				metrics.NexusOutcomeTag(fmt.Sprintf("status:%d", tc.expectedMetricOutcome)))
 			metricsHandler.EXPECT().Timer(callbacks.RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
 				metrics.NamespaceTag("namespace-name"),
-				metrics.DestinationTag("http://localhost"),
-				metrics.StringTag("hsm-callback", tc.expectedMetricOutcome))
+				metrics.DestinationTag(""),
+				metrics.NexusOutcomeTag(fmt.Sprintf("status:%d", tc.expectedMetricOutcome)))
 
 			root := newRoot(t)
 			ref := &persistencespb.StateMachineRef{
@@ -382,7 +384,7 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 						},
 					},
 				},
-				callbacks.InvocationTask{Destination: "http://localhost"},
+				callbacks.InvocationTask{},
 			)
 
 			if tc.destinationDown {

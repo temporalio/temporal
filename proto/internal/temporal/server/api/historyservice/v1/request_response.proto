@@ -936,5 +936,5 @@ message InvokeStateMachineMethodRequest {
 }
 
 message InvokeStateMachineMethodResponse {
-    bytes response = 1;
+    bytes output = 1;
 }

@@ -67,7 +67,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		MetricsHandler    metrics.Handler
 		Logger            log.Logger
-		// TODO(Tianyu): Is there any way to move this off to Nexus specific code?
+		// TODO(Tianyu): Move variant-specific fields off of this struct later
 		CallerProvider HTTPCallerProvider
 		HistoryClient  resource.HistoryClient
 	}
@@ -84,9 +84,9 @@ type (
 )
 
 const (
-	Ok invocationResult = iota
-	Retry
-	Failed
+	ok invocationResult = iota
+	retry
+	failed
 )
 
 func (e taskExecutor) executeInvocationTask(
@@ -119,7 +119,7 @@ func (e taskExecutor) executeInvocationTask(
 	}
 
 	// If the request permanently failed there is no need to raise the error
-	if result == Failed {
+	if result == failed {
 		return nil
 	}
 	if err != nil {
@@ -145,6 +145,7 @@ func (e taskExecutor) loadInvocationArgs(
 			if err != nil {
 				return err
 			}
+			// Struct is immutable
 			args := nexusInvocation{}
 			args.nexus = variant.Nexus
 			args.completion, err = target.GetNexusCompletion(ctx)
@@ -157,6 +158,7 @@ func (e taskExecutor) loadInvocationArgs(
 			if err != nil {
 				return err
 			}
+			// Struct is immutable
 			args := hsmInvocation{}
 			args.hsm = variant.Hsm
 			args.completionEvent, err = target.GetCompletionEvent(ctx)
@@ -187,15 +189,15 @@ func (e taskExecutor) saveResult(
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
 			switch result {
-			case Ok:
+			case ok:
 				return TransitionSucceeded.Apply(callback, EventSucceeded{})
-			case Retry:
+			case retry:
 				return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
 					Time:        env.Now(),
 					Err:         callErr,
 					RetryPolicy: e.Config.RetryPolicy(),
 				})
-			case Failed:
+			case failed:
 				return TransitionFailed.Apply(callback, EventFailed{
 					Time: env.Now(),
 					Err:  callErr,

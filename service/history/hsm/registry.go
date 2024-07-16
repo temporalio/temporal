@@ -56,19 +56,6 @@ func (notRegisteredError) IsTerminalTaskError() bool {
 	return true
 }
 
-type RemoteExecutor[I any, O any] func(ctx context.Context, env Environment, ref Ref, input I) (O, error)
-
-type RemoteMethod[I any, O any] interface {
-	Name() string
-	SerializeOutput(output O) ([]byte, error)
-	DeserializeInput(data []byte) (I, error)
-}
-
-type RemoteMethodDefinition[I any, O any] struct {
-	method   RemoteMethod[I, O]
-	executor RemoteExecutor[I, O]
-}
-
 // Registry maintains a mapping from state machine type to a [StateMachineDefinition] and task type to [TaskSerializer].
 // Registry methods are **not** protected by a lock and all registration is expected to happen in a single thread on
 // startup for performance reasons.
@@ -161,17 +148,16 @@ func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T
 func RegisterRemoteMethod[I any, O any, R RemoteMethod[I, O]](r *Registry, executor RemoteExecutor[I, O]) error {
 	var method R
 	methodName := method.Name()
-	// The executors are registered in pairs, so only need to check in one map.
 	if existing, ok := r.remoteExecutors[methodName]; ok {
 		return fmt.Errorf(
-			"%w: executor already registered for task type %v: %v",
+			"%w: executor already registered for method %v: %v",
 			ErrDuplicateRegistration,
 			methodName,
 			existing,
 		)
 	}
 
-	r.remoteExecutors[methodName] = RemoteMethodDefinition[I, O]{
+	r.remoteExecutors[methodName] = remoteMethodDefinition[I, O]{
 		method:   method,
 		executor: executor,
 	}
@@ -253,42 +239,31 @@ func (r *Registry) ExecuteRemoteMethod(
 	ctx context.Context,
 	env Environment,
 	ref Ref,
-	taskType string,
+	methodName string,
 	serializedInput []byte,
 ) ([]byte, error) {
-	defnRaw, ok := r.remoteExecutors[taskType]
+	defn, ok := r.remoteExecutors[methodName]
 	if !ok {
-		return nil, fmt.Errorf("%w: executor for remote method %v", ErrNotRegistered, taskType)
-
+		return nil, fmt.Errorf("%w: executor for remote method %v", ErrNotRegistered, methodName)
 	}
-	//nolint:revive // type cast result is unchecked
-	defn := defnRaw.(RemoteMethodDefinition[any, any])
+	untypedDefn := defn.(untypedRemoteMethodDefinition) //nolint:revive
 
-	input, err := defn.method.DeserializeInput(serializedInput)
+	input, err := untypedDefn.DeserializeUntyped(serializedInput)
 	if err != nil {
-		return nil, fmt.Errorf("%w: executor for remote method %v", ErrSerializationFailed, taskType)
+		return nil, fmt.Errorf("%w: executor for remote method %v failed to deserialize input", err, methodName)
 	}
 
-	fn := reflect.ValueOf(defn.executor)
-	values := fn.Call(
-		[]reflect.Value{
-			reflect.ValueOf(ctx),
-			reflect.ValueOf(env),
-			reflect.ValueOf(ref),
-			reflect.ValueOf(input),
-		},
-	)
-	//nolint:revive // type cast result is unchecked
-	if !values[1].IsNil() {
-		return nil, values[1].Interface().(error)
-	}
+	output, err := untypedDefn.InvokeUntyped(ctx, env, ref, input)
 
-	//nolint:revive // type cast result is unchecked
-	output, err := defn.method.SerializeOutput(values[0].Interface())
 	if err != nil {
-		return nil, fmt.Errorf("%w: executor for remote method %v", ErrSerializationFailed, taskType)
-	} //nolint:revive // type cast result is unchecked
-	return output, nil
+		return nil, err
+	}
+
+	serializedOutput, err := untypedDefn.SerializeUntyped(output)
+	if err != nil {
+		return nil, fmt.Errorf("%w: executor for remote method %v failed to serialize output", err, methodName)
+	}
+	return serializedOutput, nil
 }
 
 // ExecuteTimerTask gets a [TimerExecutor] from the registry and invokes it.
