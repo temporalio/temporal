@@ -29,6 +29,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"go.temporal.io/api/serviceerror"
 	"time"
 
 	"github.com/google/uuid"
@@ -1234,15 +1235,18 @@ func (s *scheduler) processBuffer() bool {
 			tryAgain = true
 			continue
 		}
-		result, err := s.startWorkflow(start, req)
 		metricsWithTag := s.metrics.WithTags(map[string]string{
 			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
+		metricsWithTag.Counter(metrics.ScheduleActionAttempt.Name()).Inc(1)
+		result, err := s.startWorkflow(start, req)
+
 		if err != nil {
 			s.logger.Error("Failed to start workflow", "error", err)
-			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
-			// TODO: we could put this back in the buffer and retry (after a delay) up until
-			// the catchup window. of course, it's unlikely that this workflow would be making
-			// progress while we're unable to start a new one, so maybe it's not that valuable.
+
+			var workflowExecutionAlreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+			if !errors.As(err, &workflowExecutionAlreadyStarted) {
+				metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
+			}
 			tryAgain = true
 			continue
 		}
