@@ -1116,6 +1116,10 @@ var (
 		"schedule_action_success",
 		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
 	)
+	ScheduleActionAttempt = NewCounterDef(
+		"schedule_action_attempt",
+		WithDescription("The number of schedule actions attempts"),
+	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
 		WithDescription("The number of schedule actions that failed to start"),
