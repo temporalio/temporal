@@ -193,9 +193,9 @@ jobs:
           shards=3
           db_names="['cass_es', 'sqlite', 'mysql8', 'postgres12', 'postgres12_pgx']"
           timeout=30
-          if [[ ${{ inputs.run_single_functional_test }} = true ]]; then
+          if [[ "${{ inputs.run_single_functional_test }}" == "true" ]]; then
             shards=1
-            timeout=30
+            timeout=${{ inputs.timeout_minutes }}
             single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
           fi
           {
