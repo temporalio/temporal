@@ -173,29 +173,41 @@ jobs:
     name: Set up functional test
     runs-on: ubuntu-20.04
     outputs:
-      shard_indices: ${{ steps.shard_matrix_step.outputs.shard_indices }}
+      shard_indices: ${{ steps.shard_indices_step.outputs.shard_indices }}
+      db_names: ${{ steps.db_names_step.outputs.db_names }}
       total_shards: ${{ steps.total_shards_step.outputs.total_shards }}
       single_test_args: ${{ steps.test_args_step.outputs.single_test_args }}
       functional_test_timeout: ${{ steps.timeout_step.outputs.timeout }}
     steps:
-      - id: shard_matrix_step
+      - id: shard_indices_step
         run: |
           if [ ${{ inputs.run_single_functional_test }} = 'true' ];
             then echo 'shard_indices=[0]' >> "$GITHUB_OUTPUT";
             else echo 'shard_indices=[0, 1, 2]' >> "$GITHUB_OUTPUT";
           fi
+      - id: db_names_step
+        run: |
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ];
+            then echo 'db_names=[${{ inputs.test_db }}]' >> "$GITHUB_OUTPUT";
+            else echo 'db_names=[cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]' >> "$GITHUB_OUTPUT";
+          fi
       - id: total_shards_step
         run: |  
-          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then total_shards=1; else total_shards=3; fi
-          echo "total_shards=$total_shards" >> "$GITHUB_OUTPUT"
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ];
+            then echo 'total_shards=1' >> "$GITHUB_OUTPUT";
+            else echo 'total_shards=3' >> "$GITHUB_OUTPUT";
+          fi
       - id: test_args_step
         run: |  
-          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"; fi
-          echo "single_test_args=$single_test_args" >> "$GITHUB_OUTPUT"
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ];
+            then echo 'single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"' >> $GITHUB_OUTPUT";
+          fi
       - id: timeout_step
         run: |
-          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then timeout="${{ inputs.timeout_minutes }}"; else timeout="30"; fi
-          echo "timeout=$timeout" >> "$GITHUB_OUTPUT" 
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ];
+            then echo 'timeout="${{ inputs.timeout_minutes }}"' >> $GITHUB_OUTPUT;
+            else echo 'timeout="30"' >> $GITHUB_OUTPUT;
+          fi
 
   functional-test:
     if: always()
@@ -206,9 +218,8 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
+        name: ${{ fromJson(needs.set-up-functional-test.outputs.db_names) }}
         shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_indices) }}
-        #shard_index: [0] # todo
         include:
           - name: cass_es
             persistence_type: nosql
