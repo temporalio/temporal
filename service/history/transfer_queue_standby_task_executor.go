@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -63,7 +64,8 @@ type (
 		*transferQueueTaskExecutorBase
 
 		clusterName        string
-		nDCHistoryResender xdc.NDCHistoryResender
+		nDCHistoryResender xdc.NDCHistoryResender // Deprecated, will delete once eventhandler.ResendHandler feature is fully launched
+		resendHandler      eventhandler.ResendHandler
 	}
 
 	verificationErr struct {
@@ -76,6 +78,7 @@ func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 	nDCHistoryResender xdc.NDCHistoryResender,
+	resendHandler eventhandler.ResendHandler,
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	clusterName string,
@@ -95,6 +98,7 @@ func newTransferQueueStandbyTaskExecutor(
 		),
 		clusterName:        clusterName,
 		nDCHistoryResender: nDCHistoryResender,
+		resendHandler:      resendHandler,
 	}
 }
 
@@ -631,17 +635,32 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 	// NOTE: history resend may take long time and its timeout is currently
 	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-		ctx,
-		remoteClusterName,
-		namespace.ID(taskInfo.GetNamespaceID()),
-		taskInfo.GetWorkflowID(),
-		taskInfo.GetRunID(),
-		resendInfo.lastEventID,
-		resendInfo.lastEventVersion,
-		0,
-		0,
-	); err != nil {
+	if t.config.EnableReplicateLocalGeneratedEvent() {
+		err = t.resendHandler.ResendHistoryEvents(
+			ctx,
+			remoteClusterName,
+			namespace.ID(taskInfo.GetNamespaceID()),
+			taskInfo.GetWorkflowID(),
+			taskInfo.GetRunID(),
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
+			common.EmptyEventID,
+			common.EmptyVersion,
+		)
+	} else {
+		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			remoteClusterName,
+			namespace.ID(taskInfo.GetNamespaceID()),
+			taskInfo.GetWorkflowID(),
+			taskInfo.GetRunID(),
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
+			0,
+			0,
+		)
+	}
+	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
 			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return err
