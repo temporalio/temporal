@@ -116,17 +116,17 @@ func TransitionHistoryStalenessCheck(
 func CompareVersionedTransition(
 	a, b *persistencespb.VersionedTransition,
 ) int {
-	if a.NamespaceFailoverVersion < b.NamespaceFailoverVersion {
+	if a.GetNamespaceFailoverVersion() < b.GetNamespaceFailoverVersion() {
 		return -1
 	}
-	if a.NamespaceFailoverVersion > b.NamespaceFailoverVersion {
+	if a.GetNamespaceFailoverVersion() > b.GetNamespaceFailoverVersion() {
 		return 1
 	}
 
-	if a.TransitionCount < b.TransitionCount {
+	if a.GetTransitionCount() < b.GetTransitionCount() {
 		return -1
 	}
-	if a.TransitionCount > b.TransitionCount {
+	if a.GetTransitionCount() > b.GetTransitionCount() {
 		return 1
 	}
 

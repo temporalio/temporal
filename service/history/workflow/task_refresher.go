@@ -28,7 +28,6 @@ package workflow
 
 import (
 	"context"
-	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -605,11 +604,12 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	// In replication case, task refresher should be called after applying the state from source
 	// cluster, which updated the transition history.
 
-	// Reset all the state machine timers, we'll recreate them all.
-	// TODO: fix this, we can not reset all timers
-	mutableState.GetExecutionInfo().StateMachineTimers = nil
-
-	err := mutableState.HSM().Walk(func(node *hsm.Node) error {
+	var nodesToRefresh []*hsm.Node
+	if err := mutableState.HSM().Walk(func(node *hsm.Node) error {
+		if node.Parent == nil {
+			// root node is mutable state and can't be refreshed
+			return nil
+		}
 
 		if CompareVersionedTransition(
 			node.InternalRepr().LastUpdateVersionedTransition,
@@ -618,12 +618,23 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 			return nil
 		}
 
+		nodesToRefresh = append(nodesToRefresh, node)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if len(nodesToRefresh) != 0 {
+		// TODO: after hsm node tombstone is tracked in mutable state,
+		// also trigger trim when there are new tombstones after minVersionedTransition
+		if err := TrimStateMachineTimers(mutableState, minVersionedTransition); err != nil {
+			return err
+		}
+	}
+
+	for _, node := range nodesToRefresh {
 		taskRegenerator, err := hsm.MachineData[hsm.TaskRegenerator](node)
 		if err != nil {
-			if node.Parent == nil && errors.Is(err, hsm.ErrIncompatibleType) {
-				// root node is mutable state and doesn't implement TaskRegenerator interface
-				return nil
-			}
 			return err
 		}
 
@@ -644,10 +655,6 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 				return err
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		return err
 	}
 
 	AddNextStateMachineTimerTask(mutableState)
