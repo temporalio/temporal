@@ -182,41 +182,30 @@ jobs:
     name: Set up functional test
     runs-on: ubuntu-20.04
     outputs:
-      shard_indices: ${{ steps.shard_indices_step.outputs.shard_indices }}
-      db_names: ${{ steps.db_names_step.outputs.db_names }}
-      total_shards: ${{ steps.total_shards_step.outputs.total_shards }}
-      single_test_args: ${{ steps.test_args_step.outputs.single_test_args }}
-      functional_test_timeout: ${{ steps.timeout_step.outputs.timeout }}
+      shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
+      db_names: ${{ steps.generate_output.outputs.db_names }}
+      total_shards: ${{ steps.generate_output.outputs.shards }}
+      single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
+      functional_test_timeout: ${{ steps.generate_output.outputs.timeout }}
     steps:
-      - id: shard_indices_step
+      - id: generate_output
         run: |
-          if [ ${{ inputs.run_single_functional_test }} = "true" ];
-            then echo "shard_indices=[0]" >> "$GITHUB_OUTPUT";
-            else echo "shard_indices=[0, 1, 2]" >> "$GITHUB_OUTPUT";
+          shards=3
+          db_names="['cass_es', 'sqlite', 'mysql8', 'postgres12', 'postgres12_pgx']"
+          timeout=30
+          if [[ ${{ inputs.run_single_functional_test }} = true ]]; then
+            shards=1
+            db_names="['sqlite']"
+            timeout=30
+            single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
           fi
-      - id: db_names_step
-        run: |
-          if [ ${{ inputs.run_single_functional_test }} = "true" ];
-            then echo "db_names=[\"${{ inputs.test_db }}\"]" >> "$GITHUB_OUTPUT";
-            else echo "db_names=[\"cass_es\", \"sqlite\", \"mysql8\", \"postgres12\", \"postgres12_pgx\"]" >> "$GITHUB_OUTPUT";
-          fi
-      - id: total_shards_step
-        run: |  
-          if [ ${{ inputs.run_single_functional_test }} = "true" ];
-            then echo "total_shards=1" >> "$GITHUB_OUTPUT";
-            else echo "total_shards=3" >> "$GITHUB_OUTPUT";
-          fi
-      - id: test_args_step
-        run: |  
-          if [ ${{ inputs.run_single_functional_test }} = "true" ];
-            then echo "single_test_args=\"-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}\" >> $GITHUB_OUTPUT";
-          fi
-      - id: timeout_step
-        run: |
-          if [ ${{ inputs.run_single_functional_test }} = "true" ];
-            then echo "timeout=${{ inputs.timeout_minutes }}" >> $GITHUB_OUTPUT;
-            else echo "timeout=30" >> $GITHUB_OUTPUT;
-          fi
+          {
+            echo "shard_indices={\"shard_indices\":[$(seq -s, 0 $((shards-1)))]}"
+            echo "shards=$shards"
+            echo "db_names=$db_names"
+            echo "timeout=$timeout"
+            echo "single_test_args=$single_test_args" 
+          } >> "$GITHUB_OUTPUT"
 
   functional-test:
     if: always()
