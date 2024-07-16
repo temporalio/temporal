@@ -25,7 +25,7 @@ on:
         description: "[Single Test Only] Name of the test suite to run, include -testify.m flag here if desired (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite -testify.m=TestUpdateWorkflow')"
         type: string
       timeout_minutes:
-        description: "[Single Test Only] Github Action timeout in minutes"
+        description: "[Single Test Only] test timeout in minutes"
         type: number
         default: 120
 
@@ -237,7 +237,8 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-functional-test.outputs.single_test_args }}
-      FUNCTIONAL_TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.functional_test_timeout }}
+      TEST_TIMEOUT_MINUTES: ${{ needs.set-up-functional-test.outputs.functional_test_timeout }}
+      TEST_TIMEOUT: "${{ env.TEST_TIMEOUT_MINUTES }}m"
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         with:
@@ -259,7 +260,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
-        timeout-minutes: ${{ fromJSON(env.FUNCTIONAL_TEST_TIMEOUT) }} # make sure this is larger than the test timeout in the Makefile
+        timeout-minutes: ${{ fromJSON(env.TEST_TIMEOUT_MINUTES) + 5 }} # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
 
       - name: Upload test results
