@@ -18,7 +18,7 @@ on:
         type: boolean
         default: false
       n_runs:
-        description: "[Single Test Only] Number of times to repeat the single test per database"
+        description: "[Single Test Only] Number of times to repeat the single test"
         type: number
         default: 1
       test_name:
