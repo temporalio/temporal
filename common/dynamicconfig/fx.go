@@ -22,27 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cache
+package dynamicconfig
 
 import (
-	"go.temporal.io/server/common/log"
-
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/common/pingable"
 )
 
 var Module = fx.Options(
-	fx.Provide(func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache {
-		return NewHostLevelCache(config, logger, handler)
-	}),
-	fx.Provide(NewCacheFnProvider),
+	fx.Provide(NewCollection),
+	fx.Provide(fx.Annotate(
+		func(c *Collection) pingable.Pingable { return c },
+		fx.ResultTags(`group:"deadlockDetectorRoots"`),
+	)),
 )
-
-// NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.
-func NewCacheFnProvider() NewCacheFn {
-	return func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache {
-		return NewShardLevelCache(config, logger, handler)
-	}
-}

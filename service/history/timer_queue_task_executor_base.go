@@ -66,6 +66,7 @@ type (
 		matchingRawClient  resource.MatchingRawClient
 		config             *configs.Config
 		metricHandler      metrics.Handler
+		isActive           bool
 	}
 )
 
@@ -77,6 +78,7 @@ func newTimerQueueTaskExecutorBase(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
+	isActive bool,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
 		stateMachineEnvironment: stateMachineEnvironment{
@@ -91,6 +93,7 @@ func newTimerQueueTaskExecutorBase(
 		matchingRawClient:  matchingRawClient,
 		config:             config,
 		metricHandler:      metricsHandler,
+		isActive:           isActive,
 	}
 }
 
@@ -264,12 +267,20 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 			err := t.executeSingleStateMachineTimer(ms, group.Deadline.AsTime(), timer, execute)
 			if err != nil {
 				if !errors.As(err, new(*serviceerror.NotFound)) {
+					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(
+						1,
+						metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
+						metrics.ServiceErrorTypeTag(err),
+					)
 					// Return on first error as we don't want to duplicate the Executable's error handling logic.
 					// This implies that a single bad task in the mutable state timer sequence will cause all other
 					// tasks to be stuck. We'll accept this limitation for now.
 					return 0, err
 				}
-				// TODO(bergundy): Metric?
+				metrics.StateMachineTimerSkipsCounter.With(t.metricHandler).Record(
+					1,
+					metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
+				)
 				t.logger.Warn("Skipped state machine timer", tag.Error(err))
 			}
 		}

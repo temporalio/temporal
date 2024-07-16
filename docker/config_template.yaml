@@ -274,7 +274,7 @@ services:
         rpc:
             grpcPort: {{ $temporalGrpcPort }}
             membershipPort: {{ default .Env.FRONTEND_MEMBERSHIP_PORT "6933" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
             httpPort: {{ $temporalHTTPPort }}
 
     {{- if .Env.USE_INTERNAL_FRONTEND }}
@@ -282,26 +282,26 @@ services:
         rpc:
             grpcPort: {{ default .Env.INTERNAL_FRONTEND_GRPC_PORT "7236" }}
             membershipPort: {{ default .Env.INTERNAL_FRONTEND_MEMBERSHIP_PORT "6936" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
     {{- end }}
 
     matching:
         rpc:
             grpcPort: {{ default .Env.MATCHING_GRPC_PORT "7235" }}
             membershipPort: {{ default .Env.MATCHING_MEMBERSHIP_PORT "6935" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
 
     history:
         rpc:
             grpcPort: {{ default .Env.HISTORY_GRPC_PORT "7234" }}
             membershipPort: {{ default .Env.HISTORY_MEMBERSHIP_PORT "6934" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
 
     worker:
         rpc:
             grpcPort: {{ default .Env.WORKER_GRPC_PORT "7239" }}
             membershipPort: {{ default .Env.WORKER_MEMBERSHIP_PORT "6939" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
 
 clusterMetadata:
     enableGlobalNamespace: false

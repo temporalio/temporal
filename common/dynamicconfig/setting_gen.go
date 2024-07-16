@@ -753,7 +753,7 @@ func NewGlobalTypedSettingWithConverter[T any](key Key, convert func(any) (T, er
 func NewGlobalTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) GlobalTypedSetting[T] {
 	s := GlobalTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -788,6 +788,25 @@ func (s GlobalTypedSetting[T]) Get(c *Collection) TypedPropertyFn[T] {
 			prec,
 		)
 	}
+}
+
+type TypedSubscribable[T any] func(callback func(T)) (v T, cancel func())
+
+func (s GlobalTypedSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
+	return func(callback func(T)) (T, func()) {
+		prec := []Constraints{{}}
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s GlobalTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFn[T any](value T) TypedPropertyFn[T] {
@@ -828,7 +847,7 @@ func NewNamespaceTypedSettingWithConverter[T any](key Key, convert func(any) (T,
 func NewNamespaceTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) NamespaceTypedSetting[T] {
 	s := NamespaceTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -863,6 +882,25 @@ func (s NamespaceTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithNamespac
 			prec,
 		)
 	}
+}
+
+type TypedSubscribableWithNamespaceFilter[T any] func(namespace string, callback func(T)) (v T, cancel func())
+
+func (s NamespaceTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceFilter[T] {
+	return func(namespace string, callback func(T)) (T, func()) {
+		prec := []Constraints{{Namespace: namespace}, {}}
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s NamespaceTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByNamespace[T any](value T) TypedPropertyFnWithNamespaceFilter[T] {
@@ -903,7 +941,7 @@ func NewNamespaceIDTypedSettingWithConverter[T any](key Key, convert func(any) (
 func NewNamespaceIDTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) NamespaceIDTypedSetting[T] {
 	s := NamespaceIDTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -938,6 +976,25 @@ func (s NamespaceIDTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithNamesp
 			prec,
 		)
 	}
+}
+
+type TypedSubscribableWithNamespaceIDFilter[T any] func(namespaceID string, callback func(T)) (v T, cancel func())
+
+func (s NamespaceIDTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceIDFilter[T] {
+	return func(namespaceID string, callback func(T)) (T, func()) {
+		prec := []Constraints{{NamespaceID: namespaceID}, {}}
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s NamespaceIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByNamespaceID[T any](value T) TypedPropertyFnWithNamespaceIDFilter[T] {
@@ -978,7 +1035,7 @@ func NewTaskQueueTypedSettingWithConverter[T any](key Key, convert func(any) (T,
 func NewTaskQueueTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) TaskQueueTypedSetting[T] {
 	s := TaskQueueTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -1021,6 +1078,31 @@ func (s TaskQueueTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithTaskQueu
 	}
 }
 
+type TypedSubscribableWithTaskQueueFilter[T any] func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType, callback func(T)) (v T, cancel func())
+
+func (s TaskQueueTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskQueueFilter[T] {
+	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType, callback func(T)) (T, func()) {
+		prec := []Constraints{
+			{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType},
+			{Namespace: namespace, TaskQueueName: taskQueue},
+			{TaskQueueName: taskQueue},
+			{Namespace: namespace},
+			{},
+		}
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s TaskQueueTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
+}
+
 func GetTypedPropertyFnFilteredByTaskQueue[T any](value T) TypedPropertyFnWithTaskQueueFilter[T] {
 	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) T {
 		return value
@@ -1059,7 +1141,7 @@ func NewShardIDTypedSettingWithConverter[T any](key Key, convert func(any) (T, e
 func NewShardIDTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) ShardIDTypedSetting[T] {
 	s := ShardIDTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -1094,6 +1176,25 @@ func (s ShardIDTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithShardIDFil
 			prec,
 		)
 	}
+}
+
+type TypedSubscribableWithShardIDFilter[T any] func(shardID int32, callback func(T)) (v T, cancel func())
+
+func (s ShardIDTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithShardIDFilter[T] {
+	return func(shardID int32, callback func(T)) (T, func()) {
+		prec := []Constraints{{ShardID: shardID}, {}}
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s ShardIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByShardID[T any](value T) TypedPropertyFnWithShardIDFilter[T] {
@@ -1134,7 +1235,7 @@ func NewTaskTypeTypedSettingWithConverter[T any](key Key, convert func(any) (T, 
 func NewTaskTypeTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) TaskTypeTypedSetting[T] {
 	s := TaskTypeTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -1169,6 +1270,25 @@ func (s TaskTypeTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithTaskTypeF
 			prec,
 		)
 	}
+}
+
+type TypedSubscribableWithTaskTypeFilter[T any] func(taskType enumsspb.TaskType, callback func(T)) (v T, cancel func())
+
+func (s TaskTypeTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskTypeFilter[T] {
+	return func(taskType enumsspb.TaskType, callback func(T)) (T, func()) {
+		prec := []Constraints{{TaskType: taskType}, {}}
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s TaskTypeTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByTaskType[T any](value T) TypedPropertyFnWithTaskTypeFilter[T] {
@@ -1209,7 +1329,7 @@ func NewDestinationTypedSettingWithConverter[T any](key Key, convert func(any) (
 func NewDestinationTypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) DestinationTypedSetting[T] {
 	s := DestinationTypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -1249,6 +1369,30 @@ func (s DestinationTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithDestin
 			prec,
 		)
 	}
+}
+
+type TypedSubscribableWithDestinationFilter[T any] func(namespace string, destination string, callback func(T)) (v T, cancel func())
+
+func (s DestinationTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithDestinationFilter[T] {
+	return func(namespace string, destination string, callback func(T)) (T, func()) {
+		prec := []Constraints{
+			{Namespace: namespace, Destination: destination},
+			{Destination: destination},
+			{Namespace: namespace},
+			{},
+		}
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s DestinationTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByDestination[T any](value T) TypedPropertyFnWithDestinationFilter[T] {
