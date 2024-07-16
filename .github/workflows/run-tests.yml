@@ -28,6 +28,17 @@ on:
         description: "[Single Test Only] When should the Github Action time out?"
         type: number
         default: 120
+      test_db:
+        description: "[Single Test Only] Which database to run your test against"
+        default: "sqlite"
+        type: choice
+        options:
+          - "cass_es"
+          - "cass_es8"
+          - "sqlite"
+          - "mysql8"
+          - "postgres12"
+          - "postgres12_pgx"
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: run-tests-${{ github.head_ref || github.run_id }}
@@ -172,13 +183,15 @@ jobs:
     runs-on: ubuntu-20.04
     outputs:
       shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
+      db_names: ${{ steps.generate_output.outputs.db_names }}
       total_shards: ${{ steps.generate_output.outputs.shards }}
-      functional_test_timeout: ${{ steps.generate_output.outputs.timeout }}
       single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
+      functional_test_timeout: ${{ steps.generate_output.outputs.timeout }}
     steps:
       - id: generate_output
         run: |
           shards=3
+          db_names="['cass_es', 'sqlite', 'mysql8', 'postgres12', 'postgres12_pgx']"
           timeout=30
           if [[ "${{ inputs.run_single_functional_test }}" == "true" ]]; then
             shards=1
@@ -201,13 +214,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name:
-          - cass_es
-          # - cass_es8
-          - sqlite
-          - mysql8
-          - postgres12
-          - postgres12_pgx
+        name: ${{ fromJson(needs.set-up-functional-test.outputs.db_names) }}
         shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_indices) }}
         include:
           - name: cass_es
