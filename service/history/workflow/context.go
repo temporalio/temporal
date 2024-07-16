@@ -178,15 +178,17 @@ func NewContext(
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 ) *ContextImpl {
-	tags := []tag.Tag{
-		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
-		tag.WorkflowID(workflowKey.WorkflowID),
-		tag.WorkflowRunID(workflowKey.RunID),
+	tags := func() []tag.Tag {
+		return []tag.Tag{
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+		}
 	}
 	return &ContextImpl{
 		workflowKey:     workflowKey,
-		logger:          log.With(logger, tags...),
-		throttledLogger: log.With(throttledLogger, tags...),
+		logger:          log.NewLazyLogger(logger, tags),
+		throttledLogger: log.NewLazyLogger(throttledLogger, tags),
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
 		config:          config,
 		lock:            locks.NewPrioritySemaphore(1),
