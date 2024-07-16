@@ -161,7 +161,6 @@ type (
 		Namespace   namespace.Name // namespace.Name is not persisted
 		RunID       string
 		WorkflowID  string
-		CloseTime   *time.Time
 	}
 
 	// GetWorkflowExecutionResponse is response to GetWorkflowExecution
