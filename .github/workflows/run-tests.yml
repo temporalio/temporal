@@ -176,7 +176,7 @@ jobs:
       shard_index: ${{ steps.shard_matrix_step.outputs.shard_index }}
       total_shards: ${{ steps.total_shards_step.outputs.total_shards }}
       single_test_args: ${{ steps.test_args_step.outputs.single_test_args }}
-      functional_test_timeout: ${{ steps.test_args_step.outputs.timeout }}
+      functional_test_timeout: ${{ steps.timeout_step.outputs.timeout }}
     steps:
       - id: shard_matrix_step
         run: |
@@ -268,7 +268,7 @@ jobs:
   #        docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
-        timeout-minutes: ${{ env.FUNCTIONAL_TEST_TIMEOUT }} # make sure this is larger than the test timeout in the Makefile
+        timeout-minutes: ${{ fromJSON(env.FUNCTIONAL_TEST_TIMEOUT) }} # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
 
   #    - name: Upload test results
