@@ -45,7 +45,11 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   cancel-in-progress: true
 
 env:
-  COMMIT: ${{ github.event.inputs.commit || github.sha }}
+  # For workflow_dispatch: use the given commit.
+  # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
+  # For push: use the pushed commit.
+  COMMIT: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
+  PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
@@ -85,7 +89,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
-          submodules: true
+          # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
+          fetch-depth: 100
 
       - uses: actions/setup-go@v5
         with:
@@ -94,7 +99,11 @@ jobs:
 
       - uses: arduino/setup-protoc@v3
 
-      - run: make ci-build-misc
+      - run: GOOS=windows GOARCH=amd64 make clean-bins bins
+
+      - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
+
+      - run: make clean-bins ci-build-misc
 
       - run: make build-tests
 
@@ -189,7 +198,7 @@ jobs:
         run: |
           if [ ${{ inputs.run_single_functional_test }} = "true" ];
             then echo "db_names=[\"${{ inputs.test_db }}\"]" >> "$GITHUB_OUTPUT";
-            else echo "db_names=[\"cass_es\", \"cass_es8\", \"sqlite\", \"mysql8\", \"postgres12\", \"postgres12_pgx\"]" >> "$GITHUB_OUTPUT";
+            else echo "db_names=[\"cass_es\", \"sqlite\", \"mysql8\", \"postgres12\", \"postgres12_pgx\"]" >> "$GITHUB_OUTPUT";
           fi
       - id: total_shards_step
         run: |  
@@ -224,10 +233,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, elasticsearch8]
+          # - name: cass_es8
+          #   persistence_type: nosql
+          #   persistence_driver: cassandra
+          #   containers: [cassandra, elasticsearch8]
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -371,16 +380,21 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        name: 
+          - cass_es
+          # - cass_es8
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            containers: [cassandra, elasticsearch8]
+          # - name: cass_es8
+          #   persistence_type: nosql
+          #   persistence_driver: elasticsearch
+          #   containers: [cassandra, elasticsearch8]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8

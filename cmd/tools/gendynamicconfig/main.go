@@ -186,7 +186,7 @@ func New{{.P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (
 func New{{.P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{.P.Name}}TypedSetting[T] {
 	s := {{.P.Name}}TypedSetting[T]{
 		key:         key,
-		cdef:        cdef,
+		cdef:        &cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -230,6 +230,34 @@ func (s {{.P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFnWith{{.P.N
 			prec,
 		)
 	}
+}
+
+{{if eq .P.Name "Global" -}}
+type TypedSubscribable[T any] func(callback func(T)) (v T, cancel func())
+{{- else -}}
+type TypedSubscribableWith{{.P.Name}}Filter[T any] func({{.P.GoArgs}}, callback func(T)) (v T, cancel func())
+{{- end}}
+
+{{if eq .P.Name "Global" -}}
+func (s {{.P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
+	return func(callback func(T)) (T, func()) {
+{{- else -}}
+func (s {{.P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWith{{.P.Name}}Filter[T] {
+	return func({{.P.GoArgs}}, callback func(T)) (T, func()) {
+{{- end}}
+		prec := {{.P.Expr}}
+		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s {{.P.Name}}TypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 {{if eq .P.Name "Global" -}}
