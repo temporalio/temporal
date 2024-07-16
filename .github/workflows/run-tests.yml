@@ -301,7 +301,7 @@ jobs:
         run: make upload-test-results
 
       - name: Tear down docker compose
-        if: ${{ always() }}
+        if: ${{ (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && inputs.db == env.PERSISTENCE_DRIVER)) && always() }}
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
