@@ -239,42 +239,37 @@ jobs:
       SINGLE_TEST_ARGS: ${{ needs.set-up-functional-test.outputs.single_test_args }}
       FUNCTIONAL_TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.functional_test_timeout }}
     steps:
-      - name: Print things
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        if: ${{ toJson(matrix.containers) != '[]' }}
         run: |
-          echo "${TEST_TOTAL_SHARDS} | ${TEST_SHARD_INDEX} | ${PERSISTENCE_TYPE} | ${PERSISTENCE_DRIVER} | ${SINGLE_TEST_ARGS} | ${FUNCTIONAL_TEST_TIMEOUT}"
-          
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
-  #    - uses: ScribeMD/docker-cache@0.3.7
-  #      with:
-  #        key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+      - name: Run functional test
+        timeout-minutes: ${{ fromJSON(env.FUNCTIONAL_TEST_TIMEOUT) }} # make sure this is larger than the test timeout in the Makefile
+        run: make functional-test-coverage
 
-  #    - uses: actions/checkout@v4
-  #      with:
-  #        token: ${{ secrets.GITHUB_TOKEN }}
-  #        ref: ${{ env.COMMIT }}
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        run: make upload-test-results
 
-  #    - uses: actions/setup-go@v5
-  #      with:
-  #        go-version-file: 'go.mod'
-  #        check-latest: true
-
-  #    - name: Start containerized dependencies
-  #      if: ${{ toJson(matrix.containers) != '[]' }}
-  #      run: |
-  #        docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
-
-  #    - name: Run functional test
-  #      timeout-minutes: ${{ fromJSON(env.FUNCTIONAL_TEST_TIMEOUT) }} # make sure this is larger than the test timeout in the Makefile
-  #      run: make functional-test-coverage
-
-  #    - name: Upload test results
-  #      if: ${{ !cancelled() }}
-  #      run: make upload-test-results
-
-  #    - name: Tear down docker compose
-  #      if: ${{ always() }}
-  #      run: |
-  #        docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+      - name: Tear down docker compose
+        if: ${{ always() }}
+        run: |
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true }}
