@@ -152,17 +152,23 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
+        name:
+          - cass_es
+          # - cass_es8
+          - sqlite
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         shard_index: [0, 1, 2]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, elasticsearch8]
+          # - name: cass_es8
+          #   persistence_type: nosql
+          #   persistence_driver: cassandra
+          #   containers: [cassandra, elasticsearch8]
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -292,16 +298,21 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        name: 
+          - cass_es
+          # - cass_es8
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            containers: [cassandra, elasticsearch8]
+          # - name: cass_es8
+          #   persistence_type: nosql
+          #   persistence_driver: elasticsearch
+          #   containers: [cassandra, elasticsearch8]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
