@@ -56,28 +56,8 @@ env:
 
 jobs:
 
-  cache-docker-images:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
-    name: Cache Docker images
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on: [ubuntu-20.04]
-    runs-on: ${{ matrix.runs-on }}
-    steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-
-      - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
-
   misc-checks:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Misc checks
     strategy:
       fail-fast: false
@@ -107,8 +87,28 @@ jobs:
 
       - run: make build-tests
 
+  cache-docker-images:
+    if: ${{ inputs.run_single_functional_test != true }}
+    name: Cache Docker images
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-20.04]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
+
   unit-test:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
     needs: misc-checks
     strategy:
@@ -136,7 +136,7 @@ jobs:
         run: make upload-test-results
 
   integration-test:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Integration test
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -292,7 +292,7 @@ jobs:
   #        docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-xdc:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Functional test xdc
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -360,7 +360,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-ndc:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Functional test ndc
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -428,7 +428,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   test-status:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Test Status
     needs:
       - unit-test
