@@ -35,10 +35,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/worker_versioning"
-
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
 	"github.com/golang/mock/gomock"
@@ -50,8 +46,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"go.temporal.io/server/common/cluster/clustertest"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -60,6 +54,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/cluster/clustertest"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/worker_versioning"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -88,6 +86,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -395,6 +394,99 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.Require().NoError(err)
 	s.Require().NotSame(tqm, got,
 		"Unload call with matching incarnation should have caused unload")
+}
+
+func (s *matchingEngineSuite) TestFailAddTaskWithHistoryExhausted() {
+	tqName := "testFailAddTaskWithHistoryExhausted"
+	historyError := consts.ErrResourceExhaustedBusyWorkflow
+	s.testFailAddTaskWithHistoryError(tqName, false, historyError, nil)
+}
+
+func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
+	historyError := serviceerror.NewInternal("nothing to start")
+	tqName := "testFailAddTaskWithHistoryError"
+	s.testFailAddTaskWithHistoryError(tqName, true, historyError, historyError)
+}
+
+func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
+	tqName string,
+	expectSyncMatch bool,
+	recordError error,
+	expectedError error,
+) {
+	namespaceID := namespace.ID(uuid.New())
+	identity := "identity"
+
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
+
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	scheduledEventID := int64(0)
+
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:            namespaceID.String(),
+		Execution:              execution,
+		ScheduledEventId:       scheduledEventID,
+		TaskQueue:              stickyTaskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+	}
+
+	pollRequest := matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: stickyTaskQueue,
+			Identity:  identity,
+		},
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &pollRequest, metrics.NoopMetricsHandler)
+		if err != nil {
+			s.logger.Info(err.Error())
+		}
+		wg.Done()
+	}()
+
+	partitionReady := func() bool {
+		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
+	}
+	s.Eventually(partitionReady, 100*time.Millisecond, 10*time.Millisecond)
+
+	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
+		PreviousStartedEventId:     scheduledEventID,
+		ScheduledEventId:           scheduledEventID + 1,
+		Attempt:                    1,
+		StickyExecutionEnabled:     true,
+		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
+		NextPageToken:              nil,
+	}
+
+	s.mockHistoryClient.EXPECT().
+		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *historyservice.RecordWorkflowTaskStartedRequest, _ ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+			s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
+			return nil, recordError
+		})
+
+	s.mockHistoryClient.EXPECT().
+		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(recordWorkflowTaskStartedResponse, nil).AnyTimes()
+
+	_, syncMatch, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+
+	s.Equal(syncMatch, expectSyncMatch)
+	if expectedError != nil {
+		s.ErrorAs(err, &expectedError)
+	} else {
+		s.Nil(err)
+	}
+	wg.Wait()
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
