@@ -171,8 +171,9 @@ jobs:
     outputs:
       shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
       total_shards: ${{ steps.generate_output.outputs.shards }}
+      github_timeout: ${{ steps.generate_output.outputs.github_timeout }}
+      test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
       single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
-      functional_test_timeout: ${{ steps.generate_output.outputs.timeout }}
     steps:
       - id: generate_output
         run: |
@@ -186,7 +187,8 @@ jobs:
           {
             echo "shard_indices=[$(seq -s, 0 $((shards-1)))]"
             echo "shards=$shards"
-            echo "timeout=$timeout"
+            echo "github_timeout=$((timeout+5))"
+            echo "test_timeout=${timeout}m"
             echo "single_test_args=$single_test_args" 
           } >> "$GITHUB_OUTPUT"
 
@@ -237,8 +239,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-functional-test.outputs.single_test_args }}
-      TEST_TIMEOUT_MINUTES: ${{ needs.set-up-functional-test.outputs.functional_test_timeout }}
-      TEST_TIMEOUT: "${{ env.TEST_TIMEOUT_MINUTES }}m"
+      TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.test_timeout }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         with:
@@ -260,7 +261,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
-        timeout-minutes: ${{ fromJSON(env.TEST_TIMEOUT_MINUTES) + 5 }} # make sure this is larger than the test timeout in the Makefile
+        timeout-minutes: ${{ fromJSON(needs.set-up-functional-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
 
       - name: Upload test results
