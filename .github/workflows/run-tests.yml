@@ -207,6 +207,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   functional-test:
+    if: always()
     name: Functional test
     needs: [misc-checks, cache-docker-images, set-up-functional-test]
     strategy:
