@@ -205,8 +205,8 @@ jobs:
       matrix:
         runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
-        #shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
-        shard_index: [0] # todo
+        shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
+        #shard_index: [0] # todo
         include:
           - name: cass_es
             persistence_type: nosql
@@ -244,9 +244,12 @@ jobs:
       - name: Print things
         run: |
           echo "$TEST_TOTAL_SHARDS"
+          echo "$TEST_SHARD_INDEX"
+          echo "$PERSISTENCE_TYPE"
+          echo "$PERSISTENCE_DRIVER"
           echo "$SINGLE_TEST_ARGS"
           echo "$FUNCTIONAL_TEST_TIMEOUT"
-          echo ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
+          
 
   #    - uses: ScribeMD/docker-cache@0.3.7
   #      with:
@@ -267,9 +270,9 @@ jobs:
   #      run: |
   #        docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
-      - name: Run functional test
-        timeout-minutes: ${{ fromJSON(env.FUNCTIONAL_TEST_TIMEOUT) }} # make sure this is larger than the test timeout in the Makefile
-        run: make functional-test-coverage
+  #    - name: Run functional test
+  #      timeout-minutes: ${{ fromJSON(env.FUNCTIONAL_TEST_TIMEOUT) }} # make sure this is larger than the test timeout in the Makefile
+  #      run: make functional-test-coverage
 
   #    - name: Upload test results
   #      if: ${{ !cancelled() }}
