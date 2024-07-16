@@ -64,7 +64,7 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT := 25m
+TEST_TIMEOUT ?= 25m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
