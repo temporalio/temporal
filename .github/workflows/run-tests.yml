@@ -103,6 +103,8 @@ jobs:
       matrix:
         runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
+    env:
+      BUILDKITE_MESSAGE: "{\"job\": \"unit-test\"}"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -131,6 +133,8 @@ jobs:
       matrix:
         runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
+    env:
+      BUILDKITE_MESSAGE: "{\"job\": \"integration-test\"}"
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         with:
@@ -239,6 +243,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-functional-test.outputs.single_test_args }}
       TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.test_timeout }}
+      BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         with:
@@ -307,6 +312,7 @@ jobs:
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         with:

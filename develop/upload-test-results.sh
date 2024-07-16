@@ -21,5 +21,6 @@ for file in *.junit.xml; do
     -F "run_env[branch]=${GITHUB_REF}" \
     -F "run_env[commit_sha]=${GITHUB_SHA}" \
     -F "run_env[url]=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+    -F "run_env[message]=${BUILDKITE_MESSAGE}" \
     https://analytics-api.buildkite.com/v1/uploads
 done
