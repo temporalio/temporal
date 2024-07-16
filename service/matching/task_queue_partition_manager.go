@@ -46,7 +46,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -260,10 +259,12 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
-	if err != nil && errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-		return true
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	if err != nil && errors.As(err, &resourceExhaustedErr) {
+		if resourceExhaustedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			return true
+		}
 	}
-
 	return false
 }
 
