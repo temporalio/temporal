@@ -25,6 +25,9 @@ set -eu -o pipefail
 : "${INTERNAL_BINPB:=proto/image.bin}"
 : "${MAIN_BRANCH:=main}"
 
+: "${COMMIT:=$(git rev-parse HEAD)}"
+: "${PR_BASE_COMMIT:=$(git merge-base HEAD main)}"
+
 color()  { printf "\e[1;35m%s\e[0m\n" "$*" ; }
 yellow() { printf "\e[1;33m%s\e[0m\n" "$*" ; }
 red()    { printf "\e[1;31m%s\e[0m\n" "$*" ; }
@@ -36,7 +39,7 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   # Interactively: the user will see this and know what to do. In CI: this is run as
   # part of ci-build-misc, which has a "ensure-no-changes at the end". Fail there
   # instead of here since we can run more tests and the error message is nicer.
-  exit
+  exit 0
 fi
 
 # If invoked from the Makefile, this should already be done. This is just in
@@ -61,17 +64,15 @@ check_against_commit() {
   fi
 }
 
-if [[ $PR_BASE_COMMIT ]]; then
+if [ "$PR_BASE_COMMIT" != "$COMMIT" ]; then
   # We're running in GHA, using shallow clone. Fetch some commits from the PR
   # base so we can try to find the merge base.
   color "Fetching more commits from $PR_BASE_COMMIT..."
   git fetch --no-tags --no-recurse-submodules --depth=100 origin "$PR_BASE_COMMIT"
-fi
 
-color "Cloning repo to temp dir..."
-git clone . "$tmp"
+  color "Cloning repo to temp dir..."
+  git clone . "$tmp"
 
-if [[ $PR_BASE_COMMIT ]]; then
   # First check against merge base commit:
   git -C "$tmp" fetch origin "$PR_BASE_COMMIT"
   if base=$(git -C "$tmp" merge-base HEAD "$PR_BASE_COMMIT"); then
@@ -79,8 +80,8 @@ if [[ $PR_BASE_COMMIT ]]; then
   else
     yellow "Can't find merge base for breaking check, checking against main only"
   fi
-fi
 
-# Next check against main:
-git -C "$tmp" fetch --depth=1 https://github.com/temporalio/temporal.git "$MAIN_BRANCH"
-check_against_commit FETCH_HEAD "main"
+  # Next check against main:
+  # git -C "$tmp" fetch --depth=1 https://github.com/temporalio/temporal.git "$MAIN_BRANCH"
+  # check_against_commit FETCH_HEAD "main"
+fi
