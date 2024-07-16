@@ -123,31 +123,30 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 		},
 	)
 
-	circuitBreakerSettings := params.Config.OutboundQueueCircuitBreakerSettings
 	circuitBreakerPool := collection.NewOnceMap(
 		func(key queues.OutboundTaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
-			return circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
+			// This is intentionally not failing the function in case of error. The circuit breaker is
+			// agnostic to Task implementation, and thus the settings function is not expected to return
+			// an error. Also, in this case, if the namespace registry fails to get the name, then the
+			// task itself will fail when it is processed and tries to get the namespace name.
+			nsName := getNamespaceNameOrDefault(
+				params.NamespaceRegistry,
+				key.NamespaceID,
+				"",
+				metricsHandler,
+			)
+			cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
 				Name: fmt.Sprintf(
 					"circuit_breaker:%s:%s:%s",
 					key.TaskGroup,
 					key.NamespaceID,
 					key.Destination,
 				),
-				SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
-					// This is intentionally not failing the function in case of error. The circuit
-					// breaker is agnostic to Task implementation, and thus the settings function is
-					// not expected to return an error. Also, in this case, if the namespace registry
-					// fails to get the name, then the task itself will fail when it is processed and
-					// tries to get the namespace name.
-					nsName := getNamespaceNameOrDefault(
-						params.NamespaceRegistry,
-						key.NamespaceID,
-						"",
-						metricsHandler,
-					)
-					return circuitBreakerSettings(nsName, key.Destination)
-				},
 			})
+			initial, cancel := params.Config.OutboundQueueCircuitBreakerSettings(nsName, key.Destination, cb.UpdateSettings)
+			cb.UpdateSettings(initial)
+			_ = cancel // OnceMap never deletes anything. use this if we support deletion
+			return cb
 		},
 	)
 
