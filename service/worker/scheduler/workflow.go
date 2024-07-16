@@ -29,7 +29,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"go.temporal.io/api/serviceerror"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,6 +40,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
