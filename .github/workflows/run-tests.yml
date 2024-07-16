@@ -188,8 +188,8 @@ jobs:
       - id: db_names_step
         run: |
           if [ ${{ inputs.run_single_functional_test }} = "true" ];
-            then echo "db_names=[sqlite]" >> "$GITHUB_OUTPUT";
-            else echo "db_names=[cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]" >> "$GITHUB_OUTPUT";
+            then echo "db_names=[\"sqlite\"]" >> "$GITHUB_OUTPUT";
+            else echo "db_names=[\"cass_es\", \"cass_es8\", \"sqlite\", \"mysql8\", \"postgres12\", \"postgres12_pgx\"]" >> "$GITHUB_OUTPUT";
           fi
       - id: total_shards_step
         run: |  
