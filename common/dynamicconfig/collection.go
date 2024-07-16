@@ -56,12 +56,12 @@ type (
 
 		cancelClientSubscription func()
 
-		subscriptionLock sync.Mutex
+		subscriptionLock sync.Mutex          // protects subscriptions, subscriptionIdx, and callbackPool
 		subscriptions    map[Key]map[int]any // final "any" is *subscription[T]
 		subscriptionIdx  int
+		callbackPool     *goro.AdaptivePool
 
-		poller       goro.Group
-		callbackPool *goro.AdaptivePool
+		poller goro.Group
 	}
 
 	subscription[T any] struct {
