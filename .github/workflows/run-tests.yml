@@ -195,7 +195,6 @@ jobs:
           timeout=30
           if [[ ${{ inputs.run_single_functional_test }} = true ]]; then
             shards=1
-            db_names="['sqlite']"
             timeout=30
             single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
           fi
