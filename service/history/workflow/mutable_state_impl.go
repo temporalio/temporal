@@ -1365,7 +1365,9 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 		// events first) to find the completion event. Event will be earlier than
 		// the recorded CompletionEventBatchID, and should be a part of the same batch.
 		//
-		// see #inc-791-2024-07-16-high-frontend-cpu-on-s-cd046
+		// See also: https://github.com/temporalio/temporal/pull/6180
+		//
+		// TODO: Remove 90 days after deployment (remove after 10/16/2024)
 		if common.IsInternalError(err) &&
 			ms.executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
 			_, txID := ms.GetLastFirstEventIDTxnID()
@@ -1383,7 +1385,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 
 			for _, event := range resp.HistoryEvents {
 				// this only applies to terminated workflows whose ultimate WFT had been failed
-				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 					return event, nil
 				}
 			}
