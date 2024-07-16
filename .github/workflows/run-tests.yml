@@ -46,7 +46,6 @@ env:
 jobs:
 
   misc-checks:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
     name: Misc checks
     strategy:
       fail-fast: false
@@ -96,7 +95,7 @@ jobs:
       - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
 
   unit-test:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
     needs: misc-checks
     strategy:
@@ -124,7 +123,7 @@ jobs:
         run: make upload-test-results
 
   integration-test:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Integration test
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -194,7 +193,7 @@ jobs:
 
   functional-test:
     name: Functional test
-    needs: [cache-docker-images, set-up-functional-test]
+    needs: [misc-checks, cache-docker-images, set-up-functional-test]
     strategy:
       fail-fast: false
       matrix:
@@ -274,7 +273,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-xdc:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Functional test xdc
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -342,7 +341,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-ndc:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Functional test ndc
     needs: [misc-checks, cache-docker-images]
     strategy:
@@ -410,7 +409,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   test-status:
-    if: ${{ inputs.run_single_functional_test != 'true' }}
+    if: ${{ inputs.run_single_functional_test != true }}
     name: Test Status
     needs:
       - unit-test
