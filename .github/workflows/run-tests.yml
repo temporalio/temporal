@@ -22,7 +22,7 @@ on:
         type: number
         default: 1
       test_name:
-        description: "[Single Test Only] Name of the test suite to run (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite/TestUpdateWorkflow')"
+        description: "[Single Test Only] Name of the test to run (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite/TestUpdateWorkflow')"
         type: string
       timeout_minutes:
         description: "[Single Test Only] test timeout in minutes"
