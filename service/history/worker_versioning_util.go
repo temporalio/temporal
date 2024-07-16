@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"go.temporal.io/server/common"
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -197,7 +196,7 @@ func initializeWorkflowAssignedBuildId(
 		return err
 	}
 
-	if mutableState.HasCompletedAnyWorkflowTask() || workflowTask.StartedEventID != common.EmptyEventID {
+	if mutableState.HasCompletedAnyWorkflowTask() {
 		// workflow has already completed a wft. buildId is stale and useless.
 		// workflow's assigned build ID should be already updated via RecordWorkflowTaskStarted
 		return nil
