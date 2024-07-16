@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/service/history/consts"
 	"math/rand"
 	"sync"
 	"testing"
@@ -46,12 +47,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/cluster/clustertest"
-	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/service/history/consts"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -60,6 +55,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/cluster/clustertest"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/worker_versioning"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -397,22 +396,35 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 		"Unload call with matching incarnation should have caused unload")
 }
 
+func (s *matchingEngineSuite) TestFailAddTaskWithHistoryExhausted() {
+	tqName := "testFailAddTaskWithHistoryExhausted"
+	historyError := consts.ErrResourceExhaustedBusyWorkflow
+	s.testFailAddTaskWithHistoryError(tqName, false, historyError, nil)
+}
+
 func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
+	historyError := serviceerror.NewInternal("nothing to start")
+	tqName := "testFailAddTaskWithHistoryError"
+	s.testFailAddTaskWithHistoryError(tqName, true, historyError, historyError)
+}
+
+func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
+	tqName string,
+	expectSyncMatch bool,
+	recordError error,
+	expectedError error,
+) {
 	namespaceID := namespace.ID(uuid.New())
 	identity := "identity"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "STQ", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_STICKY}
 
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
 
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 	scheduledEventID := int64(0)
-
-	expectedError := serviceerror.NewInternal("nothing to start")
-	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).Return(
-		nil, expectedError)
 
 	addRequest := matchingservice.AddWorkflowTaskRequest{
 		NamespaceId:            namespaceID.String(),
@@ -432,44 +444,49 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-
 	go func() {
-		wg.Done()
-		resp, _ := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &pollRequest, metrics.NoopMetricsHandler)
-		if resp != emptyPollWorkflowTaskQueueResponse {
-			s.logger.Info("Polling task got empty response")
+		_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &pollRequest, metrics.NoopMetricsHandler)
+		if err != nil {
+			s.logger.Info(err.Error())
 		}
+		wg.Done()
 	}()
+
+	partitionReady := func() bool {
+		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
+	}
+	s.Eventually(partitionReady, 100*time.Millisecond, 10*time.Millisecond)
+
+	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
+		PreviousStartedEventId:     scheduledEventID,
+		ScheduledEventId:           scheduledEventID + 1,
+		Attempt:                    1,
+		StickyExecutionEnabled:     true,
+		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
+		NextPageToken:              nil,
+	}
+
+	s.mockHistoryClient.EXPECT().
+		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *historyservice.RecordWorkflowTaskStartedRequest, _ ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+			s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
+			return nil, recordError
+		})
+
+	s.mockHistoryClient.EXPECT().
+		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(recordWorkflowTaskStartedResponse, nil).AnyTimes()
+
+	_, syncMatch, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+
+	s.Equal(syncMatch, expectSyncMatch)
+	if expectedError != nil {
+		s.ErrorAs(err, &expectedError)
+	} else {
+		s.Nil(err)
+	}
 	wg.Wait()
-	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
-	partition, err := tqid.PartitionFromProto(addRequest.TaskQueue, addRequest.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.NoError(err)
-
-	pm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
-	s.NoError(err)
-	s.NotEmpty(pm)
-
-	hasPoller := pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold))
-	s.True(hasPoller)
-
-	// at this point PollWorkflowTaskQueue should be polling for tasks.
-
-	// first time history will fail to record the task and send Internal error
-	s.logger.Info("Adding workflow task")
-	_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-
-	s.NotNil(err)
-	s.ErrorAs(err, &expectedError)
-
-	expectedError = consts.ErrResourceExhaustedBusyWorkflow
-	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).Return(
-		nil, expectedError)
-
-	_, syncMath, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-
-	// now history still generate error, but in this case task should be moved to backlog queue
-	s.Nil(err)
-	s.False(syncMath)
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
