@@ -22,7 +22,7 @@ on:
         type: number
         default: 1
       test_name:
-        description: "[Single Test Only] Name of the test suite to run, include -testify.m flag here if desired (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite -testify.m=TestUpdateWorkflow')"
+        description: "[Single Test Only] Name of the test suite to run (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite/TestUpdateWorkflow')"
         type: string
       timeout_minutes:
         description: "[Single Test Only] test timeout in minutes"
@@ -181,7 +181,7 @@ jobs:
           if [[ "${{ inputs.run_single_functional_test }}" == "true" ]]; then
             shards=1
             timeout=${{ inputs.timeout_minutes }}
-            single_test_args="-test.run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
+            single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
           fi
           {
             echo "shard_indices=[$(seq -s, 0 $((shards-1)))]"
