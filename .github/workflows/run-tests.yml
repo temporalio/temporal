@@ -173,15 +173,17 @@ jobs:
     name: Set up functional test
     runs-on: ubuntu-20.04
     outputs:
-      shard_index: ${{ steps.shard_matrix_step.outputs.shard_index }}
+      shard_indices: ${{ steps.shard_matrix_step.outputs.shard_indices }}
       total_shards: ${{ steps.total_shards_step.outputs.total_shards }}
       single_test_args: ${{ steps.test_args_step.outputs.single_test_args }}
       functional_test_timeout: ${{ steps.timeout_step.outputs.timeout }}
     steps:
       - id: shard_matrix_step
         run: |
-          if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then shard_index='{ "shard_index": [0] }'; else shard_index='{ "shard_index": [0, 1, 2] }'; fi
-          echo "shard_index=$shard_index" >> "$GITHUB_OUTPUT"
+          if [ ${{ inputs.run_single_functional_test }} = 'true' ];
+            then echo 'shard_indices=[0]' >> "$GITHUB_OUTPUT";
+            else echo 'shard_indices=[0, 1, 2]' >> "$GITHUB_OUTPUT";
+          fi
       - id: total_shards_step
         run: |  
           if [ ${{ inputs.run_single_functional_test }} = 'true' ]; then total_shards=1; else total_shards=3; fi
@@ -205,7 +207,7 @@ jobs:
       matrix:
         runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
-        shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_index) }}
+        shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_indices) }}
         #shard_index: [0] # todo
         include:
           - name: cass_es
