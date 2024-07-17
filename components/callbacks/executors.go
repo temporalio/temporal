@@ -63,13 +63,12 @@ type (
 	TaskExecutorOptions struct {
 		fx.In
 
-		Config            *Config
-		NamespaceRegistry namespace.Registry
-		MetricsHandler    metrics.Handler
-		Logger            log.Logger
-		// TODO(Tianyu): Move variant-specific fields off of this struct later
-		CallerProvider HTTPCallerProvider
-		HistoryClient  resource.HistoryClient
+		Config             *Config
+		NamespaceRegistry  namespace.Registry
+		MetricsHandler     metrics.Handler
+		Logger             log.Logger
+		HTTPCallerProvider HTTPCallerProvider
+		HistoryClient      resource.HistoryClient
 	}
 
 	taskExecutor struct {
@@ -145,11 +144,11 @@ func (e taskExecutor) loadInvocationArgs(
 			if err != nil {
 				return err
 			}
-			// Struct is immutable
-			args := nexusInvocation{}
-			args.nexus = variant.Nexus
-			args.completion, err = target.GetNexusCompletion(ctx)
-			invokable = args
+			// variant struct is immutable and ok to reference without copying
+			nexusInvokable := nexusInvocation{}
+			nexusInvokable.nexus = variant.Nexus
+			nexusInvokable.completion, err = target.GetNexusCompletion(ctx)
+			invokable = nexusInvokable
 			if err != nil {
 				return err
 			}
@@ -158,14 +157,14 @@ func (e taskExecutor) loadInvocationArgs(
 			if err != nil {
 				return err
 			}
-			// Struct is immutable
-			args := hsmInvocation{}
-			args.hsm = variant.Hsm
-			args.completionEvent, err = target.GetCompletionEvent(ctx)
+			// variant struct is immutable and ok to reference without copying
+			hsmInvokable := hsmInvocation{}
+			hsmInvokable.hsm = variant.Hsm
+			hsmInvokable.completionEvent, err = target.GetCompletionEvent(ctx)
 			if err != nil {
 				return err
 			}
-			invokable = args
+			invokable = hsmInvokable
 			if err != nil {
 				return err
 			}

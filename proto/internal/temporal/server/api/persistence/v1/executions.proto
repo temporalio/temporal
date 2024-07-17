@@ -516,7 +516,7 @@ message Callback {
         map<string, string> header = 2;
     }
 
-    message Hsm {
+    message HSM {
         // namespace id of the target state machine.
         string namespace_id = 1;
         // ID of the workflow that the target state machine is attached to.
@@ -534,7 +534,7 @@ message Callback {
     reserved 1; // For a generic callback mechanism to be added later.
     oneof variant {
         Nexus nexus = 2;
-        Hsm hsm = 3;
+        HSM hsm = 3;
     }
 }
 

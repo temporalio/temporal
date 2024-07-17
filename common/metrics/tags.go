@@ -290,7 +290,7 @@ func ServiceErrorTypeTag(err error) Tag {
 	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(util.ErrorType(err), errorPrefix)}
 }
 
-func NexusOutcomeTag(outcome string) Tag {
+func OutcomeTag(outcome string) Tag {
 	return &tagImpl{key: nexusOutcomeTagName, value: outcome}
 }
 

@@ -384,14 +384,14 @@ func (s *Service) Start() {
 	go func() {
 		s.logger.Info("Starting to serve on frontend listener")
 		if err := s.server.Serve(s.grpcListener); err != nil {
-			s.logger.Fatal("failed to serve on frontend listener", tag.Error(err))
+			s.logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
 		}
 	}()
 
 	if s.httpAPIServer != nil {
 		go func() {
 			if err := s.httpAPIServer.Serve(); err != nil {
-				s.logger.Fatal("failed to serve HTTP API server", tag.Error(err))
+				s.logger.Fatal("Failed to serve HTTP API server", tag.Error(err))
 			}
 		}()
 	}

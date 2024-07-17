@@ -932,9 +932,12 @@ message InvokeStateMachineMethodRequest {
     temporal.server.api.persistence.v1.StateMachineRef ref = 4;
 
     string method_name = 5;
+
+    // Input, in serialized bytes, to the method. Users specify a deserializer during method registration for each state machine.
     bytes input = 6;
 }
 
 message InvokeStateMachineMethodResponse {
+    // Output, in serialized bytes, of the method. Users specify a serializer during method registration for each state machine.
     bytes output = 1;
 }

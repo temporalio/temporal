@@ -85,13 +85,12 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 	}
 
 	startTime := time.Now()
-	// TODO(Tianyu): Will we want to log the response somewhere?
 	_, err = e.HistoryClient.InvokeStateMachineMethod(ctx, &request)
 
 	// Log down metrics about the call
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination)
-	statusCodeTag := metrics.NexusOutcomeTag(fmt.Sprintf("status:%d", status.Code(err)))
+	statusCodeTag := metrics.OutcomeTag(fmt.Sprintf("status:%d", status.Code(err)))
 
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)

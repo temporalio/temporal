@@ -81,7 +81,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		request.Header.Set(k, v)
 	}
 
-	caller := e.CallerProvider(queues.NamespaceIDAndDestination{
+	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
 		Destination: task.Destination,
 	})
@@ -91,7 +91,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination)
-	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(ctx, response, err))
+	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, response, err))
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
 

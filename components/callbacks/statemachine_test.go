@@ -91,7 +91,7 @@ func TestValidTransitions(t *testing.T) {
 	cbTask := out.Tasks[0].(callbacks.InvocationTask)
 	require.Equal(t, "http://address:666", cbTask.Destination)
 
-	// Store the pre-succeeded state to test failed later
+	// Store the pre-succeeded state to test Failed later
 	dup := callbacks.Callback{common.CloneProto(callback.CallbackInfo)}
 
 	// Succeeded

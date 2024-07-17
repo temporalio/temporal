@@ -350,18 +350,18 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 	}
 	if *errPtr == nil {
 		if c.forwarded {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarded"))
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
 		} else {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		}
 	} else if c.outcomeTag != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
 	} else {
 		var he *nexus.HandlerError
 		if errors.As(*errPtr, &he) {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("error_" + strings.ToLower(string(he.Type))))
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("error_" + strings.ToLower(string(he.Type))))
 		} else {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("error_internal"))
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("error_internal"))
 		}
 	}
 
@@ -413,7 +413,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 	}
 
 	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, apiName); err != nil {
-		c.outcomeTag = metrics.NexusOutcomeTag("invalid_namespace_state")
+		c.outcomeTag = metrics.OutcomeTag("invalid_namespace_state")
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
@@ -429,7 +429,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			return serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
 		}
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_inactive_forwarding_disabled"))
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_inactive_forwarding_disabled"))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
 
@@ -447,22 +447,22 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 	cleanup, err := c.NamespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), apiName, c.metricsHandlerForInterceptors, request)
 	c.cleanupFunctions = append(c.cleanupFunctions, func(error) { cleanup() })
 	if err != nil {
-		c.outcomeTag = metrics.NexusOutcomeTag("namespace_concurrency_limited")
+		c.outcomeTag = metrics.OutcomeTag("namespace_concurrency_limited")
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
 	if err := c.NamespaceRateLimitInterceptor.Allow(c.namespace.Name(), apiName, request.HTTPRequest.Header); err != nil {
-		c.outcomeTag = metrics.NexusOutcomeTag("namespace_rate_limited")
+		c.outcomeTag = metrics.OutcomeTag("namespace_rate_limited")
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 
 	if err := c.RateLimitInterceptor.Allow(apiName, request.HTTPRequest.Header); err != nil {
-		c.outcomeTag = metrics.NexusOutcomeTag("global_rate_limited")
+		c.outcomeTag = metrics.OutcomeTag("global_rate_limited")
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 
 	if err := c.clientVersionChecker.ClientSupported(ctx); err != nil {
-		c.outcomeTag = metrics.NexusOutcomeTag("unsupported_client")
+		c.outcomeTag = metrics.OutcomeTag("unsupported_client")
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 

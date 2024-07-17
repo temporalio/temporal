@@ -163,12 +163,12 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			counter.EXPECT().Record(int64(1),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome))
 			metricsHandler.EXPECT().Timer(callbacks.RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome))
 
 			root := newRoot(t)
 			cb := callbacks.Callback{
@@ -195,7 +195,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 				callbacks.TaskExecutorOptions{
 					NamespaceRegistry: namespaceRegistryMock,
 					MetricsHandler:    metricsHandler,
-					CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+					HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
 					Logger: log.NewNoopLogger(),
@@ -299,12 +299,12 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 			counter.EXPECT().Record(int64(1),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag(""),
-				metrics.NexusOutcomeTag(fmt.Sprintf("status:%d", tc.expectedMetricOutcome)))
+				metrics.OutcomeTag(fmt.Sprintf("status:%d", tc.expectedMetricOutcome)))
 			metricsHandler.EXPECT().Timer(callbacks.RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag(""),
-				metrics.NexusOutcomeTag(fmt.Sprintf("status:%d", tc.expectedMetricOutcome)))
+				metrics.OutcomeTag(fmt.Sprintf("status:%d", tc.expectedMetricOutcome)))
 
 			root := newRoot(t)
 			ref := &persistencespb.StateMachineRef{
@@ -424,7 +424,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	require.NoError(t, callbacks.RegisterExecutor(
 		reg,
 		callbacks.TaskExecutorOptions{
-			CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+			HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 				return nil
 			},
 			Logger: log.NewNoopLogger(),
