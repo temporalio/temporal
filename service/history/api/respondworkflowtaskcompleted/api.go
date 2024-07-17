@@ -405,7 +405,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
-		ms, _, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
+
+		// wtFailedEventID must be used as the event batch ID for any following workflow termination events
+		var wtFailedEventID int64
+		ms, wtFailedEventID, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
@@ -416,8 +419,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// Flush buffer event before terminating the workflow
 			ms.FlushBufferedEvents()
 
-			if err := workflow.TerminateWorkflow(ms, wtFailedCause.Message(), nil,
-				consts.IdentityHistoryService, false); err != nil {
+			_, err := ms.AddWorkflowExecutionTerminatedEvent(
+				wtFailedEventID,
+				wtFailedCause.Message(),
+				nil,
+				consts.IdentityHistoryService,
+				false,
+			)
+			if err != nil {
 				return nil, err
 			}
 
