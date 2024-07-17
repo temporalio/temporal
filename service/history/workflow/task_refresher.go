@@ -504,6 +504,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 				r.shard.StateMachineRegistry(),
 				node,
 				node.Path(),
+				node.InternalRepr().GetTransitionCount(),
 				task,
 			); err != nil {
 				return err

@@ -53,6 +53,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests"
 )
@@ -72,6 +73,7 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.EnableNexus.Key():                  true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key(): 1 * time.Millisecond,
+		callbacks.AllowedAddresses.Key():                 []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.setupSuite([]string{"nexus_state_replication_active", "nexus_state_replication_standby"})
 }
@@ -189,8 +191,26 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	// Now failover, and let cluster2 be the active.
 	s.failover(ns, s.clusterNames[1], 2, s.cluster1.GetFrontendClient())
 
+	s.NoError(sdkClient2.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "dont-care", nil))
+
+	pollRes = s.pollWorkflowTask(ctx, s.cluster2.GetFrontendClient(), ns)
+
 	// Unblock nexus operation start after failover.
 	failStartOperation.Store(false)
+
+	s.Eventually(func() bool {
+		describeRes, err := sdkClient2.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		s.Equal(1, len(describeRes.PendingNexusOperations))
+		op := describeRes.PendingNexusOperations[0]
+		return op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
+	}, time.Second*10, time.Millisecond*100)
+
+	_, err = s.cluster2.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: pollRes.TaskToken,
+		Commands:  []*commandpb.Command{}, // No need to generate other commands, this "workflow" just waits for the operation to complete.
+	})
+	s.NoError(err)
 
 	// Poll in cluster2 (previously standby) and verify the operation was started.
 	pollRes = s.pollWorkflowTask(ctx, s.cluster2.GetFrontendClient(), ns)

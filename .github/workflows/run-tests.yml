@@ -19,7 +19,11 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   cancel-in-progress: true
 
 env:
-  COMMIT: ${{ github.event.inputs.commit || github.sha }}
+  # For workflow_dispatch: use the given commit.
+  # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
+  # For push: use the pushed commit.
+  COMMIT: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
+  PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
@@ -37,7 +41,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
-          submodules: true
+          # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
+          fetch-depth: 100
 
       - uses: actions/setup-go@v5
         with:
@@ -46,28 +51,13 @@ jobs:
 
       - uses: arduino/setup-protoc@v3
 
-      - run: make ci-build-misc
+      - run: GOOS=windows GOARCH=amd64 make clean-bins bins
+
+      - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
+
+      - run: make clean-bins ci-build-misc
 
       - run: make build-tests
-
-  cache-docker-images:
-    name: Cache Docker images
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on: [ubuntu-20.04]
-    runs-on: ${{ matrix.runs-on }}
-    steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-
-      - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
 
   unit-test:
     name: Unit test
@@ -98,17 +88,13 @@ jobs:
 
   integration-test:
     name: Integration test
-    needs: [misc-checks, cache-docker-images]
+    needs: misc-checks
     strategy:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -120,8 +106,14 @@ jobs:
           check-latest: true
 
       - name: Start containerized dependencies
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: |
+            cassandra
+            mysql
+            postgresql
+          down-flags: -v
 
       - name: Run integration test
         timeout-minutes: 15
@@ -131,29 +123,32 @@ jobs:
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
-      - name: Tear down docker compose
-        if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
-
   functional-test:
     name: Functional test
-    needs: [misc-checks, cache-docker-images]
+    needs: misc-checks
     strategy:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
+        name:
+          - cass_es
+          - cass_es8
+          - sqlite
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         shard_index: [0, 1, 2]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
+            es_version: v7
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
+            es_version: v8
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -177,10 +172,6 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -193,8 +184,11 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
 
       - name: Run functional test
         timeout-minutes: 30 # make sure this is larger than the test timeout in the Makefile
@@ -204,14 +198,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
-      - name: Tear down docker compose
-        if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
-
   functional-test-xdc:
     name: Functional test xdc
-    needs: [misc-checks, cache-docker-images]
+    needs: misc-checks
     strategy:
       fail-fast: false
       matrix:
@@ -244,10 +233,6 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -260,8 +245,11 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
 
       - name: Run functional test xdc
         timeout-minutes: 15
@@ -271,28 +259,30 @@ jobs:
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
-      - name: Tear down docker compose
-        if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
-
   functional-test-ndc:
     name: Functional test ndc
-    needs: [misc-checks, cache-docker-images]
+    needs: misc-checks
     strategy:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        name: 
+          - cass_es
+          - cass_es8
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
+            es_version: v7
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
+            es_version: v8
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -309,11 +299,8 @@ jobs:
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      ES_VERSION: ${{ matrix.es_version }}
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -326,17 +313,15 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
 
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
-
-      - name: Tear down docker compose
-        if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   test-status:
     name: Test Status

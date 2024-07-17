@@ -84,7 +84,7 @@ type cachedMachine struct {
 	// A flag that indicates the cached machine is dirty.
 	dirty bool
 	// Outputs of all transitions in the current transaction.
-	outputs []TransitionOutput
+	outputs []TransitionOutputWithCount
 }
 
 // NodeBackend is a concrete implementation to support interacting with the underlying platform.
@@ -168,9 +168,13 @@ func (n *Node) Dirty() bool {
 	return false
 }
 
+type TransitionOutputWithCount struct {
+	TransitionOutput
+	TransitionCount int64
+}
 type PathAndOutputs struct {
 	Path    []Key
-	Outputs []TransitionOutput
+	Outputs []TransitionOutputWithCount
 }
 
 func (n *Node) Path() []Key {
@@ -490,7 +494,11 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	}
 	n.persistence.Data = serialized
 	n.cache.dirty = true
-	n.cache.outputs = append(n.cache.outputs, output)
+	outputWithCount := TransitionOutputWithCount{
+		TransitionOutput: output,
+		TransitionCount:  n.persistence.TransitionCount,
+	}
+	n.cache.outputs = append(n.cache.outputs, outputWithCount)
 	return nil
 }
 

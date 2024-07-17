@@ -35,10 +35,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/worker_versioning"
-
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
 	"github.com/golang/mock/gomock"
@@ -50,8 +46,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"go.temporal.io/server/common/cluster/clustertest"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -60,6 +54,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/cluster/clustertest"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/worker_versioning"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -88,6 +86,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -102,6 +101,7 @@ type (
 		mockVisibilityManager *manager.MockVisibilityManager
 		mockHostInfoProvider  *membership.MockHostInfoProvider
 		mockServiceResolver   *membership.MockServiceResolver
+		hostInfoForResolver   membership.HostInfo
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -118,7 +118,8 @@ func createTestMatchingEngine(
 	controller *gomock.Controller,
 	config *Config,
 	matchingClient matchingservice.MatchingServiceClient,
-	namespaceRegistry namespace.Registry) *matchingEngineImpl {
+	namespaceRegistry namespace.Registry,
+) *matchingEngineImpl {
 	logger := log.NewTestLogger()
 	tm := newTestTaskManager(logger)
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
@@ -175,9 +176,12 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
 	s.mockHostInfoProvider = membership.NewMockHostInfoProvider(s.controller)
 	hostInfo := membership.NewHostInfoFromAddress("self")
+	s.hostInfoForResolver = hostInfo
 	s.mockHostInfoProvider.EXPECT().HostInfo().Return(hostInfo).AnyTimes()
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
-	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(hostInfo, nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).DoAndReturn(func(string) (membership.HostInfo, error) {
+		return s.hostInfoForResolver, nil
+	}).AnyTimes()
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
 
@@ -212,20 +216,21 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
-		logger:              logger,
-		throttledLogger:     log.ThrottledLogger(logger),
-		metricsHandler:      metrics.NoopMetricsHandler,
-		matchingRawClient:   mockMatchingClient,
-		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
-		config:              config,
-		namespaceRegistry:   mockNamespaceCache,
-		hostInfoProvider:    mockHostInfoProvider,
-		serviceResolver:     mockServiceResolver,
-		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
-		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:          clock.NewRealTimeSource(),
-		visibilityManager:   mockVisibilityManager,
+		queryResults:                  collection.NewSyncMap[string, chan *queryResult](),
+		logger:                        logger,
+		throttledLogger:               log.ThrottledLogger(logger),
+		metricsHandler:                metrics.NoopMetricsHandler,
+		matchingRawClient:             mockMatchingClient,
+		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
+		config:                        config,
+		namespaceRegistry:             mockNamespaceCache,
+		hostInfoProvider:              mockHostInfoProvider,
+		serviceResolver:               mockServiceResolver,
+		membershipChangedCh:           make(chan *membership.ChangedEvent, 1),
+		clusterMeta:                   clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:                    clock.NewRealTimeSource(),
+		visibilityManager:             mockVisibilityManager,
+		nexusEndpointsOwnershipLostCh: make(chan struct{}),
 	}
 }
 
@@ -389,6 +394,99 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.Require().NoError(err)
 	s.Require().NotSame(tqm, got,
 		"Unload call with matching incarnation should have caused unload")
+}
+
+func (s *matchingEngineSuite) TestFailAddTaskWithHistoryExhausted() {
+	tqName := "testFailAddTaskWithHistoryExhausted"
+	historyError := consts.ErrResourceExhaustedBusyWorkflow
+	s.testFailAddTaskWithHistoryError(tqName, false, historyError, nil)
+}
+
+func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
+	historyError := serviceerror.NewInternal("nothing to start")
+	tqName := "testFailAddTaskWithHistoryError"
+	s.testFailAddTaskWithHistoryError(tqName, true, historyError, historyError)
+}
+
+func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
+	tqName string,
+	expectSyncMatch bool,
+	recordError error,
+	expectedError error,
+) {
+	namespaceID := namespace.ID(uuid.New())
+	identity := "identity"
+
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
+
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	scheduledEventID := int64(0)
+
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:            namespaceID.String(),
+		Execution:              execution,
+		ScheduledEventId:       scheduledEventID,
+		TaskQueue:              stickyTaskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+	}
+
+	pollRequest := matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: stickyTaskQueue,
+			Identity:  identity,
+		},
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &pollRequest, metrics.NoopMetricsHandler)
+		if err != nil {
+			s.logger.Info(err.Error())
+		}
+		wg.Done()
+	}()
+
+	partitionReady := func() bool {
+		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
+	}
+	s.Eventually(partitionReady, 100*time.Millisecond, 10*time.Millisecond)
+
+	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
+		PreviousStartedEventId:     scheduledEventID,
+		ScheduledEventId:           scheduledEventID + 1,
+		Attempt:                    1,
+		StickyExecutionEnabled:     true,
+		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
+		NextPageToken:              nil,
+	}
+
+	s.mockHistoryClient.EXPECT().
+		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *historyservice.RecordWorkflowTaskStartedRequest, _ ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+			s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
+			return nil, recordError
+		})
+
+	s.mockHistoryClient.EXPECT().
+		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(recordWorkflowTaskStartedResponse, nil).AnyTimes()
+
+	_, syncMatch, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+
+	s.Equal(syncMatch, expectSyncMatch)
+	if expectedError != nil {
+		s.ErrorAs(err, &expectedError)
+	} else {
+		s.Nil(err)
+	}
+	wg.Wait()
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
@@ -2527,6 +2625,8 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 
 	s.Equal(2, len(e.getTaskQueuePartitions(1000)))
 
+	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
+
 	// signal membership changed and give time for loop to wake up
 	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
 	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(self, nil)
@@ -3087,6 +3187,30 @@ func (s *matchingEngineSuite) TestLargerBacklogAge() {
 	thirdAge := durationpb.New(5 * time.Minute)
 	s.Same(thirdAge, largerBacklogAge(firstAge, thirdAge))
 	s.Same(thirdAge, largerBacklogAge(secondAge, thirdAge))
+}
+
+func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
+	isOwner, _, err := s.matchingEngine.checkNexusEndpointsOwnership()
+	s.NoError(err)
+	s.True(isOwner)
+	s.hostInfoForResolver = membership.NewHostInfoFromAddress("other")
+	isOwner, _, err = s.matchingEngine.checkNexusEndpointsOwnership()
+	s.NoError(err)
+	s.False(isOwner)
+}
+
+func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
+	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh
+	s.matchingEngine.notifyIfNexusEndpointsOwnershipLost()
+	select {
+	case <-ch:
+		s.Fail("expected nexusEndpointsOwnershipLost channel to not have been closed")
+	default:
+	}
+	s.hostInfoForResolver = membership.NewHostInfoFromAddress("other")
+	s.matchingEngine.notifyIfNexusEndpointsOwnershipLost()
+	<-ch
+	// If the channel is unblocked the test passed.
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {

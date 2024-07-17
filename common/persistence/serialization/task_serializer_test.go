@@ -367,6 +367,7 @@ func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
 		VisibilityTimestamp:            time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:                         rand.Int63(),
 		CloseExecutionVisibilityTaskID: rand.Int63(),
+		CloseTime:                      time.Unix(0, 0).UTC(),
 	}
 
 	s.assertEqualTasks(deleteExecutionVisibilityTask)

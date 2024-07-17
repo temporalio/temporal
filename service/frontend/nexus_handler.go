@@ -111,8 +111,8 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	}
 
 	// Record Nexus-specific metrics
-	c.metricsHandler.Counter(metrics.NexusRequests.Name()).Record(1)
-	c.metricsHandler.Histogram(metrics.NexusLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
+	metrics.NexusRequests.With(c.metricsHandler).Record(1)
+	metrics.NexusLatency.With(c.metricsHandler).Record(time.Since(c.requestStartTime))
 
 	// Record general telemetry metrics
 	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
@@ -169,7 +169,6 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 	}
 
 	if !c.namespace.ActiveInCluster(c.clusterMetadata.GetCurrentClusterName()) {
-		notActiveErr := serviceerror.NewNamespaceNotActive(c.namespaceName, c.clusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
 		if c.shouldForwardRequest(ctx, header) {
 			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarded"))
@@ -178,7 +177,7 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 				c.redirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
-			return notActiveErr
+			return serviceerror.NewNamespaceNotActive(c.namespaceName, c.clusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
 		}
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_inactive_forwarding_disabled"))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
@@ -290,7 +289,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 
 	var err error
 	if oc.namespace, err = h.namespaceRegistry.GetNamespace(namespace.Name(nc.namespaceName)); err != nil {
-		oc.metricsHandler.Counter(metrics.NexusRequests.Name()).Record(
+		metrics.NexusRequests.With(oc.metricsHandler).Record(
 			1,
 			metrics.NexusOutcomeTag("namespace_not_found"),
 		)
@@ -387,6 +386,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 		}
 	}
 	// This is the worker's fault.
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_error"))
 	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -472,6 +472,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return nil
 	}
 	// This is the worker's fault.
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_error"))
 	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }

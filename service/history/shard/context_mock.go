@@ -43,6 +43,7 @@ import (
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
+	finalizer "go.temporal.io/server/common/finalizer"
 	log "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
@@ -181,17 +182,17 @@ func (mr *MockContextMockRecorder) CurrentVectorClock() *gomock.Call {
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error {
+func (m *MockContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, stage)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, stage interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, stage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
 }
 
 // GenerateTaskID mocks base method.
@@ -336,6 +337,20 @@ func (m *MockContext) GetExecutionManager() persistence.ExecutionManager {
 func (mr *MockContextMockRecorder) GetExecutionManager() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockContext)(nil).GetExecutionManager))
+}
+
+// GetFinalizer mocks base method.
+func (m *MockContext) GetFinalizer() *finalizer.Finalizer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFinalizer")
+	ret0, _ := ret[0].(*finalizer.Finalizer)
+	return ret0
+}
+
+// GetFinalizer indicates an expected call of GetFinalizer.
+func (mr *MockContextMockRecorder) GetFinalizer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFinalizer", reflect.TypeOf((*MockContext)(nil).GetFinalizer))
 }
 
 // GetHistoryClient mocks base method.
@@ -883,17 +898,17 @@ func (mr *MockControllableContextMockRecorder) CurrentVectorClock() *gomock.Call
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error {
+func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, stage)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockControllableContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, stage interface{}) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, stage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
 }
 
 // FinishStop mocks base method.
@@ -1050,6 +1065,20 @@ func (m *MockControllableContext) GetExecutionManager() persistence.ExecutionMan
 func (mr *MockControllableContextMockRecorder) GetExecutionManager() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockControllableContext)(nil).GetExecutionManager))
+}
+
+// GetFinalizer mocks base method.
+func (m *MockControllableContext) GetFinalizer() *finalizer.Finalizer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFinalizer")
+	ret0, _ := ret[0].(*finalizer.Finalizer)
+	return ret0
+}
+
+// GetFinalizer indicates an expected call of GetFinalizer.
+func (mr *MockControllableContextMockRecorder) GetFinalizer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFinalizer", reflect.TypeOf((*MockControllableContext)(nil).GetFinalizer))
 }
 
 // GetHistoryClient mocks base method.

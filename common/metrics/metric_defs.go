@@ -59,8 +59,9 @@ const (
 	DCRedirectionRoleTagValue = "dc_redirection"
 	BlobstoreRoleTagValue     = "blobstore"
 
-	MutableStateCacheTypeTagValue = "mutablestate"
-	EventsCacheTypeTagValue       = "events"
+	MutableStateCacheTypeTagValue                     = "mutablestate"
+	EventsCacheTypeTagValue                           = "events"
+	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
@@ -677,9 +678,9 @@ var (
 		"nexus_request_preprocess_errors",
 		WithDescription("The number of Nexus requests for which pre-processing failed."),
 	)
-	NexusLatencyHistogram = NewTimerDef(
+	NexusLatency = NewTimerDef(
 		"nexus_latency",
-		WithDescription("Latency histogram of Nexus requests."),
+		WithDescription("Latency of Nexus requests."),
 	)
 	NexusCompletionRequests = NewCounterDef(
 		"nexus_completion_requests",
@@ -853,6 +854,8 @@ var (
 	StartToCloseTimeoutCounter                    = NewCounterDef("start_to_close_timeout")
 	ScheduleToCloseTimeoutCounter                 = NewCounterDef("schedule_to_close_timeout")
 	NewTimerNotifyCounter                         = NewCounterDef("new_timer_notifications")
+	StateMachineTimerProcessingFailuresCounter    = NewCounterDef("state_machine_timer_processing_failures")
+	StateMachineTimerSkipsCounter                 = NewCounterDef("state_machine_timer_skips")
 	AcquireShardsCounter                          = NewCounterDef("acquire_shards_count")
 	AcquireShardsLatency                          = NewTimerDef("acquire_shards_latency")
 	MembershipChangedCounter                      = NewCounterDef("membership_changed_count")
@@ -957,6 +960,10 @@ var (
 	DLQWrites                                      = NewCounterDef(
 		"dlq_writes",
 		WithDescription("The number of times a message is enqueued to DLQ. DLQ can be inspected using tdbg dlq command."),
+	)
+	DLQMessageCount = NewGaugeDef(
+		"dlq_message_count",
+		WithDescription("The number of messages currently in DLQ."),
 	)
 	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
 	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")

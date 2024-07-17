@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -105,7 +106,7 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
-	s.workflowCache = cache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetMetricsHandler())
+	s.workflowCache = cache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 
 	mockClusterMetadata := s.mockShard.Resource.ClusterMetadata
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -575,7 +576,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				mockShard,
 				namespaceID,
 				workflowID,
-				workflow.LockPriorityLow,
+				locks.PriorityLow,
 			).Return(cache.NoopReleaseFn, nil).AnyTimes()
 			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 				gomock.Any(),
@@ -585,7 +586,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 					WorkflowId: workflowID,
 					RunId:      currentRunID,
 				},
-				workflow.LockPriorityLow,
+				locks.PriorityLow,
 			).Return(mockWorkflowContext, cache.NoopReleaseFn, nil).Times(1)
 
 			mockExecutionManager := mockShard.Resource.ExecutionMgr
@@ -617,7 +618,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				mockWorkflowCache,
 				namespaceID.String(),
 				workflowID,
-				workflow.LockPriorityLow,
+				locks.PriorityLow,
 			)
 			if tc.currentRunChanged {
 				require.Error(t, err)

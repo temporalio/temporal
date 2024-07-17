@@ -723,15 +723,13 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilAccepted(ctx context.Context, up
 	updateResponse := make(chan error)
 	processWorkflowTaskResponse := make(chan error)
 	go func() {
-		_, err := c.client.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
-			UpdateID:   updateId,
-			WorkflowID: c.t.tv.WorkflowID(),
-			RunID:      c.t.tv.RunID(),
-			UpdateName: "the-test-doesn't-use-this",
-			Args:       []interface{}{arg},
-			WaitPolicy: &updatepb.WaitPolicy{
-				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
-			},
+		_, err := c.client.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
+			UpdateID:     updateId,
+			WorkflowID:   c.t.tv.WorkflowID(),
+			RunID:        c.t.tv.RunID(),
+			UpdateName:   "the-test-doesn't-use-this",
+			Args:         []interface{}{arg},
+			WaitForStage: sdkclient.WorkflowUpdateStageAccepted,
 		})
 		c.t.s.NoError(err)
 		updateResponse <- err
@@ -747,7 +745,7 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilAccepted(ctx context.Context, up
 
 func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -762,7 +760,7 @@ func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 
 func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -777,7 +775,7 @@ func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 
 func (c *hrsuTestCluster) pollAndErrorWhileProcessingWorkflowTask() error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),

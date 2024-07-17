@@ -46,6 +46,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/internal/temporalite"
 )
 
@@ -127,15 +128,29 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 			allow:   true,
 			message: "cannot attach more than 2 callbacks to a workflow",
 		},
+		{
+			name:    "url not configured",
+			urls:    []string{"http://some-unconfigured-address"},
+			allow:   true,
+			message: "invalid url: url does not match any configured callback address: http://some-unconfigured-address",
+		},
+		{
+			name:    "https required",
+			urls:    []string{"http://some-secure-address"},
+			allow:   true,
+			message: "invalid url: callback address does not allow insecure connections: http://some-secure-address",
+		},
 	}
 
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.FrontendCallbackURLMaxLength, 50)
 	dc.OverrideValue(s.T(), dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
 	dc.OverrideValue(s.T(), dynamicconfig.MaxCallbacksPerWorkflow, 2)
+	dc.OverrideValue(s.T(), callbacks.AllowedAddresses, []any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}})
 	defer dc.RemoveOverride(dynamicconfig.EnableNexus)
 	defer dc.RemoveOverride(dynamicconfig.FrontendCallbackURLMaxLength)
 	defer dc.RemoveOverride(dynamicconfig.MaxCallbacksPerWorkflow)
+	defer dc.RemoveOverride(callbacks.AllowedAddresses)
 
 	for _, tc := range cases {
 		s.T().Run(tc.name, func(t *testing.T) {
@@ -163,7 +178,7 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 				CompletionCallbacks: cbs,
 			}
 
-			_, err := s.engine.StartWorkflowExecution(ctx, request)
+			_, err := s.client.StartWorkflowExecution(ctx, request)
 			var invalidArgument *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgument)
 			s.Equal(tc.message, err.Error())
@@ -174,7 +189,9 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.EnableNexus, true)
+	dc.OverrideValue(s.T(), callbacks.AllowedAddresses, []any{map[string]any{"Pattern": "*", "AllowInsecure": true}})
 	defer dc.RemoveOverride(dynamicconfig.EnableNexus)
+	defer dc.RemoveOverride(callbacks.AllowedAddresses)
 
 	cases := []struct {
 		name       string
@@ -271,7 +288,7 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				},
 			}
 
-			_, err = s.engine.StartWorkflowExecution(ctx, request)
+			_, err = s.client.StartWorkflowExecution(ctx, request)
 			s.NoError(err)
 
 			run := sdkClient.GetWorkflow(ctx, request.WorkflowId, "")

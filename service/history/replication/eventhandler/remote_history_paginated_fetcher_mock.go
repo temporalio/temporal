@@ -60,16 +60,30 @@ func (m *MockHistoryPaginatedFetcher) EXPECT() *MockHistoryPaginatedFetcherMockR
 	return m.recorder
 }
 
-// GetSingleWorkflowHistoryPaginatedIterator mocks base method.
-func (m *MockHistoryPaginatedFetcher) GetSingleWorkflowHistoryPaginatedIterator(ctx context.Context, remoteClusterName string, namespaceID namespace.ID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) collection.Iterator[HistoryBatch] {
+// GetSingleWorkflowHistoryPaginatedIteratorExclusive mocks base method.
+func (m *MockHistoryPaginatedFetcher) GetSingleWorkflowHistoryPaginatedIteratorExclusive(ctx context.Context, remoteClusterName string, namespaceID namespace.ID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) collection.Iterator[*HistoryBatch] {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSingleWorkflowHistoryPaginatedIterator", ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
-	ret0, _ := ret[0].(collection.Iterator[HistoryBatch])
+	ret := m.ctrl.Call(m, "GetSingleWorkflowHistoryPaginatedIteratorExclusive", ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
+	ret0, _ := ret[0].(collection.Iterator[*HistoryBatch])
 	return ret0
 }
 
-// GetSingleWorkflowHistoryPaginatedIterator indicates an expected call of GetSingleWorkflowHistoryPaginatedIterator.
-func (mr *MockHistoryPaginatedFetcherMockRecorder) GetSingleWorkflowHistoryPaginatedIterator(ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion interface{}) *gomock.Call {
+// GetSingleWorkflowHistoryPaginatedIteratorExclusive indicates an expected call of GetSingleWorkflowHistoryPaginatedIteratorExclusive.
+func (mr *MockHistoryPaginatedFetcherMockRecorder) GetSingleWorkflowHistoryPaginatedIteratorExclusive(ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSingleWorkflowHistoryPaginatedIterator", reflect.TypeOf((*MockHistoryPaginatedFetcher)(nil).GetSingleWorkflowHistoryPaginatedIterator), ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSingleWorkflowHistoryPaginatedIteratorExclusive", reflect.TypeOf((*MockHistoryPaginatedFetcher)(nil).GetSingleWorkflowHistoryPaginatedIteratorExclusive), ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
+}
+
+// GetSingleWorkflowHistoryPaginatedIteratorInclusive mocks base method.
+func (m *MockHistoryPaginatedFetcher) GetSingleWorkflowHistoryPaginatedIteratorInclusive(ctx context.Context, remoteClusterName string, namespaceID namespace.ID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) collection.Iterator[*HistoryBatch] {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSingleWorkflowHistoryPaginatedIteratorInclusive", ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
+	ret0, _ := ret[0].(collection.Iterator[*HistoryBatch])
+	return ret0
+}
+
+// GetSingleWorkflowHistoryPaginatedIteratorInclusive indicates an expected call of GetSingleWorkflowHistoryPaginatedIteratorInclusive.
+func (mr *MockHistoryPaginatedFetcherMockRecorder) GetSingleWorkflowHistoryPaginatedIteratorInclusive(ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSingleWorkflowHistoryPaginatedIteratorInclusive", reflect.TypeOf((*MockHistoryPaginatedFetcher)(nil).GetSingleWorkflowHistoryPaginatedIteratorInclusive), ctx, remoteClusterName, namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
 }

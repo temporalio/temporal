@@ -30,6 +30,7 @@ import (
 	"sync"
 
 	"github.com/golang/mock/gomock"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -145,7 +146,6 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	}
 	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
 	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
-	taskCategoryRegistry.AddCategory(tasks.CategoryOutbound)
 
 	ctx := &ContextImpl{
 		shardID:             config.ShardInfo.GetShardId(),

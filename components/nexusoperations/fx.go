@@ -24,6 +24,7 @@ package nexusoperations
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -31,10 +32,12 @@ import (
 	"go.uber.org/fx"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
@@ -60,8 +63,9 @@ const NexusCallbackSourceHeader = "Nexus-Callback-Source"
 func EndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	endpointManager persistence.NexusEndpointManager,
-	logger log.Logger,
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) commonnexus.EndpointRegistry {
 	registryConfig := commonnexus.NewEndpointRegistryConfig(dc)
 	return commonnexus.NewEndpointRegistry(
@@ -69,6 +73,7 @@ func EndpointRegistryProvider(
 		matchingClient,
 		endpointManager,
 		logger,
+		metricsHandler,
 	)
 }
 
@@ -99,8 +104,13 @@ func ClientProviderFactory(
 	endpointRegistry commonnexus.EndpointRegistry,
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
-	httpClientCache *cluster.FrontendHTTPClientCache,
-) ClientProvider {
+	rpcFactory common.RPCFactory,
+) (ClientProvider, error) {
+	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
+	}
+
 	// TODO(bergundy): This should use an LRU or other form of cache that supports eviction.
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
@@ -120,10 +130,6 @@ func ClientProviderFactory(
 				return nil, err
 			}
 		case *persistencespb.NexusEndpointTarget_Worker_:
-			cl, err := httpClientCache.Get(clusterMetadata.GetCurrentClusterName())
-			if err != nil {
-				return nil, err
-			}
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
 		default:
@@ -142,7 +148,7 @@ func ClientProviderFactory(
 			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
 		})
-	}
+	}, nil
 }
 
 func CallbackTokenGeneratorProvider() *commonnexus.CallbackTokenGenerator {
