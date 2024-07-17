@@ -380,7 +380,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEventsWithNew(
 		return err
 	}
 
-	if err := r.doApplyBackfillEvents(ctx, newTask, r.applyBackfillEvents); err != nil {
+	if err := r.doApplyEvents(ctx, newTask); err != nil {
 		newTask.getLogger().Error(
 			"nDCHistoryReplicator unable to create new workflow when applyBackfillEvents",
 			tag.Error(err),
