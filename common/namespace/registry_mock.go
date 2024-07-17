@@ -300,19 +300,19 @@ func (mr *MockRegistryMockRecorder) GetPingChecks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPingChecks", reflect.TypeOf((*MockRegistry)(nil).GetPingChecks))
 }
 
-// RefreshSingleCacheKeyById mocks base method.
-func (m *MockRegistry) RefreshSingleCacheKeyById(namespaceId ID) (*Namespace, error) {
+// RefreshNamespaceById mocks base method.
+func (m *MockRegistry) RefreshNamespaceById(namespaceId ID) (*Namespace, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshSingleCacheKeyById", namespaceId)
+	ret := m.ctrl.Call(m, "RefreshNamespaceById", namespaceId)
 	ret0, _ := ret[0].(*Namespace)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// RefreshSingleCacheKeyById indicates an expected call of RefreshSingleCacheKeyById.
-func (mr *MockRegistryMockRecorder) RefreshSingleCacheKeyById(namespaceId interface{}) *gomock.Call {
+// RefreshNamespaceById indicates an expected call of RefreshNamespaceById.
+func (mr *MockRegistryMockRecorder) RefreshNamespaceById(namespaceId interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshSingleCacheKeyById", reflect.TypeOf((*MockRegistry)(nil).RefreshSingleCacheKeyById), namespaceId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshNamespaceById", reflect.TypeOf((*MockRegistry)(nil).RefreshNamespaceById), namespaceId)
 }
 
 // RegisterStateChangeCallback mocks base method.

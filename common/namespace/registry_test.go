@@ -755,7 +755,7 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 		ID: id.String(),
 	}).Return(&nsV2, nil).Times(1)
 
-	ns, err = s.registry.RefreshSingleCacheKeyById(id)
+	ns, err = s.registry.RefreshNamespaceById(id)
 	s.NoError(err)
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
 
