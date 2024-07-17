@@ -243,14 +243,12 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 	cases := []struct {
 		name                  string
 		expectedError         error
-		destinationDown       bool
 		expectedMetricOutcome codes.Code
 		assertOutcome         func(*testing.T, callbacks.Callback)
 	}{
 		{
 			name:                  "success",
 			expectedError:         nil,
-			destinationDown:       false,
 			expectedMetricOutcome: codes.OK,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
@@ -259,7 +257,6 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 		{
 			name:                  "retryable-error",
 			expectedError:         status.Error(codes.Unavailable, "fake error"),
-			destinationDown:       true,
 			expectedMetricOutcome: codes.Unavailable,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
@@ -268,7 +265,6 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 		{
 			name:                  "non-retryable-error",
 			expectedError:         status.Error(codes.NotFound, "fake error"),
-			destinationDown:       false,
 			expectedMetricOutcome: codes.NotFound,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
@@ -387,12 +383,7 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 				callbacks.InvocationTask{},
 			)
 
-			if tc.destinationDown {
-				var destinationDownErr *queues.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
-			} else {
-				require.NoError(t, err)
-			}
+			require.NoError(t, err)
 
 			cb, err = coll.Data("ID")
 			require.NoError(t, err)

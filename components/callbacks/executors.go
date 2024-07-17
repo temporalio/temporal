@@ -78,7 +78,10 @@ type (
 	invocationResult int
 
 	callbackInvokable interface {
+		// Invoke executes the callback logic and returns a result, and the error to be logged in the state machine.
 		Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error)
+		// WrapError provides each variant the opportunity to return a different error up the call stack than the one logged.
+		WrapError(result invocationResult, err error) error
 	}
 )
 
@@ -116,15 +119,7 @@ func (e taskExecutor) executeInvocationTask(
 	if saveErr != nil {
 		return saveErr
 	}
-
-	// If the request permanently failed there is no need to raise the error
-	if result == failed {
-		return nil
-	}
-	if err != nil {
-		return queues.NewDestinationDownError(err.Error(), err)
-	}
-	return nil
+	return invokable.WrapError(result, err)
 }
 
 func (e taskExecutor) loadInvocationArgs(

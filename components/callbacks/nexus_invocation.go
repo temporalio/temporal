@@ -67,6 +67,17 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 	return fmt.Sprintf("status:%d", response.StatusCode)
 }
 
+func (n nexusInvocation) WrapError(result invocationResult, err error) error {
+	// If the request permanently failed there is no need to raise the error
+	if result == failed {
+		return nil
+	}
+	if err != nil {
+		return queues.NewDestinationDownError(err.Error(), err)
+	}
+	return nil
+}
+
 func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error) {
 	request, err := nexus.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {

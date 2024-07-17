@@ -48,25 +48,35 @@ type hsmInvocation struct {
 }
 
 func isRetryableRpcResponse(err error) bool {
-	st, ok := status.FromError(err)
+	var st *status.Status
+	stGetter, ok := err.(interface{ Status() *status.Status })
 	if ok {
-		// nolint:exhaustive
-		switch st.Code() {
-		case codes.Canceled,
-			codes.Unknown,
-			codes.Unavailable,
-			codes.DeadlineExceeded,
-			codes.ResourceExhausted,
-			codes.Aborted,
-			codes.Internal:
-			return true
-		default:
+		st = stGetter.Status()
+	} else {
+		st, ok = status.FromError(err)
+		if !ok {
+			// Not a gRPC induced error
 			return false
 		}
 	}
-	// Not a gRPC induced error
-	// TODO(Tianyu): Can handler return some kind of non-gRPC error?
-	return false
+	// nolint:exhaustive
+	switch st.Code() {
+	case codes.Canceled,
+		codes.Unknown,
+		codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Internal:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s hsmInvocation) WrapError(invocationResult, error) error {
+	// No short-circuit
+	return nil
 }
 
 func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error) {
