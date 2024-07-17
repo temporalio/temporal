@@ -57,7 +57,7 @@ type Service struct {
 }
 
 func NewService(
-	grpcServerOptions []grpc.ServerOption,
+	server *grpc.Server,
 	serviceConfig *Config,
 	logger log.SnTaggedLogger,
 	membershipMonitor membership.Monitor,
@@ -70,7 +70,7 @@ func NewService(
 ) *Service {
 	return &Service{
 		config:                 serviceConfig,
-		server:                 grpc.NewServer(grpcServerOptions...),
+		server:                 server,
 		handler:                handler,
 		logger:                 logger,
 		membershipMonitor:      membershipMonitor,

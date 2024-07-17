@@ -68,6 +68,7 @@ func NewExecutableActivityStateTask(
 	task *replicationspb.SyncActivityTaskAttributes,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
+	versionedTransition *persistencespb.VersionedTransition,
 ) *ExecutableActivityStateTask {
 	return &ExecutableActivityStateTask{
 		ProcessToolBox: processToolBox,
@@ -81,6 +82,7 @@ func NewExecutableActivityStateTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			priority,
+			versionedTransition,
 		),
 		req: &historyservice.SyncActivityRequest{
 			NamespaceId:                task.NamespaceId,

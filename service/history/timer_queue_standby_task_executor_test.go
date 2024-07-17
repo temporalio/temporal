@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -92,6 +93,7 @@ type (
 		mockClusterMetadata    *cluster.MockMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
+		mockResendHandler      *eventhandler.MockResendHandler
 		mockDeleteManager      *deletemanager.MockDeleteManager
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
@@ -141,6 +143,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockResendHandler = eventhandler.NewMockResendHandler(s.controller)
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
@@ -204,6 +207,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.workflowCache,
 		s.mockDeleteManager,
 		s.mockNDCHistoryResender,
+		s.mockResendHandler,
 		s.mockMatchingClient,
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -1727,6 +1731,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 		mockCache,
 		s.mockDeleteManager,
 		s.mockNDCHistoryResender,
+		s.mockResendHandler,
 		s.mockMatchingClient,
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -1830,6 +1835,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 		mockCache,
 		s.mockDeleteManager,
 		s.mockNDCHistoryResender,
+		s.mockResendHandler,
 		s.mockMatchingClient,
 		s.logger,
 		metrics.NoopMetricsHandler,

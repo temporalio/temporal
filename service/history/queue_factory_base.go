@@ -29,7 +29,9 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/clock"
@@ -76,6 +78,8 @@ type (
 		SchedulerRateLimiter queues.SchedulerRateLimiter
 		DLQWriter            *queues.DLQWriter
 		ExecutorWrapper      queues.ExecutorWrapper `optional:"true"`
+		Serializer           serialization.Serializer
+		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 	}
 
 	QueueFactoryBase struct {

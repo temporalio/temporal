@@ -717,13 +717,13 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext.EXPECT().Unlock()
 	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	resetMutableState := workflow.NewMockMutableState(s.controller)
-	resetContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(resetMutableState, nil)
-	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
-	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	resetContextCacheKey := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
+	resetContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(resetMutableState, nil)
+	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
+	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	err := wcache.PutContextIfNotExist(s.workflowResetter.workflowCache, resetContextCacheKey, resetContext)
 	s.NoError(err)
 
