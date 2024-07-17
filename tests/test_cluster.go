@@ -223,8 +223,10 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 			return nil, err
 		}
 
-		// Disable standard to elasticsearch dual visibility
-		pConfig.VisibilityStore = ""
+		pConfig.VisibilityStore = "test-es-visibility"
+		pConfig.DataStores[pConfig.VisibilityStore] = config.DataStore{
+			Elasticsearch: options.ESConfig,
+		}
 		indexName = options.ESConfig.GetVisibilityIndex()
 		esClient, err = esclient.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
@@ -374,7 +376,17 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	logger.Info("Index template created.")
 
 	logger.Info("Creating index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	_, err = esClient.CreateIndex(ctx, esConfig.GetVisibilityIndex(), nil)
+	_, err = esClient.CreateIndex(
+		ctx,
+		esConfig.GetVisibilityIndex(),
+		map[string]any{
+			"settings": map[string]any{
+				"index": map[string]any{
+					"number_of_replicas": 0,
+				},
+			},
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -397,14 +409,12 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 }
 
 func waitForYellowStatus(esClient esclient.IntegrationTestsClient, index string) error {
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	status, err := esClient.WaitForYellowStatus(ctxWithTimeout, index)
+	status, err := esClient.WaitForYellowStatus(context.Background(), index)
 	if err != nil {
 		return err
 	}
 	if status == "red" {
-		return fmt.Errorf("Cluster status for index %s is red", index)
+		return fmt.Errorf("Elasticsearch index status for %s is red", index)
 	}
 	return nil
 }

@@ -38,6 +38,23 @@ import (
 )
 
 var (
+	// keys for dynamic config itself
+	DynamicConfigSubscriptionCallback = NewGlobalTypedSetting(
+		"dynamicconfig.subscriptionCallback",
+		subscriptionCallbackSettings{
+			MinWorkers:   10,
+			MaxWorkers:   100,
+			TargetDelay:  10 * time.Millisecond,
+			ShrinkFactor: 1000, // 10 seconds
+		},
+		`Settings for dynamic config subscription dispatch. Requires server restart.`,
+	)
+	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
+		"dynamicconfig.subscriptionPollInterval",
+		time.Minute,
+		`Poll interval for emulating subscriptions on non-subscribable Client.`,
+	)
+
 	// keys for admin
 
 	AdminEnableListHistoryTasks = NewGlobalBoolSetting(
@@ -1340,6 +1357,12 @@ checks while a shard is lingering.`,
 will temporarily delay closing shards after a membership update, awaiting a
 shard ownership lost error from persistence. If set to zero, shards will not delay closing.
 Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
+	)
+	ShardFinalizerTimeout = NewGlobalDurationSetting(
+		"history.shardFinalizerTimeout",
+		2*time.Second,
+		`ShardFinalizerTimeout configures if and for how long the shard will attempt
+to cleanup any of its associated data, such as workflow contexts. If set to zero, the finalizer is disabled.`,
 	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",

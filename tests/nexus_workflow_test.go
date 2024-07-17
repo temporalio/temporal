@@ -169,6 +169,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
 		require.NoError(t, err)
 		require.Equal(t, 1, len(desc.PendingNexusOperations))
 		op := desc.PendingNexusOperations[0]
+		require.Equal(t, pollResp.History.Events[scheduledEventIdx].EventId, op.ScheduledEventId)
 		require.Equal(t, endpointName, op.Endpoint)
 		require.Equal(t, "service", op.Service)
 		require.Equal(t, "operation", op.Operation)
@@ -468,6 +469,10 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	})
 	s.NoError(err)
 
+	// Remember the workflow task completed event ID (next after the last WFT started), we'll use it to test reset
+	// below.
+	wftCompletedEventID := int64(len(pollResp.History.Events))
+
 	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
@@ -597,6 +602,28 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
+
+	// Reset the workflow and check that the completion event has been reapplied.
+	resp, err := s.client.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.namespace,
+		WorkflowExecution:         pollResp.WorkflowExecution,
+		Reason:                    "test",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: wftCompletedEventID,
+	})
+	s.NoError(err)
+
+	hist := s.sdkClient.GetWorkflowHistory(ctx, run.GetID(), resp.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+
+	seenCompletedEvent := false
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
+			seenCompletedEvent = true
+		}
+	}
+	s.True(seenCompletedEvent)
 }
 
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncFailure() {

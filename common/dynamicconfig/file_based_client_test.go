@@ -64,11 +64,13 @@ func (s *fileBasedClientSuite) SetupSuite() {
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,
 	}, logger, s.doneCh)
-	s.collection = dynamicconfig.NewCollection(s.client, logger)
 	s.Require().NoError(err)
+	s.collection = dynamicconfig.NewCollection(s.client, logger)
+	s.collection.Start()
 }
 
 func (s *fileBasedClientSuite) TearDownSuite() {
+	s.collection.Stop()
 	close(s.doneCh)
 }
 
@@ -303,7 +305,7 @@ func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
 func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 	dynamicconfig.NewNamespaceFloatSetting(testGetFloat64PropertyKey, 0, "")
-	dynamicconfig.NewNamespaceBoolSetting(testGetBoolPropertyKey, false, "")
+	setting := dynamicconfig.NewNamespaceBoolSetting(testGetBoolPropertyKey, false, "")
 
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
@@ -363,8 +365,19 @@ testGetBoolPropertyKey:
 		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
-		}, mockLogger, s.doneCh)
+		}, mockLogger, doneCh)
 	s.NoError(err)
+
+	c := dynamicconfig.NewCollection(client, mockLogger)
+	c.Start()
+	sub := setting.Subscribe(c)
+
+	val1 := make(chan bool, 1)
+	initial1, cancel1 := sub("global-samples-namespace", func(n bool) { val1 <- n })
+	s.True(initial1)
+	val2 := make(chan bool, 1)
+	initial2, cancel2 := sub("other-namespace", func(n bool) { val2 <- n })
+	s.False(initial2)
 
 	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
@@ -375,7 +388,13 @@ testGetBoolPropertyKey:
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {{Namespace:global-samples-namespace}} value: true } newValue: { constraints: {{Namespace:global-samples-namespace}} value: false }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
 	s.NoError(client.Update())
-	s.NoError(err)
+
+	s.False(<-val1)
+	s.True(<-val2)
+	cancel1()
+	cancel2()
+	c.Stop()
+
 	close(doneCh)
 }
 
