@@ -197,7 +197,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 	if err != nil {
 		return nil, err
 	}
-	ns, err := e.namespaceRegistry.RefreshSingleCacheKeyById(namespaceId)
+	return e.namespaceRegistry.RefreshSingleCacheKeyById(namespaceId)
 	if err != nil {
 		return nil, err
 	}
