@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -63,6 +64,7 @@ type (
 
 		clusterName        string
 		nDCHistoryResender xdc.NDCHistoryResender
+		resendHandler      eventhandler.ResendHandler
 	}
 )
 
@@ -71,6 +73,7 @@ func newTimerQueueStandbyTaskExecutor(
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	nDCHistoryResender xdc.NDCHistoryResender,
+	resendHandler eventhandler.ResendHandler,
 	matchingRawClient resource.MatchingRawClient,
 	logger log.Logger,
 	metricProvider metrics.Handler,
@@ -90,6 +93,7 @@ func newTimerQueueStandbyTaskExecutor(
 		),
 		clusterName:        clusterName,
 		nDCHistoryResender: nDCHistoryResender,
+		resendHandler:      resendHandler,
 	}
 }
 
@@ -669,17 +673,32 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 	// NOTE: history resend may take long time and its timeout is currently
 	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-		ctx,
-		remoteClusterName,
-		namespace.ID(workflowKey.GetNamespaceID()),
-		workflowKey.GetWorkflowID(),
-		workflowKey.GetRunID(),
-		resendInfo.lastEventID,
-		resendInfo.lastEventVersion,
-		common.EmptyEventID,
-		common.EmptyVersion,
-	); err != nil {
+	if t.config.EnableReplicateLocalGeneratedEvent() {
+		err = t.resendHandler.ResendHistoryEvents(
+			ctx,
+			remoteClusterName,
+			namespace.ID(workflowKey.GetNamespaceID()),
+			workflowKey.GetWorkflowID(),
+			workflowKey.GetRunID(),
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
+			common.EmptyEventID,
+			common.EmptyVersion,
+		)
+	} else {
+		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			remoteClusterName,
+			namespace.ID(workflowKey.GetNamespaceID()),
+			workflowKey.GetWorkflowID(),
+			workflowKey.GetRunID(),
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
+			common.EmptyEventID,
+			common.EmptyVersion,
+		)
+	}
+	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
 			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return err
