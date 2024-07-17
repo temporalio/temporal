@@ -1322,7 +1322,16 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (ms *MutableStateImpl) GetCompletionEvent(
 	ctx context.Context,
-) (*historypb.HistoryEvent, error) {
+) (event *historypb.HistoryEvent, err error) {
+	defer func() {
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			err = ErrMissingWorkflowCompletionEvent
+		}
+	}()
+
 	if ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
@@ -1337,7 +1346,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 		return nil, err
 	}
 
-	event, err := ms.eventsCache.GetEvent(
+	event, err = ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
 		events.EventKey{
@@ -1385,15 +1394,9 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 			}
 		}
 
-		if common.IsNotFoundError(err) {
-			// do not return the original error
-			// since original error of type NotFound
-			// can cause task processing side to fail silently
-			return nil, ErrMissingWorkflowCompletionEvent
-		}
-
 		return nil, err
 	}
+
 	return event, nil
 }
 
