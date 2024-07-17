@@ -69,6 +69,7 @@ func NewExecutableUnknownTask(
 			time.Now().UTC(),
 			"sourceCluster",
 			enumsspb.TASK_PRIORITY_UNSPECIFIED,
+			nil,
 		),
 		task: task,
 	}
