@@ -1122,6 +1122,15 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		},
 	}
 
+	requestCancelInfo := map[int64]*persistencespb.RequestCancelInfo{
+		70: {
+			Version:               failoverVersion,
+			InitiatedEventBatchId: 20,
+			CancelRequestId:       uuid.New(),
+			InitiatedEventId:      70,
+		},
+	}
+
 	signalInfos := map[int64]*persistencespb.SignalInfo{
 		75: {
 			Version:               failoverVersion,
@@ -1154,6 +1163,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
 		ChildExecutionInfos: childInfos,
+		RequestCancelInfos:  requestCancelInfo,
 		SignalInfos:         signalInfos,
 		SignalRequestedIds:  signalRequestIDs,
 		BufferedEvents:      bufferedEvents,
@@ -1842,6 +1852,364 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 		})
 	}
 
+}
+
+func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransition() {
+	namespaceEntry := tests.GlobalNamespaceEntry
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	stateMachineDef := hsmtest.NewDefinition("test")
+	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
+	s.NoError(err)
+
+	completWorkflowTaskFn := func(ms MutableState) *historypb.HistoryEvent {
+		workflowTaskInfo := ms.GetStartedWorkflowTask()
+		completedEvent, err := ms.AddWorkflowTaskCompletedEvent(
+			workflowTaskInfo,
+			&workflowservice.RespondWorkflowTaskCompletedRequest{},
+			WorkflowTaskCompletionLimits{
+				MaxResetPoints:              10,
+				MaxSearchAttributeValueSize: 1024,
+			},
+		)
+		s.NoError(err)
+		return completedEvent
+	}
+
+	buildHSMFn := func(ms MutableState) {
+		hsmRoot := ms.HSM()
+		child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
+		s.NoError(err)
+		_, err = child1.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1_1"}, hsmtest.NewData(hsmtest.State2))
+		s.NoError(err)
+		_, err = hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_2"}, hsmtest.NewData(hsmtest.State3))
+		s.NoError(err)
+	}
+
+	testCases := []struct {
+		name   string
+		testFn func(ms MutableState)
+	}{
+		{
+			name: "Activity",
+			testFn: func(ms MutableState) {
+				completedEvent := completWorkflowTaskFn(ms)
+				scheduledEvent, _, err := ms.AddActivityTaskScheduledEvent(
+					completedEvent.GetEventId(),
+					&commandpb.ScheduleActivityTaskCommandAttributes{},
+					false,
+				)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				s.Len(ms.GetPendingActivityInfos(), 2)
+				for _, ai := range ms.GetPendingActivityInfos() {
+					if ai.ScheduledEventId == scheduledEvent.EventId {
+						protorequire.ProtoEqual(s.T(), currentVersionedTransition, ai.LastUpdateVersionedTransition)
+					} else {
+						protorequire.NotProtoEqual(s.T(), currentVersionedTransition, ai.LastUpdateVersionedTransition)
+					}
+				}
+			},
+		},
+		{
+			name: "UserTimer",
+			testFn: func(ms MutableState) {
+				completedEvent := completWorkflowTaskFn(ms)
+				newTimerID := "new-timer-id"
+				_, _, err := ms.AddTimerStartedEvent(
+					completedEvent.GetEventId(),
+					&commandpb.StartTimerCommandAttributes{
+						TimerId: newTimerID,
+					},
+				)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				s.Len(ms.GetPendingTimerInfos(), 2)
+				for _, ti := range ms.GetPendingTimerInfos() {
+					if ti.TimerId == newTimerID {
+						protorequire.ProtoEqual(s.T(), currentVersionedTransition, ti.LastUpdateVersionedTransition)
+					} else {
+						protorequire.NotProtoEqual(s.T(), currentVersionedTransition, ti.LastUpdateVersionedTransition)
+					}
+				}
+			},
+		},
+		{
+			name: "ChildExecution",
+			testFn: func(ms MutableState) {
+				completedEvent := completWorkflowTaskFn(ms)
+				initiatedEvent, _, err := ms.AddStartChildWorkflowExecutionInitiatedEvent(
+					completedEvent.GetEventId(),
+					uuid.New(),
+					&commandpb.StartChildWorkflowExecutionCommandAttributes{},
+					ms.GetNamespaceEntry().ID(),
+				)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				s.Len(ms.GetPendingChildExecutionInfos(), 2)
+				for _, ci := range ms.GetPendingChildExecutionInfos() {
+					if ci.InitiatedEventId == initiatedEvent.EventId {
+						protorequire.ProtoEqual(s.T(), currentVersionedTransition, ci.LastUpdateVersionedTransition)
+					} else {
+						protorequire.NotProtoEqual(s.T(), currentVersionedTransition, ci.LastUpdateVersionedTransition)
+					}
+				}
+			},
+		},
+		{
+			name: "RequestCancelExternal",
+			testFn: func(ms MutableState) {
+				completedEvent := completWorkflowTaskFn(ms)
+				initiatedEvent, _, err := ms.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+					completedEvent.GetEventId(),
+					uuid.New(),
+					&commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{},
+					ms.GetNamespaceEntry().ID(),
+				)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				s.Len(ms.GetPendingRequestCancelExternalInfos(), 2)
+				for _, ci := range ms.GetPendingRequestCancelExternalInfos() {
+					if ci.InitiatedEventId == initiatedEvent.EventId {
+						protorequire.ProtoEqual(s.T(), currentVersionedTransition, ci.LastUpdateVersionedTransition)
+					} else {
+						protorequire.NotProtoEqual(s.T(), currentVersionedTransition, ci.LastUpdateVersionedTransition)
+					}
+				}
+			},
+		},
+		{
+			name: "SignalExternal",
+			testFn: func(ms MutableState) {
+				completedEvent := completWorkflowTaskFn(ms)
+				initiatedEvent, _, err := ms.AddSignalExternalWorkflowExecutionInitiatedEvent(
+					completedEvent.GetEventId(),
+					uuid.New(),
+					&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: "target-workflow-id",
+							RunId:      "target-run-id",
+						},
+					},
+					ms.GetNamespaceEntry().ID(),
+				)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				s.Len(ms.GetPendingSignalExternalInfos(), 2)
+				for _, ci := range ms.GetPendingSignalExternalInfos() {
+					if ci.InitiatedEventId == initiatedEvent.EventId {
+						protorequire.ProtoEqual(s.T(), currentVersionedTransition, ci.LastUpdateVersionedTransition)
+					} else {
+						protorequire.NotProtoEqual(s.T(), currentVersionedTransition, ci.LastUpdateVersionedTransition)
+					}
+				}
+			},
+		},
+		{
+			name: "SignalRequestedID",
+			testFn: func(ms MutableState) {
+				ms.AddSignalRequested(uuid.New())
+
+				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().SignalRequestIdsLastUpdateVersionedTransition)
+			},
+		},
+		{
+			name: "UpdateInfo",
+			testFn: func(ms MutableState) {
+				updateID := "test-updateId"
+				_, err := ms.AddWorkflowExecutionUpdateAcceptedEvent(
+					updateID,
+					"update-message-id",
+					65,
+					&updatepb.Request{
+						Meta: &updatepb.Meta{
+							UpdateId: updateID,
+						},
+					},
+				)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				s.Len(ms.GetExecutionInfo().UpdateInfos, 1)
+				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().UpdateInfos[updateID].LastUpdateVersionedTransition)
+			},
+		},
+		{
+			name: "WorkflowTask/Completed",
+			testFn: func(ms MutableState) {
+				completWorkflowTaskFn(ms)
+
+				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				s.Nil(ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
+			},
+		},
+		{
+			name: "WorkflowTask/Scheduled",
+			testFn: func(ms MutableState) {
+				completWorkflowTaskFn(ms)
+				_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
+			},
+		},
+		{
+			name: "Visibility",
+			testFn: func(ms MutableState) {
+				completedEvent := completWorkflowTaskFn(ms)
+				_, err := ms.AddUpsertWorkflowSearchAttributesEvent(
+					completedEvent.EventId,
+					&commandpb.UpsertWorkflowSearchAttributesCommandAttributes{},
+				)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().VisibilityLastUpdateVersionedTransition)
+			},
+		},
+		{
+			name: "ExecutionState",
+			testFn: func(ms MutableState) {
+				completedEvent := completWorkflowTaskFn(ms)
+				_, err := ms.AddCompletedWorkflowEvent(
+					completedEvent.EventId,
+					&commandpb.CompleteWorkflowExecutionCommandAttributes{},
+					"",
+				)
+				s.NoError(err)
+
+				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionState().LastUpdateVersionedTransition)
+			},
+		},
+		{
+			name: "HSM/CloseAsMutation",
+			testFn: func(ms MutableState) {
+				completWorkflowTaskFn(ms)
+				buildHSMFn(ms)
+
+				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				err = ms.HSM().Walk(func(n *hsm.Node) error {
+					if n.Parent == nil {
+						// skip root which is entire mutable state
+						return nil
+					}
+					protorequire.ProtoEqual(s.T(), currentVersionedTransition, n.InternalRepr().LastUpdateVersionedTransition)
+					return nil
+				})
+				s.NoError(err)
+			},
+		},
+		{
+			name: "HSM/CloseAsSnapshot",
+			testFn: func(ms MutableState) {
+				completWorkflowTaskFn(ms)
+				buildHSMFn(ms)
+
+				_, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				s.NoError(err)
+
+				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
+				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+
+				err = ms.HSM().Walk(func(n *hsm.Node) error {
+					if n.Parent == nil {
+						// skip root which is entire mutable state
+						return nil
+					}
+					protorequire.ProtoEqual(s.T(), currentVersionedTransition, n.InternalRepr().LastUpdateVersionedTransition)
+					return nil
+				})
+				s.NoError(err)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+
+			dbState := s.buildWorkflowMutableState()
+			dbState.BufferedEvents = nil
+
+			var err error
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.NoError(err)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+			s.NoError(err)
+
+			s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+				namespaceEntry.IsGlobalNamespace(),
+				namespaceEntry.FailoverVersion(),
+			).Return(cluster.TestCurrentClusterName).AnyTimes()
+			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+			tc.testFn(s.mutableState)
+		})
+	}
 }
 
 func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
