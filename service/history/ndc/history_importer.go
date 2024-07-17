@@ -192,6 +192,7 @@ func (r *HistoryImporterImpl) applyEvents(
 		eventsSlice,
 		nil,
 		"",
+		nil,
 	)
 	if err != nil {
 		return nil, false, err

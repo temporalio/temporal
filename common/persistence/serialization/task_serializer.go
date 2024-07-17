@@ -1242,43 +1242,47 @@ func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
 }
 
 func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
-	backfillHistoryTask *tasks.SyncVersionedTransitionTask,
+	syncVersionedTransitionTask *tasks.SyncVersionedTransitionTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    backfillHistoryTask.WorkflowKey.NamespaceID,
-		WorkflowId:     backfillHistoryTask.WorkflowKey.WorkflowID,
-		RunId:          backfillHistoryTask.WorkflowKey.RunID,
+		NamespaceId:    syncVersionedTransitionTask.WorkflowKey.NamespaceID,
+		WorkflowId:     syncVersionedTransitionTask.WorkflowKey.WorkflowID,
+		RunId:          syncVersionedTransitionTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_BACKFILL_HISTORY,
-		TaskId:         backfillHistoryTask.TaskID,
-		VisibilityTime: timestamppb.New(backfillHistoryTask.VisibilityTimestamp),
-		// VersionedTransition: backfillHistoryTask.VersionedTransition,
-		FirstEventId: backfillHistoryTask.FirstEventID,
-		NextEventId:  backfillHistoryTask.NextEventID,
-		Version:      backfillHistoryTask.Version,
-		NewRunId:     backfillHistoryTask.NewRunID,
+		TaskId:         syncVersionedTransitionTask.TaskID,
+		VisibilityTime: timestamppb.New(syncVersionedTransitionTask.VisibilityTimestamp),
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: syncVersionedTransitionTask.NamespaceFailoverVersion,
+			TransitionCount:          syncVersionedTransitionTask.TransitionCount,
+		},
+		FirstEventId: syncVersionedTransitionTask.FirstEventID,
+		NextEventId:  syncVersionedTransitionTask.NextEventID,
+		Version:      syncVersionedTransitionTask.Version,
+		NewRunId:     syncVersionedTransitionTask.NewRunID,
 	}
 }
 
 func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
-	backfillHistoryTask *persistencespb.ReplicationTaskInfo,
+	syncVersionedTransitionTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncVersionedTransitionTask {
 	visibilityTimestamp := time.Unix(0, 0)
-	if backfillHistoryTask.VisibilityTime != nil {
-		visibilityTimestamp = backfillHistoryTask.VisibilityTime.AsTime()
+	if syncVersionedTransitionTask.VisibilityTime != nil {
+		visibilityTimestamp = syncVersionedTransitionTask.VisibilityTime.AsTime()
 	}
 	return &tasks.SyncVersionedTransitionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			backfillHistoryTask.NamespaceId,
-			backfillHistoryTask.WorkflowId,
-			backfillHistoryTask.RunId,
+			syncVersionedTransitionTask.NamespaceId,
+			syncVersionedTransitionTask.WorkflowId,
+			syncVersionedTransitionTask.RunId,
 		),
-		VisibilityTimestamp: visibilityTimestamp,
-		TaskID:              backfillHistoryTask.TaskId,
-		// VersionedTransition: backfillHistoryTask.VersionedTransition,
-		FirstEventID: backfillHistoryTask.FirstEventId,
-		NextEventID:  backfillHistoryTask.NextEventId,
-		Version:      backfillHistoryTask.Version,
-		NewRunID:     backfillHistoryTask.NewRunId,
+		VisibilityTimestamp:      visibilityTimestamp,
+		TaskID:                   syncVersionedTransitionTask.TaskId,
+		FirstEventID:             syncVersionedTransitionTask.FirstEventId,
+		NextEventID:              syncVersionedTransitionTask.NextEventId,
+		Version:                  syncVersionedTransitionTask.Version,
+		NewRunID:                 syncVersionedTransitionTask.NewRunId,
+		NamespaceFailoverVersion: syncVersionedTransitionTask.VersionedTransition.NamespaceFailoverVersion,
+		TransitionCount:          syncVersionedTransitionTask.VersionedTransition.TransitionCount,
 	}
 }
 

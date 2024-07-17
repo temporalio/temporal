@@ -26,7 +26,6 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -38,11 +37,13 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 
-		VersionedTransition *persistencespb.VersionedTransition
-		FirstEventID        int64
-		NextEventID         int64
-		Version             int64
-		NewRunID            string
+		FirstEventID int64
+		NextEventID  int64
+		Version      int64
+		NewRunID     string
+
+		NamespaceFailoverVersion int64
+		TransitionCount          int64
 	}
 )
 

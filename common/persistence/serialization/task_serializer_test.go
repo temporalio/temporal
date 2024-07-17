@@ -350,20 +350,19 @@ func (s *taskSerializerSuite) TestSyncHSMTask() {
 }
 
 func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
-	backfillHistoryTask := &tasks.SyncVersionedTransitionTask{
-		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
-		TaskID:              rand.Int63(),
-		Version:             rand.Int63(),
-		FirstEventID:        rand.Int63(),
-		NextEventID:         rand.Int63(),
-		// VersionedTransition: &persistence.VersionedTransition{
-		// 	NamespaceFailoverVersion: rand.Int63(),
-		// 	TransitionCount:          rand.Int63(),
-		// },
+	syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey:              s.workflowKey,
+		VisibilityTimestamp:      time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:                   rand.Int63(),
+		Version:                  rand.Int63(),
+		FirstEventID:             rand.Int63(),
+		NextEventID:              rand.Int63(),
+		NewRunID:                 uuid.New().String(),
+		NamespaceFailoverVersion: rand.Int63(),
+		TransitionCount:          rand.Int63(),
 	}
 
-	s.assertEqualTasks(backfillHistoryTask)
+	s.assertEqualTasks(syncVersionedTransitionTask)
 }
 
 func (s *taskSerializerSuite) TestSyncWorkflowStateTask() {

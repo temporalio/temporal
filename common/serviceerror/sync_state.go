@@ -27,18 +27,21 @@ package serviceerror
 import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"go.temporal.io/server/api/errordetails/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 type (
 	// SyncState represents sync state error.
 	SyncState struct {
-		Message     string
-		NamespaceId string
-		WorkflowId  string
-		RunId       string
-		st          *status.Status
+		Message             string
+		NamespaceId         string
+		WorkflowId          string
+		RunId               string
+		VersionedTransition *persistencespb.VersionedTransition
+		st                  *status.Status
 	}
 )
 
@@ -48,12 +51,14 @@ func NewSyncState(
 	namespaceId string,
 	workflowId string,
 	runId string,
+	versionedTransition *persistencespb.VersionedTransition,
 ) error {
 	return &SyncState{
-		Message:     message,
-		NamespaceId: namespaceId,
-		WorkflowId:  workflowId,
-		RunId:       runId,
+		Message:             message,
+		NamespaceId:         namespaceId,
+		WorkflowId:          workflowId,
+		RunId:               runId,
+		VersionedTransition: versionedTransition,
 	}
 }
 
@@ -70,9 +75,10 @@ func (e *SyncState) Status() *status.Status {
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
 		&errordetails.SyncStateFailure{
-			NamespaceId: e.NamespaceId,
-			WorkflowId:  e.WorkflowId,
-			RunId:       e.RunId,
+			NamespaceId:         e.NamespaceId,
+			WorkflowId:          e.WorkflowId,
+			RunId:               e.RunId,
+			VersionedTransition: e.VersionedTransition,
 		},
 	)
 	return st
@@ -81,7 +87,8 @@ func (e *SyncState) Status() *status.Status {
 func (e *SyncState) Equal(err *SyncState) bool {
 	return e.NamespaceId == err.NamespaceId &&
 		e.WorkflowId == err.WorkflowId &&
-		e.RunId == err.RunId
+		e.RunId == err.RunId &&
+		proto.Equal(e.VersionedTransition, err.VersionedTransition)
 }
 
 func newSyncState(
@@ -89,10 +96,11 @@ func newSyncState(
 	errDetails *errordetails.SyncStateFailure,
 ) error {
 	return &SyncState{
-		Message:     st.Message(),
-		NamespaceId: errDetails.GetNamespaceId(),
-		WorkflowId:  errDetails.GetWorkflowId(),
-		RunId:       errDetails.GetRunId(),
-		st:          st,
+		Message:             st.Message(),
+		NamespaceId:         errDetails.GetNamespaceId(),
+		WorkflowId:          errDetails.GetWorkflowId(),
+		RunId:               errDetails.GetRunId(),
+		VersionedTransition: errDetails.GetVersionedTransition(),
+		st:                  st,
 	}
 }

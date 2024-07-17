@@ -35,6 +35,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -288,9 +289,13 @@ func convertSyncVersionedTransitionTask(
 			}
 
 			transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+			versionedTransition := &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: taskInfo.NamespaceFailoverVersion,
+				TransitionCount:          taskInfo.TransitionCount,
+			}
 
 			// 1. task versioned transition not on current transition history
-			if workflow.TransitionHistoryStalenessCheck(transitionHistory, taskInfo.VersionedTransition) != nil {
+			if workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition) != nil {
 				if len(currentEvents) == 0 && len(taskInfo.NewRunID) == 0 {
 					return nil, nil
 				}
@@ -307,6 +312,7 @@ func convertSyncVersionedTransitionTask(
 							EventBatches:        currentEvents,
 							NewRunEventBatch:    newEvents,
 							NewRunId:            taskInfo.NewRunID,
+							VersionedTransition: versionedTransition,
 						},
 					},
 					VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
