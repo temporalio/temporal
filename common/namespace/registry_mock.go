@@ -300,6 +300,21 @@ func (mr *MockRegistryMockRecorder) GetPingChecks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPingChecks", reflect.TypeOf((*MockRegistry)(nil).GetPingChecks))
 }
 
+// RefreshNamespaceById mocks base method.
+func (m *MockRegistry) RefreshNamespaceById(namespaceId ID) (*Namespace, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshNamespaceById", namespaceId)
+	ret0, _ := ret[0].(*Namespace)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshNamespaceById indicates an expected call of RefreshNamespaceById.
+func (mr *MockRegistryMockRecorder) RefreshNamespaceById(namespaceId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshNamespaceById", reflect.TypeOf((*MockRegistry)(nil).RefreshNamespaceById), namespaceId)
+}
+
 // RegisterStateChangeCallback mocks base method.
 func (m *MockRegistry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn) {
 	m.ctrl.T.Helper()
