@@ -1978,9 +1978,6 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 	foundTQM, ok := e.partitions[key]
 	if !ok || (unloadPM != nil && foundTQM != unloadPM) {
 		e.partitionsLock.Unlock()
-		if unloadPM != nil {
-			unloadPM.Stop(unloadCause)
-		}
 		return false
 	}
 	delete(e.partitions, key)

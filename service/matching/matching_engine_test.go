@@ -1989,7 +1989,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		mgr.Start()
 		// tlMgr.taskWriter startup is async so give it time to complete
 		time.Sleep(100 * time.Millisecond)
-		mgr.(*taskQueuePartitionManagerImpl).unloadFromEngine(unloadCauseUnspecified)
+		mgr.(*taskQueuePartitionManagerImpl).Stop(unloadCauseUnspecified)
 
 		getTasksCount := s.taskManager.getGetTasksCount(dbq) - prevGetTasksCount
 		s.LessOrEqual(getTasksCount, 1)
