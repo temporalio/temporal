@@ -43,6 +43,7 @@ import (
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
+	finalizer "go.temporal.io/server/common/finalizer"
 	log "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
@@ -336,6 +337,20 @@ func (m *MockContext) GetExecutionManager() persistence.ExecutionManager {
 func (mr *MockContextMockRecorder) GetExecutionManager() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockContext)(nil).GetExecutionManager))
+}
+
+// GetFinalizer mocks base method.
+func (m *MockContext) GetFinalizer() *finalizer.Finalizer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFinalizer")
+	ret0, _ := ret[0].(*finalizer.Finalizer)
+	return ret0
+}
+
+// GetFinalizer indicates an expected call of GetFinalizer.
+func (mr *MockContextMockRecorder) GetFinalizer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFinalizer", reflect.TypeOf((*MockContext)(nil).GetFinalizer))
 }
 
 // GetHistoryClient mocks base method.
@@ -1050,6 +1065,20 @@ func (m *MockControllableContext) GetExecutionManager() persistence.ExecutionMan
 func (mr *MockControllableContextMockRecorder) GetExecutionManager() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockControllableContext)(nil).GetExecutionManager))
+}
+
+// GetFinalizer mocks base method.
+func (m *MockControllableContext) GetFinalizer() *finalizer.Finalizer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFinalizer")
+	ret0, _ := ret[0].(*finalizer.Finalizer)
+	return ret0
+}
+
+// GetFinalizer indicates an expected call of GetFinalizer.
+func (mr *MockControllableContextMockRecorder) GetFinalizer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFinalizer", reflect.TypeOf((*MockControllableContext)(nil).GetFinalizer))
 }
 
 // GetHistoryClient mocks base method.
