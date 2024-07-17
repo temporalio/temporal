@@ -1312,13 +1312,23 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (ms *MutableStateImpl) GetCompletionEvent(
 	ctx context.Context,
-) (*historypb.HistoryEvent, error) {
+) (event *historypb.HistoryEvent, err error) {
+	defer func() {
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			err = ErrMissingWorkflowCompletionEvent
+		}
+	}()
+
 	if ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
 	// Completion EventID is always one less than NextEventID after workflow is completed
-	completionEventID := ms.hBuilder.NextEventID() - 1
+	nextEventID := ms.hBuilder.NextEventID()
+	completionEventID := nextEventID - 1
 	firstEventID := ms.executionInfo.CompletionEventBatchId
 
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(completionEventID)
@@ -1326,7 +1336,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 		return nil, err
 	}
 
-	event, err := ms.eventsCache.GetEvent(
+	event, err = ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
 		events.EventKey{
@@ -1340,14 +1350,43 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		if common.IsNotFoundError(err) {
-			// do not return the original error
-			// since original error of type NotFound
-			// can cause task processing side to fail silently
-			return nil, ErrMissingWorkflowCompletionEvent
+		if (common.IsNotFoundError(err) ||
+			common.IsInternalError(err)) &&
+			ms.executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
+			// Certain terminated workflows have an incorrect completionEventBatchId recorded which
+			// prevents the completion event from being loaded outside of cache.
+			//
+			// If we get back an internal error, attempt to search history (most recent
+			// events first) to find the completion event. Event will be earlier than
+			// the recorded CompletionEventBatchID, and should be a part of the same batch.
+			//
+			// See also: https://github.com/temporalio/temporal/pull/6180
+			//
+			// TODO: Remove 90 days after deployment (remove after 10/16/2024)
+			_, txID := ms.GetLastFirstEventIDTxnID()
+			resp, err := ms.shard.GetExecutionManager().ReadHistoryBranchReverse(ctx, &persistence.ReadHistoryBranchReverseRequest{
+				ShardID:                ms.shard.GetShardID(),
+				BranchToken:            currentBranchToken,
+				MaxEventID:             nextEventID, // looking for an event in the most recent batch
+				PageSize:               1,
+				LastFirstTransactionID: txID,
+				NextPageToken:          []byte{},
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			for _, event := range resp.HistoryEvents {
+				// this only applies to terminated workflows whose ultimate WFT had been failed
+				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
+					return event, nil
+				}
+			}
 		}
+
 		return nil, err
 	}
+
 	return event, nil
 }
 
