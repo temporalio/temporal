@@ -1,14 +1,13 @@
 # Background
 
-Nexus RPC is a modern open-source service framework for arbitrary-length operations whose lifetime may extend beyond a
-traditional RPC. Nexus was designed with durable execution in mind, as an underpinning to connect durable executions
-within and across namespaces, clusters and regions – with a clean API contract to streamline multi-team collaboration.
-Any service can be exposed as a set of sync or async Nexus operations – the latter provides an operation identity and a
+Nexus RPC is an open-source service framework for arbitrary-length operations whose lifetime may extend beyond a
+traditional RPC. It is an underpinning connecting durable executions
+within and across namespaces, clusters and regions – with an API contract designed with multi-team collaboration in mind.
+A service can be exposed as a set of sync or async Nexus operations – the latter provides an operation identifier and a
 uniform interface to get the status of an operation or its result, receive a completion callback, or cancel the
 operation.
 
-Temporal is leveraging the Nexus RPC protocol to facilitate calling across namespace and cluster and boundaries.
-
+Temporal uses the Nexus RPC protocol to allow calling across namespace and cluster boundaries.
 The [Go SDK Nexus proposal](https://github.com/temporalio/proposals/blob/master/nexus/sdk-go.md) explains the user
 experience and shows sequence diagrams from an external perspective.
 
@@ -39,7 +38,7 @@ Complete a Nexus operation via callback.
 Since Nexus is a new feature with experimental APIs and has not been exercised in production, it is disabled by default
 until it is considered stable.
 
-Nexus is only supported in single cluster setups for the time being due to endpoint registry replication not implemented
+Nexus is only supported in single cluster setups for the time being due to endpoint registry replication not being implemented
 yet.
 
 ## Enabling Nexus
@@ -60,7 +59,7 @@ To enable Nexus in your deployment:
       clusterInformation:
         active:
           # NOTE: keep other fields as they were
-          httpAddress: $ADDRESS_ACCESSIBLE_TO_PEERS:7243
+          httpAddress: $PUBLIC_URL:7243
     ```
 
 2. Enable Nexus via dynamic config, set the public callback URL, and set the allowed callback addresses.
@@ -74,7 +73,7 @@ To enable Nexus in your deployment:
       # membership.
       - value: https://$PUBLIC_URL:7243/namespaces/{{.NamespaceName}}/nexus/callback
     component.callbacks.allowedAddresses:
-      # This list is a security mechanism for limiting which callback URL are accepted by the server.
+      # This list is a security mechanism for limiting which callback URLs are accepted by the server.
       # Attackers may leverage the callback mechanism to force the server to call arbitrary URLs.
       # The config below is only recommended for development, tune this to your requirements.
       - value:
@@ -85,13 +84,13 @@ To enable Nexus in your deployment:
 ## Disabling Nexus
 
 To disable Nexus completely a server restart is required as the outbound queue processor (detailed below) is started
-conditionally if `system.enableNexus` is on and does not shut itself down when the config is turned off. See [Disabling
+if `system.enableNexus` is on, but does not shut itself down when this config is disabled. See [Disabling
 the Outbound Queue Processor](#disabling-the-outbound-queue-processor) for shutting off processing on a running server.
 
 ## Downgrading to a Pre-Nexus Server Release
 
 In order to safely downgrade the server version to `1.24.x`, first disable nexus via dynamic config
-(`system.enableNexus`), this ensures that no experimental functionality while Nexus was still being developed is
+(`system.enableNexus`). This ensures that no experimental functionality while Nexus was still being developed is
 triggered.
 
 After disabling Nexus, outbound tasks currently scheduled will not be run and timer tasks will immediately go to the
@@ -120,10 +119,10 @@ name will be stuck in a workflow task retry loop.
 
 The registry is persisted in a dedicated table. All writes are serialized and routed through a single owning matching
 node. Frontend and history nodes load registry entries from the owning matching node, falling back to a direct
-persistence read for redundancy. Once the initial entries are loaded, nodes subscribe to changes by long polling the
+persistence read for redundancy. Once the initial entries are loaded, nodes subscribe to changes by long-polling the
 owning matching node for updates.
 The endpoints table is versioned where every write to the table increments its version. The version has a couple of
-purposes, to ensure writes are serialized, and to determine whether a node has an up-to-date view of the table when long
+purposes: to ensure writes are serialized, and to determine whether a node has an up-to-date view of the table when long
 polling.
 
 > ⚠️  At the time of writing, replication for the registry is not implemented and Nexus shouldn't be used in multi cluster
@@ -136,7 +135,7 @@ queue](./history-service.md#transfer-task-queue), the outbound queue is a sharde
 between the transfer queue and the outbound queue is that outbound tasks target external destinations, meaning that
 tasks are allowed to make long running (typically up to 10 seconds) external requests. The outbound queue groups tasks
 by their type, source namespace, and destination in a best effort attempt to provide isolation when a destination is
-down or is taking long to respond. This isolation is provided via two mechanisms: multi-cursor and and a custom
+down or is taking long to respond. This isolation is provided via two mechanisms: multi-cursor and a custom
 scheduler.
 
 ### Multi-Cursor
@@ -155,7 +154,7 @@ The outbound queue reader can be disabled dynamically by setting `history.outbou
 
 The outound queue processor uses the [`GroupByScheduler`](https://github.com/temporalio/temporal/blob/a8799ae43286f7dddf3147439bc2129f25065456/common/tasks/group_by_scheduler.go#L49) to group tasks into a per source namespace and destination [`DynamicWorkerPoolScheduler`](https://github.com/temporalio/temporal/blob/a8799ae43286f7dddf3147439bc2129f25065456/common/tasks/dynamic_worker_pool_scheduler.go#L47).
 
-Each task within its group, goes through an in memory buffer, a concurrency limiter, a rate limiter, and a circuit breaker.
+Each task within its group goes through an in-memory buffer, a concurrency limiter, a rate limiter, and a circuit breaker.
 
 The entire group's processing stack emits metrics with the group's key (the source namespace name and destination).
 
@@ -173,7 +172,7 @@ flowchart TD
     Scheduler --> Executor
 ```
 
-#### In Memory Buffer
+#### In-Memory Buffer
 
 If the scheduler cannot immediately spawn a new goroutine, tasks go directly to this buffer.
 
@@ -201,7 +200,7 @@ The number of goroutines per group is dynamically configurable per source namesp
 
 #### Rate Limiter
 
-The per group rate limiter kicks in as soon as a task starts executing, the rate can be dynamically configured via:
+The per-group rate limiter kicks in as soon as a task starts executing. The rate can be dynamically configured via:
 `history.outboundQueue.hostScheduler.maxTaskRPS`.
 
 
@@ -220,7 +219,7 @@ The circuit breaker tracks `DestinationDownError`s returned by executors (for Ne
 non-retryable HTTP errors and timeouts) and trips when the number of consecutive failures is more than 5.
 When the circuit breaker is tripped it transitions to the "open" state, from which it transitions to half-open, starting
 to let some requests through to probe if the destination is up again. After a while the circuit breaker transitions back
-into open or closed states, depending on the success of requests during the time spend in the half open state.
+into open or closed states, depending on the success of requests during the time spent in the half-open state.
 
 Tasks that get rejected by the circuit breaker never make it into the executor and prevent any work including loading
 mutable states from the cache or database.
@@ -248,7 +247,7 @@ Machine framework (docs TBD).
 
 The
 [Operation](https://github.com/temporalio/temporal/blob/a0fdea5319be5f1631d7e2b0f6f06c38dae3d413/components/nexusoperations/statemachine.go#L65)
-state machine, manages the lifetime of an Operation the StartOperation request.
+state machine manages the lifetime of an Operation the StartOperation request.
 
 The state machine transitions between these states (as defined in code):
 
@@ -284,9 +283,9 @@ queue when entering the `Scheduled` state.
 > NOTE: The `Scheduled` and `BackingOff` states may likely be merged into a single state when we add an outbound timer
 > queue.
 
-An operation in the `Scheduled` state is put on the outbound queue for scheduling a `StartOperation` request, the
-outbound queue is protected by a circuit breaker per source namespace and destination endpoint, that may entirely
-prevent processing loading the operation's associated state from the DB.
+An operation in the `Scheduled` state is put on the outbound queue for scheduling a `StartOperation` request. The
+outbound queue is protected by a circuit breaker per source namespace and destination endpoint, which may entirely
+prevent loading the operation's associated state from the DB.
 
 Operations are continuously retried using a [configurable retry policy][nexus-retry-policy] until they succeed,
 permanently fail, or the operation times out.
@@ -315,7 +314,7 @@ permanently fail, or the operation times out.
 ### Task Executors
 
 There are a couple of different types of executors making up the Nexus machinery. Timer executors (for purely
-transitioning out of `BackingOff` states and enforcing the schedule-to-close timeout, and the more complex outbound
+transitioning out of `BackingOff` states and enforcing the schedule-to-close timeout), and the more complex outbound
 executors that are responsible for invoking `StartOperation` and `CancelOperation` requests.
 
 Task execution only fails due to transient and unexpected internal errors. Invocation errors do not fail tasks and
@@ -330,7 +329,7 @@ workflow and operation state machine. The
 [component.nexusoperations.callback.endpoint.template](https://github.com/temporalio/temporal/blob/7c8025aff96af7d72a91af615f1d625817842894/components/nexusoperations/config.go#L69)
 global dynamic config must be set to construct callback URLs or the executor will fail to process invocation tasks. When
 routing callbacks to external clusters and non-Temporal destinations, the URL is used and should be a value that is
-publically accessible to those external destinations. Callbacks that are routed internally within the cluster, resolve
+publically accessible to those external destinations. Callbacks that are routed internally within the cluster resolve
 the frontend URL via membership or, as a last resort, via static configuration overrides.
 
 The timeout for making a single Nexus HTTP call is configurable via: `component.nexusoperations.request.timeout`
