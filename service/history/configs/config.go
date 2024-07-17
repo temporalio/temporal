@@ -98,6 +98,7 @@ type Config struct {
 	ShardIOTimeout               dynamicconfig.DurationPropertyFn
 	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
 	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
+	ShardFinalizerTimeout        dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -421,6 +422,7 @@ func NewConfig(
 		ShardIOTimeout:               dynamicconfig.ShardIOTimeout.Get(dc),
 		ShardLingerOwnershipCheckQPS: dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
 		ShardLingerTimeLimit:         dynamicconfig.ShardLingerTimeLimit.Get(dc),
+		ShardFinalizerTimeout:        dynamicconfig.ShardFinalizerTimeout.Get(dc),
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
