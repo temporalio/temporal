@@ -135,7 +135,7 @@ type (
 		GetNamespace(name Name) (*Namespace, error)
 		GetNamespaceWithOptions(name Name, opts GetNamespaceOptions) (*Namespace, error)
 		GetNamespaceByID(id ID) (*Namespace, error)
-		RefreshSingleCacheKey(namespaceName Name, namespaceId ID) error
+		RefreshSingleCacheKeyById(namespaceId ID) (*Namespace, error)
 		GetNamespaceByIDWithOptions(id ID, opts GetNamespaceOptions) (*Namespace, error)
 		GetNamespaceID(name Name) (ID, error)
 		GetNamespaceName(id ID) (Name, error)
@@ -228,18 +228,15 @@ func (r *registry) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int6
 	return int64(r.cacheByID.Size()), int64(r.cacheNameToID.Size())
 }
 
-func (r *registry) RefreshSingleCacheKey(name Name, id ID) error {
+func (r *registry) RefreshSingleCacheKeyById(id ID) (*Namespace, error) {
 	r.readthroughLock.Lock()
-	r.readthroughNotFoundCache.Delete(name)
-	r.readthroughNotFoundCache.Delete(id)
-	r.readthroughLock.Unlock()
-
-	r.cacheLock.Lock()
-	r.cacheByID.Delete(id)
-	r.cacheLock.Unlock()
-
-	_, err := r.getOrReadthroughNamespaceByID(id)
-	return err
+	defer r.readthroughLock.Unlock()
+	ns, err := r.getNamespaceByIDPersistence(id)
+	if err != nil {
+		return nil, err
+	}
+	r.updateCachesSingleNamespace(ns)
+	return ns, nil
 }
 
 // Start the background refresh of Namespace data.

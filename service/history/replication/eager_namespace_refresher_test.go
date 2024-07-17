@@ -389,7 +389,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Create
 	}).Return(nsResponse, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
-	s.mockNamespaceRegistry.EXPECT().RefreshSingleCacheKey(namespace.Name(nsName), namespaceId).Return(nil).Times(1)
+	s.mockNamespaceRegistry.EXPECT().RefreshSingleCacheKeyById(namespaceId).Return(namespace.FromAdminClientApiResponse(nsResponse), nil).Times(1)
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
 	s.Equal(namespaceId, ns.ID())
@@ -430,7 +430,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Update
 	}
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, nil).Times(1)
-	s.mockNamespaceRegistry.EXPECT().RefreshSingleCacheKey(namespace.Name(nsName), namespaceId).Return(nil).Times(1)
+	s.mockNamespaceRegistry.EXPECT().RefreshSingleCacheKeyById(namespaceId).Return(namespace.FromAdminClientApiResponse(nsResponse), nil).Times(1)
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
 	s.Equal(namespaceId, ns.ID())

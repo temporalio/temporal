@@ -119,6 +119,7 @@ func (e *executableTaskConverterImpl) convertOne(
 			replicationTask.GetSyncWorkflowStateTaskAttributes(),
 			taskClusterName,
 			replicationTask.GetPriority(),
+			replicationTask.GetVersionedTransition(),
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		return NewExecutableHistoryTask(
