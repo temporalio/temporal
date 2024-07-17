@@ -8170,9 +8170,13 @@ type InvokeStateMachineMethodRequest struct {
 	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// Reference including the path to the backing Operation state machine and a version + transition count for
 	// staleness checks.
-	Ref        *v114.StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
-	MethodName string                `protobuf:"bytes,5,opt,name=method_name,json=methodName,proto3" json:"method_name,omitempty"`
-	Input      []byte                `protobuf:"bytes,6,opt,name=input,proto3" json:"input,omitempty"`
+	Ref *v114.StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
+	// The method name to invoke. Methods must be explicitly registered for the target state machine in the state
+	// machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
+	// workflow.
+	MethodName string `protobuf:"bytes,5,opt,name=method_name,json=methodName,proto3" json:"method_name,omitempty"`
+	// Input, in serialized bytes, to the method. Users specify a deserializer during method registration for each state machine.
+	Input []byte `protobuf:"bytes,6,opt,name=input,proto3" json:"input,omitempty"`
 }
 
 func (x *InvokeStateMachineMethodRequest) Reset() {
@@ -8254,6 +8258,7 @@ type InvokeStateMachineMethodResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Output, in serialized bytes, of the method. Users specify a serializer during method registration for each state machine.
 	Output []byte `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
 }
 

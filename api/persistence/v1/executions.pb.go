@@ -2712,7 +2712,7 @@ type Callback struct {
 	// Types that are assignable to Variant:
 	//
 	//	*Callback_Nexus_
-	//	*Callback_Hsm_
+	//	*Callback_Hsm
 	Variant isCallback_Variant `protobuf_oneof:"variant"`
 }
 
@@ -2762,8 +2762,8 @@ func (x *Callback) GetNexus() *Callback_Nexus {
 	return nil
 }
 
-func (x *Callback) GetHsm() *Callback_Hsm {
-	if x, ok := x.GetVariant().(*Callback_Hsm_); ok {
+func (x *Callback) GetHsm() *Callback_HSM {
+	if x, ok := x.GetVariant().(*Callback_Hsm); ok {
 		return x.Hsm
 	}
 	return nil
@@ -2777,13 +2777,13 @@ type Callback_Nexus_ struct {
 	Nexus *Callback_Nexus `protobuf:"bytes,2,opt,name=nexus,proto3,oneof"`
 }
 
-type Callback_Hsm_ struct {
-	Hsm *Callback_Hsm `protobuf:"bytes,3,opt,name=hsm,proto3,oneof"`
+type Callback_Hsm struct {
+	Hsm *Callback_HSM `protobuf:"bytes,3,opt,name=hsm,proto3,oneof"`
 }
 
 func (*Callback_Nexus_) isCallback_Variant() {}
 
-func (*Callback_Hsm_) isCallback_Variant() {}
+func (*Callback_Hsm) isCallback_Variant() {}
 
 type CallbackInfo struct {
 	state         protoimpl.MessageState
@@ -3338,7 +3338,7 @@ func (x *Callback_Nexus) GetHeader() map[string]string {
 	return nil
 }
 
-type Callback_Hsm struct {
+type Callback_HSM struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -3357,8 +3357,8 @@ type Callback_Hsm struct {
 	Method string `protobuf:"bytes,5,opt,name=method,proto3" json:"method,omitempty"`
 }
 
-func (x *Callback_Hsm) Reset() {
-	*x = Callback_Hsm{}
+func (x *Callback_HSM) Reset() {
+	*x = Callback_HSM{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_temporal_server_api_persistence_v1_executions_proto_msgTypes[29]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3366,13 +3366,13 @@ func (x *Callback_Hsm) Reset() {
 	}
 }
 
-func (x *Callback_Hsm) String() string {
+func (x *Callback_HSM) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Callback_Hsm) ProtoMessage() {}
+func (*Callback_HSM) ProtoMessage() {}
 
-func (x *Callback_Hsm) ProtoReflect() protoreflect.Message {
+func (x *Callback_HSM) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_executions_proto_msgTypes[29]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3384,40 +3384,40 @@ func (x *Callback_Hsm) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Callback_Hsm.ProtoReflect.Descriptor instead.
-func (*Callback_Hsm) Descriptor() ([]byte, []int) {
+// Deprecated: Use Callback_HSM.ProtoReflect.Descriptor instead.
+func (*Callback_HSM) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{16, 1}
 }
 
-func (x *Callback_Hsm) GetNamespaceId() string {
+func (x *Callback_HSM) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
 	}
 	return ""
 }
 
-func (x *Callback_Hsm) GetWorkflowId() string {
+func (x *Callback_HSM) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
 	}
 	return ""
 }
 
-func (x *Callback_Hsm) GetRunId() string {
+func (x *Callback_HSM) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *Callback_Hsm) GetRef() *StateMachineRef {
+func (x *Callback_HSM) GetRef() *StateMachineRef {
 	if x != nil {
 		return x.Ref
 	}
 	return nil
 }
 
-func (x *Callback_Hsm) GetMethod() string {
+func (x *Callback_HSM) GetMethod() string {
 	if x != nil {
 		return x.Method
 	}
@@ -4546,7 +4546,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_rawDesc = []byte{
 	0x02, 0x68, 0x00, 0x12, 0x48, 0x0a, 0x03, 0x68, 0x73, 0x6d, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32,
 	0x30, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
 	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e,
-	0x76, 0x31, 0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x2e, 0x48, 0x73, 0x6d, 0x48, 0x00,
+	0x76, 0x31, 0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x2e, 0x48, 0x53, 0x4d, 0x48, 0x00,
 	0x52, 0x03, 0x68, 0x73, 0x6d, 0x42, 0x02, 0x68, 0x00, 0x1a, 0xbc, 0x01, 0x0a, 0x05, 0x4e, 0x65, 0x78,
 	0x75, 0x73, 0x12, 0x14, 0x0a, 0x03, 0x75, 0x72, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03,
 	0x75, 0x72, 0x6c, 0x42, 0x02, 0x68, 0x00, 0x12, 0x5a, 0x0a, 0x06, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
@@ -4559,7 +4559,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_rawDesc = []byte{
 	0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00,
 	0x12, 0x18, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05,
 	0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x1a, 0xd3, 0x01, 0x0a,
-	0x03, 0x48, 0x73, 0x6d, 0x12, 0x25, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65,
+	0x03, 0x48, 0x53, 0x4d, 0x12, 0x25, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65,
 	0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70,
 	0x61, 0x63, 0x65, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x23, 0x0a, 0x0b, 0x77, 0x6f, 0x72, 0x6b,
 	0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x77, 0x6f,
@@ -4749,7 +4749,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_goTypes = []interfa
 	(*TransferTaskInfo_CloseExecutionTaskDetails)(nil), // 26: temporal.server.api.persistence.v1.TransferTaskInfo.CloseExecutionTaskDetails
 	(*ActivityInfo_UseWorkflowBuildIdInfo)(nil),        // 27: temporal.server.api.persistence.v1.ActivityInfo.UseWorkflowBuildIdInfo
 	(*Callback_Nexus)(nil),                             // 28: temporal.server.api.persistence.v1.Callback.Nexus
-	(*Callback_Hsm)(nil),                               // 29: temporal.server.api.persistence.v1.Callback.Hsm
+	(*Callback_HSM)(nil),                               // 29: temporal.server.api.persistence.v1.Callback.HSM
 	nil,                                                // 30: temporal.server.api.persistence.v1.Callback.Nexus.HeaderEntry
 	(*CallbackInfo_WorkflowClosed)(nil),                // 31: temporal.server.api.persistence.v1.CallbackInfo.WorkflowClosed
 	(*CallbackInfo_Trigger)(nil),                       // 32: temporal.server.api.persistence.v1.CallbackInfo.Trigger
@@ -4866,7 +4866,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_depIdxs = []int32{
 	41,  // 78: temporal.server.api.persistence.v1.SignalInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	54,  // 79: temporal.server.api.persistence.v1.Checksum.flavor:type_name -> temporal.server.api.enums.v1.ChecksumFlavor
 	28,  // 80: temporal.server.api.persistence.v1.Callback.nexus:type_name -> temporal.server.api.persistence.v1.Callback.Nexus
-	29,  // 81: temporal.server.api.persistence.v1.Callback.hsm:type_name -> temporal.server.api.persistence.v1.Callback.Hsm
+	29,  // 81: temporal.server.api.persistence.v1.Callback.hsm:type_name -> temporal.server.api.persistence.v1.Callback.HSM
 	16,  // 82: temporal.server.api.persistence.v1.CallbackInfo.callback:type_name -> temporal.server.api.persistence.v1.Callback
 	32,  // 83: temporal.server.api.persistence.v1.CallbackInfo.trigger:type_name -> temporal.server.api.persistence.v1.CallbackInfo.Trigger
 	33,  // 84: temporal.server.api.persistence.v1.CallbackInfo.registration_time:type_name -> google.protobuf.Timestamp
@@ -4891,7 +4891,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_depIdxs = []int32{
 	60,  // 103: temporal.server.api.persistence.v1.WorkflowExecutionInfo.UpdateInfosEntry.value:type_name -> temporal.server.api.persistence.v1.UpdateInfo
 	61,  // 104: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SubStateMachinesByTypeEntry.value:type_name -> temporal.server.api.persistence.v1.StateMachineMap
 	30,  // 105: temporal.server.api.persistence.v1.Callback.Nexus.header:type_name -> temporal.server.api.persistence.v1.Callback.Nexus.HeaderEntry
-	62,  // 106: temporal.server.api.persistence.v1.Callback.Hsm.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
+	62,  // 106: temporal.server.api.persistence.v1.Callback.HSM.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
 	31,  // 107: temporal.server.api.persistence.v1.CallbackInfo.Trigger.workflow_closed:type_name -> temporal.server.api.persistence.v1.CallbackInfo.WorkflowClosed
 	108, // [108:108] is the sub-list for method output_type
 	108, // [108:108] is the sub-list for method input_type
@@ -5186,7 +5186,7 @@ func file_temporal_server_api_persistence_v1_executions_proto_init() {
 			}
 		}
 		file_temporal_server_api_persistence_v1_executions_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Callback_Hsm); i {
+			switch v := v.(*Callback_HSM); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5231,7 +5231,7 @@ func file_temporal_server_api_persistence_v1_executions_proto_init() {
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[16].OneofWrappers = []interface{}{
 		(*Callback_Nexus_)(nil),
-		(*Callback_Hsm_)(nil),
+		(*Callback_Hsm)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[32].OneofWrappers = []interface{}{
 		(*CallbackInfo_Trigger_WorkflowClosed)(nil),

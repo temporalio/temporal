@@ -152,7 +152,7 @@ func (e taskExecutor) loadInvocationArgs(
 			if err != nil {
 				return err
 			}
-		case *persistencespb.Callback_Hsm_:
+		case *persistencespb.Callback_Hsm:
 			target, err := hsm.MachineData[CanGetCompletionEvent](node.Parent)
 			if err != nil {
 				return err

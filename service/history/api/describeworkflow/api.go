@@ -265,13 +265,13 @@ func Invoke(
 		callback, err := cbColl.Data(node.Key.ID)
 		if err != nil {
 			shard.GetLogger().Error(
-				"Failed to load callback data while building describe response",
+				"failed to load callback data while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
 				tag.WorkflowRunID(executionState.RunId),
 				tag.Error(err),
 			)
-			return nil, serviceerror.NewInternal("Failed to construct describe response")
+			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 		var state enumspb.CallbackState
 		switch callback.State() {
@@ -283,7 +283,7 @@ func Invoke(
 				tag.WorkflowRunID(executionState.RunId),
 				tag.Error(err),
 			)
-			return nil, serviceerror.NewInternal("Failed to construct describe response")
+			return nil, serviceerror.NewInternal("failed to construct describe response")
 		case enumsspb.CALLBACK_STATE_STANDBY:
 			state = enumspb.CALLBACK_STATE_STANDBY
 		case enumsspb.CALLBACK_STATE_SCHEDULED:
@@ -331,13 +331,13 @@ func Invoke(
 		op, err := opColl.Data(node.Key.ID)
 		if err != nil {
 			shard.GetLogger().Error(
-				"Failed to load operation data while building describe response",
+				"failed to load operation data while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
 				tag.WorkflowRunID(executionState.RunId),
 				tag.Error(err),
 			)
-			return nil, serviceerror.NewInternal("Failed to construct describe response")
+			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 		var state enumspb.PendingNexusOperationState
 		switch op.State() {
@@ -349,7 +349,7 @@ func Invoke(
 				tag.WorkflowRunID(executionState.RunId),
 				tag.Error(err),
 			)
-			return nil, serviceerror.NewInternal("Failed to construct describe response")
+			return nil, serviceerror.NewInternal("failed to construct describe response")
 		case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF
 		case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
@@ -366,13 +366,13 @@ func Invoke(
 		cancelation, err := op.Cancelation(node)
 		if err != nil {
 			shard.GetLogger().Error(
-				"Failed to load operation cancelation data while building describe response",
+				"failed to load operation cancelation data while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
 				tag.WorkflowRunID(executionState.RunId),
 				tag.Error(err),
 			)
-			return nil, serviceerror.NewInternal("Failed to construct describe response")
+			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 		var cancellationInfo *workflowpb.NexusOperationCancellationInfo
 		if cancelation != nil {
@@ -389,13 +389,13 @@ func Invoke(
 		scheduledEventID, err := strconv.ParseInt(node.Key.ID, 10, 64)
 		if err != nil {
 			shard.GetLogger().Error(
-				"Failed to determine Nexus operation scheduled event ID while building describe response",
+				"failed to determine Nexus operation scheduled event ID while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
 				tag.WorkflowRunID(executionState.RunId),
 				tag.Error(err),
 			)
-			return nil, serviceerror.NewInternal("Failed to construct describe response")
+			return nil, serviceerror.NewInternal("failed to construct describe response")
 
 		}
 

@@ -43,7 +43,7 @@ type CanGetCompletionEvent interface {
 }
 
 type hsmInvocation struct {
-	hsm             *persistencepb.Callback_Hsm
+	hsm             *persistencepb.Callback_HSM
 	completionEvent *historypb.HistoryEvent
 }
 

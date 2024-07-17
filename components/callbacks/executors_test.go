@@ -318,8 +318,8 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 			cb := callbacks.Callback{
 				CallbackInfo: &persistencespb.CallbackInfo{
 					Callback: &persistencespb.Callback{
-						Variant: &persistencespb.Callback_Hsm_{
-							Hsm: &persistencespb.Callback_Hsm{
+						Variant: &persistencespb.Callback_Hsm{
+							Hsm: &persistencespb.Callback_HSM{
 								NamespaceId: "nsid",
 								WorkflowId:  "wid",
 								RunId:       "rid",
