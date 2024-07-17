@@ -366,7 +366,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
 
-	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.queue.NamespaceId())
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(c.queue.NamespaceId()))
 	if err != nil {
 		return nil, err
 	}

@@ -462,15 +462,19 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.Mo
 
 func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *shard.MockContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
-	timer.EXPECT().Record(
-		gomock.Any(),
-		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
+	tags := []metrics.Tag{
 		metrics.NamespaceTag(uc.namespaceName.String()),
+		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
+		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
-		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
+	}
+
+	timer.EXPECT().Record(
+		gomock.Any(),
 	)
 	metricsHandler := metrics.NewMockHandler(s.controller)
+	metricsHandler.EXPECT().WithTags(tags).Return(metricsHandler)
 	metricsHandler.EXPECT().Timer(metrics.ActivityE2ELatency.Name()).Return(timer)
 
 	shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()

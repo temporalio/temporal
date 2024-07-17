@@ -641,7 +641,7 @@ func NewConfig(
 
 		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
 
-		BreakdownMetricsByTaskQueue: dynamicconfig.MatchingBreakdownMetricsByTaskQueue.Get(dc),
+		BreakdownMetricsByTaskQueue: dynamicconfig.BreakdownMetricsByTaskQueue.Get(dc),
 	}
 
 	return cfg

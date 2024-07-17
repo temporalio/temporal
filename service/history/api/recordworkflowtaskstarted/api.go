@@ -32,7 +32,6 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -174,7 +174,7 @@ func Invoke(
 			namespaceName := namespaceEntry.Name()
 			tqPartition := tqid.UnsafePartitionFromProto(workflowTask.TaskQueue, req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 			metrics.TaskScheduleToStartLatency.With(
-				tqid.GetPerTaskQueuePartitionScope(
+				metrics.GetPerTaskQueuePartitionScope(
 					metricsScope,
 					namespaceName.String(),
 					tqPartition,

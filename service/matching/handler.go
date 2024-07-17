@@ -137,7 +137,7 @@ func (h *Handler) opMetricsHandler(
 ) metrics.Handler {
 	nsName := h.namespaceName(namespace.ID(namespaceID))
 	partition := tqid.UnsafePartitionFromProto(taskQueue, namespaceID, taskQueueType)
-	return tqid.GetPerTaskQueuePartitionScope(
+	return metrics.GetPerTaskQueuePartitionScope(
 		h.metricsHandler.WithTags(metrics.OperationTag(operation)),
 		nsName.String(),
 		partition,

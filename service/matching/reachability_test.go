@@ -33,6 +33,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tqid"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
@@ -164,7 +167,7 @@ func TestGetDefaultBuildId(t *testing.T) {
 func TestMakeBuildIdQuery(t *testing.T) {
 	t.Parallel()
 	rc := &reachabilityCalculator{
-		taskQueue: "test-query-tq",
+		taskQueue: tqid.UnsafeTaskQueueFamily("nsid", "test-query-tq"),
 	}
 
 	buildIdsOfInterest := []string{"0", "1", "2", ""}
@@ -363,12 +366,13 @@ func mkTestReachabilityCalculatorWithEmptyVisibility(t *testing.T) *testReachabi
 	cacheMetricsHandler := metricstest.NewCaptureHandler()
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).AnyTimes().Return(mkCountResponse(0))
-
+	nsName := namespace.Name("test-namespace")
+	tqf := tqid.UnsafeTaskQueueFamily("nsid", "test-reachability-tq")
 	return &testReachabilityCalculator{
 		rc: &reachabilityCalculator{
 			nsID:                         "test-namespace-id",
-			nsName:                       "test-namespace",
-			taskQueue:                    "test-reachability-tq",
+			nsName:                       nsName,
+			taskQueue:                    tqf,
 			buildIdVisibilityGracePeriod: testBuildIdVisibilityGracePeriod,
 			cache: newReachabilityCache(
 				cacheMetricsHandler,
@@ -376,6 +380,7 @@ func mkTestReachabilityCalculatorWithEmptyVisibility(t *testing.T) *testReachabi
 				testReachabilityCacheOpenWFsTTL,
 				testReachabilityCacheClosedWFsTTL,
 			),
+			tqConfig: newTaskQueueConfig(tqf.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW), NewConfig(dynamicconfig.NewNoopCollection()), nsName),
 		},
 		capture: cacheMetricsHandler.StartCapture(),
 	}

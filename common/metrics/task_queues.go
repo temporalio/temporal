@@ -22,61 +22,64 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tqid
+package metrics
 
 import (
 	"strconv"
 
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/tqid"
 )
 
 const (
-	unknown = "_unknown_"
 	omitted = "__omitted__"
 	normal  = "__normal__"
 	sticky  = "__sticky__"
 )
 
 func GetPerTaskQueueFamilyScope(
-	handler metrics.Handler,
+	handler Handler,
 	namespaceName string,
-	taskQueueFamily *TaskQueueFamily,
+	taskQueueFamily *tqid.TaskQueueFamily,
 	taskQueueBreakdown bool,
-) metrics.Handler {
+	tags ...Tag,
+) Handler {
 	metricTaskQueueName := omitted
 	if taskQueueBreakdown {
 		metricTaskQueueName = taskQueueFamily.Name()
 	}
-	return handler.WithTags(
-		metrics.NamespaceTag(namespaceName),
-		metrics.UnsafeTaskQueueTag(metricTaskQueueName),
-	)
+
+	allTags := []Tag{NamespaceTag(namespaceName), UnsafeTaskQueueTag(metricTaskQueueName)}
+	if tags != nil {
+		allTags = append(allTags, tags...)
+	}
+
+	return handler.WithTags(allTags...)
 }
 
 func GetPerTaskQueueScope(
-	handler metrics.Handler,
+	handler Handler,
 	namespaceName string,
-	taskQueue *TaskQueue,
+	taskQueue *tqid.TaskQueue,
 	taskQueueBreakdown bool,
-) metrics.Handler {
-	return GetPerTaskQueueFamilyScope(handler, namespaceName, taskQueue.Family(), taskQueueBreakdown).WithTags(
-		metrics.TaskQueueTypeTag(taskQueue.TaskType()),
-	)
+	tags ...Tag,
+) Handler {
+	return GetPerTaskQueueFamilyScope(handler, namespaceName, taskQueue.Family(), taskQueueBreakdown,
+		append(tags, TaskQueueTypeTag(taskQueue.TaskType()))...)
 }
 
 func GetPerTaskQueuePartitionScope(
-	handler metrics.Handler,
+	handler Handler,
 	namespaceName string,
-	partition Partition,
+	partition tqid.Partition,
 	taskQueueBreakdown bool,
 	partitionIDBreakdown bool,
-) metrics.Handler {
-	h := GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown)
+	tags ...Tag,
+) Handler {
 
 	var value string
 	if partition == nil {
-		value = unknown
-	} else if normalPartition, ok := partition.(*NormalPartition); ok {
+		value = unknownValue
+	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok {
 		if partitionIDBreakdown {
 			value = strconv.Itoa(normalPartition.PartitionId())
 		} else {
@@ -86,5 +89,6 @@ func GetPerTaskQueuePartitionScope(
 		value = sticky
 	}
 
-	return h.WithTags(metrics.PartitionTag(value))
+	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,
+		append(tags, PartitionTag(value))...)
 }

@@ -215,7 +215,7 @@ func NewConfig(
 		ThrottledLogRPS:                          dynamicconfig.MatchingThrottledLogRPS.Get(dc),
 		NumTaskqueueWritePartitions:              dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
 		NumTaskqueueReadPartitions:               dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
-		BreakdownMetricsByTaskQueue:              dynamicconfig.MatchingBreakdownMetricsByTaskQueue.Get(dc),
+		BreakdownMetricsByTaskQueue:              dynamicconfig.BreakdownMetricsByTaskQueue.Get(dc),
 		BreakdownMetricsByPartition:              dynamicconfig.MatchingBreakdownMetricsByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MatchingBreakdownMetricsByBuildID.Get(dc),
 		ForwarderMaxOutstandingPolls:             dynamicconfig.MatchingForwarderMaxOutstandingPolls.Get(dc),

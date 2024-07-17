@@ -167,8 +167,8 @@ func ToClusterIDTag(value int32) Tag {
 }
 
 // UnsafeTaskQueueTag returns a new task queue tag.
-// WARNING: Do not use this function directly as it may create high number of unique task queues that can
-// trouble the observability stack. Instead, use one of the following helper functions and pass a proper
+// WARNING: Do not use this function directly in production code as it may create high number of unique task queue tag
+// values that can trouble the observability stack. Instead, use one of the following helper functions and pass a proper
 // breakdown boolean (typically based on the task queue dynamic configs):
 // - `workflow.PerTaskQueueFamilyScope`
 // - `tqid.PerTaskQueueFamilyScope`

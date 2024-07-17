@@ -133,7 +133,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 	ctx context.Context,
 ) error {
 	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
-		NamespaceID: db.queue.NamespaceId().String(),
+		NamespaceID: db.queue.NamespaceId(),
 		TaskQueue:   db.queue.PersistenceName(),
 		TaskType:    db.queue.TaskType(),
 	})
@@ -223,7 +223,7 @@ func (db *taskQueueDB) updateApproximateBacklogCount(
 	// Prevent under-counting
 	if db.approximateBacklogCount.Load()+delta < 0 {
 		db.logger.Info("ApproximateBacklogCounter could have under-counted.",
-			tag.WorkerBuildId(db.queue.BuildId()), tag.WorkflowNamespace(db.queue.Partition().NamespaceId().String()))
+			tag.WorkerBuildId(db.queue.BuildId()), tag.WorkflowNamespace(db.queue.Partition().NamespaceId()))
 		db.approximateBacklogCount.Store(0)
 	} else {
 		db.approximateBacklogCount.Add(delta)
@@ -288,7 +288,7 @@ func (db *taskQueueDB) GetTasks(
 	batchSize int,
 ) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(ctx, &persistence.GetTasksRequest{
-		NamespaceID:        db.queue.NamespaceId().String(),
+		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueue:          db.queue.PersistenceName(),
 		TaskType:           db.queue.TaskType(),
 		PageSize:           batchSize,
@@ -306,7 +306,7 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	limit int,
 ) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
-		NamespaceID:        db.queue.NamespaceId().String(),
+		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueueName:      db.queue.PersistenceName(),
 		TaskType:           db.queue.TaskType(),
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
@@ -337,7 +337,7 @@ func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	return &persistencespb.TaskQueueInfo{
-		NamespaceId:             db.queue.NamespaceId().String(),
+		NamespaceId:             db.queue.NamespaceId(),
 		Name:                    db.queue.PersistenceName(),
 		TaskType:                db.queue.TaskType(),
 		Kind:                    db.queue.Partition().Kind(),

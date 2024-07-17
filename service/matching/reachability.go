@@ -116,7 +116,7 @@ func getBuildIdTaskReachability(
 	buildId string,
 ) (enumspb.BuildIdTaskReachability, error) {
 	reachability, exitPoint, err := rc.run(ctx, buildId)
-	handler := tqid.GetPerTaskQueueFamilyScope(metricsHandler, rc.nsName.String(), rc.taskQueue, rc.tqConfig.BreakdownMetricsByTaskQueue())
+	handler := metrics.GetPerTaskQueueFamilyScope(metricsHandler, rc.nsName.String(), rc.taskQueue, rc.tqConfig.BreakdownMetricsByTaskQueue())
 	metrics.ReachabilityExitPointCounter.With(handler).Record(1,
 		metrics.WorkerBuildIdTag(buildId, rc.tqConfig.BreakdownMetricsByBuildID()),
 		metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))

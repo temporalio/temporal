@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tqid
+package metricstest
 
 import (
 	"testing"
@@ -30,52 +30,58 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/tqid"
+)
+
+const (
+	omitted = "__omitted__"
+	normal  = "__normal__"
+	sticky  = "__sticky__"
 )
 
 func TestPerTaskQueueScope(t *testing.T) {
 	ns := "my_ns"
-	tq := UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW)
+	tq := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW)
 	verifyTags(t,
-		GetPerTaskQueueScope(metricstest.NewCaptureHandler(), ns, tq, false),
+		metrics.GetPerTaskQueueScope(NewCaptureHandler(), ns, tq, false),
 		map[string]string{"namespace": ns, "taskqueue": omitted, "task_type": "Workflow"},
 	)
 
 	verifyTags(t,
-		GetPerTaskQueueScope(metricstest.NewCaptureHandler(), ns, tq, true),
+		metrics.GetPerTaskQueueScope(NewCaptureHandler(), ns, tq, true),
 		map[string]string{"namespace": ns, "taskqueue": tq.Name(), "task_type": "Workflow"},
 	)
 }
 
 func TestPerTaskQueuePartitionScope_Normal(t *testing.T) {
 	ns := "my_ns"
-	p := UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 	verifyTags(t,
-		GetPerTaskQueuePartitionScope(metricstest.NewCaptureHandler(), ns, p, true, false),
+		metrics.GetPerTaskQueuePartitionScope(NewCaptureHandler(), ns, p, true, false),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": normal},
 	)
 	verifyTags(t,
-		GetPerTaskQueuePartitionScope(metricstest.NewCaptureHandler(), ns, p, true, true),
+		metrics.GetPerTaskQueuePartitionScope(NewCaptureHandler(), ns, p, true, true),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": "1"},
 	)
 }
 
 func TestPerTaskQueuePartitionScope_Sticky(t *testing.T) {
 	ns := "my_ns"
-	p := UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("abc")
+	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("abc")
 	verifyTags(t,
-		GetPerTaskQueuePartitionScope(metricstest.NewCaptureHandler(), ns, p, true, false),
+		metrics.GetPerTaskQueuePartitionScope(NewCaptureHandler(), ns, p, true, false),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": sticky},
 	)
 	verifyTags(t,
-		GetPerTaskQueuePartitionScope(metricstest.NewCaptureHandler(), ns, p, true, true),
+		metrics.GetPerTaskQueuePartitionScope(NewCaptureHandler(), ns, p, true, true),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": sticky},
 	)
 }
 
 func verifyTags(t *testing.T, handler metrics.Handler, expectedTags map[string]string) {
 	a := assert.New(t)
-	h, ok := handler.(*metricstest.CaptureHandler)
+	h, ok := handler.(*CaptureHandler)
 	a.True(ok)
 	capture := h.StartCapture()
 	h.Counter("MyMetric").Record(1)

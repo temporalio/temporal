@@ -132,9 +132,10 @@ func GetPerTaskQueueFamilyScope(
 	config *configs.Config,
 	tags ...metrics.Tag,
 ) metrics.Handler {
-	return tqid.GetPerTaskQueueFamilyScope(handler,
+	return metrics.GetPerTaskQueueFamilyScope(handler,
 		namespaceName.String(),
 		tqid.UnsafeTaskQueueFamily(namespaceName.String(), taskQueueFamily),
 		config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-	).WithTags(tags...)
+		tags...,
+	)
 }

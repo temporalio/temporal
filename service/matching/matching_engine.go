@@ -93,7 +93,7 @@ type (
 	identityCtxKey string
 
 	taskQueueCounterKey struct {
-		namespaceID   namespace.ID
+		namespaceID   string
 		taskType      enumspb.TaskQueueType
 		partitionType enumspb.TaskQueueKind
 		versioned     string // one of these values: "unversioned", "versionSet", "buildId"
@@ -395,7 +395,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManagerNoWait(
 		e.partitionsLock.Lock()
 		pm, ok = e.partitions[key]
 		if !ok {
-			namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
+			namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
 			if err != nil {
 				e.partitionsLock.Unlock()
 				return nil, err
@@ -852,10 +852,10 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		}
 	case <-ctx.Done():
 		// task timed out. log (optionally) and return the timeout error
-		ns, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
+		ns, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
 		if err != nil {
 			e.logger.Error("Failed to get the namespace by ID",
-				tag.WorkflowNamespaceID(partition.NamespaceId().String()),
+				tag.WorkflowNamespaceID(partition.NamespaceId()),
 				tag.Error(err))
 		} else {
 			sampleRate := e.config.QueryWorkflowTaskTimeoutLogRate(ns.Name().String(), partition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -1947,12 +1947,13 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 	loadedPhysicalTaskQueueCounter := e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters]
 
 	pm := pqm.partitionMgr
-	tqid.GetPerTaskQueuePartitionScope(
+	metrics.GetPerTaskQueuePartitionScope(
 		e.metricsHandler,
 		pm.ns.Name().String(),
 		pm.Partition(),
-		pqm.config.BreakdownMetricsByTaskQueue(),
-		pqm.config.BreakdownMetricsByPartition(),
+		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
+		false,
+		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 	).Gauge(metrics.LoadedPhysicalTaskQueueGauge.Name()).Record(
 		float64(loadedPhysicalTaskQueueCounter),
 		metrics.VersionedTag(versioned),
@@ -2008,7 +2009,7 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitio
 		metrics.TaskQueueTypeTag(taskQueueParameters.taskType),
 	)
 
-	taggedHandler := tqid.GetPerTaskQueuePartitionScope(
+	taggedHandler := metrics.GetPerTaskQueuePartitionScope(
 		e.metricsHandler,
 		pm.ns.Name().String(),
 		pm.Partition(),

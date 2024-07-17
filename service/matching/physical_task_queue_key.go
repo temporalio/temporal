@@ -32,7 +32,6 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -63,8 +62,8 @@ var (
 	ErrInvalidPersistenceName = errors.New("invalid persistence name")
 )
 
-func (q *PhysicalTaskQueueKey) NamespaceId() namespace.ID {
-	return q.partition.TaskQueue().NamespaceId()
+func (q *PhysicalTaskQueueKey) NamespaceId() string {
+	return q.partition.NamespaceId()
 }
 
 func (q *PhysicalTaskQueueKey) TaskQueueFamily() *tqid.TaskQueueFamily {
