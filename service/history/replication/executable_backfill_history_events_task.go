@@ -67,6 +67,7 @@ func NewExecutableBackfillHistoryEventsTask(
 	task *replicationspb.BackfillHistoryTaskAttributes,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
+	versionedTransition *persistencespb.VersionedTransition,
 ) *ExecutableBackfillHistoryEventsTask {
 	return &ExecutableBackfillHistoryEventsTask{
 		ProcessToolBox: processToolBox,
@@ -80,6 +81,7 @@ func NewExecutableBackfillHistoryEventsTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			priority,
+			versionedTransition,
 		),
 		taskAttr:               task,
 		markPoisonPillAttempts: 0,

@@ -58,7 +58,7 @@ type (
 )
 
 func NewService(
-	grpcServerOptions []grpc.ServerOption,
+	server *grpc.Server,
 	serviceConfig *configs.Config,
 	visibilityMgr manager.VisibilityManager,
 	handler *Handler,
@@ -69,7 +69,7 @@ func NewService(
 	healthServer *health.Server,
 ) *Service {
 	return &Service{
-		server:            grpc.NewServer(grpcServerOptions...),
+		server:            server,
 		handler:           handler,
 		visibilityManager: visibilityMgr,
 		config:            serviceConfig,

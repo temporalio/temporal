@@ -25,12 +25,8 @@
 package history
 
 import (
-	"net"
-
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/common"
@@ -94,7 +90,8 @@ var Module = fx.Options(
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
-	fx.Provide(ServiceProvider),
+	fx.Provide(ServerProvider),
+	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
@@ -103,28 +100,8 @@ var Module = fx.Options(
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )
 
-func ServiceProvider(
-	grpcServerOptions []grpc.ServerOption,
-	serviceConfig *configs.Config,
-	visibilityMgr manager.VisibilityManager,
-	handler *Handler,
-	logger log.SnTaggedLogger,
-	grpcListener net.Listener,
-	membershipMonitor membership.Monitor,
-	metricsHandler metrics.Handler,
-	healthServer *health.Server,
-) *Service {
-	return NewService(
-		grpcServerOptions,
-		serviceConfig,
-		visibilityMgr,
-		handler,
-		logger,
-		grpcListener,
-		membershipMonitor,
-		metricsHandler,
-		healthServer,
-	)
+func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
+	return grpc.NewServer(grpcServerOptions...)
 }
 
 func ServiceResolverProvider(
