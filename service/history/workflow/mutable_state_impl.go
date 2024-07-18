@@ -5089,11 +5089,11 @@ func (ms *MutableStateImpl) GetUpdateCondition() (int64, int64) {
 func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 	task *tasks.WorkflowTaskTimeoutTask,
 ) error {
-	taskID, err := ms.shard.GenerateTaskIDs(1)
+	taskID, err := ms.shard.GenerateTaskID()
 	if err != nil {
 		return err
 	}
-	task.TaskID = taskID[0]
+	task.TaskID = taskID
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
