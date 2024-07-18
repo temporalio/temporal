@@ -35,10 +35,11 @@ import (
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"golang.org/x/exp/slices"
 )
 
 type (
@@ -105,6 +106,7 @@ var (
 		"client.history.DeleteDLQTasks":         true,
 		"client.history.ListQueues":             true,
 		"client.history.ListTasks":              true,
+		"client.history.HealthCheck":            true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,

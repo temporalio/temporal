@@ -355,6 +355,20 @@ func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	return c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
 }
 
+func (c *metricClient) HealthCheck(
+	ctx context.Context,
+	request *historyservice.HealthCheckRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.HealthCheckResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientHealthCheck")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.HealthCheck(ctx, request, opts...)
+}
+
 func (c *metricClient) ImportWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ImportWorkflowExecutionRequest,

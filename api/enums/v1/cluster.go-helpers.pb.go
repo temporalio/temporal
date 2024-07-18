@@ -49,3 +49,22 @@ func ClusterMemberRoleFromString(s string) (ClusterMemberRole, error) {
 	}
 	return ClusterMemberRole(0), fmt.Errorf("%s is not a valid ClusterMemberRole", s)
 }
+
+var (
+	HealthState_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Serving":     1,
+		"NotServing":  2,
+	}
+)
+
+// HealthStateFromString parses a HealthState value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to HealthState
+func HealthStateFromString(s string) (HealthState, error) {
+	if v, ok := HealthState_value[s]; ok {
+		return HealthState(v), nil
+	} else if v, ok := HealthState_shorthandValue[s]; ok {
+		return HealthState(v), nil
+	}
+	return HealthState(0), fmt.Errorf("%s is not a valid HealthState", s)
+}

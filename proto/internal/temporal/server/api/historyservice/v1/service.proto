@@ -354,4 +354,8 @@ service HistoryService {
     // canceled.
     rpc CompleteNexusOperation (CompleteNexusOperationRequest) returns (CompleteNexusOperationResponse) {
     }
+
+    // Health check history service health status
+    rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {
+    }
 }

@@ -40,6 +40,7 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc/metadata"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -95,6 +96,7 @@ type (
 		persistenceExecutionManager  persistence.ExecutionManager
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
+		persistenceHealthSignal      persistence.HealthSignalAggregator
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -123,6 +125,7 @@ type (
 		ThrottledLogger              log.ThrottledLogger
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
+		PersistenceHealthSignal      persistence.HealthSignalAggregator
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
 		MetricsHandler               metrics.Handler
@@ -204,6 +207,22 @@ func (h *Handler) Stop() {
 
 func (h *Handler) isStopped() bool {
 	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
+}
+
+func (h *Handler) HealthCheck(
+	_ context.Context,
+	_ *historyservice.HealthCheckRequest,
+) (_ *historyservice.HealthCheckResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	latency := h.persistenceHealthSignal.AverageLatency()
+	errRatio := h.persistenceHealthSignal.ErrorRatio()
+
+	if latency > h.config.HealthPersistenceLatencyThreshold() || errRatio > h.config.HealthPersistenceErrorRatio() {
+		return &historyservice.HealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
+	}
+	return &historyservice.HealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid

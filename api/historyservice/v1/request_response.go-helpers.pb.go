@@ -4875,3 +4875,77 @@ func (this *CompleteNexusOperationResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type HealthCheckRequest to the protobuf v3 wire format
+func (val *HealthCheckRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type HealthCheckRequest from the protobuf v3 wire format
+func (val *HealthCheckRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *HealthCheckRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two HealthCheckRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *HealthCheckRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *HealthCheckRequest
+	switch t := that.(type) {
+	case *HealthCheckRequest:
+		that1 = t
+	case HealthCheckRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type HealthCheckResponse to the protobuf v3 wire format
+func (val *HealthCheckResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type HealthCheckResponse from the protobuf v3 wire format
+func (val *HealthCheckResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *HealthCheckResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two HealthCheckResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *HealthCheckResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *HealthCheckResponse
+	switch t := that.(type) {
+	case *HealthCheckResponse:
+		that1 = t
+	case HealthCheckResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
