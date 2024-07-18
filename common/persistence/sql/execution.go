@@ -29,7 +29,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -375,6 +374,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 	namespaceID := primitives.MustParseUUID(updateWorkflow.NamespaceID)
 	workflowID := updateWorkflow.WorkflowID
 	runID := primitives.MustParseUUID(updateWorkflow.ExecutionState.RunId)
+
 	shardID := request.ShardID
 
 	switch request.Mode {
@@ -391,17 +391,17 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 
 	case p.UpdateWorkflowModeUpdateCurrent:
 		row := sqlplugin.CurrentExecutionsRow{
-			ShardID:         shardID,
-			NamespaceID:     namespaceID,
-			WorkflowID:      workflowID,
-			RunID:           runID,
-			CreateRequestID: newWorkflow.ExecutionState.CreateRequestId,
-			StartTime:       nil,
-			State:           newWorkflow.ExecutionState.State,
-			Status:          newWorkflow.ExecutionState.Status,
+			ShardID:     shardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+			RunID:       runID,
+			StartTime:   nil,
 		}
 
 		if newWorkflow != nil {
+			row.CreateRequestID = newWorkflow.ExecutionState.CreateRequestId
+			row.State = newWorkflow.ExecutionState.State
+			row.Status = newWorkflow.ExecutionState.Status
 			row.LastWriteVersion = newWorkflow.LastWriteVersion
 			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
 			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
@@ -410,6 +410,9 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
 			}
 		} else {
+			row.CreateRequestID = updateWorkflow.ExecutionState.CreateRequestId
+			row.State = updateWorkflow.ExecutionState.State
+			row.Status = updateWorkflow.ExecutionState.Status
 			row.LastWriteVersion = updateWorkflow.LastWriteVersion
 			// we still call update only to update the current record
 		}
@@ -421,20 +424,12 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
-	if err := applyWorkflowMutationTx(ctx,
-		tx,
-		shardID,
-		&updateWorkflow,
-	); err != nil {
+	if err := applyWorkflowMutationTx(ctx, tx, shardID, &updateWorkflow); err != nil {
 		return err
 	}
 
 	if newWorkflow != nil {
-		if err := m.applyWorkflowSnapshotTxAsNew(ctx,
-			tx,
-			shardID,
-			newWorkflow,
-		); err != nil {
+		if err := m.applyWorkflowSnapshotTxAsNew(ctx, tx, shardID, newWorkflow); err != nil {
 			return err
 		}
 	}
