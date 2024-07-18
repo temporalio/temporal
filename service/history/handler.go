@@ -219,7 +219,7 @@ func (h *Handler) HealthCheck(
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
 
-	if latency > h.config.HealthPersistenceLatencyThreshold() || errRatio > h.config.HealthPersistenceErrorRatio() {
+	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
 		return &historyservice.HealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 	}
 	return &historyservice.HealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
