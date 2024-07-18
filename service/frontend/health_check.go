@@ -46,14 +46,16 @@ func (c *HealthCheckClient) Check(ctx context.Context) enumsspb.HealthState {
 			}
 		}(client)
 	}
-	close(respCh)
 
 	var failureCount float64
-	for resp := range respCh {
+	for i := 0; i < len(c.clients); i++ {
+		resp := <-respCh
 		if resp.err != nil || resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
 			failureCount++
 		}
 	}
+
+	close(respCh)
 	if (failureCount / float64(len(c.clients))) < c.failureRate() {
 		return enumsspb.HEALTH_STATE_NOT_SERVING
 	}

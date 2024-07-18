@@ -176,4 +176,3 @@ service AdminService {
 
     rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {}
 }
-
