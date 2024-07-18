@@ -253,15 +253,16 @@ func transferTaskMutableStateStaleChecker(
 ) bool {
 
 	// Check to see if mutable state cache needs to be reloaded from a database.
-	// The exception is a transient workflow task that doesn't generate events.
+	// The exception is a transient workflow task that doesn't generate events
+	// (check only that it is still current WFT).
 
 	wt, isWt := transferTask.(*tasks.WorkflowTask)
 	if !isWt {
 		return true
 	}
 
-	transientWorkflowTask := executionInfo.WorkflowTaskAttempt > 1
-	if transientWorkflowTask && executionInfo.WorkflowTaskScheduledEventId == wt.ScheduledEventID {
+	isTransientWorkflowTask := executionInfo.WorkflowTaskAttempt > 1
+	if isTransientWorkflowTask && executionInfo.WorkflowTaskScheduledEventId == wt.ScheduledEventID {
 		return false
 	}
 
@@ -275,7 +276,7 @@ func timerTaskMutableStateStaleChecker(
 
 	// Check to see if mutable state cache needs to be reloaded from a database.
 	// Exceptions are:
-	// 1. Transient workflow task that doesn't generate events.
+	// 1. Transient workflow task that doesn't generate events (check only that it is still current WFT).
 	// 2. Speculative workflow task that doesn't generate events.
 
 	wttt, isWttt := timerTask.(*tasks.WorkflowTaskTimeoutTask)
@@ -283,12 +284,13 @@ func timerTaskMutableStateStaleChecker(
 		return true
 	}
 
-	if wttt.GetCategory() == tasks.CategoryMemoryTimer {
+	isSpeculativeWorkflowTask := wttt.GetCategory() == tasks.CategoryMemoryTimer
+	if isSpeculativeWorkflowTask {
 		return false
 	}
 
-	transientWorkflowTask := executionInfo.WorkflowTaskAttempt > 1
-	if transientWorkflowTask && executionInfo.WorkflowTaskScheduledEventId == wttt.EventID {
+	isTransientWorkflowTask := executionInfo.WorkflowTaskAttempt > 1
+	if isTransientWorkflowTask && executionInfo.WorkflowTaskScheduledEventId == wttt.EventID {
 		return false
 	}
 
