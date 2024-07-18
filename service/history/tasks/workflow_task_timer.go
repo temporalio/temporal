@@ -53,7 +53,9 @@ type (
 		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
-		InMemory            bool
+
+		// InMemory field is not persisted in the database.
+		InMemory bool
 
 		// state is used by speculative WT only.
 		state atomic.Uint32 // of type ctasks.State
