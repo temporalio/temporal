@@ -2192,10 +2192,10 @@ that task will be sent to DLQ.`,
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
-	HealthPersistenceLatencyThreshold = NewGlobalFloatSetting(
-		"history.healthPersistenceLatencyThreshold",
-		1000,
-		"History service health check on persistence average latency threshold",
+	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
+		"history.healthPersistenceLatencyFailure",
+		500,
+		"History service health check on persistence average latency (millisecond) threshold",
 	)
 	HealthPersistenceErrorRatio = NewGlobalFloatSetting(
 		"history.healthPersistenceErrorRatio",
