@@ -57,7 +57,7 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -84,7 +84,7 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,

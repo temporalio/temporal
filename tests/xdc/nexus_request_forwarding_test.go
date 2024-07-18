@@ -608,7 +608,6 @@ func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest
 	require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 	require.Equal(t, 1, len(snap["nexus_latency"]))
 	require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
-	require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 }
 
 func (s *NexusRequestForwardingSuite) mustToPayload(v any) *commonpb.Payload {

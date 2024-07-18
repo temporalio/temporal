@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto bins temporal-server-debug shell-check copyright-check go-generate gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto buf-breaking bins temporal-server-debug shell-check copyright-check go-generate gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -70,8 +70,10 @@ PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 API_BINPB := $(PROTO_ROOT)/api.binpb
+# Note: If you change the value of INTERNAL_BINPB, you'll have to add logic to
+# develop/buf-breaking.sh to handle the old and new values at once.
+INTERNAL_BINPB := $(PROTO_ROOT)/image.bin
 PROTO_OUT := api
-PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
@@ -228,13 +230,17 @@ endef
 
 ##### Proto #####
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
-	@printf $(COLOR) "Generate api.binpb..."
+	@printf $(COLOR) "Generating proto dependencies image..."
 	@./cmd/tools/getproto/run.sh --out $@
+
+$(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
+	@printf $(COLOR) "Generate proto image..."
+	@protoc --descriptor_set_in=$(API_BINPB) -I=$(PROTO_ROOT)/internal $(PROTO_FILES) -o $@
 
 protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
 	@env \
 		PROTOGEN=$(PROTOGEN) MOCKGEN=$(MOCKGEN) GOIMPORTS=$(GOIMPORTS) \
-		API_BINPB=$(API_BINPB) PROTO_OUT=$(PROTO_OUT) \
+		API_BINPB=$(API_BINPB) PROTO_ROOT=$(PROTO_ROOT) PROTO_OUT=$(PROTO_OUT) \
 		./develop/protoc.sh
 
 service-clients:
@@ -283,13 +289,13 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
-goimports: MERGE_BASE ?= $(shell test -d .git && git merge-base $(MAIN_BRANCH) HEAD)
-goimports: MODIFIED_FILES := $(shell test -d .git && git diff --name-status $(MERGE_BASE) -- | cut -f2)
 goimports:
 	@printf $(COLOR) "Run goimports for modified files..."
-	@printf "Merge base: $(MERGE_BASE)\n"
-	@printf "Modified files: $(MODIFIED_FILES)\n"
-	@$(GOIMPORTS_BIN) -w $(filter %.go, $(MODIFIED_FILES))
+	@MERGE_BASE=$$(git merge-base $(MAIN_BRANCH) HEAD) && \
+		MODIFIED_FILES=$$(git diff --name-status $$MERGE_BASE -- | cut -f2 | grep '.go$$' || true) && \
+		echo "Merge base: $$MERGE_BASE" && \
+		echo "Modified files: $$MODIFIED_FILES" && \
+		if [ -n "$$MODIFIED_FILES" ]; then $(GOIMPORTS) -w $$MODIFIED_FILES; fi
 
 lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
@@ -306,18 +312,14 @@ lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
 	$(call silent_exec, $(API_LINTER) --set-exit-status -I=$(PROTO_ROOT)/internal --descriptor-set-in $(API_BINPB) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
-lint-protos: $(BUF) $(API_BINPB)
+lint-protos: $(BUF) $(INTERNAL_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
-	@protoc --descriptor_set_in=$(API_BINPB) -I=proto/internal $(PROTO_FILES) -o /dev/stdout | (cd proto/internal && $(ROOT)/$(BUF) lint -)
+	@$(BUF) lint $(INTERNAL_BINPB)
 
-# TODO: fix this to work with getproto + API_BINPB
-# buf-build: $(BUF)
-# 	@printf $(COLOR) "Build image.bin with buf..."
-# 	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) build -o image.bin)
-#
-# buf-breaking: $(BUF)
-# 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
-# 	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) breaking --against image.bin)
+buf-breaking: $(BUF) $(API_BINPB) $(INTERNAL_BINPB)
+	@printf $(COLOR) "Run buf breaking proto changes check..."
+	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
+		./develop/buf-breaking.sh
 
 shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
@@ -508,6 +510,9 @@ start: start-sqlite
 
 start-cass-es: temporal-server
 	./temporal-server --env development-cass-es --allow-no-auth start
+
+start-cass-es-custom: temporal-server
+	./temporal-server --env development-cass-es-custom --allow-no-auth start
 
 start-es-fi: temporal-server
 	./temporal-server --env development-cass-es-fi --allow-no-auth start

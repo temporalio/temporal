@@ -30,10 +30,10 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -54,7 +54,7 @@ func Invoke(
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err

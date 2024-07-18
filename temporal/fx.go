@@ -148,7 +148,6 @@ var (
 		fx.Provide(
 			NewServerFxImpl,
 			ServerOptionsProvider,
-			dynamicconfig.NewCollection,
 			resource.ArchivalMetadataProvider,
 			TaskCategoryRegistryProvider,
 			PersistenceFactoryProvider,
@@ -159,6 +158,7 @@ var (
 			WorkerServiceProvider,
 			ApplyClusterMetadataConfigProvider,
 		),
+		dynamicconfig.Module,
 		pprof.Module,
 		TraceExportModule,
 		FxLogAdapter,
@@ -463,16 +463,11 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 // it, we also do validation on request task categories in the frontend service. As a result, we need to initialize the
 // registry in the server graph, and then propagate it to the service graphs. Otherwise, it would be isolated to the
 // history service's graph.
-func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata, dc *dynamicconfig.Collection) tasks.TaskCategoryRegistry {
+func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata) tasks.TaskCategoryRegistry {
 	registry := tasks.NewDefaultTaskCategoryRegistry()
 	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled ||
 		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
 		registry.AddCategory(tasks.CategoryArchival)
-	}
-	// Can't use history service configs.Config because this provider is applied to all services (see docstring for this
-	// function for more info).
-	if dynamicconfig.EnableNexus.Get(dc)() {
-		registry.AddCategory(tasks.CategoryOutbound)
 	}
 	return registry
 }

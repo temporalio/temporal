@@ -68,7 +68,6 @@ func TestCommandProtocolMessage(t *testing.T) {
 		ms      *workflow.MockMutableState
 		updates update.Registry
 		handler *workflowTaskCompletedHandler
-		conf    map[dynamicconfig.Key]any
 	}
 
 	const defaultBlobSizeLimit = 1 * 1024 * 1024
@@ -88,7 +87,6 @@ func TestCommandProtocolMessage(t *testing.T) {
 		shardCtx := shard.NewMockContext(gomock.NewController(t))
 		logger := log.NewNoopLogger()
 		metricsHandler := metrics.NoopMetricsHandler
-		out.conf = map[dynamicconfig.Key]any{}
 		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
 		out.ms.EXPECT().VisitUpdates(gomock.Any())
 		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
@@ -96,9 +94,8 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer
-		config := configs.NewConfig(
-			dynamicconfig.NewCollection(
-				dynamicconfig.StaticClient(out.conf), logger), 1)
+		col := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), logger)
+		config := configs.NewConfig(col, 1)
 		mockMeta := persistence.NewMockMetadataManager(gomock.NewController(t))
 		nsReg := namespace.NewRegistry(
 			mockMeta,

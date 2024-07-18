@@ -28,14 +28,16 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"go.temporal.io/server/common/namespace"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/payloads"
 )
 
@@ -81,13 +83,13 @@ func newSystemUnderTestConnector(s *FunctionalSuite) *sutConnector {
 func (b *sutConnector) startWorkflowExecution(ns namespace.Name) error {
 	request := newStartWorkflowExecutionRequest(ns, b.id, b.identity, b.taskQueue)
 
-	_, err := b.suite.engine.StartWorkflowExecution(NewContext(), request)
+	_, err := b.suite.client.StartWorkflowExecution(NewContext(), request)
 	return err
 }
 
 func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) {
 	request := newPollWorkflowTaskQueueRequest(ns, b.identity, b.taskQueue)
-	resp, err := b.suite.engine.PollWorkflowTaskQueue(NewContext(), request)
+	resp, err := b.suite.client.PollWorkflowTaskQueue(NewContext(), request)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +99,7 @@ func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) 
 
 func (b *sutConnector) respondWorkflowTaskCompleted(token []byte, ns namespace.Name) error {
 	request := newRespondWorkflowTaskCompletedRequest(ns, b.stickyTaskQueue, token)
-	_, err := b.suite.engine.RespondWorkflowTaskCompleted(NewContext(), request)
+	_, err := b.suite.client.RespondWorkflowTaskCompleted(NewContext(), request)
 	return err
 }
 

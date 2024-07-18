@@ -33,6 +33,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -59,7 +60,7 @@ func getWorkflowExecutionContextForTask(
 		shardContext,
 		workflowCache,
 		taskWorkflowKey(task),
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 }
 
@@ -68,7 +69,7 @@ func getWorkflowExecutionContext(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	key definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
+	lockPriority locks.Priority,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
 	if key.GetRunID() == "" {
 		return getCurrentWorkflowExecutionContext(
@@ -108,7 +109,7 @@ func getCurrentWorkflowExecutionContext(
 	workflowCache wcache.Cache,
 	namespaceID string,
 	workflowID string,
-	lockPriority workflow.LockPriority,
+	lockPriority locks.Priority,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
 	currentRunID, err := wcache.GetCurrentRunID(
 		ctx,
@@ -328,7 +329,7 @@ func (e *stateMachineEnvironment) getValidatedMutableState(
 	key definition.WorkflowKey,
 	validate func(ms workflow.MutableState, potentialStaleState bool) error,
 ) (workflow.Context, wcache.ReleaseCacheFunc, workflow.MutableState, error) {
-	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, workflow.LockPriorityLow)
+	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, locks.PriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
 	}

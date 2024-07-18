@@ -54,6 +54,7 @@ func handleSuccessfulOperationResult(
 			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
 				ScheduledEventId: eventID,
 				Result:           result,
+				RequestId:        operation.RequestId,
 			},
 		}
 	})
@@ -87,6 +88,7 @@ func handleUnsuccessfulOperationError(
 						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
 					),
 					ScheduledEventId: eventID,
+					RequestId:        operation.RequestId,
 				},
 			}
 		})
@@ -109,6 +111,7 @@ func handleUnsuccessfulOperationError(
 						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
 					),
 					ScheduledEventId: eventID,
+					RequestId:        operation.RequestId,
 				},
 			}
 		})

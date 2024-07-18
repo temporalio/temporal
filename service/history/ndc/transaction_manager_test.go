@@ -105,7 +105,7 @@ func (s *transactionMgrSuite) SetupTest() {
 
 	s.transactionMgr = NewTransactionManager(
 		s.mockShard,
-		wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler),
 		s.mockEventsReapplier,
 		s.logger,
 		false,

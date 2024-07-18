@@ -35,7 +35,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
@@ -135,7 +134,6 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 		historyState           archiver.ArchivalState
 		visibilityState        archiver.ArchivalState
 		expectArchivalCategory bool
-		expectCallbackCategory bool
 	}{
 		{
 			name:                   "both disabled",
@@ -166,7 +164,6 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			historyState:           archiver.ArchivalDisabled,
 			visibilityState:        archiver.ArchivalDisabled,
 			expectArchivalCategory: false,
-			expectCallbackCategory: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -178,17 +175,13 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			visibilityArchivalConfig := archiver.NewMockArchivalConfig(ctrl)
 			visibilityArchivalConfig.EXPECT().StaticClusterState().Return(tc.visibilityState).AnyTimes()
 			archivalMetadata.EXPECT().GetVisibilityConfig().Return(visibilityArchivalConfig).AnyTimes()
-			dcClient := dynamicconfig.StaticClient{dynamicconfig.EnableNexus.Key(): tc.expectCallbackCategory}
-			dcc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
-			registry := TaskCategoryRegistryProvider(archivalMetadata, dcc)
+			registry := TaskCategoryRegistryProvider(archivalMetadata)
 			_, ok := registry.GetCategoryByID(tasks.CategoryIDArchival)
 			if tc.expectArchivalCategory {
 				require.True(t, ok)
 			} else {
 				require.False(t, ok)
 			}
-			_, ok = registry.GetCategoryByID(tasks.CategoryIDOutbound)
-			require.Equal(t, tc.expectCallbackCategory, ok)
 		})
 	}
 }

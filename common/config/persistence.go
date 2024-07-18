@@ -80,9 +80,11 @@ func (c *Persistence) Validate() error {
 		return fmt.Errorf("%w: visibilityStore must be specified", ErrPersistenceConfig)
 	}
 	if c.SecondaryVisibilityStore != "" {
+		isAnyCustom := c.DataStores[c.VisibilityStore].CustomDataStoreConfig != nil ||
+			c.DataStores[c.SecondaryVisibilityStore].CustomDataStoreConfig != nil
 		isPrimaryEs := c.DataStores[c.VisibilityStore].Elasticsearch != nil
 		isSecondaryEs := c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil
-		if isPrimaryEs != isSecondaryEs {
+		if !isAnyCustom && isPrimaryEs != isSecondaryEs {
 			return fmt.Errorf(
 				"%w: cannot set visibilityStore and secondaryVisibilityStore with different datastore types",
 				ErrPersistenceConfig)

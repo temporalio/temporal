@@ -29,7 +29,9 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/clock"
@@ -76,6 +78,8 @@ type (
 		SchedulerRateLimiter queues.SchedulerRateLimiter
 		DLQWriter            *queues.DLQWriter
 		ExecutorWrapper      queues.ExecutorWrapper `optional:"true"`
+		Serializer           serialization.Serializer
+		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 	}
 
 	QueueFactoryBase struct {
@@ -143,15 +147,15 @@ type additionalQueueFactories struct {
 func getOptionalQueueFactories(
 	registry tasks.TaskCategoryRegistry,
 	archivalParams ArchivalQueueFactoryParams,
-	callbackParams outboundQueueFactoryParams,
+	outboundParams outboundQueueFactoryParams,
 	config *configs.Config,
 ) additionalQueueFactories {
 	factories := []QueueFactory{}
 	if _, ok := registry.GetCategoryByID(tasks.CategoryIDArchival); ok {
 		factories = append(factories, NewArchivalQueueFactory(archivalParams))
 	}
-	if _, ok := registry.GetCategoryByID(tasks.CategoryIDOutbound); ok {
-		factories = append(factories, NewOutboundQueueFactory(callbackParams))
+	if config.EnableNexus() {
+		factories = append(factories, NewOutboundQueueFactory(outboundParams))
 	}
 	return additionalQueueFactories{
 		Factories: factories,

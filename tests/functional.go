@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -66,6 +67,8 @@ func (s *FunctionalSuite) TearDownSuite() {
 }
 
 func (s *FunctionalSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
@@ -75,7 +78,7 @@ func (s *FunctionalSuite) SetupTest() {
 
 func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
-	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
 		WorkflowExecution: execution,
 		SignalName:        signalName,
@@ -89,7 +92,7 @@ func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.Workf
 func (s *FunctionalSuite) closeShard(wid string) {
 	s.T().Helper()
 
-	resp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+	resp, err := s.client.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace,
 	})
 	s.NoError(err)

@@ -240,6 +240,10 @@ message WorkflowExecutionInfo {
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: This is a vector clock, not a timestamp --)
     int64 task_generation_shard_clock_timestamp = 91;
+
+    VersionedTransition workflow_task_last_update_versioned_transition = 92;
+    VersionedTransition visibility_last_update_versioned_transition = 93;
+    VersionedTransition signal_request_ids_last_update_versioned_transition = 94;
 }
 
 message ExecutionStats {
@@ -252,6 +256,7 @@ message WorkflowExecutionState {
     string run_id = 2;
     temporal.server.api.enums.v1.WorkflowExecutionState state = 3;
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
+    VersionedTransition last_update_versioned_transition = 5;
 }
 
 // transfer column
@@ -317,6 +322,7 @@ message VisibilityTaskInfo {
     reserved 8;
     reserved 9;
     int64 close_visibility_task_id = 10;
+    google.protobuf.Timestamp close_time = 11;
 }
 
 // timer column
@@ -430,6 +436,7 @@ message ActivityInfo {
     }
     // The version stamp of the worker to whom this activity was most-recently dispatched
     temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 37;
+    VersionedTransition last_update_versioned_transition = 38;
 
     message UseWorkflowBuildIdInfo {
         // build ID of the wf when this activity started last time (which is the build ID of
@@ -448,6 +455,7 @@ message TimerInfo {
     int64 task_status = 4;
     // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
     string timer_id = 5;
+    VersionedTransition last_update_versioned_transition = 6;
 }
 
 // child_executions_map column
@@ -466,6 +474,7 @@ message ChildExecutionInfo {
     int64 initiated_event_id = 12;
     temporal.server.api.clock.v1.VectorClock clock = 13;
     string namespace_id = 14;
+    VersionedTransition last_update_versioned_transition = 15;
 }
 
 // request_cancel_map column
@@ -474,6 +483,7 @@ message RequestCancelInfo {
     int64 initiated_event_batch_id = 2;
     string cancel_request_id = 3;
     int64 initiated_event_id = 4;
+    VersionedTransition last_update_versioned_transition = 5;
 }
 
 // signal_map column
@@ -486,6 +496,7 @@ message SignalInfo {
     reserved 6;
     int64 initiated_event_id = 7;
     reserved 8;
+    VersionedTransition last_update_versioned_transition = 9;
 }
 
 // checksum column

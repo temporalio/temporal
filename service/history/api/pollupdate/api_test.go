@@ -45,6 +45,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/pollupdate"
@@ -62,7 +63,7 @@ type (
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
 			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
+			lockPriority locks.Priority,
 		) (api.WorkflowLease, error)
 	}
 
@@ -90,7 +91,7 @@ func (m mockWFConsistencyChecker) GetWorkflowLease(
 	ctx context.Context,
 	clock *clockspb.VectorClock,
 	wfKey definition.WorkflowKey,
-	prio workflow.LockPriority,
+	prio locks.Priority,
 ) (api.WorkflowLease, error) {
 	return m.GetWorkflowContextFunc(ctx, clock, wfKey, prio)
 }
@@ -131,7 +132,7 @@ func TestPollOutcome(t *testing.T) {
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
 			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
+			lockPriority locks.Priority,
 		) (api.WorkflowLease, error) {
 			return apiCtx, nil
 		},

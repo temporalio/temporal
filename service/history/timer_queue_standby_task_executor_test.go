@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -53,6 +54,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -91,6 +93,7 @@ type (
 		mockClusterMetadata    *cluster.MockMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
+		mockResendHandler      *eventhandler.MockResendHandler
 		mockDeleteManager      *deletemanager.MockDeleteManager
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
@@ -140,6 +143,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockResendHandler = eventhandler.NewMockResendHandler(s.controller)
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
@@ -178,7 +182,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.clusterName).AnyTimes()
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 
 	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
@@ -203,6 +207,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.workflowCache,
 		s.mockDeleteManager,
 		s.mockNDCHistoryResender,
+		s.mockResendHandler,
 		s.mockMatchingClient,
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -1712,7 +1717,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateWorkflowExecution(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, workflow.LockPriorityLow,
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
@@ -1726,6 +1731,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 		mockCache,
 		s.mockDeleteManager,
 		s.mockNDCHistoryResender,
+		s.mockResendHandler,
 		s.mockMatchingClient,
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -1815,7 +1821,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateWorkflowExecution(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, workflow.LockPriorityLow,
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
@@ -1829,6 +1835,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 		mockCache,
 		s.mockDeleteManager,
 		s.mockNDCHistoryResender,
+		s.mockResendHandler,
 		s.mockMatchingClient,
 		s.logger,
 		metrics.NoopMetricsHandler,

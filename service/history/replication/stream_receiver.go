@@ -262,15 +262,23 @@ func (r *StreamReceiverImpl) ackMessage(
 			r.logger.Warn("Tiered stack mode. Have to wait for both high and low priority tracker received at least one batch of tasks before acking.")
 			return 0, nil
 		}
+		highPriorityFlowControlCommand := r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_HIGH)
+		if highPriorityFlowControlCommand == enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
+			r.logger.Warn(fmt.Sprintf("pausing High Priority Tasks, current size: %v, lowWatermark: %v", r.highPriorityTaskTracker.Size(), highPriorityWaterMarkInfo.Watermark))
+		}
 		highPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
-			FlowControlCommand:        r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_HIGH),
+			FlowControlCommand:        highPriorityFlowControlCommand,
+		}
+		lowPriorityFlowControlCommand := r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_LOW)
+		if lowPriorityFlowControlCommand == enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
+			r.logger.Warn(fmt.Sprintf("pausing Low Priority Tasks, current size: %v, lowWatermark: %v", r.lowPriorityTaskTracker.Size(), lowPriorityWaterMarkInfo.Watermark))
 		}
 		lowPriorityWatermark = &replicationpb.ReplicationState{
 			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
-			FlowControlCommand:        r.flowController.GetFlowControlInfo(enums.TASK_PRIORITY_LOW),
+			FlowControlCommand:        lowPriorityFlowControlCommand,
 		}
 		if highPriorityWaterMarkInfo.Watermark <= lowPriorityWaterMarkInfo.Watermark {
 			inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark

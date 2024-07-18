@@ -32,6 +32,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -42,7 +44,6 @@ type (
 		dummyString string
 		dummyInt    int
 	}
-
 	testEntryWithCacheSize struct {
 		cacheSize int
 	}
@@ -720,4 +721,42 @@ func TestCache_ItemSizeChangeBeforeRelease(t *testing.T) {
 	cache.Release(key1)
 	// Cache should have evicted entry1 to bring cache size under max limit.
 	assert.Equal(t, 2, cache.Size())
+}
+
+func TestCache_InvokeLifecycleCallbacks(t *testing.T) {
+	t.Parallel()
+
+	var onPut, onEvict int
+	ttl := time.Millisecond * 50
+	timeSource := clock.NewEventTimeSource()
+	cache := New(5,
+		&Options{
+			TTL:        ttl,
+			TimeSource: timeSource,
+			OnPut: func(val any) {
+				require.Equal(t, val, "value")
+				onPut++
+			},
+			OnEvict: func(val any) {
+				require.Equal(t, val, "value")
+				onEvict++
+			},
+		},
+	)
+
+	cache.Put("key", "value")
+	cache.Put("key", "value")
+	require.Equal(t, 2, onPut, "expected OnPut callback to be invoked twice")
+
+	_, _ = cache.PutIfNotExist("key", "value")
+	require.Equal(t, 2, onPut, "expected OnPut callback to *not* be invoked again")
+	require.Equal(t, 0, onEvict, "expected OnEvict callback to be *not* be invoked")
+
+	cache.Delete("key")
+	require.Equal(t, 1, onEvict, "expected OnEvict callback to be invoked")
+
+	cache.Put("key", "value")
+	timeSource.Advance(2 * ttl)
+	assert.Nil(t, cache.Get("key"))
+	require.Equal(t, 2, onEvict, "expected OnEvict callback to be invoked")
 }

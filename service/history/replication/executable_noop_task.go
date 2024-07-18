@@ -60,6 +60,7 @@ func NewExecutableNoopTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			enumsspb.TASK_PRIORITY_UNSPECIFIED,
+			nil,
 		),
 	}
 }

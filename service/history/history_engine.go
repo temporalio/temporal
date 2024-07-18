@@ -225,7 +225,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsHandler(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.StateMachineRegistry(), shard.GetMetricsHandler(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
@@ -828,7 +828,12 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		}
 
 		if len(tasksByCategory) > 0 {
-			e.queueProcessors[category].NotifyNewTasks(tasksByCategory)
+			proc, ok := e.queueProcessors[category]
+			if !ok {
+				e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
+				continue
+			}
+			proc.NotifyNewTasks(tasksByCategory)
 		}
 	}
 }

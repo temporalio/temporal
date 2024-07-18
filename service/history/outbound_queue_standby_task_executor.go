@@ -87,6 +87,13 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		}
 	}
 
+	nsName, err := e.shardContext.GetNamespaceRegistry().GetNamespaceName(
+		namespace.ID(task.GetNamespaceID()),
+	)
+	if err != nil {
+		return respond(err)
+	}
+
 	ref, smt, err := stateMachineTask(e.shardContext, task)
 	if err != nil {
 		return respond(err)
@@ -94,6 +101,11 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 
 	if err := validateTaskByClock(e.shardContext, task); err != nil {
 		return respond(err)
+	}
+
+	destination := ""
+	if dtask, ok := task.(tasks.HasDestination); ok {
+		destination = dtask.GetDestination()
 	}
 
 	actionFn := func(ctx context.Context) (any, error) {
@@ -113,9 +125,24 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 			}
 			return nil, err
 		}
+
 		// If there was no error from Access nor from the accessor function, then the task
 		// is still valid for processing based on the current state of the machine.
-		return nil, consts.ErrTaskRetry
+		// The *likely* reasons are: a) delay in the replication stack; b) destination is down.
+		// In any case, the task needs to be retried.
+		var postActionInfoErr error = consts.ErrTaskRetry
+		if e.config.OutboundStandbyTaskMissingEventsDestinationDownErr(nsName.String(), destination) {
+			// Wrap the retry error with DestinationDownError so it can trigger the circuit breaker on
+			// the standby side. This won't do any harm, at most some delay processing the standby task.
+			// Assuming the dynamic config OutboundStandbyTaskMissingEventsDiscardDelay is long enough,
+			// it should give enough time for the active side to execute the task successfully, and the
+			// standby side to process it as well without discarding the task.
+			postActionInfoErr = queues.NewDestinationDownError(
+				"standby task executor returned retryable error",
+				postActionInfoErr,
+			)
+		}
+		return postActionInfoErr, nil
 	}
 
 	err = e.processTask(
@@ -125,9 +152,12 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		getStandbyPostActionFn(
 			task,
 			e.Now,
-			e.config.StandbyTaskMissingEventsResendDelay(task.GetType()),
-			e.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
-			e.noopPostProcessAction,
+			0, // We don't need resend delay since we don't do fetch history.
+			e.config.OutboundStandbyTaskMissingEventsDiscardDelay(nsName.String(), destination),
+			// We don't need to fetch history from remote for state machine to sync.
+			// So, just use the noop post action which will return a retry error
+			// if the task didn't succeed.
+			standbyTaskPostActionNoOp,
 			standbyOutboundTaskPostActionTaskDiscarded,
 		),
 	)
@@ -161,14 +191,4 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 	}
 
 	return postActionFn(ctx, task, historyResendInfo, e.logger)
-}
-
-func (e *outboundQueueStandbyTaskExecutor) noopPostProcessAction(
-	ctx context.Context,
-	taskInfo tasks.Task,
-	postActionInfo interface{},
-	logger log.Logger,
-) error {
-	// Return retryable error, so task processing will retry.
-	return consts.ErrTaskRetry
 }

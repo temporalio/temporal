@@ -86,6 +86,7 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
+	dynamicconfig.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
 	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
@@ -94,7 +95,6 @@ var Module = fx.Options(
 	// coverage to catch misconfiguration.
 	// A more robust approach would require using fx groups but we shouldn't overcomplicate until this becomes an issue.
 	fx.Provide(MuxRouterProvider),
-	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
@@ -537,6 +537,7 @@ func VisibilityManagerProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	namespaceRegistry namespace.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -545,6 +546,7 @@ func VisibilityManagerProvider(
 		nil, // frontend visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -842,8 +844,9 @@ func NexusEndpointClientProvider(
 func NexusEndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	nexusEndpointManager persistence.NexusEndpointManager,
-	logger log.Logger,
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) nexus.EndpointRegistry {
 	registryConfig := nexus.NewEndpointRegistryConfig(dc)
 	return nexus.NewEndpointRegistry(
@@ -851,6 +854,7 @@ func NexusEndpointRegistryProvider(
 		matchingClient,
 		nexusEndpointManager,
 		logger,
+		metricsHandler,
 	)
 }
 

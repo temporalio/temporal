@@ -34,13 +34,13 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -67,7 +67,7 @@ func Invoke(
 			workflowID,
 			baseRunID,
 		),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func Invoke(
 		ctx,
 		namespaceID.String(),
 		request.WorkflowExecution.GetWorkflowId(),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func Invoke(
 				workflowID,
 				currentRunID,
 			),
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
 			return nil, err

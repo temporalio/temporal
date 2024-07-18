@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -41,6 +42,9 @@ import (
 type VisibilityStoreFactory interface {
 	NewVisibilityStore(
 		cfg config.CustomDatastoreConfig,
+		saProvider searchattribute.Provider,
+		saMapperProvider searchattribute.MapperProvider,
+		nsRegistry namespace.Registry,
 		r resolver.ServiceResolver,
 		logger log.Logger,
 		metricsHandler metrics.Handler,
@@ -55,6 +59,7 @@ func NewManager(
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	namespaceRegistry namespace.Registry,
 
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
@@ -75,6 +80,7 @@ func NewManager(
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		maxReadQPS,
 		maxWriteQPS,
 		operatorRPSRatio,
@@ -98,6 +104,7 @@ func NewManager(
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		maxReadQPS,
 		maxWriteQPS,
 		operatorRPSRatio,
@@ -173,6 +180,7 @@ func newVisibilityManagerFromDataStoreConfig(
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	namespaceRegistry namespace.Registry,
 
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
@@ -190,6 +198,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
 		metricsHandler,
@@ -220,6 +229,7 @@ func newVisibilityStoreFromDataStoreConfig(
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	namespaceRegistry namespace.Registry,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 
@@ -251,8 +261,15 @@ func newVisibilityStoreFromDataStoreConfig(
 			logger,
 		)
 	} else if dsConfig.CustomDataStoreConfig != nil {
+		if customVisibilityStoreFactory == nil {
+			logger.Fatal("custom visibility store factory must be defined")
+			return nil, nil
+		}
 		visStore, err = customVisibilityStoreFactory.NewVisibilityStore(
 			*dsConfig.CustomDataStoreConfig,
+			searchAttributesProvider,
+			searchAttributesMapperProvider,
+			namespaceRegistry,
 			persistenceResolver,
 			logger,
 			metricsHandler,

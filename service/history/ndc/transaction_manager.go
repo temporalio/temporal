@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/locks"
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -448,7 +449,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err

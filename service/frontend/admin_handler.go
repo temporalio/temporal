@@ -232,10 +232,6 @@ func (adh *AdminHandler) Start() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
-
-	// Start namespace replication queue cleanup
-	// If the queue does not start, we can still call stop()
-	adh.namespaceReplicationQueue.Start()
 }
 
 // Stop stops the handler
@@ -247,9 +243,6 @@ func (adh *AdminHandler) Stop() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
-
-	// Calling stop if the queue does not start is ok
-	adh.namespaceReplicationQueue.Stop()
 }
 
 func (adh *AdminHandler) HealthCheck(
@@ -1055,6 +1048,7 @@ func (adh *AdminHandler) DescribeCluster(
 		InitialFailoverVersion:   metadata.GetInitialFailoverVersion(),
 		IsGlobalNamespaceEnabled: metadata.GetIsGlobalNamespaceEnabled(),
 		Tags:                     metadata.GetTags(),
+		HttpAddress:              metadata.GetHttpAddress(),
 	}, nil
 }
 
@@ -1065,7 +1059,6 @@ func (adh *AdminHandler) ListClusters(
 	request *adminservice.ListClustersRequest,
 ) (_ *adminservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1194,7 +1187,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
-			HttpAddress:              request.GetFrontendHttpAddress(),
+			HttpAddress:              resp.GetHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),

@@ -128,6 +128,7 @@ func (s *executableTaskSuite) SetupTest() {
 		receivedTime,
 		s.sourceCluster,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		nil,
 	)
 }
 
@@ -607,7 +608,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	// enable feature flag
 	s.config.EnableReplicationEagerRefreshNamespace = dynamicconfig.GetBoolPropertyFn(true)
 
-	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).AnyTimes()
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).Times(1)
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntry, nil)
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -616,6 +618,137 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.True(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_SyncFromRemoteSuccess() {
+	namespaceID := uuid.NewString()
+	namespaceName := uuid.NewString()
+	now := time.Now()
+	s.task = NewExecutableTask(
+		ProcessToolBox{
+			Config:                  s.config,
+			ClusterMetadata:         s.clusterMetadata,
+			ClientBean:              s.clientBean,
+			ShardController:         s.shardController,
+			NamespaceCache:          s.namespaceCache,
+			NDCHistoryResender:      s.ndcHistoryResender,
+			MetricsHandler:          s.metricsHandler,
+			Logger:                  s.logger,
+			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+			DLQWriter:               NoopDLQWriter{},
+		},
+		rand.Int63(),
+		"metrics-tag",
+		now,
+		now,
+		s.sourceCluster,
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		&persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
+	)
+	namespaceEntryOld := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   namespaceID,
+				Name: namespaceName,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			FailoverVersion: 10,
+		},
+	})
+	namespaceEntryNew := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   namespaceID,
+				Name: namespaceName,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			FailoverVersion: 100,
+		},
+	})
+	// enable feature flag
+	s.config.EnableReplicationEagerRefreshNamespace = dynamicconfig.GetBoolPropertyFn(true)
+
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryNew, nil).Times(1)
+	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
+		namespaceEntryNew, nil)
+	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	s.NoError(err)
+	s.Equal(namespaceName, name)
+	s.True(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_StillBehandAfterSyncFromRemote() {
+	namespaceID := uuid.NewString()
+	namespaceName := uuid.NewString()
+	now := time.Now()
+	s.task = NewExecutableTask(
+		ProcessToolBox{
+			Config:                  s.config,
+			ClusterMetadata:         s.clusterMetadata,
+			ClientBean:              s.clientBean,
+			ShardController:         s.shardController,
+			NamespaceCache:          s.namespaceCache,
+			NDCHistoryResender:      s.ndcHistoryResender,
+			MetricsHandler:          s.metricsHandler,
+			Logger:                  s.logger,
+			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+			DLQWriter:               NoopDLQWriter{},
+		},
+		rand.Int63(),
+		"metrics-tag",
+		now,
+		now,
+		s.sourceCluster,
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		&persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
+	)
+	namespaceEntryOld := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   namespaceID,
+				Name: namespaceName,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			FailoverVersion: 10,
+		},
+	})
+	// enable feature flag
+	s.config.EnableReplicationEagerRefreshNamespace = dynamicconfig.GetBoolPropertyFn(true)
+
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)
+	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
+		namespaceEntryOld, nil)
+	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	s.Empty(name)
+	s.Error(err)
+	s.False(toProcess)
 }
 
 func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_SyncFromRemoteFailed() {

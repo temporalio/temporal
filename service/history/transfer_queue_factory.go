@@ -31,6 +31,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -100,10 +101,10 @@ func NewTransferQueueFactory(
 }
 
 func (f *transferQueueFactory) CreateQueue(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 ) queues.Queue {
-	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
+	logger := log.With(shardContext.GetLogger(), tag.ComponentTransferQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope))
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
@@ -127,13 +128,13 @@ func (f *transferQueueFactory) CreateQueue(
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
-		shard.GetTimeSource(),
+		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
 	)
 
 	activeExecutor := newTransferQueueActiveTaskExecutor(
-		shard,
+		shardContext,
 		workflowCache,
 		f.SdkClientFactory,
 		logger,
@@ -143,9 +144,30 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MatchingRawClient,
 		f.VisibilityManager,
 	)
+	eventImporter := eventhandler.NewEventImporter(
+		f.RemoteHistoryFetcher,
+		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
+			return shardContext.GetEngine(ctx)
+		},
+		f.Serializer,
+		logger,
+	)
+	resendHandler := eventhandler.NewResendHandler(
+		f.NamespaceRegistry,
+		f.ClientBean,
+		f.Serializer,
+		f.ClusterMetadata,
+		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
+			return shardContext.GetEngine(ctx)
+		},
+		f.RemoteHistoryFetcher,
+		eventImporter,
+		logger,
+		f.Config,
+	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
-		shard,
+		shardContext,
 		workflowCache,
 		xdc.NewNDCHistoryResender(
 			f.NamespaceRegistry,
@@ -159,7 +181,7 @@ func (f *transferQueueFactory) CreateQueue(
 				events [][]*historypb.HistoryEvent,
 				versionHistory []*historyspb.VersionHistoryItem,
 			) error {
-				engine, err := shard.GetEngine(ctx)
+				engine, err := shardContext.GetEngine(ctx)
 				if err != nil {
 					return err
 				}
@@ -177,11 +199,12 @@ func (f *transferQueueFactory) CreateQueue(
 					"",
 				)
 			},
-			shard.GetPayloadSerializer(),
+			shardContext.GetPayloadSerializer(),
 			f.Config.StandbyTaskReReplicationContextTimeout,
 			logger,
 			f.Config,
 		),
+		resendHandler,
 		logger,
 		f.MetricsHandler,
 		currentClusterName,
@@ -206,9 +229,9 @@ func (f *transferQueueFactory) CreateQueue(
 		shardScheduler,
 		rescheduler,
 		f.HostPriorityAssigner,
-		shard.GetTimeSource(),
-		shard.GetNamespaceRegistry(),
-		shard.GetClusterMetadata(),
+		shardContext.GetTimeSource(),
+		shardContext.GetNamespaceRegistry(),
+		shardContext.GetClusterMetadata(),
 		logger,
 		metricsHandler,
 		f.DLQWriter,
@@ -218,7 +241,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewImmediateQueue(
-		shard,
+		shardContext,
 		tasks.CategoryTransfer,
 		shardScheduler,
 		rescheduler,

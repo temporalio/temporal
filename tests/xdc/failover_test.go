@@ -275,7 +275,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 
 	poller := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -287,7 +287,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -548,7 +548,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	}
 
 	poller1 := &tests.TaskPoller{
-		Engine:                       client1,
+		Client:                       client1,
 		Namespace:                    namespace,
 		TaskQueue:                    taskQueue,
 		StickyTaskQueue:              stickyTaskQueue1,
@@ -560,7 +560,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	}
 
 	poller2 := &tests.TaskPoller{
-		Engine:                       client2,
+		Client:                       client2,
 		Namespace:                    namespace,
 		TaskQueue:                    taskQueue,
 		StickyTaskQueue:              stickyTaskQueue2,
@@ -683,7 +683,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	}
 
 	poller := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -694,7 +694,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -824,7 +824,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	}
 
 	poller := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1003,7 +1003,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	}
 
 	poller := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1014,7 +1014,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1173,7 +1173,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	}
 
 	poller := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1183,7 +1183,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1286,7 +1286,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	}
 
 	poller := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1296,7 +1296,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	}
 
 	poller2 := &tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1557,7 +1557,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 	}
 
 	poller1 := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1567,7 +1567,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 	}
 
 	poller2 := &tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1665,7 +1665,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	}
 
 	poller1 := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1823,7 +1823,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	}
 
 	poller1 := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1833,7 +1833,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	}
 
 	poller2 := &tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1918,7 +1918,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2013,7 +2013,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	}
 
 	poller1 := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2023,7 +2023,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2136,7 +2136,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2240,7 +2240,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	}
 
 	poller1 := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2250,7 +2250,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,

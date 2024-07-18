@@ -100,6 +100,8 @@ func (s *PurgeDLQTasksSuite) TearDownSuite() {
 }
 
 func (s *PurgeDLQTasksSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	s.Assertions = require.New(s.T())
 }
 

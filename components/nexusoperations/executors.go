@@ -204,8 +204,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	outcomeTag := metrics.NexusOutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
-	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
-	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
+	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
+	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
 
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
@@ -306,6 +306,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 						NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 							ScheduledEventId: eventID,
 							OperationId:      result.Pending.ID,
+							RequestId:        operation.RequestId,
 						},
 					}
 				})
@@ -365,6 +366,7 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 			},
 		),
 		ScheduledEventId: eventID,
+		RequestId:        operation.RequestId,
 	}
 	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 		// nolint:revive // We must mutate here even if the linter doesn't like it.
@@ -421,6 +423,7 @@ func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, ta
 						},
 					),
 					ScheduledEventId: eventID,
+					RequestId:        op.RequestId,
 				},
 			}
 		})
@@ -484,8 +487,8 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	statusCodeTag := metrics.NexusOutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
-	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
-	e.MetricsHandler.Timer(OutboundRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
+	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
+	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
 
 	if callErr != nil {
 		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))

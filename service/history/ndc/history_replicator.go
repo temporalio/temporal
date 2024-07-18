@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -262,7 +263,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 		r.shardContext,
 		task.getNamespaceID(),
 		task.getExecution(),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id

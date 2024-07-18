@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -437,9 +438,9 @@ func (s *workflowSuite) setupWorkflowContext(mutableState *workflow.MockMutableS
 
 func (s *workflowSuite) setupCache() *wcache.MockCache {
 	workflowCache := wcache.NewMockCache(s.controller)
-	workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).
+	workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).
 		Return(s.workflowContext, wcache.NoopReleaseFn, nil).AnyTimes()
-	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).Return(wcache.NoopReleaseFn, nil).AnyTimes()
+	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).Return(wcache.NoopReleaseFn, nil).AnyTimes()
 	return workflowCache
 }
 

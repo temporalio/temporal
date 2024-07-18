@@ -179,6 +179,8 @@ func myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *DLQSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	s.setAssertions()
 	s.deleteBlockCh = make(chan interface{})
 	close(s.deleteBlockCh)

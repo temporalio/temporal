@@ -178,7 +178,7 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 				CompletionCallbacks: cbs,
 			}
 
-			_, err := s.engine.StartWorkflowExecution(ctx, request)
+			_, err := s.client.StartWorkflowExecution(ctx, request)
 			var invalidArgument *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgument)
 			s.Equal(tc.message, err.Error())
@@ -288,7 +288,7 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				},
 			}
 
-			_, err = s.engine.StartWorkflowExecution(ctx, request)
+			_, err = s.client.StartWorkflowExecution(ctx, request)
 			s.NoError(err)
 
 			run := sdkClient.GetWorkflow(ctx, request.WorkflowId, "")

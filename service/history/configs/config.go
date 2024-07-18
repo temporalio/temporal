@@ -98,6 +98,7 @@ type Config struct {
 	ShardIOTimeout               dynamicconfig.DurationPropertyFn
 	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
 	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
+	ShardFinalizerTimeout        dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -170,7 +171,9 @@ type Config struct {
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
-	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedPropertyFnWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
+	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedSubscribableWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
+	OutboundStandbyTaskMissingEventsDiscardDelay        dynamicconfig.DurationPropertyFnWithDestinationFilter
+	OutboundStandbyTaskMissingEventsDestinationDownErr  dynamicconfig.BoolPropertyFnWithDestinationFilter
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -348,7 +351,8 @@ type Config struct {
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFnWithNamespaceFilter[schedulerhsm.Tweakables]
@@ -418,6 +422,7 @@ func NewConfig(
 		ShardIOTimeout:               dynamicconfig.ShardIOTimeout.Get(dc),
 		ShardLingerOwnershipCheckQPS: dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
 		ShardLingerTimeLimit:         dynamicconfig.ShardLingerTimeLimit.Get(dc),
+		ShardFinalizerTimeout:        dynamicconfig.ShardFinalizerTimeout.Get(dc),
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
@@ -486,7 +491,9 @@ func NewConfig(
 		OutboundQueueGroupLimiterBufferSize:                 dynamicconfig.OutboundQueueGroupLimiterBufferSize.Get(dc),
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),
 		OutboundQueueHostSchedulerMaxTaskRPS:                dynamicconfig.OutboundQueueHostSchedulerMaxTaskRPS.Get(dc),
-		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Get(dc),
+		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Subscribe(dc),
+		OutboundStandbyTaskMissingEventsDestinationDownErr:  dynamicconfig.OutboundStandbyTaskMissingEventsDestinationDownErr.Get(dc),
+		OutboundStandbyTaskMissingEventsDiscardDelay:        dynamicconfig.OutboundStandbyTaskMissingEventsDiscardDelay.Get(dc),
 
 		ReplicatorProcessorMaxPollInterval:                  dynamicconfig.ReplicatorProcessorMaxPollInterval.Get(dc),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient.Get(dc),
@@ -635,8 +642,9 @@ func NewConfig(
 		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
 		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
-		SendRawWorkflowHistory:         dynamicconfig.SendRawWorkflowHistory.Get(dc),
-		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
 
 		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
 		HsmSchedulerTweakables:      schedulerhsm.CurrentTweakables.Get(dc),

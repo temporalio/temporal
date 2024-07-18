@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -54,7 +55,7 @@ func Invoke(
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return nil, err

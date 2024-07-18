@@ -61,6 +61,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -140,7 +141,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = mockShard.GetLogger()
 
-	s.workflowCache = wcache.NewHostLevelCache(mockShard.GetConfig(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(mockShard.GetConfig(), mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.workflowTaskCompletedHandler = NewWorkflowTaskCompletedHandler(
 		mockShard,
 		common.NewProtoTaskTokenSerializer(),
@@ -220,7 +221,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 			s.workflowTaskCompletedHandler.shardContext,
 			tv.NamespaceID(),
 			tv.WorkflowExecution(),
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
 			return nil, nil

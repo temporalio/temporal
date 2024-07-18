@@ -710,7 +710,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
-			HttpAddress:              request.GetFrontendHttpAddress(),
+			HttpAddress:              resp.GetHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -759,7 +759,6 @@ func (h *OperatorHandlerImpl) ListClusters(
 	request *operatorservice.ListClustersRequest,
 ) (_ *operatorservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -781,6 +780,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 			ClusterName:            clusterResp.GetClusterName(),
 			ClusterId:              clusterResp.GetClusterId(),
 			Address:                clusterResp.GetClusterAddress(),
+			HttpAddress:            clusterResp.GetHttpAddress(),
 			InitialFailoverVersion: clusterResp.GetInitialFailoverVersion(),
 			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
 			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),
