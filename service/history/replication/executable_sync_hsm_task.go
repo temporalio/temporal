@@ -71,6 +71,7 @@ func NewExecutableSyncHSMTask(
 	task *replicationspb.SyncHSMAttributes,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
+	versionedTransition *persistencespb.VersionedTransition,
 ) *ExecutableSyncHSMTask {
 	return &ExecutableSyncHSMTask{
 		ProcessToolBox: processToolBox,
@@ -84,6 +85,7 @@ func NewExecutableSyncHSMTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			priority,
+			versionedTransition,
 		),
 		taskAttr:               task,
 		markPoisonPillAttempts: 0,

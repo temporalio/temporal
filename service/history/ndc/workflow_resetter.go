@@ -28,6 +28,7 @@ package ndc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -717,12 +719,13 @@ func (r *workflowResetterImpl) reapplyEvents(
 	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
 	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
 	// did, before the refactoring that unified two code paths; see comment below.)
-	return reapplyEvents(mutableState, nil, events, resetReapplyExcludeTypes, "")
+	return reapplyEvents(mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "")
 }
 
 func reapplyEvents(
 	mutableState workflow.MutableState,
 	targetBranchUpdateRegistry update.Registry,
+	stateMachineRegistry *hsm.Registry,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 	runIdForDeduplication string,
@@ -795,8 +798,22 @@ func reapplyEvents(
 			}
 			reappliedEvents = append(reappliedEvents, event)
 		default:
-			// Other event types are not reapplied.
-			continue
+			root := mutableState.HSM()
+			def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
+			if !ok {
+				// Only reapply hardcoded events above or ones registered and are cherry-pickable in the HSM framework.
+				continue
+			}
+			if err := def.CherryPick(root, event); err != nil {
+				if errors.Is(err, hsm.ErrNotCherryPickable) || errors.Is(err, hsm.ErrStateMachineNotFound) || errors.Is(err, hsm.ErrInvalidTransition) {
+					continue
+				}
+				return reappliedEvents, err
+			}
+			mutableState.AddHistoryEvent(event.EventType, func(he *historypb.HistoryEvent) {
+				he.Attributes = event.Attributes
+			})
+			reappliedEvents = append(reappliedEvents, event)
 		}
 		if runIdForDeduplication != "" {
 			deDupResource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())

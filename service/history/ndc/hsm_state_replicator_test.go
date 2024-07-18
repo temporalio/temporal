@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -65,7 +66,7 @@ type (
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
-		workflowCache *wcache.CacheImpl
+		workflowCache wcache.Cache
 		logger        log.Logger
 
 		workflowKey     definition.WorkflowKey
@@ -109,9 +110,7 @@ func (s *hsmStateReplicatorSuite) SetupTest() {
 	err = stateMachineRegistry.RegisterTaskSerializer(hsmtest.TaskType, hsmtest.TaskSerializer{})
 	s.NoError(err)
 
-	var ok bool
-	s.workflowCache, ok = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler).(*wcache.CacheImpl)
-	s.True(ok)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	s.namespaceEntry = tests.GlobalNamespaceEntry
 	s.workflowKey = definition.NewWorkflowKey(s.namespaceEntry.ID().String(), tests.WorkflowID, tests.RunID)

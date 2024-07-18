@@ -86,6 +86,7 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
+	dynamicconfig.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
 	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
@@ -94,7 +95,6 @@ var Module = fx.Options(
 	// coverage to catch misconfiguration.
 	// A more robust approach would require using fx groups but we shouldn't overcomplicate until this becomes an issue.
 	fx.Provide(MuxRouterProvider),
-	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),

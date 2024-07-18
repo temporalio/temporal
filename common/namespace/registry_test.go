@@ -706,3 +706,60 @@ func (s *registrySuite) TestGetByIDWithoutReadthrough() {
 	s.NoError(err)
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
+
+func (s *registrySuite) TestRefreshSingleCacheKeyById() {
+	id := namespace.NewID()
+
+	nsV1 := persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			FailoverVersion:   1,
+		},
+		NotificationVersion: 1,
+	}
+	nsV2 := persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			FailoverVersion:   2,
+		},
+		NotificationVersion: 2,
+	}
+
+	// registry start will refresh once
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: nil,
+	}, nil)
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	// first call will get old ns
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: id.String(),
+	}).Return(&nsV1, nil).Times(1)
+	ns, err := s.registry.GetNamespaceByID(id)
+	s.NoError(err)
+	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion())
+
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: id.String(),
+	}).Return(&nsV2, nil).Times(1)
+
+	ns, err = s.registry.RefreshNamespaceById(id)
+	s.NoError(err)
+	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
+
+	ns, err = s.registry.GetNamespaceByID(id)
+	s.NoError(err)
+	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
+}

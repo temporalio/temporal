@@ -60,6 +60,7 @@ message ReplicationTask {
     temporal.api.common.v1.DataBlob data = 12;
     google.protobuf.Timestamp visibility_time = 9;
     temporal.server.api.enums.v1.TaskPriority priority = 13;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 15;
 }
 
 message ReplicationToken {

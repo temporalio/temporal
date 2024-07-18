@@ -23,6 +23,7 @@
 package nexusoperations
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 
@@ -50,6 +51,11 @@ func (d ScheduledEventDefinition) Apply(root *hsm.Node, event *historypb.History
 	return err
 }
 
+func (d ScheduledEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
+	return hsm.ErrNotCherryPickable
+}
+
 type CancelRequestedEventDefinition struct{}
 
 func (d CancelRequestedEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -64,6 +70,11 @@ func (d CancelRequestedEventDefinition) Apply(root *hsm.Node, event *historypb.H
 	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return o.Cancel(node, event.EventTime.AsTime())
 	})
+}
+
+func (d CancelRequestedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
+	return hsm.ErrNotCherryPickable
 }
 
 type StartedEventDefinition struct{}
@@ -86,6 +97,10 @@ func (d StartedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEv
 	})
 }
 
+func (d StartedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+	return d.Apply(root, event)
+}
+
 type CompletedEventDefinition struct{}
 
 func (d CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -103,6 +118,10 @@ func (d CompletedEventDefinition) Apply(root *hsm.Node, event *historypb.History
 
 func (d CompletedEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
+}
+
+func (d CompletedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+	return d.Apply(root, event)
 }
 
 type FailedEventDefinition struct{}
@@ -125,6 +144,10 @@ func (d FailedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEve
 	})
 }
 
+func (d FailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+	return d.Apply(root, event)
+}
+
 type CanceledEventDefinition struct{}
 
 func (d CanceledEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -144,6 +167,10 @@ func (d CanceledEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryE
 	})
 }
 
+func (d CanceledEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+	return d.Apply(root, event)
+}
+
 type TimedOutEventDefinition struct{}
 
 func (d TimedOutEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -160,6 +187,10 @@ func (d TimedOutEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryE
 			Node: node,
 		})
 	})
+}
+
+func (d TimedOutEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+	return d.Apply(root, event)
 }
 
 func RegisterEventDefinitions(reg *hsm.Registry) error {
@@ -185,6 +216,16 @@ func RegisterEventDefinitions(reg *hsm.Registry) error {
 }
 
 func transitionOperation(root *hsm.Node, event *historypb.HistoryEvent, fn func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error)) error {
+	node, err := findOperationNode(root, event)
+	if err != nil {
+		return err
+	}
+	return hsm.MachineTransition(node, func(o Operation) (hsm.TransitionOutput, error) {
+		return fn(node, o)
+	})
+}
+
+func findOperationNode(root *hsm.Node, event *historypb.HistoryEvent) (*hsm.Node, error) {
 	attrs := reflect.ValueOf(event.Attributes).Elem()
 
 	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
@@ -194,17 +235,26 @@ func transitionOperation(root *hsm.Node, event *historypb.HistoryEvent, fn func(
 
 	f := attrs.Field(0).Interface()
 
-	getter, ok := f.(interface{ GetScheduledEventId() int64 })
+	eventIDGetter, ok := f.(interface{ GetScheduledEventId() int64 })
 	if !ok {
 		panic("Event does not have a ScheduledEventId field")
 	}
 	coll := MachineCollection(root)
-	nodeID := strconv.FormatInt(getter.GetScheduledEventId(), 10)
+	nodeID := strconv.FormatInt(eventIDGetter.GetScheduledEventId(), 10)
 	node, err := coll.Node(nodeID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return coll.Transition(nodeID, func(o Operation) (hsm.TransitionOutput, error) {
-		return fn(node, o)
-	})
+	requestIDGetter, ok := f.(interface{ GetRequestId() string })
+	if ok && requestIDGetter.GetRequestId() != "" {
+		op, err := coll.Data(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		if op.RequestId != requestIDGetter.GetRequestId() {
+			return nil, fmt.Errorf("%w: event has different request ID (%q) than the machine (%q)",
+				hsm.ErrNotCherryPickable, requestIDGetter.GetRequestId(), op.RequestId)
+		}
+	}
+	return node, nil
 }

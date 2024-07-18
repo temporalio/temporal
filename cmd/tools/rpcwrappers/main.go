@@ -214,7 +214,7 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	case len(taskTokenField) == 1:
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 `, taskTokenField[0].path)

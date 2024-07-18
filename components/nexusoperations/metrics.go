@@ -28,7 +28,7 @@ var OutboundRequestCounter = metrics.NewCounterDef(
 	"nexus_outbound_requests",
 	metrics.WithDescription("The number of Nexus outbound requests made by the history service."),
 )
-var OutboundRequestLatencyHistogram = metrics.NewTimerDef(
+var OutboundRequestLatency = metrics.NewTimerDef(
 	"nexus_outbound_latency",
-	metrics.WithDescription("Latency histogram of outbound Nexus requests made by the history service."),
+	metrics.WithDescription("Latency of outbound Nexus requests made by the history service."),
 )

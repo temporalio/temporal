@@ -29,6 +29,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -37,6 +38,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -120,6 +122,7 @@ type (
 		UnloadForOwnershipLost()
 
 		StateMachineRegistry() *hsm.Registry
+		GetFinalizer() *finalizer.Finalizer
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

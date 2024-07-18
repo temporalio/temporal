@@ -111,8 +111,8 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	}
 
 	// Record Nexus-specific metrics
-	c.metricsHandler.Counter(metrics.NexusRequests.Name()).Record(1)
-	c.metricsHandler.Histogram(metrics.NexusLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
+	metrics.NexusRequests.With(c.metricsHandler).Record(1)
+	metrics.NexusLatency.With(c.metricsHandler).Record(time.Since(c.requestStartTime))
 
 	// Record general telemetry metrics
 	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
@@ -289,7 +289,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 
 	var err error
 	if oc.namespace, err = h.namespaceRegistry.GetNamespace(namespace.Name(nc.namespaceName)); err != nil {
-		oc.metricsHandler.Counter(metrics.NexusRequests.Name()).Record(
+		metrics.NexusRequests.With(oc.metricsHandler).Record(
 			1,
 			metrics.NexusOutcomeTag("namespace_not_found"),
 		)
@@ -386,6 +386,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 		}
 	}
 	// This is the worker's fault.
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_error"))
 	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -471,6 +472,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return nil
 	}
 	// This is the worker's fault.
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_error"))
 	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }

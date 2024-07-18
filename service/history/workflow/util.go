@@ -109,6 +109,10 @@ func TimeoutWorkflow(
 	return err
 }
 
+// TerminateWorkflow will write a WorkflowExecutionTerminated event with a fresh
+// batch ID. Do not use for situations where the WorkflowExecutionTerminated
+// event must fall within an existing event batch (for example, if you've already
+// failed a workflow task via `failWorkflowTask` and have an event batch ID).
 func TerminateWorkflow(
 	mutableState MutableState,
 	terminateReason string,

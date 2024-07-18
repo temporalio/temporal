@@ -98,6 +98,7 @@ type Config struct {
 	ShardIOTimeout               dynamicconfig.DurationPropertyFn
 	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
 	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
+	ShardFinalizerTimeout        dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -170,7 +171,7 @@ type Config struct {
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
-	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedPropertyFnWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
+	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedSubscribableWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
 	OutboundStandbyTaskMissingEventsDiscardDelay        dynamicconfig.DurationPropertyFnWithDestinationFilter
 	OutboundStandbyTaskMissingEventsDestinationDownErr  dynamicconfig.BoolPropertyFnWithDestinationFilter
 
@@ -421,6 +422,7 @@ func NewConfig(
 		ShardIOTimeout:               dynamicconfig.ShardIOTimeout.Get(dc),
 		ShardLingerOwnershipCheckQPS: dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
 		ShardLingerTimeLimit:         dynamicconfig.ShardLingerTimeLimit.Get(dc),
+		ShardFinalizerTimeout:        dynamicconfig.ShardFinalizerTimeout.Get(dc),
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
@@ -489,7 +491,7 @@ func NewConfig(
 		OutboundQueueGroupLimiterBufferSize:                 dynamicconfig.OutboundQueueGroupLimiterBufferSize.Get(dc),
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),
 		OutboundQueueHostSchedulerMaxTaskRPS:                dynamicconfig.OutboundQueueHostSchedulerMaxTaskRPS.Get(dc),
-		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Get(dc),
+		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Subscribe(dc),
 		OutboundStandbyTaskMissingEventsDestinationDownErr:  dynamicconfig.OutboundStandbyTaskMissingEventsDestinationDownErr.Get(dc),
 		OutboundStandbyTaskMissingEventsDiscardDelay:        dynamicconfig.OutboundStandbyTaskMissingEventsDiscardDelay.Get(dc),
 

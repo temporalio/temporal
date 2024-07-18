@@ -25,18 +25,24 @@
 package dynamicconfig
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
 )
 
 type (
@@ -47,6 +53,32 @@ type (
 		client   Client
 		logger   log.Logger
 		errCount int64
+
+		cancelClientSubscription func()
+
+		subscriptionLock sync.Mutex          // protects subscriptions, subscriptionIdx, and callbackPool
+		subscriptions    map[Key]map[int]any // final "any" is *subscription[T]
+		subscriptionIdx  int
+		callbackPool     *goro.AdaptivePool
+
+		poller goro.Group
+	}
+
+	subscription[T any] struct {
+		// constant:
+		prec []Constraints
+		f    func(T)
+		def  T
+		cdef *[]TypedConstrainedValue[T]
+		// protected by subscriptionLock in Collection:
+		prev T
+	}
+
+	subscriptionCallbackSettings struct {
+		MinWorkers   int
+		MaxWorkers   int
+		TargetDelay  time.Duration
+		ShrinkFactor float64
 	}
 
 	// These function types follow a similar pattern:
@@ -76,12 +108,107 @@ var (
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 )
 
-// NewCollection creates a new collection
+// NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
+// Get will work without Start/Stop.
 func NewCollection(client Client, logger log.Logger) *Collection {
 	return &Collection{
-		client:   client,
-		logger:   logger,
-		errCount: -1,
+		client:        client,
+		logger:        logger,
+		errCount:      -1,
+		subscriptions: make(map[Key]map[int]any),
+	}
+}
+
+func (c *Collection) Start() {
+	s := DynamicConfigSubscriptionCallback.Get(c)()
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
+	if notifyingClient, ok := c.client.(NotifyingClient); ok {
+		c.cancelClientSubscription = notifyingClient.Subscribe(c.keysChanged)
+	} else {
+		c.poller.Go(c.pollForChanges)
+	}
+}
+
+func (c *Collection) Stop() {
+	c.poller.Cancel()
+	c.poller.Wait()
+	if c.cancelClientSubscription != nil {
+		c.cancelClientSubscription()
+	}
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	c.callbackPool.Stop()
+	c.callbackPool = nil
+}
+
+// Implement pingable.Pingable
+func (c *Collection) GetPingChecks() []pingable.Check {
+	return []pingable.Check{
+		{
+			Name:    "dynamic config callbacks",
+			Timeout: 5 * time.Second,
+			Ping: func() []pingable.Pingable {
+				c.subscriptionLock.Lock()
+				defer c.subscriptionLock.Unlock()
+				if c.callbackPool == nil {
+					return nil
+				}
+				var wg sync.WaitGroup
+				wg.Add(1)
+				c.callbackPool.Do(wg.Done)
+				wg.Wait()
+				return nil
+			},
+		},
+	}
+}
+
+func (c *Collection) pollForChanges(ctx context.Context) error {
+	interval := DynamicConfigSubscriptionPollInterval.Get(c)
+	for ctx.Err() == nil {
+		util.InterruptibleSleep(ctx, interval())
+		c.pollOnce(ctx)
+	}
+	return ctx.Err()
+}
+
+func (c *Collection) pollOnce(ctx context.Context) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	if c.callbackPool == nil {
+		return
+	}
+
+	for key, subs := range c.subscriptions {
+		setting := queryRegistry(key)
+		if setting == nil {
+			continue
+		}
+		for _, sub := range subs {
+			cvs := c.client.GetValue(key)
+			setting.dispatchUpdate(c, sub, cvs)
+		}
+	}
+}
+
+func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	if c.callbackPool == nil {
+		return
+	}
+
+	for key, cvs := range changed {
+		setting := queryRegistry(key)
+		if setting == nil {
+			continue
+		}
+		// use setting.Key instead of key to avoid changing case again
+		for _, sub := range c.subscriptions[setting.Key()] {
+			setting.dispatchUpdate(c, sub, cvs)
+		}
 	}
 }
 
@@ -91,11 +218,6 @@ func (c *Collection) throttleLog() bool {
 	errCount := atomic.AddInt64(&c.errCount, 1)
 	// log only the first x errors and then one every x after that to reduce log noise
 	return errCount < errCountLogThreshold || errCount%errCountLogThreshold == 0
-}
-
-func (c *Collection) HasKey(key Key) bool {
-	cvs := c.client.GetValue(key)
-	return len(cvs) > 0
 }
 
 func findMatch[T any](cvs []ConstrainedValue, defaultCVs []TypedConstrainedValue[T], precedence []Constraints) (any, error) {
@@ -124,14 +246,27 @@ func matchAndConvert[T any](
 	c *Collection,
 	key Key,
 	def T,
-	cdef []TypedConstrainedValue[T],
+	cdef *[]TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	precedence []Constraints,
 ) T {
 	cvs := c.client.GetValue(key)
+	return matchAndConvertCvs(c, key, def, cdef, convert, precedence, cvs)
+}
 
-	defaultCVs := cdef
-	if defaultCVs == nil {
+func matchAndConvertCvs[T any](
+	c *Collection,
+	key Key,
+	def T,
+	cdef *[]TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	precedence []Constraints,
+	cvs []ConstrainedValue,
+) T {
+	var defaultCVs []TypedConstrainedValue[T]
+	if cdef != nil {
+		defaultCVs = *cdef
+	} else {
 		defaultCVs = []TypedConstrainedValue[T]{{Value: def}}
 	}
 
@@ -159,6 +294,62 @@ func matchAndConvert[T any](
 		// Return typedVal anyway since we have to return something.
 	}
 	return typedVal
+}
+
+func subscribe[T any](
+	c *Collection,
+	key Key,
+	def T,
+	cdef *[]TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	prec []Constraints,
+	callback func(T),
+) (T, func()) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+
+	c.subscriptionIdx++
+	id := c.subscriptionIdx
+
+	if c.subscriptions[key] == nil {
+		c.subscriptions[key] = make(map[int]any)
+	}
+
+	// get and return one value immediately (note that subscriptionLock is held here so we
+	// can't race with an update)
+	init := matchAndConvert(c, key, def, cdef, convert, prec)
+	c.subscriptions[key][id] = &subscription[T]{
+		prec: prec,
+		f:    callback,
+		def:  def,
+		cdef: cdef,
+		prev: init,
+	}
+
+	return init, func() {
+		c.subscriptionLock.Lock()
+		defer c.subscriptionLock.Unlock()
+		delete(c.subscriptions[key], id)
+	}
+}
+
+// called with subscriptionLock
+func dispatchUpdate[T any](
+	c *Collection,
+	key Key,
+	convert func(value any) (T, error),
+	sub *subscription[T],
+	cvs []ConstrainedValue,
+) {
+	newVal := matchAndConvertCvs(c, key, sub.def, sub.cdef, convert, sub.prec, cvs)
+	// Unfortunately we have to use reflect.DeepEqual instead of just == because T is not comparable.
+	// We can't make T comparable because maps and slices are not comparable, and we want to support
+	// those directly. We could have two versions of this, one for comparable types and one for
+	// non-comparable, but it's not worth it.
+	if !reflect.DeepEqual(sub.prev, newVal) {
+		sub.prev = newVal
+		c.callbackPool.Do(func() { sub.f(newVal) })
+	}
 }
 
 func convertInt(val any) (int, error) {

@@ -197,6 +197,12 @@ type (
 		// dynamic configuration value changes in the middle of a transaction
 		// TODO: remove this flag once transition history feature is stable.
 		transitionHistoryEnabled bool
+		// following fields are for tracking if sub state machines are updated
+		// in a transaction. They are similar to field like updateActivityInfos
+		visibilityUpdated     bool
+		executionStateUpdated bool
+		workflowTaskUpdated   bool
+		updateInfoUpdated     map[string]struct{}
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
@@ -276,6 +282,10 @@ func NewMutableState(
 		appliedEvents:            make(map[string]struct{}),
 		InsertTasks:              make(map[tasks.Category][]tasks.Task),
 		transitionHistoryEnabled: shard.GetConfig().EnableTransitionHistory(),
+		visibilityUpdated:        false,
+		executionStateUpdated:    false,
+		workflowTaskUpdated:      false,
+		updateInfoUpdated:        make(map[string]struct{}),
 
 		QueryRegistry: NewQueryRegistry(),
 
@@ -1312,13 +1322,23 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (ms *MutableStateImpl) GetCompletionEvent(
 	ctx context.Context,
-) (*historypb.HistoryEvent, error) {
+) (event *historypb.HistoryEvent, err error) {
+	defer func() {
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			err = ErrMissingWorkflowCompletionEvent
+		}
+	}()
+
 	if ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
 	// Completion EventID is always one less than NextEventID after workflow is completed
-	completionEventID := ms.hBuilder.NextEventID() - 1
+	nextEventID := ms.hBuilder.NextEventID()
+	completionEventID := nextEventID - 1
 	firstEventID := ms.executionInfo.CompletionEventBatchId
 
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(completionEventID)
@@ -1326,7 +1346,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 		return nil, err
 	}
 
-	event, err := ms.eventsCache.GetEvent(
+	event, err = ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
 		events.EventKey{
@@ -1340,14 +1360,43 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		if common.IsNotFoundError(err) {
-			// do not return the original error
-			// since original error of type NotFound
-			// can cause task processing side to fail silently
-			return nil, ErrMissingWorkflowCompletionEvent
+		if (common.IsNotFoundError(err) ||
+			common.IsInternalError(err)) &&
+			ms.executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
+			// Certain terminated workflows have an incorrect completionEventBatchId recorded which
+			// prevents the completion event from being loaded outside of cache.
+			//
+			// If we get back an internal error, attempt to search history (most recent
+			// events first) to find the completion event. Event will be earlier than
+			// the recorded CompletionEventBatchID, and should be a part of the same batch.
+			//
+			// See also: https://github.com/temporalio/temporal/pull/6180
+			//
+			// TODO: Remove 90 days after deployment (remove after 10/16/2024)
+			_, txID := ms.GetLastFirstEventIDTxnID()
+			resp, err := ms.shard.GetExecutionManager().ReadHistoryBranchReverse(ctx, &persistence.ReadHistoryBranchReverseRequest{
+				ShardID:                ms.shard.GetShardID(),
+				BranchToken:            currentBranchToken,
+				MaxEventID:             nextEventID, // looking for an event in the most recent batch
+				PageSize:               1,
+				LastFirstTransactionID: txID,
+				NextPageToken:          []byte{},
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			for _, event := range resp.HistoryEvents {
+				// this only applies to terminated workflows whose ultimate WFT had been failed
+				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
+					return event, nil
+				}
+			}
 		}
+
 		return nil, err
 	}
+
 	return event, nil
 }
 
@@ -2435,7 +2484,7 @@ func (ms *MutableStateImpl) updateBinaryChecksumSearchAttribute() error {
 	if proto.Equal(exeInfo.SearchAttributes[searchattribute.BinaryChecksums], checksumsPayload) {
 		return nil // unchanged
 	}
-	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.BinaryChecksums: checksumsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -2583,7 +2632,9 @@ func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.Worker
 	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
 	if err != nil {
 		return err
-	} else if !changed {
+	}
+
+	if !changed {
 		return nil
 	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
@@ -2654,7 +2705,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 			return err
 		}
 		if len(buildIds) == 0 || len(saPayload.GetData()) <= maxSearchAttributeValueSize {
-			searchAttributes[searchattribute.BuildIds] = saPayload
+			ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.BuildIds: saPayload})
 			break
 		}
 		if len(buildIds) == 1 {
@@ -3745,7 +3796,7 @@ func (ms *MutableStateImpl) ApplyUpsertWorkflowSearchAttributesEvent(
 ) {
 	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
 	ms.approximateSize -= ms.executionInfo.Size()
-	ms.executionInfo.SearchAttributes = payload.MergeMapOfPayload(ms.executionInfo.SearchAttributes, upsertSearchAttr)
+	ms.updateSearchAttributes(upsertSearchAttr)
 	ms.approximateSize += ms.executionInfo.Size()
 }
 
@@ -3761,6 +3812,7 @@ func (ms *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
 	event := ms.hBuilder.AddWorkflowPropertiesModifiedEvent(workflowTaskCompletedEventID, command)
 	ms.ApplyWorkflowPropertiesModifiedEvent(event)
 	// TODO merge active & passive task generation
+	// TODO: only generate visibility task when memo is updated
 	if err := ms.taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
 		return nil, err
 	}
@@ -3774,7 +3826,7 @@ func (ms *MutableStateImpl) ApplyWorkflowPropertiesModifiedEvent(
 	if attr.UpsertedMemo != nil {
 		upsertMemo := attr.GetUpsertedMemo().GetFields()
 		ms.approximateSize -= ms.executionInfo.Size()
-		ms.executionInfo.Memo = payload.MergeMapOfPayload(ms.executionInfo.Memo, upsertMemo)
+		ms.updateMemo(upsertMemo)
 		ms.approximateSize += ms.executionInfo.Size()
 	}
 }
@@ -4102,6 +4154,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
 	ms.approximateSize += sizeDelta
+	ms.updateInfoUpdated[updateID] = struct{}{}
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -4151,6 +4204,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 		sizeDelta = ui.Size() + len(updateID)
 	}
 	ms.approximateSize += sizeDelta
+	ms.updateInfoUpdated[updateID] = struct{}{}
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -4197,6 +4251,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 	}
 	sizeDelta = ui.Size() - sizeBefore
 	ms.approximateSize += sizeDelta
+	ms.updateInfoUpdated[updateID] = struct{}{}
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -5061,6 +5116,8 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
+	ms.executionStateUpdated = true
+	ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
 	return setStateStatus(ms.executionState, state, status)
 }
 
@@ -5138,7 +5195,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	}
 
 	ms.checksum = result.checksum
-	if err := ms.cleanupTransaction(transactionPolicy); err != nil {
+	if err := ms.cleanupTransaction(); err != nil {
 		return nil, nil, err
 	}
 	return workflowMutation, result.workflowEventsSeq, nil
@@ -5178,7 +5235,7 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	}
 
 	ms.checksum = result.checksum
-	if err := ms.cleanupTransaction(transactionPolicy); err != nil {
+	if err := ms.cleanupTransaction(); err != nil {
 		return nil, nil, err
 	}
 	return workflowSnapshot, result.workflowEventsSeq, nil
@@ -5201,6 +5258,26 @@ func (ms *MutableStateImpl) UpdateDuplicatedResource(
 
 func (ms *MutableStateImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
 	return ms.taskGenerator.GenerateMigrationTasks()
+}
+
+func (ms *MutableStateImpl) updateSearchAttributes(
+	updatedPayloadMap map[string]*commonpb.Payload,
+) {
+	ms.executionInfo.SearchAttributes = payload.MergeMapOfPayload(
+		ms.executionInfo.SearchAttributes,
+		updatedPayloadMap,
+	)
+	ms.visibilityUpdated = true
+}
+
+func (ms *MutableStateImpl) updateMemo(
+	updatedMemo map[string]*commonpb.Payload,
+) {
+	ms.executionInfo.Memo = payload.MergeMapOfPayload(
+		ms.executionInfo.Memo,
+		updatedMemo,
+	)
+	ms.visibilityUpdated = true
 }
 
 type closeTransactionResult struct {
@@ -5236,6 +5313,10 @@ func (ms *MutableStateImpl) closeTransaction(
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
+
+	ms.closeTransactionTrackLastUpdateVersionedTransition(
+		transactionPolicy,
+	)
 
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
@@ -5347,6 +5428,8 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	}
 
 	if transactionPolicy != TransactionPolicyActive {
+		// TODO: replication/standby logic will need a different way for updating transition history
+		// when not syncing mutable state
 		return nil
 	}
 
@@ -5364,6 +5447,64 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	)
 
 	return nil
+}
+
+func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
+	transactionPolicy TransactionPolicy,
+) {
+	if transactionPolicy != TransactionPolicyActive {
+		// TODO: replication/standby logic will need a different way for updating LastUpdatedVersionedTransition
+		// when reapplying history, especially when history replication tasks got batched.
+		return
+	}
+
+	if len(ms.executionInfo.TransitionHistory) == 0 {
+		// transition history is not enabled
+		return
+	}
+
+	transitionHistory := ms.executionInfo.TransitionHistory
+	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	for _, activityInfo := range ms.updateActivityInfos {
+		activityInfo.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+	for _, timerInfo := range ms.updateTimerInfos {
+		timerInfo.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+	for _, childInfo := range ms.updateChildExecutionInfos {
+		childInfo.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+	for _, cancelInfo := range ms.updateRequestCancelInfos {
+		cancelInfo.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+	for _, signalInfo := range ms.updateSignalInfos {
+		signalInfo.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+
+	// signalRequestedIDs is a set in DB, we don't have a place to store the lastUpdateVersionedTransition for each
+	// signal requestedID.
+	// Deletion of signalRequestID is not replicated today, so we can even drop the check on deleteSignalRequestedIDs
+	if len(ms.updateSignalRequestedIDs) != 0 || len(ms.deleteSignalRequestedIDs) != 0 {
+		ms.executionInfo.SignalRequestIdsLastUpdateVersionedTransition = currentVersionedTransition
+	}
+
+	for updateID := range ms.updateInfoUpdated {
+		ms.executionInfo.UpdateInfos[updateID].LastUpdateVersionedTransition = currentVersionedTransition
+	}
+
+	if ms.workflowTaskUpdated && ms.HasPendingWorkflowTask() {
+		ms.executionInfo.WorkflowTaskLastUpdateVersionedTransition = currentVersionedTransition
+	}
+
+	if ms.visibilityUpdated {
+		ms.executionInfo.VisibilityLastUpdateVersionedTransition = currentVersionedTransition
+	}
+
+	if ms.executionStateUpdated {
+		ms.executionState.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+
+	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareTasks(
@@ -5431,9 +5572,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	return nil
 }
 
-func (ms *MutableStateImpl) cleanupTransaction(
-	_ TransactionPolicy,
-) error {
+func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
 	ms.deleteActivityInfos = make(map[int64]struct{})
 	ms.syncActivityTasks = make(map[int64]struct{})
@@ -5452,6 +5591,11 @@ func (ms *MutableStateImpl) cleanupTransaction(
 
 	ms.updateSignalRequestedIDs = make(map[string]struct{})
 	ms.deleteSignalRequestedIDs = make(map[string]struct{})
+
+	ms.visibilityUpdated = false
+	ms.executionStateUpdated = false
+	ms.workflowTaskUpdated = false
+	ms.updateInfoUpdated = make(map[string]struct{})
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()

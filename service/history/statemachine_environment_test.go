@@ -106,7 +106,7 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
-	s.workflowCache = cache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetMetricsHandler())
+	s.workflowCache = cache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 
 	mockClusterMetadata := s.mockShard.Resource.ClusterMetadata
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()

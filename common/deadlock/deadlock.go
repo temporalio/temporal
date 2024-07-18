@@ -28,12 +28,12 @@ import (
 	"context"
 	"runtime/pprof"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -68,14 +68,14 @@ type (
 		metricsHandler metrics.Handler
 		config         config
 		roots          []pingable.Pingable
+		pools          []*goro.AdaptivePool
 		loops          goro.Group
 	}
 
 	loopContext struct {
-		dd      *deadlockDetector
-		root    pingable.Pingable
-		ch      chan pingable.Check
-		workers int32
+		dd   *deadlockDetector
+		root pingable.Pingable
+		p    *goro.AdaptivePool
 	}
 )
 
@@ -97,10 +97,18 @@ func NewDeadlockDetector(params params) *deadlockDetector {
 
 func (dd *deadlockDetector) Start() error {
 	for _, root := range dd.roots {
+		pool := goro.NewAdaptivePool(
+			clock.NewRealTimeSource(),
+			0,
+			dd.config.MaxWorkersPerRoot(),
+			100*time.Millisecond,
+			10,
+		)
+		dd.pools = append(dd.pools, pool)
 		loopCtx := &loopContext{
 			dd:   dd,
 			root: root,
-			ch:   make(chan pingable.Check),
+			p:    pool,
 		}
 		dd.loops.Go(loopCtx.run)
 	}
@@ -108,6 +116,9 @@ func (dd *deadlockDetector) Start() error {
 }
 
 func (dd *deadlockDetector) Stop() error {
+	for _, pool := range dd.pools {
+		pool.Stop()
+	}
 	dd.loops.Cancel()
 	// don't wait for workers to exit, they may be blocked
 	return nil
@@ -167,57 +178,32 @@ func (lc *loopContext) run(ctx context.Context) error {
 func (lc *loopContext) ping(ctx context.Context, pingables []pingable.Pingable) {
 	for _, pingable := range pingables {
 		for _, check := range pingable.GetPingChecks() {
-			select {
-			case lc.ch <- check:
-			case <-ctx.Done():
-				return
-			default:
-				// maybe add another worker if blocked
-				w := atomic.LoadInt32(&lc.workers)
-				if w < int32(lc.dd.config.MaxWorkersPerRoot()) && atomic.CompareAndSwapInt32(&lc.workers, w, w+1) {
-					lc.dd.loops.Go(lc.worker)
-				}
-				// blocking send
-				select {
-				case lc.ch <- check:
-				case <-ctx.Done():
-					return
-				}
-			}
+			lc.p.Do(func() { lc.check(ctx, check) })
 		}
 	}
 }
 
-func (lc *loopContext) worker(ctx context.Context) error {
-	for {
-		var check pingable.Check
-		select {
-		case check = <-lc.ch:
-		case <-ctx.Done():
-			return nil
+func (lc *loopContext) check(ctx context.Context, check pingable.Check) {
+	lc.dd.logger.Debug("starting ping check", tag.Name(check.Name))
+	startTime := time.Now().UTC()
+
+	// Using AfterFunc is cheaper than creating another goroutine to be the waiter, since
+	// we expect to always cancel it. If the go runtime is so messed up that it can't
+	// create a goroutine, that's a bigger problem than we can handle.
+	t := time.AfterFunc(check.Timeout, func() {
+		if ctx.Err() != nil {
+			// deadlock detector was stopped
+			return
 		}
-
-		lc.dd.logger.Debug("starting ping check", tag.Name(check.Name))
-		startTime := time.Now().UTC()
-
-		// Using AfterFunc is cheaper than creating another goroutine to be the waiter, since
-		// we expect to always cancel it. If the go runtime is so messed up that it can't
-		// create a goroutine, that's a bigger problem than we can handle.
-		t := time.AfterFunc(check.Timeout, func() {
-			if ctx.Err() != nil {
-				// deadlock detector was stopped
-				return
-			}
-			lc.dd.detected(check.Name)
-		})
-		newPingables := check.Ping()
-		t.Stop()
-		if len(check.MetricsName) > 0 {
-			lc.dd.metricsHandler.Timer(check.MetricsName).Record(time.Since(startTime))
-		}
-
-		lc.dd.logger.Debug("ping check succeeded", tag.Name(check.Name))
-
-		lc.ping(ctx, newPingables)
+		lc.dd.detected(check.Name)
+	})
+	newPingables := check.Ping()
+	t.Stop()
+	if len(check.MetricsName) > 0 {
+		lc.dd.metricsHandler.Timer(check.MetricsName).Record(time.Since(startTime))
 	}
+
+	lc.dd.logger.Debug("ping check succeeded", tag.Name(check.Name))
+
+	lc.ping(ctx, newPingables)
 }

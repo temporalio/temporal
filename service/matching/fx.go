@@ -26,6 +26,7 @@ package matching
 
 import (
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -51,7 +52,7 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
-	fx.Provide(dynamicconfig.NewCollection),
+	dynamicconfig.Module,
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -64,9 +65,14 @@ var Module = fx.Options(
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
+
+func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
+	return grpc.NewServer(grpcServerOptions...)
+}
 
 func ConfigProvider(
 	dc *dynamicconfig.Collection,

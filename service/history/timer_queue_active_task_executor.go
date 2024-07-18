@@ -84,6 +84,7 @@ func newTimerQueueActiveTaskExecutor(
 			logger,
 			metricProvider,
 			config,
+			true,
 		),
 	}
 }
