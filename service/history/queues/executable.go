@@ -494,13 +494,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		}
 	}()
 
-	metricsHandler := e.taggedMetricsHandler.WithTags(metrics.ServiceErrorTypeTag(err))
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	var resourceExhaustedCauseTag metrics.Tag
 	if errors.As(err, &resourceExhaustedErr) {
-		metricsHandler = metricsHandler.WithTags(
-			metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause),
-		)
+		resourceExhaustedCauseTag = metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause)
+	} else {
+		resourceExhaustedCauseTag = metrics.ResourceExhaustedCauseEmptyTag()
 	}
+	metricsHandler := e.taggedMetricsHandler.WithTags(
+		metrics.ServiceErrorTypeTag(err),
+		resourceExhaustedCauseTag,
+	)
 
 	if len(e.dlqErrorPattern()) > 0 {
 		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
