@@ -152,8 +152,7 @@ type (
 	BackfillHistoryEventsRequest struct {
 		definition.WorkflowKey
 
-		SourceClusterName string
-		// BaseExecutionInfo *workflowpb.BaseExecutionInfo
+		SourceClusterName   string
 		VersionedHistory    *persistencespb.VersionedTransition
 		BaseExecutionInfo   *workflowpb.BaseExecutionInfo
 		VersionHistoryItems []*historyspb.VersionHistoryItem

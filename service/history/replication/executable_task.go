@@ -116,8 +116,7 @@ type (
 		taskReceivedTime  time.Time
 		sourceClusterName string
 		taskPriority      enumsspb.TaskPriority
-		// versionedTransition *persistence.VersionedTransition
-		replicationTask *replicationspb.ReplicationTask
+		replicationTask   *replicationspb.ReplicationTask
 
 		// mutable data
 		taskState int32

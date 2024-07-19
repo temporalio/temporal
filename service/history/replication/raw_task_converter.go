@@ -283,7 +283,7 @@ func convertSyncVersionedTransitionTask(
 				shardContext,
 				shardID,
 				definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-				taskInfo.Version,
+				taskInfo.VersionedTransition.NamespaceFailoverVersion,
 				taskInfo.FirstEventID,
 				taskInfo.NextEventID,
 				taskInfo.NewRunID,

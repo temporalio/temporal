@@ -357,7 +357,6 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
-		Version:             rand.Int63(),
 		FirstEventID:        rand.Int63(),
 		NextEventID:         rand.Int63(),
 		NewRunID:            uuid.New().String(),

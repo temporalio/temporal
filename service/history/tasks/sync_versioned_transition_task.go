@@ -40,7 +40,6 @@ type (
 
 		FirstEventID int64
 		NextEventID  int64
-		Version      int64
 		NewRunID     string
 
 		VersionedTransition *persistencespb.VersionedTransition
