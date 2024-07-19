@@ -393,7 +393,9 @@ func (c *cacheImpl) makeReleaseFunc(
 	status := cacheNotReleased
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
-			defer metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
+			defer func() {
+				metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
+			}()
 			if rec := recover(); rec != nil {
 				context.Clear()
 				context.Unlock()

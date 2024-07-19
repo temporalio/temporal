@@ -490,7 +490,6 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	time.Sleep(100 * time.Millisecond)
 	s.Eventually(func() bool {
 		release1(nil)
 		snapshot := capture.Snapshot()
