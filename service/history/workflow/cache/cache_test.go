@@ -495,7 +495,6 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	snapshot := capture.Snapshot()
 	s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
 	s.Equal(tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"])
-	s.Equal(tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"])
 
 	capture = metricsHandler.StartCapture()
 	release2, err := s.cache.GetOrCreateCurrentWorkflowExecution(
