@@ -25,14 +25,21 @@
 package replication
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -56,6 +63,15 @@ type (
 		sync.Mutex
 		inboundStreams  map[ClusterShardKeyPair]StreamSender
 		outboundStreams map[ClusterShardKeyPair]StreamReceiver
+		previousStatus  map[ClusterShardKey]*streamStatus
+	}
+	streamStatus struct {
+		defaultAckLevel      int64
+		highPriorityAckLevel int64
+		lowPriorityAckLevel  int64
+		maxReplicationTaskId int64
+		isTieredStackEnabled bool
+		senderShardId        int32
 	}
 )
 
@@ -90,6 +106,7 @@ func (m *StreamReceiverMonitorImpl) Start() {
 	}
 
 	go m.eventLoop()
+	go m.statusMonitorLoop()
 
 	m.Logger.Info("StreamReceiverMonitor started.")
 }
@@ -293,6 +310,152 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 			)
 			stream.Start()
 			m.outboundStreams[streamKey] = stream
+		}
+	}
+}
+
+func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
+		}
+	}()
+	defer log.CapturePanic(m.Logger, &panicErr)
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.monitoryStreamStatus()
+		case <-m.shutdownOnce.Channel():
+			return
+		}
+	}
+}
+func (m *StreamReceiverMonitorImpl) monitoryStreamStatus() {
+	if m.shutdownOnce.IsShutdown() {
+		return
+	}
+	statusMap := m.generateStatusMap()
+	if m.previousStatus == nil {
+		m.previousStatus = statusMap
+		return
+	}
+	m.compareStreamsStatus(statusMap)
+	m.previousStatus = statusMap
+}
+
+func (m *StreamReceiverMonitorImpl) compareStreamsStatus(currentStatusMap map[ClusterShardKey]*streamStatus) {
+	for key, currentStatus := range currentStatusMap {
+		m.compareStatus(&key, currentStatus, m.previousStatus[key])
+	}
+}
+
+func (m *StreamReceiverMonitorImpl) compareStatus(clientKey *ClusterShardKey, current *streamStatus, previous *streamStatus) {
+	if previous == nil || current == nil { // cluster metadata change or shard movement could cause stream reconnect and status could be nil
+		return
+	}
+	if previous.isTieredStackEnabled != current.isTieredStackEnabled { // there is tiered stack config change, wait until it becomes stable
+		return
+	}
+	checkIfMakeProgress := func(priority enumspb.TaskPriority, currentAckLevel int64, currentMaxTaskId int64, previousAckLevel int64, previousMaxReplicationTaskId int64) {
+		//if currentAckLevel >= currentMaxTaskId || // reader already catch up
+		//	currentAckLevel > previousAckLevel { // reader ACK level moved forward
+		//	return
+		//}
+		//
+		//// a special case where the replication task was just put into the queue when gathering the reader status
+		//if previousAckLevel >= previousMaxReplicationTaskId {
+		//	return
+		//}
+
+		// 2 continuous data points where ACK level is not moving forward and ACK level is behind MaxReplication taskId
+		if currentAckLevel == previousAckLevel && currentAckLevel < previousMaxReplicationTaskId {
+			m.Logger.Error(
+				fmt.Sprintf("%v replication is not making progress. previousAckLevel: %v, previousMaxTaskId: %v, currentAckLevel: %v, currentMaxTaskId: %v",
+					priority.String(), previous.defaultAckLevel, current.maxReplicationTaskId, current.defaultAckLevel, current.defaultAckLevel),
+				tag.SourceShardID(current.senderShardId), tag.TargetCluster(string(clientKey.ClusterID)), tag.TargetShardID(clientKey.ShardID))
+			metrics.ReplicationStreamStuck.With(m.MetricsHandler).Record(1)
+		}
+	}
+
+	if !current.isTieredStackEnabled {
+		checkIfMakeProgress(enumspb.TASK_PRIORITY_UNSPECIFIED, current.defaultAckLevel, current.maxReplicationTaskId, previous.defaultAckLevel, previous.maxReplicationTaskId)
+		return
+	}
+	checkIfMakeProgress(enumspb.TASK_PRIORITY_HIGH, current.highPriorityAckLevel, current.maxReplicationTaskId, previous.highPriorityAckLevel, previous.maxReplicationTaskId)
+	checkIfMakeProgress(enumspb.TASK_PRIORITY_LOW, current.lowPriorityAckLevel, current.maxReplicationTaskId, previous.lowPriorityAckLevel, previous.maxReplicationTaskId)
+}
+
+func (m *StreamReceiverMonitorImpl) generateStatusMap() map[ClusterShardKey]*streamStatus {
+	serverToClients := make(map[ClusterShardKey][]ClusterShardKey)
+	keyPairs := m.generateInboundStreamKeys()
+	for keyPair := range keyPairs {
+		serverToClients[keyPair.Server] = append(serverToClients[keyPair.Server], keyPair.Client)
+	}
+	statusMap := make(map[ClusterShardKey]*streamStatus)
+	for serverKey, clientKeys := range serverToClients {
+		m.fillStatusMap(statusMap, serverKey.ShardID, clientKeys)
+	}
+	return statusMap
+}
+
+func (m *StreamReceiverMonitorImpl) fillStatusMap(statusMap map[ClusterShardKey]*streamStatus, serverShardId int32, clientsKeys []ClusterShardKey) {
+	shardContext, err := m.ShardController.GetShardByID(serverShardId)
+	if err != nil {
+		m.Logger.Error("Failed to get shardContext.", tag.Error(err))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		m.Logger.Error("Failed to get engine.", tag.Error(err))
+		return
+	}
+	maxTaskId, _ := engine.GetMaxReplicationTaskInfo()
+	queueState, ok := shardContext.GetQueueState(tasks.CategoryReplication)
+	if !ok {
+		m.Logger.Error("Failed to get queue state.")
+		return
+	}
+	readerStates := queueState.GetReaderStates()
+	for _, clientKey := range clientsKeys {
+		readerID := shard.ReplicationReaderIDFromClusterShardID(
+			int64(clientKey.ClusterID),
+			clientKey.ShardID,
+		)
+		readerState, ok := readerStates[readerID]
+		if !ok {
+			m.Logger.Error("Failed to get reader state.")
+			statusMap[clientKey] = &streamStatus{
+				maxReplicationTaskId: maxTaskId,
+				isTieredStackEnabled: false,
+				senderShardId:        serverShardId,
+			}
+			continue
+		}
+		if len(readerState.Scopes) == 3 {
+			statusMap[clientKey] = &streamStatus{
+				defaultAckLevel:      readerState.Scopes[0].Range.InclusiveMin.TaskId,
+				highPriorityAckLevel: readerState.Scopes[1].Range.InclusiveMin.TaskId,
+				lowPriorityAckLevel:  readerState.Scopes[2].Range.InclusiveMin.TaskId,
+				maxReplicationTaskId: maxTaskId,
+				isTieredStackEnabled: true,
+				senderShardId:        serverShardId,
+			}
+		} else if len(readerState.Scopes) == 1 {
+			statusMap[clientKey] = &streamStatus{
+				defaultAckLevel:      readerState.Scopes[0].Range.InclusiveMin.TaskId,
+				highPriorityAckLevel: 0,
+				lowPriorityAckLevel:  0,
+				maxReplicationTaskId: maxTaskId,
+				isTieredStackEnabled: false,
+				senderShardId:        serverShardId,
+			}
 		}
 	}
 }
