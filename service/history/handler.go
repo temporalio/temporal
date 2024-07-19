@@ -38,7 +38,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
-	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -2027,11 +2027,8 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		return errShuttingDown
 	}
 
-	ctxMetadata, ok := metadata.FromIncomingContext(server.Context())
-	if !ok {
-		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
-	}
-	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	getter := headers.NewGRPCHeaderGetter(server.Context())
+	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(getter)
 	if err != nil {
 		return err
 	}
