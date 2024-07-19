@@ -1182,6 +1182,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	}
 
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+	metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+		metrics.ReasonTag("close_transaction"))
 
 	wt := m.getWorkflowTaskInfo()
 
