@@ -75,7 +75,6 @@ enum TaskType {
 
     TASK_TYPE_REPLICATION_SYNC_HSM = 30;
     TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION = 31;
-    TASK_TYPE_REPLICATION_BACKFILL_HISTORY = 32;
 }
 
 // TaskPriority is only used for replication task as of May 2024

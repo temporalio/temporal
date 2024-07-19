@@ -115,10 +115,12 @@ func replicationTaskConverterFactoryProvider(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
 		clientClusterName string,
+		serializer serialization.Serializer,
 	) SourceTaskConverter {
 		return NewSourceTaskConverter(
 			historyEngine,
 			shardContext.GetNamespaceRegistry(),
+			serializer,
 			config)
 	}
 }

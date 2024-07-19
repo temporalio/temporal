@@ -26,7 +26,6 @@ package ndc
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -301,16 +300,19 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 
 	versionedTransition := task.getVersionedTransition()
 	if versionedTransition == nil {
-		return errors.New("versioned transition is required for backfill task")
+		return &serviceerror.InvalidArgument{
+			Message: "versioned transition is required for backfill task",
+		}
 	}
 
 	if task.getFirstEvent().GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-		return errors.New("workflow execution started event is not expected in backfill task")
+		return &serviceerror.InvalidArgument{
+			Message: "workflow execution started event is not expected in backfill task",
+		}
 	}
 
 	transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
-	err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
-	if err != nil {
+	if workflow.CompareVersionedTransition(versionedTransition, transitionHistory[len(transitionHistory)-1]) > 0 {
 		return serviceerrors.NewSyncState(
 			mutableStateMissingMessage,
 			task.getNamespaceID().String(),
@@ -320,9 +322,9 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 		)
 	}
 
-	mutableState, _, err = r.mutableStateMapper.FlushBufferEvents(ctx, wfContext, mutableState, task)
-	if err != nil {
-		return err
+	err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
+	if err == nil {
+		return nil
 	}
 
 	mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.GetOrCreateHistoryBranch(ctx, wfContext, mutableState, task)

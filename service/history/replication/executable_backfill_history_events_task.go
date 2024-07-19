@@ -28,10 +28,7 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -64,11 +61,10 @@ func NewExecutableBackfillHistoryEventsTask(
 	processToolBox ProcessToolBox,
 	taskID int64,
 	taskCreationTime time.Time,
-	task *replicationspb.BackfillHistoryTaskAttributes,
 	sourceClusterName string,
-	priority enumsspb.TaskPriority,
-	versionedTransition *persistencespb.VersionedTransition,
+	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableBackfillHistoryEventsTask {
+	task := replicationTask.GetBackfillHistoryTaskAttributes()
 	return &ExecutableBackfillHistoryEventsTask{
 		ProcessToolBox: processToolBox,
 
@@ -80,8 +76,8 @@ func NewExecutableBackfillHistoryEventsTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
-			priority,
-			versionedTransition,
+			replicationTask.Priority,
+			replicationTask,
 		),
 		taskAttr:               task,
 		markPoisonPillAttempts: 0,
@@ -142,23 +138,38 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 	return engine.BackfillHistoryEvents(ctx, &shard.BackfillHistoryEventsRequest{
 		WorkflowKey:         e.WorkflowKey,
 		SourceClusterName:   e.SourceClusterName(),
-		VersionedHistory:    e.taskAttr.VersionedTransition,
-		BaseExecutionInfo:   e.taskAttr.BaseExecutionInfo,
-		VersionHistoryItems: e.taskAttr.VersionHistoryItems,
+		VersionedHistory:    e.ReplicationTask().VersionedTransition,
+		VersionHistoryItems: e.taskAttr.EventVersionHistory,
 		Events:              events,
 		NewEvents:           newRunEvents,
-		NewRunID:            e.taskAttr.NewRunId,
+		NewRunID:            e.taskAttr.NewRunInfo.RunId,
 	})
 
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
-	switch retryErr := err.(type) {
+	switch taskErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.SyncState:
-		// TODO: call SyncState.
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
+		if nsError != nil {
+			return err
+		}
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		defer cancel()
 
+		if doContinue, syncStateErr := e.SyncState(
+			ctx,
+			e.ExecutableTask.SourceClusterName(),
+			taskErr,
+			ResendAttempt,
+		); syncStateErr != nil || !doContinue {
+			return err
+		}
 		return e.Execute()
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -174,7 +185,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		if doContinue, resendErr := e.Resend(
 			ctx,
 			e.ExecutableTask.SourceClusterName(),
-			retryErr,
+			taskErr,
 			ResendAttempt,
 		); resendErr != nil || !doContinue {
 			return err
@@ -193,37 +204,12 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) MarkPoisonPill() error {
+	taskInfo := e.ReplicationTask().GetRawTaskInfo()
+
 	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		taskInfo := &persistencespb.ReplicationTaskInfo{
-			NamespaceId:         e.NamespaceID,
-			WorkflowId:          e.WorkflowID,
-			RunId:               e.RunID,
-			TaskId:              e.ExecutableTask.TaskID(),
-			TaskType:            enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
-			VisibilityTime:      timestamppb.New(e.TaskCreationTime()),
-			NewRunId:            e.taskAttr.NewRunId,
-			VersionedTransition: e.taskAttr.VersionedTransition,
-		}
-		events, newRunEvents, err := e.getDeserializedEvents()
-		if err != nil {
-			taskInfo.FirstEventId = -1
-			taskInfo.NextEventId = -1
-			taskInfo.Version = -1
-			e.Logger.Error("MarkPoisonPill reached max attempts, deserialize failed",
-				tag.SourceCluster(e.SourceClusterName()),
-				tag.ReplicationTask(taskInfo),
-				tag.Error(err),
-			)
-			return nil
-		}
-		taskInfo.FirstEventId = events[0][0].GetEventId()
-		taskInfo.NextEventId = events[len(events)-1][len(events[len(events)-1])-1].GetEventId() + 1
-		taskInfo.Version = events[0][0].GetVersion()
 		e.Logger.Error("MarkPoisonPill reached max attempts",
 			tag.SourceCluster(e.SourceClusterName()),
 			tag.ReplicationTask(taskInfo),
-			tag.NewAnyTag("NewRunFirstEventId", newRunEvents[0].GetEventId()),
-			tag.NewAnyTag("NewRunLastEventId", newRunEvents[len(newRunEvents)-1].GetEventId()),
 		)
 		return nil
 	}
@@ -237,53 +223,15 @@ func (e *ExecutableBackfillHistoryEventsTask) MarkPoisonPill() error {
 		return err
 	}
 
-	eventBatches := [][]*historypb.HistoryEvent{}
-	for _, eventsBlob := range e.taskAttr.EventBatches {
-		events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
-		if err != nil {
-			e.Logger.Error("unable to enqueue sync versioned transition replication task to DLQ, ser/de error",
-				tag.ShardID(shardContext.GetShardID()),
-				tag.WorkflowNamespaceID(e.NamespaceID),
-				tag.WorkflowID(e.WorkflowID),
-				tag.WorkflowRunID(e.RunID),
-				tag.TaskID(e.ExecutableTask.TaskID()),
-				tag.Error(err),
-			)
-			return nil
-		} else if len(events) == 0 {
-			e.Logger.Error("unable to enqueue sync versioned transition replication task to DLQ, no events",
-				tag.ShardID(shardContext.GetShardID()),
-				tag.WorkflowNamespaceID(e.NamespaceID),
-				tag.WorkflowID(e.WorkflowID),
-				tag.WorkflowRunID(e.RunID),
-				tag.TaskID(e.ExecutableTask.TaskID()),
-			)
-			return nil
-		}
-		eventBatches = append(eventBatches, events)
-	}
-
 	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	taskInfo := &persistencespb.ReplicationTaskInfo{
-		NamespaceId:         e.NamespaceID,
-		WorkflowId:          e.WorkflowID,
-		RunId:               e.RunID,
-		TaskId:              e.ExecutableTask.TaskID(),
-		TaskType:            enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
-		VisibilityTime:      timestamppb.New(e.TaskCreationTime()),
-		NewRunId:            e.taskAttr.NewRunId,
-		VersionedTransition: e.taskAttr.VersionedTransition,
-		FirstEventId:        eventBatches[0][0].GetEventId(),
-		NextEventId:         eventBatches[len(eventBatches)-1][len(eventBatches[len(eventBatches)-1])-1].GetEventId() + 1,
-		Version:             eventBatches[0][0].GetVersion(),
-	}
-
 	e.Logger.Error("enqueue sync versioned transition replication task to DLQ",
 		tag.ShardID(shardContext.GetShardID()),
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),
 		tag.WorkflowRunID(e.RunID),
 		tag.TaskID(e.ExecutableTask.TaskID()),
+		tag.SourceCluster(e.SourceClusterName()),
+		tag.ReplicationTask(taskInfo),
 	)
 
 	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
@@ -309,7 +257,7 @@ func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*hi
 		eventBatches = append(eventBatches, events)
 	}
 
-	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.taskAttr.NewRunEventBatch)
+	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.taskAttr.NewRunInfo.EventBatch)
 	if err != nil {
 		e.Logger.Error("unable to deserialize new run history events",
 			tag.WorkflowNamespaceID(e.NamespaceID),

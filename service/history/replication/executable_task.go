@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -98,18 +98,26 @@ type (
 			ctx context.Context,
 			namespaceID string,
 		) (string, bool, error)
+		SyncState(
+			ctx context.Context,
+			remoteCluster string,
+			syncStateErr *serviceerrors.SyncState,
+			remainingAttempt int,
+		) (bool, error)
+		ReplicationTask() *replicationspb.ReplicationTask
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
 
 		// immutable data
-		taskID              int64
-		metricsTag          string
-		taskCreationTime    time.Time
-		taskReceivedTime    time.Time
-		sourceClusterName   string
-		taskPriority        enumsspb.TaskPriority
-		versionedTransition *persistence.VersionedTransition
+		taskID            int64
+		metricsTag        string
+		taskCreationTime  time.Time
+		taskReceivedTime  time.Time
+		sourceClusterName string
+		taskPriority      enumsspb.TaskPriority
+		// versionedTransition *persistence.VersionedTransition
+		replicationTask *replicationspb.ReplicationTask
 
 		// mutable data
 		taskState int32
@@ -126,20 +134,19 @@ func NewExecutableTask(
 	taskReceivedTime time.Time,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
-	versionedTransition *persistence.VersionedTransition,
+	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
-		ProcessToolBox:      processToolBox,
-		taskID:              taskID,
-		metricsTag:          metricsTag,
-		taskCreationTime:    taskCreationTime,
-		taskReceivedTime:    taskReceivedTime,
-		sourceClusterName:   sourceClusterName,
-		taskPriority:        priority,
-		versionedTransition: versionedTransition,
-
-		taskState: taskStatePending,
-		attempt:   1,
+		ProcessToolBox:    processToolBox,
+		taskID:            taskID,
+		metricsTag:        metricsTag,
+		taskCreationTime:  taskCreationTime,
+		taskReceivedTime:  taskReceivedTime,
+		sourceClusterName: sourceClusterName,
+		taskPriority:      priority,
+		replicationTask:   replicationTask,
+		taskState:         taskStatePending,
+		attempt:           1,
 	}
 }
 
@@ -153,6 +160,10 @@ func (e *ExecutableTaskImpl) TaskCreationTime() time.Time {
 
 func (e *ExecutableTaskImpl) SourceClusterName() string {
 	return e.sourceClusterName
+}
+
+func (e *ExecutableTaskImpl) ReplicationTask() *replicationspb.ReplicationTask {
+	return e.replicationTask
 }
 
 func (e *ExecutableTaskImpl) Ack() {
@@ -416,6 +427,15 @@ func (e *ExecutableTaskImpl) Resend(
 	}
 }
 
+func (e *ExecutableTaskImpl) SyncState(
+	ctx context.Context,
+	remoteCluster string,
+	syncStateErr *serviceerrors.SyncState,
+	remainingAttempt int,
+) (bool, error) {
+	return false, serviceerror.NewUnimplemented("not implemented") // TODO
+}
+
 func (e *ExecutableTaskImpl) DeleteWorkflow(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
@@ -449,9 +469,9 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
-		if e.versionedTransition != nil && e.versionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
+		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
 			if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
-				return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.versionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
+				return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
 			}
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
@@ -475,8 +495,8 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 		return "", false, err
 	}
 	// need to make sure ns in cache is up-to-date
-	if e.versionedTransition != nil && namespaceEntry.FailoverVersion() < e.versionedTransition.NamespaceFailoverVersion {
-		return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.versionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
+	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion() < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
+		return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
 	}
 
 	e.namespace.Store(namespaceEntry.Name())

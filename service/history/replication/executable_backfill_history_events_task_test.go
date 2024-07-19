@@ -38,8 +38,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
-	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -77,7 +75,7 @@ type (
 		mockExecutionManager    *persistence.MockExecutionManager
 		config                  *configs.Config
 
-		replicationTask   *replicationspb.BackfillHistoryTaskAttributes
+		replicationTask   *replicationspb.ReplicationTask
 		sourceClusterName string
 
 		taskID        int64
@@ -133,29 +131,36 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 	s.newRunID = uuid.NewString()
 
 	s.eventsBlobs = []*commonpb.DataBlob{eventsBlob}
+	s.taskID = rand.Int63()
 
-	s.replicationTask = &replicationspb.BackfillHistoryTaskAttributes{
-		NamespaceId: uuid.NewString(),
-		WorkflowId:  uuid.NewString(),
-		RunId:       uuid.NewString(),
+	s.replicationTask = &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK,
+		SourceTaskId: s.taskID,
+		Attributes: &replicationspb.ReplicationTask_BackfillHistoryTaskAttributes{
+			BackfillHistoryTaskAttributes: &replicationspb.BackfillHistoryTaskAttributes{
+				NamespaceId: uuid.NewString(),
+				WorkflowId:  uuid.NewString(),
+				RunId:       uuid.NewString(),
+				EventVersionHistory: []*history.VersionHistoryItem{{
+					EventId: nextEventID - 1,
+					Version: version,
+				}},
+				EventBatches: s.eventsBlobs,
+				NewRunInfo: &replicationspb.NewRunInfo{
+					RunId:      s.newRunID,
+					EventBatch: newEventsBlob,
+				},
+			},
+		},
 		VersionedTransition: &persistencepb.VersionedTransition{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
 		},
-		BaseExecutionInfo: &workflowspb.BaseExecutionInfo{},
-		VersionHistoryItems: []*history.VersionHistoryItem{{
-			EventId: nextEventID - 1,
-			Version: version,
-		}},
-		EventBatches:     s.eventsBlobs,
-		NewRunEventBatch: newEventsBlob,
-		NewRunId:         s.newRunID,
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.config = tests.NewDynamicConfig()
 
-	s.taskID = rand.Int63()
 	taskCreationTime := time.Unix(0, rand.Int63())
 	s.task = NewExecutableBackfillHistoryEventsTask(
 		ProcessToolBox{
@@ -173,10 +178,8 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 		},
 		s.taskID,
 		taskCreationTime,
-		s.replicationTask,
 		s.sourceClusterName,
-		enumsspb.TASK_PRIORITY_HIGH,
-		nil,
+		s.replicationTask,
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -190,6 +193,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TearDownTest() {
 
 func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(s.replicationTask)
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -201,6 +205,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Process() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
+
 	engine.EXPECT().BackfillHistoryEvents(gomock.Any(), &shard.BackfillHistoryEventsRequest{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: s.task.NamespaceID,
@@ -209,8 +214,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Process() {
 		},
 		SourceClusterName:   s.sourceClusterName,
 		VersionedHistory:    s.replicationTask.VersionedTransition,
-		BaseExecutionInfo:   s.replicationTask.BaseExecutionInfo,
-		VersionHistoryItems: s.replicationTask.VersionHistoryItems,
+		VersionHistoryItems: s.replicationTask.GetBackfillHistoryTaskAttributes().EventVersionHistory,
 		Events:              s.eventsBatches,
 		NewEvents:           s.newRunEvents,
 		NewRunID:            s.newRunID,
@@ -249,6 +253,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Err() {
 
 func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(s.replicationTask)
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -301,22 +306,11 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestMarkPoisonPill() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(s.replicationTask)
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardID,
 		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencepb.ReplicationTaskInfo{
-			NamespaceId:         s.task.NamespaceID,
-			WorkflowId:          s.task.WorkflowID,
-			RunId:               s.task.RunID,
-			TaskId:              s.task.ExecutableTask.TaskID(),
-			TaskType:            enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
-			VisibilityTime:      timestamppb.New(s.task.TaskCreationTime()),
-			NewRunId:            s.newRunID,
-			VersionedTransition: s.task.taskAttr.VersionedTransition,
-			FirstEventId:        s.eventsBatches[0][0].GetEventId(),
-			NextEventId:         s.eventsBatches[len(s.eventsBatches)-1][len(s.eventsBatches[len(s.eventsBatches)-1])-1].GetEventId() + 1,
-			Version:             s.eventsBatches[0][0].GetVersion(),
-		},
+		TaskInfo:          s.replicationTask.RawTaskInfo,
 	}).Return(nil)
 
 	err := s.task.MarkPoisonPill()
@@ -332,22 +326,11 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestMarkPoisonPill_MaxAttempt
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	s.executableTask.EXPECT().ReplicationTask().Times(2).Return(s.replicationTask)
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardID,
 		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencepb.ReplicationTaskInfo{
-			NamespaceId:         s.task.NamespaceID,
-			WorkflowId:          s.task.WorkflowID,
-			RunId:               s.task.RunID,
-			TaskId:              s.task.ExecutableTask.TaskID(),
-			TaskType:            enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
-			VisibilityTime:      timestamppb.New(s.task.TaskCreationTime()),
-			NewRunId:            s.newRunID,
-			VersionedTransition: s.task.taskAttr.VersionedTransition,
-			FirstEventId:        s.eventsBatches[0][0].GetEventId(),
-			NextEventId:         s.eventsBatches[len(s.eventsBatches)-1][len(s.eventsBatches[len(s.eventsBatches)-1])-1].GetEventId() + 1,
-			Version:             s.eventsBatches[0][0].GetVersion(),
-		},
+		TaskInfo:          s.replicationTask.RawTaskInfo,
 	}).Return(serviceerror.NewInternal("failed"))
 
 	err := s.task.MarkPoisonPill()

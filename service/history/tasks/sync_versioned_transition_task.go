@@ -26,6 +26,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -42,8 +43,7 @@ type (
 		Version      int64
 		NewRunID     string
 
-		NamespaceFailoverVersion int64
-		TransitionCount          int64
+		VersionedTransition *persistencespb.VersionedTransition
 	}
 )
 

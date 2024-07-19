@@ -35,7 +35,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -57,6 +57,7 @@ type (
 	SourceTaskConverterImpl struct {
 		historyEngine  shard.Engine
 		namespaceCache namespace.Registry
+		serializer     serialization.Serializer
 		config         *configs.Config
 	}
 	SourceTaskConverter interface {
@@ -66,12 +67,14 @@ type (
 		historyEngine shard.Engine,
 		shardContext shard.Context,
 		clientClusterName string, // Some task converter may use the client cluster name.
+		serializer serialization.Serializer,
 	) SourceTaskConverter
 )
 
 func NewSourceTaskConverter(
 	historyEngine shard.Engine,
 	namespaceCache namespace.Registry,
+	serializer serialization.Serializer,
 	config *configs.Config,
 ) *SourceTaskConverterImpl {
 	return &SourceTaskConverterImpl{
@@ -104,6 +107,11 @@ func (c *SourceTaskConverterImpl) Convert(
 	if err != nil {
 		return nil, err
 	}
+	rawTaskInfo, err := c.serializer.ParseReplicationTaskInfo(task)
+	if err != nil {
+		return nil, err
+	}
+	replicationTask.RawTaskInfo = rawTaskInfo
 	return replicationTask, nil
 }
 
@@ -270,7 +278,7 @@ func convertSyncVersionedTransitionTask(
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			currentVersionHistory, currentEvents, newEvents, currentBaseWorkflowInfo, err := getVersionHistoryAndEventsWithNewRun(
+			currentVersionHistory, currentEvents, newEvents, _, err := getVersionHistoryAndEventsWithNewRun(
 				ctx,
 				shardContext,
 				shardID,
@@ -289,13 +297,9 @@ func convertSyncVersionedTransitionTask(
 			}
 
 			transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-			versionedTransition := &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: taskInfo.NamespaceFailoverVersion,
-				TransitionCount:          taskInfo.TransitionCount,
-			}
 
 			// 1. task versioned transition not on current transition history
-			if workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition) != nil {
+			if workflow.TransitionHistoryStalenessCheck(transitionHistory, taskInfo.VersionedTransition) != nil {
 				if len(currentEvents) == 0 && len(taskInfo.NewRunID) == 0 {
 					return nil, nil
 				}
@@ -307,15 +311,16 @@ func convertSyncVersionedTransitionTask(
 							NamespaceId:         taskInfo.NamespaceID,
 							WorkflowId:          taskInfo.WorkflowID,
 							RunId:               taskInfo.RunID,
-							BaseExecutionInfo:   currentBaseWorkflowInfo,
-							VersionHistoryItems: currentVersionHistory,
+							EventVersionHistory: currentVersionHistory,
 							EventBatches:        currentEvents,
-							NewRunEventBatch:    newEvents,
-							NewRunId:            taskInfo.NewRunID,
-							VersionedTransition: versionedTransition,
+							NewRunInfo: &replicationspb.NewRunInfo{
+								RunId:      taskInfo.NewRunID,
+								EventBatch: newEvents,
+							},
 						},
 					},
-					VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
+					VersionedTransition: taskInfo.VersionedTransition,
+					VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
 				}, nil
 			}
 
