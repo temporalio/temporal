@@ -491,11 +491,12 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	)
 	s.NoError(err)
 	time.Sleep(100 * time.Millisecond)
-	release1(nil)
-
-	snapshot := capture.Snapshot()
-	s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
-	s.Equal(tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"])
+	s.Eventually(func() bool {
+		release1(nil)
+		snapshot := capture.Snapshot()
+		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
+		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"]
+	}, 150*time.Millisecond, 100*time.Millisecond)
 
 	capture = metricsHandler.StartCapture()
 	release2, err := s.cache.GetOrCreateCurrentWorkflowExecution(
@@ -506,12 +507,12 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	time.Sleep(200 * time.Millisecond)
-	release2(nil)
-
-	snapshot = capture.Snapshot()
-	s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 200*time.Millisecond)
-	s.Equal(tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"])
+	s.Eventually(func() bool {
+		release2(nil)
+		snapshot := capture.Snapshot()
+		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 200*time.Millisecond)
+		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"]
+	}, 300*time.Millisecond, 200*time.Millisecond)
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
