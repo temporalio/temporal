@@ -471,7 +471,8 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 
-	// Using a mock context in this test to use metrics.CaptureHandler in workflow.Cache
+	// Using a mock context in this test to use metrics.CaptureHandler in workflow.Cache.
+	// We need ShardContext to return metrics.CaptureHandler on GetMetricsHandler() call.
 	mockContext := shard.NewMockContext(s.controller)
 	mockContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
 	mockContext.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
