@@ -918,10 +918,10 @@ message CompleteNexusOperationRequest {
 message CompleteNexusOperationResponse {
 }
 
-message HealthCheckRequest {
+message DeepHealthCheckRequest {
     string host_address = 1;
 }
 
-message HealthCheckResponse {
+message DeepHealthCheckResponse {
     temporal.server.api.enums.v1.HealthState state = 1;
 }

@@ -75,6 +75,20 @@ func (c *metricClient) CompleteNexusOperation(
 	return c.client.CompleteNexusOperation(ctx, request, opts...)
 }
 
+func (c *metricClient) DeepHealthCheck(
+	ctx context.Context,
+	request *historyservice.DeepHealthCheckRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DeepHealthCheckResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientDeepHealthCheck")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeepHealthCheck(ctx, request, opts...)
+}
+
 func (c *metricClient) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,
@@ -353,20 +367,6 @@ func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	}()
 
 	return c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
-}
-
-func (c *metricClient) HealthCheck(
-	ctx context.Context,
-	request *historyservice.HealthCheckRequest,
-	opts ...grpc.CallOption,
-) (_ *historyservice.HealthCheckResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientHealthCheck")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.HealthCheck(ctx, request, opts...)
 }
 
 func (c *metricClient) ImportWorkflowExecution(

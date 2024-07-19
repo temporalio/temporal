@@ -355,7 +355,7 @@ service HistoryService {
     rpc CompleteNexusOperation (CompleteNexusOperationRequest) returns (CompleteNexusOperationResponse) {
     }
 
-    // Health check history service health status
-    rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {
+    // Deep health check history service dependencies health status
+    rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {
     }
 }

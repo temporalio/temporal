@@ -209,10 +209,10 @@ func (h *Handler) isStopped() bool {
 	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
 }
 
-func (h *Handler) HealthCheck(
+func (h *Handler) DeepHealthCheck(
 	_ context.Context,
-	_ *historyservice.HealthCheckRequest,
-) (_ *historyservice.HealthCheckResponse, retError error) {
+	_ *historyservice.DeepHealthCheckRequest,
+) (_ *historyservice.DeepHealthCheckResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
@@ -220,9 +220,9 @@ func (h *Handler) HealthCheck(
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
 
 	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
-		return &historyservice.HealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 	}
-	return &historyservice.HealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
+	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid

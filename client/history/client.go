@@ -72,11 +72,6 @@ type clientImpl struct {
 	shardIndex atomic.Uint32
 }
 
-type healthCheckTuple struct {
-	resp *historyservice.HealthCheckResponse
-	err  error
-}
-
 // NewClient creates a new history service gRPC client
 func NewClient(
 	dc *dynamicconfig.Collection,
@@ -107,8 +102,8 @@ func NewClient(
 	}
 }
 
-func (c *clientImpl) HealthCheck(ctx context.Context, in *historyservice.HealthCheckRequest, opts ...grpc.CallOption) (*historyservice.HealthCheckResponse, error) {
-	return c.connections.getOrCreateClientConn(rpcAddress(in.GetHostAddress())).historyClient.HealthCheck(ctx, in, opts...)
+func (c *clientImpl) DeepHealthCheck(ctx context.Context, request *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
+	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).historyClient.DeepHealthCheck(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(
