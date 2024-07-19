@@ -967,16 +967,6 @@ Default is 4.`,
 after all namespace resources (i.e. workflow executions) are deleted.
 Default is 0, means, namespace will be deleted immediately.`,
 	)
-	FrontendHealthCheckFailureRatio = NewGlobalFloatSetting(
-		"frontend.healthCheckFailureRate",
-		0.8,
-		`FrontendServiceHealthCheckFailureRate is the percentage of failed hosts / all hosts on frontend health check`,
-	)
-	MatchingHealthCheckFailureRate = NewGlobalFloatSetting(
-		"frontend.matchingHealthCheckFailureRate",
-		0.8,
-		`MatchingHealthCheckFailureRate is the percentile of failed hosts on matching health check`,
-	)
 
 	// keys for matching
 
