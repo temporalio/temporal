@@ -169,6 +169,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	ms := workflowLease.GetMutableState()
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
 	defer func() {
+		var errForRelease error
+		if releaseLeaseWithError {
+			// If the workflow context needs to be cleared, operation error passed to Release func (default).
+			// Otherwise, leave it nil here to avoid clearing the workflow context (but still return error to the caller).
+			errForRelease = retError
+		}
 		if retError != nil && currentWorkflowTask != nil && currentWorkflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && ms.IsStickyTaskQueueSet() {
 			// If, while completing WFT, error is occurred and returned to the worker then worker will clear its cache.
 			// New WFT will also be created on sticky task queue and sent to worker.
@@ -188,16 +194,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 					tag.WorkflowID(token.GetWorkflowId()),
 					tag.WorkflowRunID(token.GetRunId()),
 					tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
+
+				// Workflow context is already cleared and need to be cleared one more time if clearStickyTaskQueue failed.
+				// Use clearStickyErr for that.
+				errForRelease = clearStickyErr
 			}
 		}
 
-		if releaseLeaseWithError {
-			// If the workflow context needs to be cleared, pass operation error (default).
-			workflowLease.GetReleaseFn()(retError)
-		} else {
-			// Otherwise, pass nil to avoid clearing the workflow context (but still return error to the caller).
-			workflowLease.GetReleaseFn()(nil)
-		}
+		workflowLease.GetReleaseFn()(errForRelease)
 	}()
 
 	if !ms.IsWorkflowExecutionRunning() ||
