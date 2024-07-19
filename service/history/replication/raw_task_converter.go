@@ -80,6 +80,7 @@ func NewSourceTaskConverter(
 	return &SourceTaskConverterImpl{
 		historyEngine:  historyEngine,
 		namespaceCache: namespaceCache,
+		serializer:     serializer,
 		config:         config,
 	}
 }
