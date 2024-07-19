@@ -83,13 +83,3 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	// do not use createContext function, let caller manage stream API lifecycle
 	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }
-
-func (c *clientImpl) HealthCheck(
-	ctx context.Context,
-	request *adminservice.HealthCheckRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.HealthCheckResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.HealthCheck(ctx, request, opts...)
-}

@@ -174,5 +174,5 @@ service AdminService {
 
     rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {}
 
-    rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {}
+    rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {}
 }

@@ -313,7 +313,7 @@ func NewConfig(
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
-		FrontendHealthCheckFailureRate: dynamicconfig.FrontendHealthCheckFailureRate.Get(dc),
+		FrontendHealthCheckFailureRate: dynamicconfig.FrontendHealthCheckFailureRatio.Get(dc),
 		MatchingHealthCheckFailureRate: dynamicconfig.MatchingHealthCheckFailureRate.Get(dc),
 	}
 }

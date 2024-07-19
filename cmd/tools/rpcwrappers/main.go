@@ -97,7 +97,6 @@ var (
 		"client.history.StreamWorkflowReplicationMessages":          true,
 		"metricsClient.history.StreamWorkflowReplicationMessages":   true,
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
-		"client.admin.HealthCheck":                                  true,
 
 		// these are non-standard implementations. do not generate.
 		"client.history.DescribeHistoryHost":    true,
@@ -107,7 +106,6 @@ var (
 		"client.history.DeleteDLQTasks":         true,
 		"client.history.ListQueues":             true,
 		"client.history.ListTasks":              true,
-		"client.history.HealthCheck":            true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,

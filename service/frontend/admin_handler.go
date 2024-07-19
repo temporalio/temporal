@@ -245,34 +245,14 @@ func (adh *AdminHandler) Stop() {
 	}
 }
 
-func (adh *AdminHandler) HealthCheck(
+func (adh *AdminHandler) DeepHealthCheck(
 	ctx context.Context,
-	request *adminservice.HealthCheckRequest,
-) (_ *adminservice.HealthCheckResponse, retError error) {
+	request *adminservice.DeepHealthCheckRequest,
+) (_ *adminservice.DeepHealthCheckResponse, retError error) {
 
-	var client *HealthCheckClient
-	switch request.GetServiceName() {
-	case string(primitives.FrontendService):
-		client, retError = adh.healthCheckClientFactory.GetFrontendClients()
-		if retError != nil {
-			return nil, retError
-		}
-	case string(primitives.HistoryService):
-		// TODO: health check to history
-	case string(primitives.MatchingService):
-		client, retError = adh.healthCheckClientFactory.GetMatchingClients()
-		if retError != nil {
-			return nil, retError
-		}
-	default:
-		// TODO: check all services
-	}
-	if client != nil {
-		healthStatus := client.Check(ctx)
-		return &adminservice.HealthCheckResponse{State: healthStatus}, nil
-	}
+	// TODO: health check to history
 
-	return &adminservice.HealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
+	return nil, serviceerror.NewUnimplemented("This API is not ready")
 }
 
 // AddSearchAttributes add search attribute to the cluster.
