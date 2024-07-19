@@ -42,7 +42,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -465,6 +467,52 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 	latency2, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name())
 	s.True(ok)
 	s.Greater(latency2, latency1)
+}
+
+func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+
+	// Using a mock context in this test to use metrics.CaptureHandler in workflow.Cache
+	mockContext := shard.NewMockContext(s.controller)
+	mockContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
+	mockContext.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
+	mockContext.EXPECT().GetLogger().Return(s.mockShard.GetLogger()).AnyTimes()
+	mockContext.EXPECT().GetThrottledLogger().Return(s.mockShard.GetThrottledLogger())
+	mockContext.EXPECT().GetOwner().Return(primitives.NewUUID().String()).AnyTimes()
+	mockContext.EXPECT().GetFinalizer().Return(s.mockShard.GetFinalizer()).AnyTimes()
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metricsHandler)
+
+	release1, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+		context.Background(),
+		mockContext,
+		tests.NamespaceID,
+		tests.WorkflowID,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	time.Sleep(100 * time.Millisecond)
+	release1(nil)
+
+	snapshot := capture.Snapshot()
+	s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
+	s.Equal(tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"])
+
+	capture = metricsHandler.StartCapture()
+	release2, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+		context.Background(),
+		mockContext,
+		tests.NamespaceID,
+		tests.WorkflowID,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	time.Sleep(200 * time.Millisecond)
+	release2(nil)
+
+	snapshot = capture.Snapshot()
+	s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 200*time.Millisecond)
+	s.Equal(tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"])
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {

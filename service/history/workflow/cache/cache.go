@@ -222,6 +222,7 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.HistoryCacheGetOrCreateCurrentScope),
 		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
+		metrics.NamespaceTag(namespaceID.String()),
 	)
 	metrics.CacheRequests.With(handler).Record(1)
 	start := time.Now()
@@ -264,6 +265,7 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.HistoryCacheGetOrCreateScope),
 		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
+		metrics.NamespaceTag(namespaceID.String()),
 	)
 	metrics.CacheRequests.With(handler).Record(1)
 	start := time.Now()
@@ -324,7 +326,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			cacheKey.WorkflowKey,
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
-			shardContext.GetMetricsHandler(),
+			handler,
 		)
 
 		var err error
@@ -334,15 +336,15 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		}
 	}
 
-	// TODO This will create a closure on every request.
-	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext)
-
 	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
 		metrics.AcquireLockFailedCounter.With(handler).Record(1)
 		return nil, nil, err
 	}
+
+	// TODO This will create a closure on every request.
+	//  Consider revisiting this if it causes too much GC activity
+	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, handler, time.Now())
 
 	return workflowCtx, releaseFunc, nil
 }
@@ -384,11 +386,14 @@ func (c *cacheImpl) makeReleaseFunc(
 	shardContext shard.Context,
 	context workflow.Context,
 	forceClearContext bool,
+	handler metrics.Handler,
+	acquireTime time.Time,
 ) func(error) {
 
 	status := cacheNotReleased
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
+			defer metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
 			if rec := recover(); rec != nil {
 				context.Clear()
 				context.Unlock()
