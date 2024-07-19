@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
@@ -195,6 +196,18 @@ func (s *FunctionalSuite) loseUpdateRegistryAndAbandonPendingUpdates(tv *testvar
 	s.closeShard(tv.WorkflowID())
 }
 
+func (s *FunctionalSuite) speculativeWorkflowTaskOutcomes(
+	snap map[string][]*metricstest.CapturedRecording,
+) (commits, rollbacks int) {
+	for _ = range snap[metrics.SpeculativeWorkflowTaskCommits.Name()] {
+		commits += 1
+	}
+	for _ = range snap[metrics.SpeculativeWorkflowTaskRollbacks.Name()] {
+		rollbacks += 1
+	}
+	return
+}
+
 func (s *FunctionalSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		Name     string
@@ -220,6 +233,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Accept
 				// Clear RunID in tv to test code paths when APIs have to fetch current RunID themselves.
 				tv = tv.WithRunID("")
 			}
+
+			capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 			wtHandlerCalls := 0
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -301,6 +317,10 @@ func (s *FunctionalSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Accept
 
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
+
+			commits, rollbacks := s.speculativeWorkflowTaskOutcomes(capture.Snapshot())
+			s.Equal(1, commits)
+			s.Equal(0, rollbacks)
 
 			events := s.getHistory(s.namespace, tv.WorkflowExecution())
 
@@ -664,10 +684,12 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_RunningWorkflowTask_NewEmptySpeculativeWorkflowTask_Rejected() {
-
 	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
+
+	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 	var updateResultCh <-chan *workflowservice.UpdateWorkflowExecutionResponse
 
@@ -761,6 +783,10 @@ func (s *FunctionalSuite) TestUpdateWorkflow_RunningWorkflowTask_NewEmptySpecula
 
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
+
+	commits, rollbacks := s.speculativeWorkflowTaskOutcomes(capture.Snapshot())
+	s.Equal(0, commits)
+	s.Equal(1, rollbacks)
 
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
 
