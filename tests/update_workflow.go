@@ -97,11 +97,11 @@ func (s *FunctionalSuite) sendUpdateNoErrorInternal(tv *testvars.TestVars, updat
 	retCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 	syncCh := make(chan struct{})
 	go func() {
-		ur := s.sendUpdateInternal(NewContext(), tv, updateID, waitPolicy, true)
-		// Unblock return only after update is admitted by server.
+		urCh := s.sendUpdateInternal(NewContext(), tv, updateID, waitPolicy, true)
+		// Unblock return only after the server admits update.
 		syncCh <- struct{}{}
-		// Unblocked when update result is ready.
-		retCh <- (<-ur).response
+		// Unblocked when an update result is ready.
+		retCh <- (<-urCh).response
 	}()
 	<-syncCh
 	return retCh
@@ -131,7 +131,8 @@ func (s *FunctionalSuite) sendUpdateInternal(
 				},
 			},
 		})
-		// It is important to do assert here to fail fast without trying to process update in wtHandler.
+		// It is important to do assert here (before writing to channel which doesn't have readers yet)
+		// to fail fast without trying to process update in wtHandler.
 		if requireNoError {
 			require.NoError(s.T(), updateErr)
 		}
@@ -2129,6 +2130,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
 	s.NoError(err)
 	s.NotNil(res)
 	updateResult1 := <-updateResultCh1
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult1.Stage)
 	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, updateResult1.GetOutcome().GetSuccess()))
 	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
@@ -2801,13 +2803,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_StartToClos
 	// ensure correct metrics were recorded
 	snap := capture.Snapshot()
 
-	// var speculativeWorkflowTaskTimeoutTasks int
-	// for _, m := range snap[metrics.TaskRequests.Name()] {
-	// 	if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
-	// 		speculativeWorkflowTaskTimeoutTasks += 1
-	// 	}
-	// }
-	// s.Equal(1, speculativeWorkflowTaskTimeoutTasks, "expected 1 speculative workflow task timeout task to be created")
+	var speculativeWorkflowTaskTimeoutTasks int
+	for _, m := range snap[metrics.TaskRequests.Name()] {
+		if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
+			speculativeWorkflowTaskTimeoutTasks += 1
+		}
+	}
+	s.Equal(1, speculativeWorkflowTaskTimeoutTasks, "expected 1 speculative workflow task timeout task to be created")
 
 	var speculativeStartToCloseTimeouts int
 	for _, m := range snap[metrics.StartToCloseTimeoutCounter.Name()] {
