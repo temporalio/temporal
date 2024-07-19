@@ -41,19 +41,17 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -479,7 +477,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	mockContext.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	mockContext.EXPECT().GetLogger().Return(s.mockShard.GetLogger()).AnyTimes()
 	mockContext.EXPECT().GetThrottledLogger().Return(s.mockShard.GetThrottledLogger())
-	mockContext.EXPECT().GetOwner().Return(primitives.NewUUID().String()).AnyTimes()
+	mockContext.EXPECT().GetOwner().Return(s.mockShard.GetOwner()).AnyTimes()
 	mockContext.EXPECT().GetFinalizer().Return(s.mockShard.GetFinalizer()).AnyTimes()
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metricsHandler)
 
@@ -496,6 +494,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 
 	snapshot := capture.Snapshot()
 	s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
+	s.Equal(tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"])
 	s.Equal(tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"])
 
 	capture = metricsHandler.StartCapture()
