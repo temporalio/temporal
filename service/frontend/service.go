@@ -198,6 +198,8 @@ type Config struct {
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -308,6 +310,8 @@ func NewConfig(
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
+
+		EnableEagerWorkflowStart: dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 	}
 }
 
