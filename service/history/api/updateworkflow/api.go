@@ -136,6 +136,7 @@ func (u *Updater) ApplyRequest(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
+	u.wfKey = ms.GetWorkflowKey()
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
 
 	if !ms.IsWorkflowExecutionRunning() {
@@ -146,8 +147,6 @@ func (u *Updater) ApplyRequest(
 		}
 		return nil, consts.ErrWorkflowCompleted
 	}
-
-	u.wfKey = ms.GetWorkflowKey()
 
 	if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
 		// If workflow task is constantly failing, the update to that workflow will also fail.
