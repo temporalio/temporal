@@ -114,7 +114,7 @@ func TestValidTransitions(t *testing.T) {
 	// Increment the time to ensure it's updated in the transition
 	currentTime = currentTime.Add(time.Second)
 
-	// Failed
+	// failed
 	out, err = callbacks.TransitionFailed.Apply(callback, callbacks.EventFailed{Time: currentTime, Err: fmt.Errorf("failed")})
 	require.NoError(t, err)
 
