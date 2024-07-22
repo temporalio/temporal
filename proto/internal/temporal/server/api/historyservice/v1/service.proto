@@ -354,4 +354,7 @@ service HistoryService {
     // canceled.
     rpc CompleteNexusOperation (CompleteNexusOperationRequest) returns (CompleteNexusOperationResponse) {
     }
+
+    rpc InvokeStateMachineMethod (InvokeStateMachineMethodRequest) returns (InvokeStateMachineMethodResponse) {
+    }
 }

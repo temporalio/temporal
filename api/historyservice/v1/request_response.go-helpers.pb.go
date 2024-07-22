@@ -4875,3 +4875,77 @@ func (this *CompleteNexusOperationResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type InvokeStateMachineMethodRequest to the protobuf v3 wire format
+func (val *InvokeStateMachineMethodRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type InvokeStateMachineMethodRequest from the protobuf v3 wire format
+func (val *InvokeStateMachineMethodRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *InvokeStateMachineMethodRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two InvokeStateMachineMethodRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *InvokeStateMachineMethodRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *InvokeStateMachineMethodRequest
+	switch t := that.(type) {
+	case *InvokeStateMachineMethodRequest:
+		that1 = t
+	case InvokeStateMachineMethodRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type InvokeStateMachineMethodResponse to the protobuf v3 wire format
+func (val *InvokeStateMachineMethodResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type InvokeStateMachineMethodResponse from the protobuf v3 wire format
+func (val *InvokeStateMachineMethodResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *InvokeStateMachineMethodResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two InvokeStateMachineMethodResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *InvokeStateMachineMethodResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *InvokeStateMachineMethodResponse
+	switch t := that.(type) {
+	case *InvokeStateMachineMethodResponse:
+		that1 = t
+	case InvokeStateMachineMethodResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
