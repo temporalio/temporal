@@ -27,6 +27,7 @@ package replication
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -365,8 +366,8 @@ func (m *StreamReceiverMonitorImpl) evaluateSingleStreamConnection(key *ClusterS
 		if currentAckLevel == previousAckLevel && currentAckLevel < previousMaxReplicationTaskId {
 			m.Logger.Error(
 				fmt.Sprintf("%v replication is not making progress. previousAckLevel: %v, previousMaxTaskId: %v, currentAckLevel: %v, currentMaxTaskId: %v",
-					priority.String(), previous.defaultAckLevel, current.maxReplicationTaskId, current.defaultAckLevel, current.defaultAckLevel),
-				tag.SourceShardID(key.Server.ShardID), tag.TargetCluster(string(key.Client.ClusterID)), tag.TargetShardID(key.Client.ShardID))
+					priority.String(), previousAckLevel, previousMaxReplicationTaskId, currentAckLevel, currentMaxTaskId),
+				tag.SourceShardID(key.Server.ShardID), tag.TargetCluster(strconv.Itoa(int(key.Client.ClusterID))), tag.TargetShardID(key.Client.ShardID))
 			metrics.ReplicationStreamStuck.With(m.MetricsHandler).Record(1)
 			return false
 		}
