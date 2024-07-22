@@ -123,6 +123,7 @@ message GetMutableStateResponse {
     // for this execution.
     string assigned_build_id = 22;
     string inherited_build_id = 23;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 24;
 }
 
 message PollMutableStateRequest {

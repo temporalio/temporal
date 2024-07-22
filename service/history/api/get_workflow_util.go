@@ -246,6 +246,7 @@ func MutableStateToGetResponse(
 	executionInfo := mutableState.GetExecutionInfo()
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
+	currentWorkflowTask := mutableState.GetPendingWorkflowTask()
 	return &historyservice.GetMutableStateResponse{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: mutableState.GetExecutionInfo().WorkflowId,
@@ -277,5 +278,6 @@ func MutableStateToGetResponse(
 		AssignedBuildId:              mutableState.GetAssignedBuildId(),
 		InheritedBuildId:             mutableState.GetInheritedBuildId(),
 		MostRecentWorkerVersionStamp: executionInfo.GetMostRecentWorkerVersionStamp(),
+		TransientWorkflowTask:        mutableState.GetTransientWorkflowTaskInfo(currentWorkflowTask, ""),
 	}, nil
 }
