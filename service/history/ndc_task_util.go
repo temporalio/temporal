@@ -45,6 +45,11 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+type (
+	taskEventIDGetter        func(task tasks.Task) int64
+	mutableStateStaleChecker func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) bool
+)
+
 // CheckTaskVersion will return an error if task version check fails
 func CheckTaskVersion(
 	shard shard.Context,
@@ -87,7 +92,8 @@ func loadMutableStateForTransferTask(
 		shardContext,
 		wfContext,
 		transferTask,
-		getTransferTaskEventIDAndRetryable,
+		tasks.GetTransferTaskEventID,
+		transferTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 		logger,
 	)
@@ -133,7 +139,8 @@ func loadMutableStateForTimerTask(
 		shardContext,
 		wfContext,
 		timerTask,
-		getTimerTaskEventIDAndRetryable,
+		tasks.GetTimerTaskEventID,
+		timerTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 		logger,
 	)
@@ -144,7 +151,8 @@ func loadMutableStateForTask(
 	shardContext shard.Context,
 	wfContext workflow.Context,
 	task tasks.Task,
-	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
+	getEventID taskEventIDGetter,
+	canMutableStateBeStale mutableStateStaleChecker,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
@@ -169,14 +177,17 @@ func loadMutableStateForTask(
 
 	// Validation based on eventID is not good enough as certain operation does not generate events.
 	// For example, scheduling transient workflow task, or starting activities that have retry policy.
-
-	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
-	// the exception is workflow task consistently fail
-	// there will be no event generated, thus making the workflow task schedule ID == next event ID
-	eventID, retryable := taskEventIDAndRetryable(task, mutableState.GetExecutionInfo())
-	if eventID < mutableState.GetNextEventID() || !retryable {
+	eventID := getEventID(task)
+	if eventID < mutableState.GetNextEventID() {
 		return mutableState, nil
 	}
+
+	// Depending on task type, there are exceptions when mutable state can't be stale.
+	// If this is a case, it is safe to use cached mutable state.
+	if !canMutableStateBeStale(task, mutableState.GetExecutionInfo()) {
+		return mutableState, nil
+	}
+	// Otherwise, clear workflow context, reload mutable state from a database and try again.
 
 	metrics.StaleMutableStateCounter.With(metricsHandler).Record(1)
 	wfContext.Clear()
@@ -190,15 +201,16 @@ func loadMutableStateForTask(
 		return nil, err
 	}
 
-	// after refresh, still mutable state's next event ID <= task's event ID
-	if eventID >= mutableState.GetNextEventID() {
-		metrics.TaskSkipped.With(metricsHandler).Record(1)
-		logger.Info("Task Processor: task event ID >= MS NextEventID, skip.",
-			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
-		)
-		return nil, nil
+	if eventID < mutableState.GetNextEventID() {
+		return mutableState, nil
 	}
-	return mutableState, nil
+	// After reloading mutable state from a database, task's event ID is still not valid,
+	// means that task is obsolete and can be safely skipped.
+	metrics.TaskSkipped.With(metricsHandler).Record(1)
+	logger.Info("Task processor skipping task: task event ID >= MS NextEventID.",
+		tag.WorkflowNextEventID(mutableState.GetNextEventID()),
+	)
+	return nil, nil
 }
 
 func validateTaskByClock(
@@ -235,33 +247,54 @@ func validateTaskGeneration(mutableState workflow.MutableState, taskID int64) er
 	return nil
 }
 
-func getTransferTaskEventIDAndRetryable(
+func transferTaskMutableStateStaleChecker(
 	transferTask tasks.Task,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
-) (int64, bool) {
-	eventID := tasks.GetTransferTaskEventID(transferTask)
-	retryable := true
+) bool {
 
-	if task, ok := transferTask.(*tasks.WorkflowTask); ok {
-		retryable = !(executionInfo.WorkflowTaskScheduledEventId == task.ScheduledEventID && executionInfo.WorkflowTaskAttempt > 1)
+	// Check to see if mutable state cache needs to be reloaded from a database.
+	// The exception is a transient workflow task that doesn't generate events
+	// (check only that it is still current WFT).
+
+	wt, isWt := transferTask.(*tasks.WorkflowTask)
+	if !isWt {
+		return true
 	}
 
-	return eventID, retryable
+	isTransientWorkflowTask := executionInfo.WorkflowTaskAttempt > 1
+	if isTransientWorkflowTask && executionInfo.WorkflowTaskScheduledEventId == wt.ScheduledEventID {
+		return false
+	}
+
+	return true
 }
 
-func getTimerTaskEventIDAndRetryable(
+func timerTaskMutableStateStaleChecker(
 	timerTask tasks.Task,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
-) (int64, bool) {
-	eventID := tasks.GetTimerTaskEventID(timerTask)
-	retryable := true
+) bool {
 
-	if task, ok := timerTask.(*tasks.WorkflowTaskTimeoutTask); ok {
-		retryable = !(executionInfo.WorkflowTaskScheduledEventId == task.EventID && executionInfo.WorkflowTaskAttempt > 1) &&
-			executionInfo.WorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+	// Check to see if mutable state cache needs to be reloaded from a database.
+	// Exceptions are:
+	// 1. Transient workflow task that doesn't generate events (check only that it is still current WFT).
+	// 2. Speculative workflow task that doesn't generate events.
+
+	wttt, isWttt := timerTask.(*tasks.WorkflowTaskTimeoutTask)
+	if !isWttt {
+		return true
 	}
 
-	return eventID, retryable
+	isSpeculativeWorkflowTask := wttt.GetCategory() == tasks.CategoryMemoryTimer
+	if isSpeculativeWorkflowTask {
+		return false
+	}
+
+	isTransientWorkflowTask := executionInfo.WorkflowTaskAttempt > 1
+	if isTransientWorkflowTask && executionInfo.WorkflowTaskScheduledEventId == wttt.EventID {
+		return false
+	}
+
+	return true
 }
 
 func getNamespaceTagByID(
