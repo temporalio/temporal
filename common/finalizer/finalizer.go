@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -43,18 +44,21 @@ var (
 )
 
 type Finalizer struct {
-	logger    log.Logger
-	mu        sync.Mutex
-	finalized bool
-	callbacks map[string]func(context.Context) error
+	logger         log.Logger
+	metricsHandler metrics.Handler
+	mu             sync.Mutex
+	finalized      bool
+	callbacks      map[string]func(context.Context) error
 }
 
 func New(
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *Finalizer {
 	return &Finalizer{
-		logger:    logger,
-		callbacks: make(map[string]func(context.Context) error),
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		callbacks:      make(map[string]func(context.Context) error),
 	}
 }
 
@@ -103,7 +107,7 @@ func (f *Finalizer) Deregister(
 // It can only be invoked once; calling it again has no effect.
 // Returns the number of completed callbacks.
 func (f *Finalizer) Run(
-	pool *goro.AdaptivePool,
+	poolFactory func() *goro.AdaptivePool,
 	timeout time.Duration,
 ) int {
 	if timeout == 0 {
@@ -126,12 +130,18 @@ func (f *Finalizer) Run(
 		return 0
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
 	f.logger.Info("finalizer starting",
 		tag.NewInt("items", totalCount),
 		tag.NewDurationTag("timeout", timeout))
+
+	startTime := time.Now()
+	defer func() { metrics.FinalizerLatency.With(f.metricsHandler).Record(time.Since(startTime)) }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	pool := poolFactory()
+	defer pool.Stop()
 
 	completionChannel := make(chan struct{})
 	go func() {
@@ -146,11 +156,15 @@ func (f *Finalizer) Run(
 	}()
 
 	var completedCallbacks int
+	defer func() {
+		metrics.FinalizerItemsCompleted.With(f.metricsHandler).Record(int64(completedCallbacks))
+		metrics.FinalizerItemsUnfinished.With(f.metricsHandler).Record(int64(totalCount - completedCallbacks))
+	}()
+
 	for {
 		select {
 		case <-completionChannel:
 			completedCallbacks += 1
-
 			if completedCallbacks == totalCount {
 				f.logger.Info("finalizer completed",
 					tag.NewInt("completed", completedCallbacks))
@@ -158,12 +172,9 @@ func (f *Finalizer) Run(
 			}
 
 		case <-ctx.Done():
-			pool.Stop()
-
 			f.logger.Error("finalizer timed out",
 				tag.NewInt("completed", completedCallbacks),
 				tag.NewInt("unfinished", totalCount-completedCallbacks))
-
 			return completedCallbacks
 		}
 	}

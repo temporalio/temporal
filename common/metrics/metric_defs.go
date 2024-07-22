@@ -732,6 +732,9 @@ var (
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
+	FinalizerItemsCompleted    = NewCounterDef("finalizer_items_completed")
+	FinalizerItemsUnfinished   = NewCounterDef("finalizer_items_unfinished")
+	FinalizerLatency           = NewTimerDef("finalizer_latency")
 	TaskRequests               = NewCounterDef(
 		"task_requests",
 		WithDescription("The number of history tasks processed."),

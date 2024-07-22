@@ -34,6 +34,8 @@ import (
 	"go.temporal.io/server/common/clock"
 	. "go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -41,47 +43,49 @@ func TestFinalizer(t *testing.T) {
 
 	t.Run("register", func(t *testing.T) {
 		t.Run("succeeds", func(t *testing.T) {
-			f := newFinalizer()
+			f := newFinalizer(metrics.NoopMetricsHandler)
 			require.NoError(t, f.Register("1", nil))
 			require.NoError(t, f.Deregister("1"))
 		})
 
 		t.Run("fails when ID already registered", func(t *testing.T) {
-			f := newFinalizer()
+			f := newFinalizer(metrics.NoopMetricsHandler)
 			require.NoError(t, f.Register("1", nil))
 			require.ErrorIs(t, f.Register("1", nil), FinalizerDuplicateIdErr)
 		})
 
 		t.Run("fails after already run before", func(t *testing.T) {
-			f := newFinalizer()
-			f.Run(newPool(), 1*time.Second)
+			f := newFinalizer(metrics.NoopMetricsHandler)
+			f.Run(newPool, 1*time.Second)
 			require.ErrorIs(t, f.Register("1", nil), FinalizerAlreadyDoneErr)
 		})
 	})
 
 	t.Run("deregister", func(t *testing.T) {
 		t.Run("succeeds", func(t *testing.T) {
-			f := newFinalizer()
+			f := newFinalizer(metrics.NoopMetricsHandler)
 			require.NoError(t, f.Register("1", nil))
 			require.NoError(t, f.Deregister("1"))
-			require.Zero(t, f.Run(newPool(), 1*time.Second))
+			require.Zero(t, f.Run(newPool, 1*time.Second))
 		})
 
 		t.Run("fails if callback does not exist", func(t *testing.T) {
-			f := newFinalizer()
+			f := newFinalizer(metrics.NoopMetricsHandler)
 			require.ErrorIs(t, f.Deregister("does-not-exist"), FinalizerUnknownIdErr)
 		})
 
 		t.Run("fails after already run before", func(t *testing.T) {
-			f := newFinalizer()
-			f.Run(newPool(), 1*time.Second)
+			f := newFinalizer(metrics.NoopMetricsHandler)
+			f.Run(newPool, 1*time.Second)
 			require.ErrorIs(t, f.Deregister("1"), FinalizerAlreadyDoneErr)
 		})
 	})
 
 	t.Run("run", func(t *testing.T) {
 		t.Run("invokes all callbacks", func(t *testing.T) {
-			f := newFinalizer()
+			mh := metricstest.NewCaptureHandler()
+			f := newFinalizer(mh)
+			capture := mh.StartCapture()
 
 			var completed atomic.Int32
 			for i := 0; i < 5; i += 1 {
@@ -95,20 +99,25 @@ func TestFinalizer(t *testing.T) {
 					}))
 			}
 
-			require.EqualValues(t, 5, f.Run(newPool(), 1*time.Second))
+			require.EqualValues(t, 5, f.Run(newPool, 1*time.Second))
 			require.EqualValues(t, 5, completed.Load())
+
+			snap := capture.Snapshot()
+			require.Equal(t, int64(5), snap[metrics.FinalizerItemsCompleted.Name()][0].Value)
+			require.Equal(t, int64(0), snap[metrics.FinalizerItemsUnfinished.Name()][0].Value)
+			require.NotZero(t, snap[metrics.FinalizerLatency.Name()][0].Value.(time.Duration).Nanoseconds())
 		})
 
 		t.Run("returns once timeout has been reached", func(t *testing.T) {
-			f := newFinalizer()
 			timeout := 50 * time.Millisecond
+			mh := metricstest.NewCaptureHandler()
+			f := newFinalizer(mh)
 
 			require.NoError(t, f.Register(
 				"before-timeout",
 				func(ctx context.Context) error {
 					return nil
 				}))
-
 			require.NoError(t, f.Register(
 				"after-timeout",
 				func(ctx context.Context) error {
@@ -117,25 +126,60 @@ func TestFinalizer(t *testing.T) {
 					return nil
 				}))
 
-			completed := f.Run(newPool(), timeout)
+			capture := mh.StartCapture()
+			completed := f.Run(newPool, timeout)
 			require.EqualValues(t, 1, completed, "expected only one callback to complete")
+
+			snap := capture.Snapshot()
+			require.Equal(t, int64(1), snap[metrics.FinalizerItemsCompleted.Name()][0].Value)
+			require.Equal(t, int64(1), snap[metrics.FinalizerItemsUnfinished.Name()][0].Value)
 		})
 
-		t.Run("does not execute more than once", func(t *testing.T) {
-			f := newFinalizer()
+		t.Run("does not execute when no callbacks are registered", func(t *testing.T) {
+			mh := metricstest.NewCaptureHandler()
+			f := newFinalizer(mh)
+
+			require.Zero(t, f.Run(noPool, 0), "expected no callbacks to complete")
+			require.Empty(t, mh.StartCapture().Snapshot())
+		})
+
+		t.Run("does not execute if timeout is zero", func(t *testing.T) {
+			mh := metricstest.NewCaptureHandler()
+			f := newFinalizer(mh)
 			require.NoError(t, f.Register(
 				"0",
 				func(ctx context.Context) error {
 					return nil
 				}))
-			require.EqualValues(t, 1, f.Run(newPool(), 1*time.Second))                            // 1st call
-			require.Zero(t, f.Run(newPool(), 1*time.Second), "expected no callbacks to complete") // 2nd call
+			require.Zero(t, f.Run(noPool, 0), "expected no callbacks to complete")
+			require.Empty(t, mh.StartCapture().Snapshot())
+		})
+
+		t.Run("does not execute more than once", func(t *testing.T) {
+			mh := metricstest.NewCaptureHandler()
+			f := newFinalizer(mh)
+
+			// 1st call
+			require.NoError(t, f.Register(
+				"0",
+				func(ctx context.Context) error {
+					return nil
+				}))
+			require.EqualValues(t, 1, f.Run(newPool, 1*time.Second))
+
+			// 2nd call
+			require.Zero(t, f.Run(noPool, 1*time.Second), "expected no callbacks to complete")
+			require.Empty(t, mh.StartCapture().Snapshot())
 		})
 	})
 }
 
-func newFinalizer() *Finalizer {
-	return New(log.NewNoopLogger())
+func newFinalizer(mh metrics.Handler) *Finalizer {
+	return New(log.NewNoopLogger(), mh)
+}
+
+func noPool() *goro.AdaptivePool {
+	panic("pool created when it should not have been")
 }
 
 func newPool() *goro.AdaptivePool {
