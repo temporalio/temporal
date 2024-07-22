@@ -471,20 +471,12 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 
-	// Using a mock context in this test to use metrics.CaptureHandler in workflow.Cache.
-	// We need ShardContext to return metrics.CaptureHandler on GetMetricsHandler() call.
-	mockContext := shard.NewMockContext(s.controller)
-	mockContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
-	mockContext.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
-	mockContext.EXPECT().GetLogger().Return(s.mockShard.GetLogger()).AnyTimes()
-	mockContext.EXPECT().GetThrottledLogger().Return(s.mockShard.GetThrottledLogger())
-	mockContext.EXPECT().GetOwner().Return(s.mockShard.GetOwner()).AnyTimes()
-	mockContext.EXPECT().GetFinalizer().Return(s.mockShard.GetFinalizer()).AnyTimes()
+	s.mockShard.SetMetricsHandler(metricsHandler)
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metricsHandler)
 
 	release1, err := s.cache.GetOrCreateCurrentWorkflowExecution(
 		context.Background(),
-		mockContext,
+		s.mockShard,
 		tests.NamespaceID,
 		tests.WorkflowID,
 		locks.PriorityHigh,
@@ -500,7 +492,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	capture = metricsHandler.StartCapture()
 	release2, err := s.cache.GetOrCreateCurrentWorkflowExecution(
 		context.Background(),
-		mockContext,
+		s.mockShard,
 		tests.NamespaceID,
 		tests.WorkflowID,
 		locks.PriorityHigh,
