@@ -244,13 +244,13 @@ func (r *Registry) ExecuteRemoteMethod(
 ) ([]byte, error) {
 	defn, ok := r.remoteExecutors[methodName]
 	if !ok {
-		return nil, fmt.Errorf("%w: executor for remote method %v", ErrNotRegistered, methodName)
+		return nil, fmt.Errorf("executor for remote method %v: %w", methodName, ErrNotRegistered)
 	}
 	untypedDefn := defn.(untypedRemoteMethodDefinition) //nolint:revive
 
 	input, err := untypedDefn.DeserializeUntyped(serializedInput)
 	if err != nil {
-		return nil, fmt.Errorf("%w: executor for remote method %v failed to deserialize input", err, methodName)
+		return nil, fmt.Errorf("executor for remote method %v failed to deserialize input: %w", methodName, err)
 	}
 
 	output, err := untypedDefn.InvokeUntyped(ctx, env, ref, input)
@@ -261,7 +261,7 @@ func (r *Registry) ExecuteRemoteMethod(
 
 	serializedOutput, err := untypedDefn.SerializeUntyped(output)
 	if err != nil {
-		return nil, fmt.Errorf("%w: executor for remote method %v failed to serialize output", err, methodName)
+		return nil, fmt.Errorf("executor for remote method %v failed to serialize output: %w", methodName, err)
 	}
 	return serializedOutput, nil
 }

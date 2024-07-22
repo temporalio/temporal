@@ -291,7 +291,7 @@ func ServiceErrorTypeTag(err error) Tag {
 }
 
 func OutcomeTag(outcome string) Tag {
-	return &tagImpl{key: nexusOutcomeTagName, value: outcome}
+	return &tagImpl{key: outcomeTagName, value: outcome}
 }
 
 func NexusMethodTag(value string) Tag {

@@ -116,6 +116,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	}
 
 	if err != nil {
+		e.Logger.Error("Callback request failed with error", tag.Error(err))
 		return retry, err
 	}
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
