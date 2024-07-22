@@ -206,6 +206,21 @@ func (mr *MockEngineMockRecorder) GetDLQReplicationMessages(ctx, taskInfos inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetDLQReplicationMessages), ctx, taskInfos)
 }
 
+// GetMaxReplicationTaskInfo mocks base method.
+func (m *MockEngine) GetMaxReplicationTaskInfo() (int64, time.Time) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMaxReplicationTaskInfo")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(time.Time)
+	return ret0, ret1
+}
+
+// GetMaxReplicationTaskInfo indicates an expected call of GetMaxReplicationTaskInfo.
+func (mr *MockEngineMockRecorder) GetMaxReplicationTaskInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxReplicationTaskInfo", reflect.TypeOf((*MockEngine)(nil).GetMaxReplicationTaskInfo))
+}
+
 // GetMutableState mocks base method.
 func (m *MockEngine) GetMutableState(ctx context.Context, request *v12.GetMutableStateRequest) (*v12.GetMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -1038,6 +1053,21 @@ func (m *MockReplicationStream) ConvertReplicationTask(ctx context.Context, task
 func (mr *MockReplicationStreamMockRecorder) ConvertReplicationTask(ctx, task interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertReplicationTask", reflect.TypeOf((*MockReplicationStream)(nil).ConvertReplicationTask), ctx, task)
+}
+
+// GetMaxReplicationTaskInfo mocks base method.
+func (m *MockReplicationStream) GetMaxReplicationTaskInfo() (int64, time.Time) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMaxReplicationTaskInfo")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(time.Time)
+	return ret0, ret1
+}
+
+// GetMaxReplicationTaskInfo indicates an expected call of GetMaxReplicationTaskInfo.
+func (mr *MockReplicationStreamMockRecorder) GetMaxReplicationTaskInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxReplicationTaskInfo", reflect.TypeOf((*MockReplicationStream)(nil).GetMaxReplicationTaskInfo))
 }
 
 // GetReplicationTasksIter mocks base method.

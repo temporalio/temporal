@@ -63,7 +63,7 @@ type (
 		sync.Mutex
 		inboundStreams  map[ClusterShardKeyPair]StreamSender
 		outboundStreams map[ClusterShardKeyPair]StreamReceiver
-		previousStatus  map[ClusterShardKey]*streamStatus
+		previousStatus  map[ClusterShardKeyPair]*streamStatus
 	}
 	streamStatus struct {
 		defaultAckLevel      int64
@@ -71,7 +71,6 @@ type (
 		lowPriorityAckLevel  int64
 		maxReplicationTaskId int64
 		isTieredStackEnabled bool
-		senderShardId        int32
 	}
 )
 
@@ -329,82 +328,72 @@ func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			m.monitoryStreamStatus()
+			m.monitorStreamStatus()
 		case <-m.shutdownOnce.Channel():
 			return
 		}
 	}
 }
-func (m *StreamReceiverMonitorImpl) monitoryStreamStatus() {
+func (m *StreamReceiverMonitorImpl) monitorStreamStatus() {
 	if m.shutdownOnce.IsShutdown() {
 		return
 	}
-	statusMap := m.generateStatusMap()
+	statusMap := m.generateStatusMap(m.generateInboundStreamKeys())
 	if m.previousStatus == nil {
 		m.previousStatus = statusMap
 		return
 	}
-	m.compareStreamsStatus(statusMap)
+	m.evaluateStreamStatus(statusMap)
 	m.previousStatus = statusMap
 }
 
-func (m *StreamReceiverMonitorImpl) compareStreamsStatus(currentStatusMap map[ClusterShardKey]*streamStatus) {
+func (m *StreamReceiverMonitorImpl) evaluateStreamStatus(currentStatusMap map[ClusterShardKeyPair]*streamStatus) {
 	for key, currentStatus := range currentStatusMap {
-		m.compareStatus(&key, currentStatus, m.previousStatus[key])
+		m.evaluateSingleStreamConnection(&key, currentStatus, m.previousStatus[key])
 	}
 }
 
-func (m *StreamReceiverMonitorImpl) compareStatus(clientKey *ClusterShardKey, current *streamStatus, previous *streamStatus) {
+func (m *StreamReceiverMonitorImpl) evaluateSingleStreamConnection(key *ClusterShardKeyPair, current *streamStatus, previous *streamStatus) bool {
 	if previous == nil || current == nil { // cluster metadata change or shard movement could cause stream reconnect and status could be nil
-		return
+		return true
 	}
 	if previous.isTieredStackEnabled != current.isTieredStackEnabled { // there is tiered stack config change, wait until it becomes stable
-		return
+		return true
 	}
-	checkIfMakeProgress := func(priority enumspb.TaskPriority, currentAckLevel int64, currentMaxTaskId int64, previousAckLevel int64, previousMaxReplicationTaskId int64) {
-		//if currentAckLevel >= currentMaxTaskId || // reader already catch up
-		//	currentAckLevel > previousAckLevel { // reader ACK level moved forward
-		//	return
-		//}
-		//
-		//// a special case where the replication task was just put into the queue when gathering the reader status
-		//if previousAckLevel >= previousMaxReplicationTaskId {
-		//	return
-		//}
-
-		// 2 continuous data points where ACK level is not moving forward and ACK level is behind MaxReplication taskId
+	checkIfMakeProgress := func(priority enumspb.TaskPriority, currentAckLevel int64, currentMaxTaskId int64, previousAckLevel int64, previousMaxReplicationTaskId int64) bool {
+		// 2 continuous data points where ACK level is not moving forward and ACK level is behind previous Max Replication taskId
 		if currentAckLevel == previousAckLevel && currentAckLevel < previousMaxReplicationTaskId {
 			m.Logger.Error(
 				fmt.Sprintf("%v replication is not making progress. previousAckLevel: %v, previousMaxTaskId: %v, currentAckLevel: %v, currentMaxTaskId: %v",
 					priority.String(), previous.defaultAckLevel, current.maxReplicationTaskId, current.defaultAckLevel, current.defaultAckLevel),
-				tag.SourceShardID(current.senderShardId), tag.TargetCluster(string(clientKey.ClusterID)), tag.TargetShardID(clientKey.ShardID))
+				tag.SourceShardID(key.Server.ShardID), tag.TargetCluster(string(key.Client.ClusterID)), tag.TargetShardID(key.Client.ShardID))
 			metrics.ReplicationStreamStuck.With(m.MetricsHandler).Record(1)
+			return false
 		}
+		return true
 	}
 
 	if !current.isTieredStackEnabled {
-		checkIfMakeProgress(enumspb.TASK_PRIORITY_UNSPECIFIED, current.defaultAckLevel, current.maxReplicationTaskId, previous.defaultAckLevel, previous.maxReplicationTaskId)
-		return
+		return checkIfMakeProgress(enumspb.TASK_PRIORITY_UNSPECIFIED, current.defaultAckLevel, current.maxReplicationTaskId, previous.defaultAckLevel, previous.maxReplicationTaskId)
 	}
-	checkIfMakeProgress(enumspb.TASK_PRIORITY_HIGH, current.highPriorityAckLevel, current.maxReplicationTaskId, previous.highPriorityAckLevel, previous.maxReplicationTaskId)
-	checkIfMakeProgress(enumspb.TASK_PRIORITY_LOW, current.lowPriorityAckLevel, current.maxReplicationTaskId, previous.lowPriorityAckLevel, previous.maxReplicationTaskId)
+	return checkIfMakeProgress(enumspb.TASK_PRIORITY_HIGH, current.highPriorityAckLevel, current.maxReplicationTaskId, previous.highPriorityAckLevel, previous.maxReplicationTaskId) &&
+		checkIfMakeProgress(enumspb.TASK_PRIORITY_LOW, current.lowPriorityAckLevel, current.maxReplicationTaskId, previous.lowPriorityAckLevel, previous.maxReplicationTaskId)
 }
 
-func (m *StreamReceiverMonitorImpl) generateStatusMap() map[ClusterShardKey]*streamStatus {
+func (m *StreamReceiverMonitorImpl) generateStatusMap(inboundKeys map[ClusterShardKeyPair]struct{}) map[ClusterShardKeyPair]*streamStatus {
 	serverToClients := make(map[ClusterShardKey][]ClusterShardKey)
-	keyPairs := m.generateInboundStreamKeys()
-	for keyPair := range keyPairs {
+	for keyPair := range inboundKeys {
 		serverToClients[keyPair.Server] = append(serverToClients[keyPair.Server], keyPair.Client)
 	}
-	statusMap := make(map[ClusterShardKey]*streamStatus)
+	statusMap := make(map[ClusterShardKeyPair]*streamStatus)
 	for serverKey, clientKeys := range serverToClients {
-		m.fillStatusMap(statusMap, serverKey.ShardID, clientKeys)
+		m.fillStatusMap(statusMap, serverKey, clientKeys)
 	}
 	return statusMap
 }
 
-func (m *StreamReceiverMonitorImpl) fillStatusMap(statusMap map[ClusterShardKey]*streamStatus, serverShardId int32, clientsKeys []ClusterShardKey) {
-	shardContext, err := m.ShardController.GetShardByID(serverShardId)
+func (m *StreamReceiverMonitorImpl) fillStatusMap(statusMap map[ClusterShardKeyPair]*streamStatus, serverKey ClusterShardKey, clientsKeys []ClusterShardKey) {
+	shardContext, err := m.ShardController.GetShardByID(serverKey.ShardID)
 	if err != nil {
 		m.Logger.Error("Failed to get shardContext.", tag.Error(err))
 		return
@@ -431,30 +420,27 @@ func (m *StreamReceiverMonitorImpl) fillStatusMap(statusMap map[ClusterShardKey]
 		readerState, ok := readerStates[readerID]
 		if !ok {
 			m.Logger.Error("Failed to get reader state.")
-			statusMap[clientKey] = &streamStatus{
+			statusMap[ClusterShardKeyPair{Client: clientKey, Server: serverKey}] = &streamStatus{
 				maxReplicationTaskId: maxTaskId,
 				isTieredStackEnabled: false,
-				senderShardId:        serverShardId,
 			}
 			continue
 		}
 		if len(readerState.Scopes) == 3 {
-			statusMap[clientKey] = &streamStatus{
+			statusMap[ClusterShardKeyPair{Client: clientKey, Server: serverKey}] = &streamStatus{
 				defaultAckLevel:      readerState.Scopes[0].Range.InclusiveMin.TaskId,
 				highPriorityAckLevel: readerState.Scopes[1].Range.InclusiveMin.TaskId,
 				lowPriorityAckLevel:  readerState.Scopes[2].Range.InclusiveMin.TaskId,
 				maxReplicationTaskId: maxTaskId,
 				isTieredStackEnabled: true,
-				senderShardId:        serverShardId,
 			}
 		} else if len(readerState.Scopes) == 1 {
-			statusMap[clientKey] = &streamStatus{
+			statusMap[ClusterShardKeyPair{Client: clientKey, Server: serverKey}] = &streamStatus{
 				defaultAckLevel:      readerState.Scopes[0].Range.InclusiveMin.TaskId,
 				highPriorityAckLevel: 0,
 				lowPriorityAckLevel:  0,
 				maxReplicationTaskId: maxTaskId,
 				isTieredStackEnabled: false,
-				senderShardId:        serverShardId,
 			}
 		}
 	}
