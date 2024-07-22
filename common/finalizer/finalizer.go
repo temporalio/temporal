@@ -31,6 +31,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -107,7 +108,6 @@ func (f *Finalizer) Deregister(
 // It can only be invoked once; calling it again has no effect.
 // Returns the number of completed callbacks.
 func (f *Finalizer) Run(
-	poolFactory func() *goro.AdaptivePool,
 	timeout time.Duration,
 ) int {
 	if timeout == 0 {
@@ -140,14 +140,14 @@ func (f *Finalizer) Run(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	pool := poolFactory()
+	pool := goro.NewAdaptivePool(cclock.NewRealTimeSource(), 5, 15, 10*time.Millisecond, 10)
 	defer pool.Stop()
 
 	completionChannel := make(chan struct{})
 	go func() {
 		defer func() { f.logger.Info("finalizer loop ended") }()
 		for _, callback := range f.callbacks {
-			// NOTE: Once `pool.Stop` is called due to a timeout, any remaining calls to `pool.Do` will do nothing.
+			// NOTE: Once `pool.Stop` is called, any remaining calls to `pool.Do` will do nothing.
 			pool.Do(func() {
 				defer func() { completionChannel <- struct{}{} }()
 				_ = callback(ctx)

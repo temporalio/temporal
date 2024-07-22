@@ -56,7 +56,7 @@ func TestFinalizer(t *testing.T) {
 
 		t.Run("fails after already run before", func(t *testing.T) {
 			f := newFinalizer(metrics.NoopMetricsHandler)
-			f.Run(newPool, 1*time.Second)
+			f.Run(1 * time.Second)
 			require.ErrorIs(t, f.Register("1", nil), FinalizerAlreadyDoneErr)
 		})
 	})
@@ -66,7 +66,7 @@ func TestFinalizer(t *testing.T) {
 			f := newFinalizer(metrics.NoopMetricsHandler)
 			require.NoError(t, f.Register("1", nil))
 			require.NoError(t, f.Deregister("1"))
-			require.Zero(t, f.Run(newPool, 1*time.Second))
+			require.Zero(t, f.Run(1*time.Second))
 		})
 
 		t.Run("fails if callback does not exist", func(t *testing.T) {
@@ -76,7 +76,7 @@ func TestFinalizer(t *testing.T) {
 
 		t.Run("fails after already run before", func(t *testing.T) {
 			f := newFinalizer(metrics.NoopMetricsHandler)
-			f.Run(newPool, 1*time.Second)
+			f.Run(1 * time.Second)
 			require.ErrorIs(t, f.Deregister("1"), FinalizerAlreadyDoneErr)
 		})
 	})
@@ -99,7 +99,7 @@ func TestFinalizer(t *testing.T) {
 					}))
 			}
 
-			require.EqualValues(t, 5, f.Run(newPool, 1*time.Second))
+			require.EqualValues(t, 5, f.Run(1*time.Second))
 			require.EqualValues(t, 5, completed.Load())
 
 			snap := capture.Snapshot()
@@ -127,7 +127,7 @@ func TestFinalizer(t *testing.T) {
 				}))
 
 			capture := mh.StartCapture()
-			completed := f.Run(newPool, timeout)
+			completed := f.Run(timeout)
 			require.EqualValues(t, 1, completed, "expected only one callback to complete")
 
 			snap := capture.Snapshot()
@@ -139,7 +139,7 @@ func TestFinalizer(t *testing.T) {
 			mh := metricstest.NewCaptureHandler()
 			f := newFinalizer(mh)
 
-			require.Zero(t, f.Run(noPool, 0), "expected no callbacks to complete")
+			require.Zero(t, f.Run(0), "expected no callbacks to complete")
 			require.Empty(t, mh.StartCapture().Snapshot())
 		})
 
@@ -151,7 +151,7 @@ func TestFinalizer(t *testing.T) {
 				func(ctx context.Context) error {
 					return nil
 				}))
-			require.Zero(t, f.Run(noPool, 0), "expected no callbacks to complete")
+			require.Zero(t, f.Run(0), "expected no callbacks to complete")
 			require.Empty(t, mh.StartCapture().Snapshot())
 		})
 
@@ -165,10 +165,10 @@ func TestFinalizer(t *testing.T) {
 				func(ctx context.Context) error {
 					return nil
 				}))
-			require.EqualValues(t, 1, f.Run(newPool, 1*time.Second))
+			require.EqualValues(t, 1, f.Run(1*time.Second))
 
 			// 2nd call
-			require.Zero(t, f.Run(noPool, 1*time.Second), "expected no callbacks to complete")
+			require.Zero(t, f.Run(1*time.Second), "expected no callbacks to complete")
 			require.Empty(t, mh.StartCapture().Snapshot())
 		})
 	})
@@ -176,10 +176,6 @@ func TestFinalizer(t *testing.T) {
 
 func newFinalizer(mh metrics.Handler) *Finalizer {
 	return New(log.NewNoopLogger(), mh)
-}
-
-func noPool() *goro.AdaptivePool {
-	panic("pool created when it should not have been")
 }
 
 func newPool() *goro.AdaptivePool {
