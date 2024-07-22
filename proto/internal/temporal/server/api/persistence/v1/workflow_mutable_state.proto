@@ -53,7 +53,7 @@ message WorkflowMutableStateMutation{
         VersionedTransition last_update_versioned_transition = 4;
     }
 
-    // Following updatedXXX fields can be computed based on the 
+    // The following updated_* fields are computed based on the 
     // lastUpdateVersionedTransition field of each sub state machine.
     map<int64, ActivityInfo> updated_activity_infos = 1;
     map<string, TimerInfo> updated_timer_infos = 2;
@@ -63,7 +63,7 @@ message WorkflowMutableStateMutation{
     map<string, UpdateInfo> updated_update_infos = 6;
     repeated StateMachineNodeMutation updated_sub_state_machines = 7;
     
-    // Following deletedXXX fields can be computed based on the 
+    // The following deleted_* fields are computed based on the 
     // sub_state_machine_tombstone_batches field of mutable state.
     repeated int64 deleted_activities = 8;
     repeated string deleted_timers = 9;
@@ -74,8 +74,9 @@ message WorkflowMutableStateMutation{
     repeated StateMachinePath deleted_sub_state_machines = 14;
     
     repeated string signal_requested_ids = 15;
-    // update_infos and sub_state_machines_by_type fields in execution_info
-    // will not be populated in this message.
+    // Partial WorkflowExecutionInfo. Some fields, such as
+    // update_infos and sub_state_machines_by_type, are not populated here.
+    // Instead, only diffs are synced in the deleted_* and updated_* fields above.
     WorkflowExecutionInfo execution_info = 16;
     WorkflowExecutionState execution_state = 17;
 

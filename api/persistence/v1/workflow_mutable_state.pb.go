@@ -176,7 +176,7 @@ type WorkflowMutableStateMutation struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Following updatedXXX fields can be computed based on the
+	// The following updated_* fields are computed based on the
 	// lastUpdateVersionedTransition field of each sub state machine.
 	UpdatedActivityInfos       map[int64]*ActivityInfo                                  `protobuf:"bytes,1,rep,name=updated_activity_infos,json=updatedActivityInfos,proto3" json:"updated_activity_infos,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	UpdatedTimerInfos          map[string]*TimerInfo                                    `protobuf:"bytes,2,rep,name=updated_timer_infos,json=updatedTimerInfos,proto3" json:"updated_timer_infos,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
@@ -185,7 +185,7 @@ type WorkflowMutableStateMutation struct {
 	UpdatedSignalInfos         map[int64]*SignalInfo                                    `protobuf:"bytes,5,rep,name=updated_signal_infos,json=updatedSignalInfos,proto3" json:"updated_signal_infos,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	UpdatedUpdateInfos         map[string]*UpdateInfo                                   `protobuf:"bytes,6,rep,name=updated_update_infos,json=updatedUpdateInfos,proto3" json:"updated_update_infos,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	UpdatedSubStateMachines    []*WorkflowMutableStateMutation_StateMachineNodeMutation `protobuf:"bytes,7,rep,name=updated_sub_state_machines,json=updatedSubStateMachines,proto3" json:"updated_sub_state_machines,omitempty"`
-	// Following deletedXXX fields can be computed based on the
+	// The following deleted_* fields are computed based on the
 	// sub_state_machine_tombstone_batches field of mutable state.
 	DeletedActivities          []int64             `protobuf:"varint,8,rep,packed,name=deleted_activities,json=deletedActivities,proto3" json:"deleted_activities,omitempty"`
 	DeletedTimers              []string            `protobuf:"bytes,9,rep,name=deleted_timers,json=deletedTimers,proto3" json:"deleted_timers,omitempty"`
@@ -195,8 +195,9 @@ type WorkflowMutableStateMutation struct {
 	DeletedUpdateInfos         []string            `protobuf:"bytes,13,rep,name=deleted_update_infos,json=deletedUpdateInfos,proto3" json:"deleted_update_infos,omitempty"`
 	DeletedSubStateMachines    []*StateMachinePath `protobuf:"bytes,14,rep,name=deleted_sub_state_machines,json=deletedSubStateMachines,proto3" json:"deleted_sub_state_machines,omitempty"`
 	SignalRequestedIds         []string            `protobuf:"bytes,15,rep,name=signal_requested_ids,json=signalRequestedIds,proto3" json:"signal_requested_ids,omitempty"`
-	// update_infos and sub_state_machines_by_type fields in execution_info
-	// will not be populated in this message.
+	// Partial WorkflowExecutionInfo. Some fields, such as
+	// update_infos and sub_state_machines_by_type, are not populated here.
+	// Instead, only diffs are synced in the deleted_* and updated_* fields above.
 	ExecutionInfo  *WorkflowExecutionInfo  `protobuf:"bytes,16,opt,name=execution_info,json=executionInfo,proto3" json:"execution_info,omitempty"`
 	ExecutionState *WorkflowExecutionState `protobuf:"bytes,17,opt,name=execution_state,json=executionState,proto3" json:"execution_state,omitempty"`
 }

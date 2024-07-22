@@ -555,7 +555,7 @@ type StateMachineTombstoneBatch struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// versioned transition the tombstones are created
+	// The versioned transition in which the tombstones were created.
 	VersionedTransition    *VersionedTransition     `protobuf:"bytes,1,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
 	StateMachineTombstones []*StateMachineTombstone `protobuf:"bytes,2,rep,name=state_machine_tombstones,json=stateMachineTombstones,proto3" json:"state_machine_tombstones,omitempty"`
 }

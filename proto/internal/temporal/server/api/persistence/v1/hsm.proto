@@ -140,7 +140,7 @@ message VersionedTransition {
 }
 
 message StateMachineTombstoneBatch {
-    // versioned transition the tombstones are created
+    // The versioned transition in which the tombstones were created.
     VersionedTransition versioned_transition = 1;
     repeated StateMachineTombstone state_machine_tombstones = 2; 
 }
