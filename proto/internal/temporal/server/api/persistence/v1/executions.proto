@@ -244,6 +244,8 @@ message WorkflowExecutionInfo {
     VersionedTransition workflow_task_last_update_versioned_transition = 92;
     VersionedTransition visibility_last_update_versioned_transition = 93;
     VersionedTransition signal_request_ids_last_update_versioned_transition = 94;
+
+    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
 }
 
 message ExecutionStats {
@@ -516,9 +518,25 @@ message Callback {
         map<string, string> header = 2;
     }
 
+    message HSM {
+        // namespace id of the target state machine.
+        string namespace_id = 1;
+        // ID of the workflow that the target state machine is attached to.
+        string workflow_id = 2;
+        // Run id of said workflow.
+        string run_id = 3;
+        // A reference to the state machine.
+        temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+        // The method name to invoke. Methods must be explicitly registered for the target state machine in the state
+        // machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
+        // workflow.
+        string method = 5;
+    }
+
     reserved 1; // For a generic callback mechanism to be added later.
     oneof variant {
         Nexus nexus = 2;
+        HSM hsm = 3;
     }
 }
 

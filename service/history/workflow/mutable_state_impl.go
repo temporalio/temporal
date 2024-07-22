@@ -335,7 +335,7 @@ func NewMutableState(
 		s.metricsHandler,
 	)
 	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
-	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
+	s.workflowTaskManager = newWorkflowTaskStateMachine(s, s.metricsHandler)
 
 	s.mustInitHSM()
 
@@ -5089,6 +5089,11 @@ func (ms *MutableStateImpl) GetUpdateCondition() (int64, int64) {
 func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 	task *tasks.WorkflowTaskTimeoutTask,
 ) error {
+	taskID, err := ms.shard.GenerateTaskID()
+	if err != nil {
+		return err
+	}
+	task.TaskID = taskID
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
