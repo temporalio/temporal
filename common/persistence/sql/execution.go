@@ -394,7 +394,6 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
-			RunID:       runID,
 			StartTime:   nil,
 		}
 
@@ -414,6 +413,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.State = updateWorkflow.ExecutionState.State
 			row.Status = updateWorkflow.ExecutionState.Status
 			row.LastWriteVersion = updateWorkflow.LastWriteVersion
+			row.RunID = runID
 			// we still call update only to update the current record
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, runID); err != nil {
