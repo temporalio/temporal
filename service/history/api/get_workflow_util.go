@@ -27,6 +27,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -241,13 +242,11 @@ func MutableStateToGetResponse(
 	// NOTE: fields of GetMutableStateResponse (returned value) are accessed outside of workflow lock
 	// and, therefore, MUST be copied by value from mutableState fields.
 
-	var currentBranchToken []byte
-	if cbt, err := mutableState.GetCurrentBranchToken(); err != nil {
+	currentBranchToken, err := mutableState.GetCurrentBranchToken()
+	if err != nil {
 		return nil, err
-	} else {
-		currentBranchToken = make([]byte, len(cbt))
-		copy(currentBranchToken, cbt)
 	}
+	currentBranchToken = slices.Clone(currentBranchToken)
 
 	executionInfo := mutableState.GetExecutionInfo()
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
