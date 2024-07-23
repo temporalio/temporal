@@ -81,3 +81,7 @@ type ImmediateExecutor[T Task] func(ctx context.Context, env Environment, ref Re
 // Timers tasks are collapsed into a single task which will execute all timers that have hit their deadline while
 // holding a lock on the workflow.
 type TimerExecutor[T Task] func(env Environment, node *Node, task T) error
+
+// RemoteExecutor is responsible for executing remote methods.
+// // Implementations should be registered via [RegisterRemoteExecutors] to handle specific methods.
+type RemoteExecutor[I any, O any] func(ctx context.Context, env Environment, ref Ref, input I) (O, error)

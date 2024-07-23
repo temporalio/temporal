@@ -169,12 +169,12 @@ func (c *Collection) pollForChanges(ctx context.Context) error {
 	interval := DynamicConfigSubscriptionPollInterval.Get(c)
 	for ctx.Err() == nil {
 		util.InterruptibleSleep(ctx, interval())
-		c.pollOnce(ctx)
+		c.pollOnce()
 	}
 	return ctx.Err()
 }
 
-func (c *Collection) pollOnce(ctx context.Context) {
+func (c *Collection) pollOnce() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
 	if c.callbackPool == nil {

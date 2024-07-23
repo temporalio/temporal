@@ -33,12 +33,16 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
-	"go.uber.org/fx"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,8 +52,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -239,7 +241,7 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 		result, err := e.startWorkflow(ctx, s, start, req)
 		metricsWithTag := e.MetricsHandler.WithTags(metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 		if err != nil {
-			e.Logger.Error("Failed to start workflow", tag.NewErrorTag(err))
+			e.Logger.Error("Failed to start workflow", tag.Error(err))
 			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Record(1)
 			// TODO: we could put this back in the buffer and retry (after a delay) up until
 			// the catchup window. of course, it's unlikely that this workflow would be making

@@ -217,6 +217,7 @@ func (c *ContextImpl) Clear() {
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
+		c.MutableState.RemoveSpeculativeWorkflowTaskTimeoutTask()
 		c.MutableState = nil
 	}
 	if c.updateRegistry != nil {

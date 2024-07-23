@@ -56,7 +56,8 @@ import (
 
 type (
 	workflowTaskStateMachine struct {
-		ms *MutableStateImpl
+		ms             *MutableStateImpl
+		metricsHandler metrics.Handler
 	}
 )
 
@@ -67,9 +68,11 @@ const (
 
 func newWorkflowTaskStateMachine(
 	ms *MutableStateImpl,
+	metricsHandler metrics.Handler,
 ) *workflowTaskStateMachine {
 	return &workflowTaskStateMachine{
-		ms: ms,
+		ms:             ms,
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -612,8 +615,11 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		// Only Speculative WT can skip WorkflowTaskCompletedEvent.
 		return false
 	}
+
 	if len(request.GetCommands()) != 0 {
 		// If worker returned commands, they will be converted to events, which must follow by WorkflowTaskCompletedEvent.
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("worker_returned_commands"))
 		return false
 	}
 
@@ -622,6 +628,8 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
 		// In the future, if we decide not to write heartbeat of speculative WT to the history, this check should be removed,
 		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("force_create_task"))
 		return false
 	}
 
@@ -634,11 +642,15 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 	// In this case difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
 	// If there are other events after WFTCompleted event, then difference is > 2 and speculative WFT can't be dropped.
 	if m.ms.GetNextEventID() != m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("interleaved_events"))
 		return false
 	}
 
 	for _, message := range request.Messages {
 		if !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
+			metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+				metrics.ReasonTag("update_accepted"))
 			return false
 		}
 	}
@@ -649,6 +661,8 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 	// TODO: We should perform a shard ownership check here to prevent the case where the entire speculative workflow task
 	// is done on a stale mutable state and the fact that mutable state is stale caused workflow update requests to be rejected.
 	// NOTE: The AssertShardOwnership persistence API is not implemented in the repo.
+
+	metrics.SpeculativeWorkflowTaskRollbacks.With(m.metricsHandler).Record(1)
 	return true
 }
 
@@ -1168,8 +1182,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	}
 
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-	metrics.ConvertSpeculativeWorkflowTask.With(m.ms.metricsHandler).
-		Record(1, metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()))
+	metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+		metrics.ReasonTag("close_transaction"))
 
 	wt := m.getWorkflowTaskInfo()
 

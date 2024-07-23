@@ -879,6 +879,10 @@ func (e *historyEngineImpl) GetReplicationTasksIter(
 	return e.replicationAckMgr.GetReplicationTasksIter(ctx, pollingCluster, minInclusiveTaskID, maxExclusiveTaskID)
 }
 
+func (e *historyEngineImpl) GetMaxReplicationTaskInfo() (int64, time.Time) {
+	return e.replicationAckMgr.GetMaxTaskInfo()
+}
+
 func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
 	taskInfos []*replicationspb.ReplicationTaskInfo,

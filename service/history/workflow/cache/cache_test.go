@@ -160,6 +160,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 	mockMS1 := workflow.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(true).AnyTimes()
 	mockMS1.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mockMS1.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
@@ -269,6 +270,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	// all we need is a fake MutableState
 	mock := workflow.NewMockMutableState(s.controller)
 	mock.EXPECT().IsDirty().Return(false).AnyTimes()
+	mock.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	ctx.(*workflow.ContextImpl).MutableState = mock
 
 	release(nil)
@@ -340,6 +342,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		// all we need is a fake MutableState
 		mock := workflow.NewMockMutableState(s.controller)
 		mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry())
+		mock.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask()
 		ctx.(*workflow.ContextImpl).MutableState = mock
 		release(errors.New("some random error message"))
 	}

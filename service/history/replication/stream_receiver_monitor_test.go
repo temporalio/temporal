@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -32,6 +33,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -474,4 +478,209 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Reactivate()
 	}]
 	s.True(ok)
 	s.True(stream.IsValid())
+}
+
+func (s *streamReceiverMonitorSuite) TestGenerateStatusMap_Success() {
+	inboundKeys := make(map[ClusterShardKeyPair]struct{})
+	key1 := ClusterShardKeyPair{
+		Client: NewClusterShardKey(2, 1),
+		Server: NewClusterShardKey(1, 1),
+	}
+	key2 := ClusterShardKeyPair{
+		Client: NewClusterShardKey(3, 1),
+		Server: NewClusterShardKey(1, 1),
+	}
+	key3 := ClusterShardKeyPair{
+		Client: NewClusterShardKey(4, 2),
+		Server: NewClusterShardKey(1, 2),
+	}
+	inboundKeys[key1] = struct{}{}
+	inboundKeys[key2] = struct{}{}
+	inboundKeys[key3] = struct{}{}
+	ctx1 := shard.NewMockContext(s.controller)
+	ctx2 := shard.NewMockContext(s.controller)
+	engine1 := shard.NewMockEngine(s.controller)
+	engine2 := shard.NewMockEngine(s.controller)
+	engine1.EXPECT().GetMaxReplicationTaskInfo().Return(int64(1000), time.Now())
+	engine2.EXPECT().GetMaxReplicationTaskInfo().Return(int64(2000), time.Now())
+	readerId1 := shard.ReplicationReaderIDFromClusterShardID(int64(key1.Client.ClusterID), key1.Client.ShardID)
+	ackLevel1 := int64(100)
+	ackLevel2 := int64(200)
+	ackLevel3 := int64(300)
+	readerId2 := shard.ReplicationReaderIDFromClusterShardID(int64(key2.Client.ClusterID), key2.Client.ShardID)
+	readerId3 := shard.ReplicationReaderIDFromClusterShardID(int64(key3.Client.ClusterID), key3.Client.ShardID)
+	queueState1 := &persistencespb.QueueState{
+		ExclusiveReaderHighWatermark: nil,
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerId1: {
+				Scopes: []*persistencespb.QueueSliceScope{{
+					Range: &persistencespb.QueueSliceRange{
+						InclusiveMin: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(ackLevel1),
+						),
+						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(math.MaxInt64),
+						),
+					},
+					Predicate: &persistencespb.Predicate{
+						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+					},
+				}},
+			},
+			readerId2: {
+				Scopes: []*persistencespb.QueueSliceScope{{
+					Range: &persistencespb.QueueSliceRange{
+						InclusiveMin: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(ackLevel2),
+						),
+						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(math.MaxInt64),
+						),
+					},
+					Predicate: &persistencespb.Predicate{
+						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+					},
+				}},
+			},
+		},
+	}
+	queueState2 := &persistencespb.QueueState{
+		ExclusiveReaderHighWatermark: nil,
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerId3: {
+				Scopes: []*persistencespb.QueueSliceScope{{
+					Range: &persistencespb.QueueSliceRange{
+						InclusiveMin: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(ackLevel3),
+						),
+						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(math.MaxInt64),
+						),
+					},
+					Predicate: &persistencespb.Predicate{
+						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+					},
+				}},
+			},
+		},
+	}
+	ctx1.EXPECT().GetQueueState(tasks.CategoryReplication).Return(queueState1, true)
+	ctx2.EXPECT().GetQueueState(tasks.CategoryReplication).Return(queueState2, true)
+	s.shardController.EXPECT().GetShardByID(int32(1)).Return(ctx1, nil)
+	s.shardController.EXPECT().GetShardByID(int32(2)).Return(ctx2, nil)
+	ctx1.EXPECT().GetEngine(gomock.Any()).Return(engine1, nil)
+	ctx2.EXPECT().GetEngine(gomock.Any()).Return(engine2, nil)
+	statusMap := s.streamReceiverMonitor.generateStatusMap(inboundKeys)
+	s.Equal(map[ClusterShardKeyPair]*streamStatus{
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(2, 1),
+			Server: NewClusterShardKey(1, 1),
+		}: {
+			defaultAckLevel:      ackLevel1,
+			maxReplicationTaskId: int64(1000),
+			isTieredStackEnabled: false,
+		},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(3, 1),
+			Server: NewClusterShardKey(1, 1),
+		}: {
+			defaultAckLevel:      ackLevel2,
+			maxReplicationTaskId: int64(1000),
+			isTieredStackEnabled: false,
+		},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(4, 2),
+			Server: NewClusterShardKey(1, 2),
+		}: {
+			defaultAckLevel:      ackLevel3,
+			maxReplicationTaskId: int64(2000),
+			isTieredStackEnabled: false,
+		},
+	}, statusMap)
+}
+
+func (s *streamReceiverMonitorSuite) TestEvaluateStreamStatus() {
+	keyPair := &ClusterShardKeyPair{
+		Client: NewClusterShardKey(2, 1),
+		Server: NewClusterShardKey(1, 1),
+	}
+
+	s.True(s.streamReceiverMonitor.evaluateSingleStreamConnection(keyPair,
+		&streamStatus{
+			defaultAckLevel:      100,
+			maxReplicationTaskId: 1000,
+			isTieredStackEnabled: false,
+		},
+		&streamStatus{
+			defaultAckLevel:      50,
+			maxReplicationTaskId: 500,
+			isTieredStackEnabled: false,
+		},
+	),
+	)
+
+	s.False(s.streamReceiverMonitor.evaluateSingleStreamConnection(keyPair,
+		&streamStatus{
+			defaultAckLevel:      50,
+			maxReplicationTaskId: 1000,
+			isTieredStackEnabled: false,
+		},
+		&streamStatus{
+			defaultAckLevel:      50,
+			maxReplicationTaskId: 500,
+			isTieredStackEnabled: false,
+		},
+	),
+	)
+
+	s.False(s.streamReceiverMonitor.evaluateSingleStreamConnection(keyPair,
+		&streamStatus{
+			highPriorityAckLevel: 100,
+			lowPriorityAckLevel:  20,
+			maxReplicationTaskId: 1000,
+			isTieredStackEnabled: true,
+		},
+		&streamStatus{
+			highPriorityAckLevel: 50,
+			lowPriorityAckLevel:  20,
+			maxReplicationTaskId: 500,
+			isTieredStackEnabled: true,
+		},
+	),
+	)
+
+	s.False(s.streamReceiverMonitor.evaluateSingleStreamConnection(keyPair,
+		&streamStatus{
+			highPriorityAckLevel: 20,
+			lowPriorityAckLevel:  50,
+			maxReplicationTaskId: 1000,
+			isTieredStackEnabled: true,
+		},
+		&streamStatus{
+			highPriorityAckLevel: 20,
+			lowPriorityAckLevel:  20,
+			maxReplicationTaskId: 500,
+			isTieredStackEnabled: true,
+		},
+	),
+	)
+
+	s.True(s.streamReceiverMonitor.evaluateSingleStreamConnection(keyPair,
+		&streamStatus{
+			highPriorityAckLevel: 51,
+			lowPriorityAckLevel:  21,
+			maxReplicationTaskId: 1000,
+			isTieredStackEnabled: true,
+		},
+		&streamStatus{
+			highPriorityAckLevel: 50,
+			lowPriorityAckLevel:  20,
+			maxReplicationTaskId: 500,
+			isTieredStackEnabled: true,
+		},
+	),
+	)
 }
