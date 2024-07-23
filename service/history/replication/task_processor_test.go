@@ -429,10 +429,6 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncHSM() {
 	s.Equal(request, dlqTask)
 }
 
-func (s *taskProcessorSuite) TestConvertTaskToDLQTask_BackfillHistory() {
-	// TODO
-}
-
 func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
