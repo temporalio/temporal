@@ -1223,7 +1223,7 @@ func (s *scheduler) processBuffer() bool {
 	s.State.BufferedStarts = action.NewBuffer
 	s.Info.OverlapSkipped += action.OverlapSkipped
 
-	tryAgain := s.startScheduledActions(req, action)
+	tryAgain := s.startScheduledActions(action)
 
 	// Terminate or cancel if required (terminate overrides cancel if both are present)
 	if action.NeedTerminate {
@@ -1251,19 +1251,16 @@ func (s *scheduler) processBuffer() bool {
 	return tryAgain
 }
 
-func (s *scheduler) startScheduledAction(
-	start *schedspb.BufferedStart,
-	executionInfo *workflowpb.NewWorkflowExecutionInfo,
-	action ProcessBufferResult[*schedspb.BufferedStart],
-) (tryAgain bool) {
+func (s *scheduler) startScheduledAction(start *schedspb.BufferedStart) (*schedpb.ScheduleActionResult, bool) {
 	if !s.canTakeScheduledAction(start.Manual, true) {
 		// try again to drain the buffer if paused or out of actions
-		return true
+		return nil, false
 	}
 
 	metricsWithTag := s.metrics.WithTags(map[string]string{
 		metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
 	metricsWithTag.Counter(metrics.ScheduleActionAttempt.Name()).Inc(1)
+	executionInfo := s.Schedule.Action.GetStartWorkflow()
 	result, err := s.startWorkflow(start, executionInfo)
 
 	if err != nil {
@@ -1273,16 +1270,14 @@ func (s *scheduler) startScheduledAction(
 		if !errors.As(err, &workflowExecutionAlreadyStarted) {
 			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
 		}
-		return true
+		return result, false
 	}
 	metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Inc(1)
-	nonOverlapping := start == action.NonOverlappingStart
-	s.recordAction(result, nonOverlapping)
-	return false
+
+	return result, true
 }
 
 func (s *scheduler) startScheduledActions(
-	executionInfo *workflowpb.NewWorkflowExecutionInfo,
 	action ProcessBufferResult[*schedspb.BufferedStart],
 ) (tryAgain bool) {
 	// Try starting whatever we're supposed to start now
@@ -1292,9 +1287,14 @@ func (s *scheduler) startScheduledActions(
 	}
 	tryAgain = false
 	for _, start := range allStarts {
-		tryAgain = tryAgain || s.startScheduledAction(start, executionInfo, action)
+		result, workflowStarted := s.startScheduledAction(start)
+		tryAgain = tryAgain || (!workflowStarted)
+		if result != nil {
+			nonOverlapping := start == action.NonOverlappingStart
+			s.recordAction(result, nonOverlapping)
+		}
 	}
-	return
+	return tryAgain
 }
 
 func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult, nonOverlapping bool) {

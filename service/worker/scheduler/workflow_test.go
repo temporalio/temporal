@@ -2310,17 +2310,14 @@ func (s *workflowSuite) TestStartScheduledAction() {
 	_scheduler := &scheduler{
 		StartScheduleArgs: s.buildScheduleArgs(),
 	}
+	_scheduler.metrics = sdkclient.MetricsNopHandler
 
 	start := &schedspb.BufferedStart{
-		Manual: true,
+		Manual: false,
 	}
-
-	tryAgain := _scheduler.startScheduledAction(start,
-		_scheduler.Schedule.Action,
-		nil)
-	assert.True(s.T(), tryAgain)
-
-	_scheduler.metrics = sdkclient.MetricsNopHandler
-	start.Manual = false
-	tryAgain = _scheduler.startScheduledAction(start, nil, nil)
+	_scheduler.Schedule.State.Paused = true
+	
+	result, workflowStarted := _scheduler.startScheduledAction(start)
+	assert.False(s.T(), workflowStarted)
+	assert.Nil(s.T(), result)
 }
