@@ -170,6 +170,25 @@ func (c *clientImpl) DispatchNexusTask(
 	return client.DispatchNexusTask(ctx, request, opts...)
 }
 
+func (c *clientImpl) ForceLoadTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.ForceLoadTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueuePartition().GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueuePartition().GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ForceLoadTaskQueuePartition(ctx, request, opts...)
+}
+
 func (c *clientImpl) ForceUnloadTaskQueue(
 	ctx context.Context,
 	request *matchingservice.ForceUnloadTaskQueueRequest,
