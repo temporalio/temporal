@@ -62,7 +62,6 @@ var (
 		dynamicconfig.ValidateUTF8FailPersistence.Key():                         true,
 		dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Key():                 true,
 		dynamicconfig.FrontendMaskInternalErrorDetails.Key():                    false,
-		dynamicconfig.WorkflowIdReuseMinimalInterval.Key():                      100 * time.Millisecond,
 	}
 )
 

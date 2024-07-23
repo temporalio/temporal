@@ -166,7 +166,7 @@ func loadMutableStateForTask(
 		return nil, err
 	}
 
-	if task.GetRunID() == mutableState.GetExecutionState().GetRunId() {
+	if task.GetRunID() == mutableState.GetWorkflowKey().RunID {
 		// Task generation is scoped to a specific run, so only perform the validation if runID matches.
 		// Tasks targeting the current run (e.g. workflow execution timeout timer) should bypass the validation.
 		if err := validateTaskGeneration(mutableState, task.GetTaskID()); err != nil {
