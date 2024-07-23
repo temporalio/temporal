@@ -86,6 +86,20 @@ func (mr *MockEngineMockRecorder) AddTasks(ctx, request interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockEngine)(nil).AddTasks), ctx, request)
 }
 
+// BackfillHistoryEvents mocks base method.
+func (m *MockEngine) BackfillHistoryEvents(ctx context.Context, request *BackfillHistoryEventsRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BackfillHistoryEvents", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BackfillHistoryEvents indicates an expected call of BackfillHistoryEvents.
+func (mr *MockEngineMockRecorder) BackfillHistoryEvents(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackfillHistoryEvents", reflect.TypeOf((*MockEngine)(nil).BackfillHistoryEvents), ctx, request)
+}
+
 // ConvertReplicationTask mocks base method.
 func (m *MockEngine) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*v13.ReplicationTask, error) {
 	m.ctrl.T.Helper()

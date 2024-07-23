@@ -74,6 +74,7 @@ enum TaskType {
     TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT = 29;
 
     TASK_TYPE_REPLICATION_SYNC_HSM = 30;
+    TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION = 31;
 }
 
 // TaskPriority is only used for replication task as of May 2024

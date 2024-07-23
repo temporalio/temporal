@@ -84,7 +84,7 @@ func NewExecutableHistoryTask(
 	task *replicationspb.HistoryTaskAttributes,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
-	versionedTransition *persistencespb.VersionedTransition,
+	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableHistoryTask {
 	eventBatches := task.GetEventsBatches()
 	if eventBatches == nil {
@@ -102,7 +102,7 @@ func NewExecutableHistoryTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			priority,
-			versionedTransition,
+			replicationTask,
 		),
 
 		baseExecutionInfo:      task.BaseExecutionInfo,

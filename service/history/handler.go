@@ -2071,6 +2071,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 			engine,
 			shardContext,
 			clientClusterName,
+			serialization.NewSerializer(),
 		),
 		clientClusterName,
 		clientShardCount,

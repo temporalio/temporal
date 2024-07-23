@@ -93,6 +93,7 @@ type (
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
 		SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error
 		SyncHSM(ctx context.Context, request *SyncHSMRequest) error
+		BackfillHistoryEvents(ctx context.Context, request *BackfillHistoryEventsRequest) error
 		GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
@@ -147,5 +148,18 @@ type (
 
 		StateMachineNode    *persistencespb.StateMachineNode
 		EventVersionHistory *historyspb.VersionHistory
+	}
+
+	BackfillHistoryEventsRequest struct {
+		definition.WorkflowKey
+
+		SourceClusterName   string
+		VersionedHistory    *persistencespb.VersionedTransition
+		BaseExecutionInfo   *workflowpb.BaseExecutionInfo
+		VersionHistoryItems []*historyspb.VersionHistoryItem
+
+		Events    [][]*historypb.HistoryEvent
+		NewEvents []*historypb.HistoryEvent
+		NewRunID  string
 	}
 )

@@ -524,9 +524,11 @@ const (
 	SyncActivityTaskScope = "SyncActivityTask"
 	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
 	SyncWorkflowStateTaskScope = "SyncWorkflowStateTask"
-	// SyncWatermarkScope is the scope used by closed workflow task replication processing
 	// SyncHSMTaskScope is the scope used by sync HSM replication task
-	SyncHSMTaskScope   = "SyncHSMTask"
+	SyncHSMTaskScope = "SyncHSMTask"
+	// BackfillHistoryEventsTaskScope is the scope used by backfill history events replication processing
+	BackfillHistoryEventsTaskScope = "BackfillHistoryEventsTask"
+	// SyncWatermarkScope is the scope used by closed workflow task replication processing
 	SyncWatermarkScope = "SyncWatermark"
 	// NoopTaskScope is the scope used by noop task
 	NoopTaskScope = "NoopTask"

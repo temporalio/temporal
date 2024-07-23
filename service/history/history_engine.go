@@ -743,6 +743,13 @@ func (e *historyEngineImpl) SyncHSM(
 	return e.nDCHSMStateReplicator.SyncHSMState(ctx, request)
 }
 
+func (e *historyEngineImpl) BackfillHistoryEvents(
+	ctx context.Context,
+	request *shard.BackfillHistoryEventsRequest,
+) error {
+	return e.nDCHistoryReplicator.BackfillHistoryEvents(ctx, request)
+}
+
 // ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
 func (e *historyEngineImpl) ReplicateWorkflowState(
 	ctx context.Context,
