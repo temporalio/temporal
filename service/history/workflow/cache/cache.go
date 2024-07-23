@@ -90,7 +90,6 @@ type (
 
 		onPut                     func(wfContext *workflow.Context)
 		onEvict                   func(wfContext *workflow.Context)
-		logger                    log.Logger
 		nonUserContextLockTimeout time.Duration
 	}
 	cacheItem struct {
@@ -202,7 +201,6 @@ func newCache(
 
 	return &cacheImpl{
 		Cache:                     withMetrics,
-		logger:                    logger,
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }

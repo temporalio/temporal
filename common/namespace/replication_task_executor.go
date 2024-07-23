@@ -204,7 +204,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 					tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
 					tag.NewStringTag("Task Namespace Id", task.GetId()),
 					tag.NewStringTag("Task Namepsace Info Id", task.Info.GetId()),
-					tag.NewErrorTag(err))
+					tag.Error(err))
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:
@@ -216,7 +216,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				"namespace replication encountered error during NamespaceCreationReplicationTask",
 				tag.WorkflowNamespace(task.Info.GetName()),
 				tag.WorkflowNamespaceID(task.Info.GetId()),
-				tag.NewErrorTag(err))
+				tag.Error(err))
 			return err
 		}
 
@@ -230,7 +230,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 					"namespace replication encountered name collision during NamespaceCreationReplicationTask",
 					tag.WorkflowNamespace(resp.Namespace.Info.Name),
 					tag.NewStringTag("Task Namespace Name", task.Info.GetName()),
-					tag.NewErrorTag(err))
+					tag.Error(err))
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:

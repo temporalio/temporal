@@ -105,6 +105,7 @@ const (
 	HistoryService_AddTasks_FullMethodName                               = "/temporal.server.api.historyservice.v1.HistoryService/AddTasks"
 	HistoryService_ListTasks_FullMethodName                              = "/temporal.server.api.historyservice.v1.HistoryService/ListTasks"
 	HistoryService_CompleteNexusOperation_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation"
+	HistoryService_InvokeStateMachineMethod_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod"
 	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
 )
 
@@ -316,6 +317,7 @@ type HistoryServiceClient interface {
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
 	CompleteNexusOperation(ctx context.Context, in *CompleteNexusOperationRequest, opts ...grpc.CallOption) (*CompleteNexusOperationResponse, error)
+	InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error)
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
 }
@@ -917,6 +919,15 @@ func (c *historyServiceClient) CompleteNexusOperation(ctx context.Context, in *C
 	return out, nil
 }
 
+func (c *historyServiceClient) InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error) {
+	out := new(InvokeStateMachineMethodResponse)
+	err := c.cc.Invoke(ctx, HistoryService_InvokeStateMachineMethod_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error) {
 	out := new(DeepHealthCheckResponse)
 	err := c.cc.Invoke(ctx, HistoryService_DeepHealthCheck_FullMethodName, in, out, opts...)
@@ -1134,6 +1145,7 @@ type HistoryServiceServer interface {
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
 	CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error)
+	InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error)
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
@@ -1331,6 +1343,9 @@ func (UnimplementedHistoryServiceServer) ListTasks(context.Context, *ListTasksRe
 }
 func (UnimplementedHistoryServiceServer) CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeStateMachineMethod not implemented")
 }
 func (UnimplementedHistoryServiceServer) DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeepHealthCheck not implemented")
@@ -2490,6 +2505,24 @@ func _HistoryService_CompleteNexusOperation_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_InvokeStateMachineMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvokeStateMachineMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).InvokeStateMachineMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_InvokeStateMachineMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).InvokeStateMachineMethod(ctx, req.(*InvokeStateMachineMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_DeepHealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeepHealthCheckRequest)
 	if err := dec(in); err != nil {
@@ -2762,6 +2795,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteNexusOperation",
 			Handler:    _HistoryService_CompleteNexusOperation_Handler,
+		},
+		{
+			MethodName: "InvokeStateMachineMethod",
+			Handler:    _HistoryService_InvokeStateMachineMethod_Handler,
 		},
 		{
 			MethodName: "DeepHealthCheck",

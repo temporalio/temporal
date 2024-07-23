@@ -137,6 +137,7 @@ type (
 			minInclusiveTaskID int64,
 			maxExclusiveTaskID int64,
 		) (collection.Iterator[tasks.Task], error)
+		GetMaxReplicationTaskInfo() (int64, time.Time)
 	}
 )
 

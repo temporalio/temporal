@@ -2381,3 +2381,37 @@ func validateTaskToken(taskToken *tokenspb.Task) error {
 	}
 	return nil
 }
+
+func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *historyservice.InvokeStateMachineMethodRequest) (_ *historyservice.InvokeStateMachineMethodResponse, retErr error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.NamespaceId), request.WorkflowId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	registry := shardContext.StateMachineRegistry()
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	ref := hsm.Ref{
+		WorkflowKey:     definition.NewWorkflowKey(request.NamespaceId, request.WorkflowId, request.RunId),
+		StateMachineRef: request.Ref,
+	}
+
+	bytes, err := registry.ExecuteRemoteMethod(ctx, engine.StateMachineEnvironment(), ref, request.MethodName, request.Input)
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.InvokeStateMachineMethodResponse{
+		Output: bytes,
+	}, nil
+}
