@@ -29,7 +29,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -324,23 +323,18 @@ func (s *FunctionalSuite) TestContinueAsNewRun_ExecutionTimeout() {
 	}
 
 	testCompleted := make(chan struct{})
-	var workerWG sync.WaitGroup
-	workerWG.Add(1)
 	go func() {
-		defer workerWG.Done()
-
 		for {
 			select {
 			case <-testCompleted:
 				return
 			default:
 				// process the workflow task and continue as new
-				_, err := poller.PollAndProcessWorkflowTask()
+				_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
 				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-			}
 
-			// introduce some delay to the workflow
-			time.Sleep(100 * time.Millisecond)
+				// rely on WorkflowIdReuseMinimalInterval to prevent tight loop of continue as new
+			}
 		}
 	}()
 
@@ -364,7 +358,6 @@ func (s *FunctionalSuite) TestContinueAsNewRun_ExecutionTimeout() {
 	)
 
 	close(testCompleted)
-	workerWG.Wait()
 }
 
 func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
