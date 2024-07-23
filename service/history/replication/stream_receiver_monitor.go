@@ -368,7 +368,11 @@ func (m *StreamReceiverMonitorImpl) evaluateSingleStreamConnection(key *ClusterS
 				fmt.Sprintf("%v replication is not making progress. previousAckLevel: %v, previousMaxTaskId: %v, currentAckLevel: %v, currentMaxTaskId: %v",
 					priority.String(), previousAckLevel, previousMaxReplicationTaskId, currentAckLevel, currentMaxTaskId),
 				tag.SourceShardID(key.Server.ShardID), tag.TargetCluster(strconv.Itoa(int(key.Client.ClusterID))), tag.TargetShardID(key.Client.ShardID))
-			metrics.ReplicationStreamStuck.With(m.MetricsHandler).Record(1)
+			metrics.ReplicationStreamStuck.With(m.MetricsHandler).Record(
+				int64(1),
+				metrics.FromClusterIDTag(key.Server.ClusterID),
+				metrics.ToClusterIDTag(key.Client.ClusterID),
+			)
 			return false
 		}
 		return true
