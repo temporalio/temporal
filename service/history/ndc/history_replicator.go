@@ -260,7 +260,7 @@ func (r *HistoryReplicatorImpl) doApplyBackfillEvents(
 		r.shardContext,
 		task.getNamespaceID(),
 		task.getExecution(),
-		locks.PriorityHigh,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
@@ -297,18 +297,13 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 	releaseFn wcache.ReleaseCacheFunc,
 	task replicationTask,
 ) (retError error) {
-
 	versionedTransition := task.getVersionedTransition()
 	if versionedTransition == nil {
-		return &serviceerror.InvalidArgument{
-			Message: "versioned transition is required for backfill task",
-		}
+		return serviceerror.NewInvalidArgument("versioned transition is required for backfill task")
 	}
 
 	if task.getFirstEvent().GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-		return &serviceerror.InvalidArgument{
-			Message: "workflow execution started event is not expected in backfill task",
-		}
+		return serviceerror.NewInvalidArgument("workflow execution started event is not expected in backfill task")
 	}
 
 	transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
