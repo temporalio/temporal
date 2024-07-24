@@ -33,10 +33,10 @@ on:
         description: "postgres12"
         type: boolean
         default: false
-      postgres12_pgx:
-        description: "postgres12_pgx"
-        type: boolean
-        default: false
+#      postgres12_pgx:
+#        description: "postgres12_pgx"
+#        type: boolean
+#        default: false
       n_runs:
         description: "[Single Test Only] Number of times to repeat the single test per database type"
         type: number
