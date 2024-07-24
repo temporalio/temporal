@@ -43,6 +43,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -608,6 +609,21 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		}, nil
 	}
 	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
+}
+
+// GetHSMCallbackArg converts a workflow completion event into a [persistencepb.HSMCallbackArg].
+func (ms *MutableStateImpl) GetHSMCallbackArg(ctx context.Context) (*persistencepb.HSMCallbackArg, error) {
+	workflowKey := ms.GetWorkflowKey()
+	ce, err := ms.GetCompletionEvent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &persistencespb.HSMCallbackArg{
+		NamespaceId: workflowKey.NamespaceID,
+		WorkflowId:  workflowKey.WorkflowID,
+		RunId:       workflowKey.RunID,
+		LastEvent:   ce,
+	}, nil
 }
 
 func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {

@@ -75,14 +75,14 @@ var _ hsm.Environment = fakeEnv{}
 
 type mutableState struct {
 	completionNexus nexus.OperationCompletion
-	completionHsm   *historypb.HistoryEvent
+	completionHsm   *persistencespb.HSMCallbackArg
 }
 
 func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
 	return ms.completionNexus, nil
 }
 
-func (ms mutableState) GetCompletionEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
+func (ms mutableState) GetGetHSMCallbackArg(ctx context.Context) (*persistencespb.HSMCallbackArg, error) {
 	return ms.completionHsm, nil
 }
 
@@ -342,11 +342,14 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 				require.Equal(t, "rid", in.RunId)
 				require.True(t, ref.Equal(in.Ref))
 				require.Equal(t, "test", in.MethodName)
-				event := &historypb.HistoryEvent{}
-				err = proto.Unmarshal(in.Input, event)
+				arg := &persistencespb.HSMCallbackArg{}
+				err = proto.Unmarshal(in.Input, arg)
 				require.NoError(t, err)
-				require.Equal(t, int64(42), event.EventId)
-				require.Equal(t, enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, event.EventType)
+				require.Equal(t, "mynsid", arg.NamespaceId)
+				require.Equal(t, "mywid", arg.WorkflowId)
+				require.Equal(t, "myrid", arg.RunId)
+				require.Equal(t, int64(42), arg.LastEvent.EventId)
+				require.Equal(t, enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, arg.LastEvent.EventType)
 
 				return &historyservice.InvokeStateMachineMethodResponse{}, tc.expectedError
 			}).Times(1)
@@ -443,13 +446,18 @@ func TestProcessBackoffTask(t *testing.T) {
 func newMutableState(t *testing.T) mutableState {
 	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccesfulOptions{})
 	require.NoError(t, err)
-	completionHsm := &historypb.HistoryEvent{
-		EventId:   42,
-		EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+	hsmCallbackArg := &persistencespb.HSMCallbackArg{
+		NamespaceId: "mynsid",
+		WorkflowId:  "mywid",
+		RunId:       "myrid",
+		LastEvent: &historypb.HistoryEvent{
+			EventId:   42,
+			EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		},
 	}
 	return mutableState{
 		completionNexus: completionNexus,
-		completionHsm:   completionHsm,
+		completionHsm:   hsmCallbackArg,
 	}
 }
 

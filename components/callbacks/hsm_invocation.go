@@ -30,7 +30,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log/tag"
@@ -38,13 +37,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-type CanGetCompletionEvent interface {
-	GetCompletionEvent(ctx context.Context) (*historypb.HistoryEvent, error)
+type CanGetHSMCallbackArg interface {
+	GetHSMCallbackArg(ctx context.Context) (*persistencepb.HSMCallbackArg, error)
 }
 
 type hsmInvocation struct {
-	hsm             *persistencepb.Callback_HSM
-	completionEvent *historypb.HistoryEvent
+	hsm         *persistencepb.Callback_HSM
+	callbackArg *persistencepb.HSMCallbackArg
 }
 
 func isRetryableRpcResponse(err error) bool {
@@ -80,7 +79,8 @@ func (s hsmInvocation) WrapError(invocationResult, error) error {
 }
 
 func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error) {
-	completionEventSerialized, err := s.completionEvent.Marshal()
+	// TODO(Tianyu): Will this ever be too big for an RPC call?
+	callbackArgSerialized, err := s.callbackArg.Marshal()
 	if err != nil {
 		return failed, fmt.Errorf("failed to serialize completion event: %v", err) //nolint:goerr113
 	}
@@ -91,7 +91,7 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 		RunId:       s.hsm.RunId,
 		Ref:         s.hsm.Ref,
 		MethodName:  s.hsm.Method,
-		Input:       completionEventSerialized,
+		Input:       callbackArgSerialized,
 	}
 
 	startTime := time.Now()

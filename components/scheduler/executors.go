@@ -27,6 +27,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/api/failure/v1"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
+	"golang.org/x/exp/slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -54,13 +57,21 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
+var (
+	errTryAgain             = errors.New("try again")
+	errWrongChain           = errors.New("found running workflow with wrong FirstExecutionRunId")
+	errNoEvents             = errors.New("GetEvents didn't return any events")
+	errNoAttrs              = errors.New("last event did not have correct attrs")
+	errBlocked              = errors.New("rate limiter doesn't allow any progress")
+	errUnkownWorkflowStatus = errors.New("unknown workflow status")
+)
+
 type (
 	TaskExecutorOptions struct {
 		fx.In
 		MetricsHandler    metrics.Handler
 		Logger            log.Logger
 		SpecBuilder       *scheduler.SpecBuilder
-		FrontendClient    workflowservice.WorkflowServiceClient
 		HistoryClient     resource.HistoryClient
 		NamespaceRegistry namespace.Registry
 		Config            *Config
@@ -69,7 +80,11 @@ type (
 	taskExecutor struct {
 		TaskExecutorOptions
 	}
+
+	errFollow string
 )
+
+func (e errFollow) Error() string { return string(e) }
 
 var ErrSchedulerConflict = errors.New("concurrent scheduler task execution detected, unable to update scheduler state")
 
@@ -176,6 +191,9 @@ func (e taskExecutor) executeSchedulerRunTask(
 
 	s.Args.State.LastProcessedTime = timestamppb.New(lastAction)
 	s.NextInvocationTime = timestamppb.New(nextWakeup)
+
+	// TODO(Tianyu): Process signals here
+
 	// process backfills if we have any too
 	e.processBackfills(&s, &tweakables)
 
@@ -191,6 +209,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 		}
 	}
 
+	// TODO(Tianyu): Check for retention period and complete schedule after retention period has passed
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		sPtr, err := hsm.MachineData[*Scheduler](node)
 		if err != nil {
@@ -207,6 +226,31 @@ func (e taskExecutor) executeSchedulerRunTask(
 			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
 		})
 	})
+}
+
+func (e taskExecutor) canTakeScheduledAction(s *Scheduler, manual, decrement bool) bool {
+	// If manual (trigger immediately or backfill), always allow
+	if manual {
+		return true
+	}
+	// If paused, don't do anything
+	if s.Args.Schedule.State.Paused {
+		return false
+	}
+	// If unlimited actions, allow
+	if !s.Args.Schedule.State.LimitedActions {
+		return true
+	}
+	// Otherwise check and decrement limit
+	if s.Args.Schedule.State.RemainingActions > 0 {
+		if decrement {
+			s.Args.Schedule.State.RemainingActions--
+			s.Args.State.ConflictToken++
+		}
+		return true
+	}
+	// No actions left
+	return false
 }
 
 func (e taskExecutor) processBuffer(ctx context.Context,
@@ -238,6 +282,11 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 	s.Args.Info.OverlapSkipped += action.OverlapSkipped
 
 	for _, start := range allStarts {
+		if !e.canTakeScheduledAction(s, start.Manual, true) {
+			// try again to drain the buffer if paused or out of actions
+			tryAgain = true
+			continue
+		}
 		result, err := e.startWorkflow(ctx, s, start, req)
 		metricsWithTag := e.MetricsHandler.WithTags(metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 		if err != nil {
@@ -299,6 +348,14 @@ func (e taskExecutor) processTimeRange(
 		tag.NewAnyTag("overlap-policy", overlapPolicy), tag.NewBoolTag("manual", manual))
 
 	catchupWindow := s.catchupWindow(tweakables)
+
+	// Peek at paused/remaining actions state and don't bother if we're not going to
+	// take an action now. (Don't count as missed catchup window either.)
+	// Skip over entire time range if paused or no actions can be taken
+	if !e.canTakeScheduledAction(s, manual, false) {
+		// use end as last action time so that we don't reprocess time spent paused
+		return e.getNextTime(s, end).Next, end
+	}
 
 	lastAction := start
 	var next scheduler.GetNextTimeResult
@@ -376,7 +433,6 @@ func (e taskExecutor) startWorkflow(
 		continuedFailure = nil
 	}
 
-	// TODO(Tianyu): Add callback here
 	req := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:               workflowID,
 		WorkflowType:             newWorkflow.WorkflowType,
@@ -396,9 +452,20 @@ func (e taskExecutor) startWorkflow(
 		LastCompletionResult: lastCompletionResult,
 		ContinuedFailure:     continuedFailure,
 		Namespace:            s.Args.State.Namespace,
+		// TODO(Tianyu): Add callback here
+		CompletionCallbacks: []*commonpb.Callback{},
 	}
 
-	res, err := e.FrontendClient.StartWorkflowExecution(ctx, req)
+	histRequest := common.CreateHistoryStartWorkflowRequest(
+		s.Args.State.Namespace,
+		req,
+		nil,
+		nil,
+		time.Now().UTC(),
+	)
+	histRequest.
+
+	res, err := e.HistoryClient.StartWorkflowExecution(ctx, histRequest)
 	if err != nil {
 		// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 		// TODO(Tianyu): On failure, need to figure out how HSM-based implementation should retry, as we can no longer rely on automatic activity retries.
@@ -475,4 +542,90 @@ func (e taskExecutor) cancelWorkflow(
 		e.Logger.Error("cancelling workflow failed", tag.WorkflowID(ex.WorkflowId), tag.Error(err))
 		e.MetricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 	}
+}
+
+func getWorkflowResult(input *persistencepb.HSMCallbackArg) (*commonpb.Payloads, *failure.Failure, error) {
+	switch input.LastEvent.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		if attrs := input.LastEvent.GetWorkflowExecutionCompletedEventAttributes(); attrs == nil {
+			return nil, nil, errNoAttrs
+		} else if len(attrs.NewExecutionRunId) > 0 {
+			// this shouldn't happen because we don't allow old-cron workflows as scheduled, but follow it anyway
+			return nil, nil, errFollow(attrs.NewExecutionRunId)
+		} else {
+			return attrs.Result, nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		if attrs := input.LastEvent.GetWorkflowExecutionFailedEventAttributes(); attrs == nil {
+			return nil, nil, errNoAttrs
+		} else if len(attrs.NewExecutionRunId) > 0 {
+			return nil, nil, errFollow(attrs.NewExecutionRunId)
+		} else {
+			return nil, attrs.Failure, nil
+		}
+	}
+	return nil, nil, nil
+}
+
+func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hsm.Environment, ref hsm.Ref, input *persistencepb.HSMCallbackArg) (any, error) {
+	return nil, env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+
+		tweakables := e.Config.Tweakables(s.Args.State.Namespace)
+		match := func(ex *commonpb.WorkflowExecution) bool { return ex.WorkflowId == input.WorkflowId }
+		if idx := slices.IndexFunc(s.Args.Info.RunningWorkflows, match); idx >= 0 {
+			s.Args.Info.RunningWorkflows = slices.Delete(s.Args.Info.RunningWorkflows, idx, idx+1)
+		} else {
+			// This could happen if the callback is retried.
+			e.Logger.Error("just-closed workflow not found in running list", tag.WorkflowID(input.WorkflowId))
+		}
+
+		lastEventType := input.LastEvent.GetEventType()
+		r, f, err := getWorkflowResult(input)
+		if err != nil {
+			return err
+		}
+
+		// handle pause-on-failure
+		failedStatus := lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED ||
+			lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT ||
+			(tweakables.CanceledTerminatedCountAsFailures &&
+				lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED || lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED)
+
+		pauseOnFailure := s.Args.Schedule.Policies.PauseOnFailure && failedStatus && !s.Args.Schedule.State.Paused
+		if pauseOnFailure {
+			s.Args.Schedule.State.Paused = true
+			if lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED {
+
+				s.Args.Schedule.State.Notes = fmt.Sprintf("paused due to workflow failure: %s: %s", input.WorkflowId, f.Message)
+				e.Logger.Debug("paused due to workflow failure", tag.WorkflowID(input.WorkflowId), tag.NewStringTag("message", f.Message))
+			} else if lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
+				s.Args.Schedule.State.Notes = fmt.Sprintf("paused due to workflow timeout: %s", input.WorkflowId)
+				e.Logger.Debug("paused due to workflow timeout", tag.WorkflowID(input.WorkflowId))
+			}
+			s.Args.State.ConflictToken++
+		}
+
+		// TODO(Tianyu): Check that this is the last completion result since we no longer poll in order
+		// handle last completion/failure
+		if r != nil {
+			s.Args.State.LastCompletionResult = r
+			s.Args.State.ContinuedFailure = nil
+		} else if f != nil {
+			// leave LastCompletionResult from previous run
+			s.Args.State.ContinuedFailure = f
+		}
+
+		// Update desired time of next start if it's buffered. This is used for metrics only.
+		if len(s.Args.State.BufferedStarts) > 0 {
+			s.Args.State.BufferedStarts[0].DesiredTime = input.LastEvent.GetEventTime()
+		}
+
+		e.Logger.Debug("started workflow finished", tag.WorkflowID(input.WorkflowId), tag.NewStringTag("status", input.LastEvent.EventType.String()),
+			tag.NewBoolTag("pause-after-failure", pauseOnFailure))
+		return nil
+	})
 }

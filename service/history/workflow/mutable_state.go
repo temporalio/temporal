@@ -147,6 +147,7 @@ type (
 
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
+		callbacks.CanGetHSMCallbackArg
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 
