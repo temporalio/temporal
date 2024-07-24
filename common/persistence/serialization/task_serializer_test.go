@@ -29,10 +29,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/proto"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
@@ -349,6 +352,28 @@ func (s *taskSerializerSuite) TestSyncHSMTask() {
 	s.assertEqualTasks(syncHSMTask)
 }
 
+func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
+	syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+		FirstEventID:        rand.Int63(),
+		NextEventID:         rand.Int63(),
+		NewRunID:            uuid.New().String(),
+		VersionedTransition: &persistence.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+	}
+
+	s.assertEqualTasksWithOpts(syncVersionedTransitionTask,
+		func(task, deserializedTask tasks.Task) {
+			s.True(proto.Equal(task.(*tasks.SyncVersionedTransitionTask).VersionedTransition, deserializedTask.(*tasks.SyncVersionedTransitionTask).VersionedTransition))
+		},
+		cmpopts.IgnoreFields(tasks.SyncVersionedTransitionTask{}, "VersionedTransition"),
+	)
+}
+
 func (s *taskSerializerSuite) TestSyncWorkflowStateTask() {
 	syncWorkflowStateTask := &tasks.SyncWorkflowStateTask{
 		WorkflowKey:         s.workflowKey,
@@ -464,6 +489,21 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	s.NoError(err)
 
 	s.Equal(task, deserializedTask)
+}
+
+func (s *taskSerializerSuite) assertEqualTasksWithOpts(
+	task tasks.Task,
+	cmpFunc func(task, deserializedTask tasks.Task),
+	opts ...cmp.Option,
+) {
+	blob, err := s.taskSerializer.SerializeTask(task)
+	s.NoError(err)
+	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
+	s.NoError(err)
+	s.Empty(cmp.Diff(task, deserializedTask, opts...))
+	if cmpFunc != nil {
+		cmpFunc(task, deserializedTask)
+	}
 }
 
 func (s *taskSerializerSuite) assertEqualTasks(

@@ -112,25 +112,6 @@ jobs:
 
       - run: make build-tests
 
-  cache-docker-images:
-    name: Cache Docker images
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on: [ubuntu-20.04]
-    runs-on: ${{ matrix.runs-on }}
-    steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-
-      - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
-
   unit-test:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
@@ -173,10 +154,6 @@ jobs:
     env:
       BUILDKITE_MESSAGE: "{\"job\": \"integration-test\"}"
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -188,8 +165,14 @@ jobs:
           check-latest: true
 
       - name: Start containerized dependencies
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: |
+            cassandra
+            mysql
+            postgresql
+          down-flags: -v
 
       - name: Run integration test
         timeout-minutes: 15
@@ -260,7 +243,7 @@ jobs:
         shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_indices) }}
         name:
           - cass_es
-          # - cass_es8
+          - cass_es8
           - sqlite
           - mysql8
           - postgres12
@@ -270,10 +253,12 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
-          # - name: cass_es8
-          #   persistence_type: nosql
-          #   persistence_driver: cassandra
-          #   containers: [cassandra, elasticsearch8]
+            es_version: v7
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, elasticsearch8]
+            es_version: v8
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -318,9 +303,12 @@ jobs:
           check-latest: true
 
       - name: Start containerized dependencies
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-functional-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-functional-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
 
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-functional-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -331,15 +319,10 @@ jobs:
         if: ${{ !cancelled() && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-functional-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         run: make upload-test-results
 
-      - name: Tear down docker compose
-        if: ${{ (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-functional-test.outputs.dbs), env.PERSISTENCE_DRIVER))) && always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
-
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Functional test xdc
-    needs: [misc-checks, cache-docker-images]
+    needs: misc-checks
     strategy:
       fail-fast: false
       matrix:
@@ -373,10 +356,6 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -389,8 +368,11 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
 
       - name: Run functional test xdc
         timeout-minutes: 15
@@ -400,22 +382,17 @@ jobs:
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
-      - name: Tear down docker compose
-        if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
-
   functional-test-ndc:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Functional test ndc
-    needs: [misc-checks, cache-docker-images]
+    needs: misc-checks
     strategy:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
         name: 
           - cass_es
-          # - cass_es8
+          - cass_es8
           - mysql8
           - postgres12
           - postgres12_pgx
@@ -424,10 +401,12 @@ jobs:
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
-          # - name: cass_es8
-          #   persistence_type: nosql
-          #   persistence_driver: elasticsearch
-          #   containers: [cassandra, elasticsearch8]
+            es_version: v7
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch8]
+            es_version: v8
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -444,11 +423,8 @@ jobs:
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      ES_VERSION: ${{ matrix.es_version }}
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -461,17 +437,15 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
 
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
-
-      - name: Tear down docker compose
-        if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   test-status:
     if: ${{ inputs.run_single_functional_test != true }}

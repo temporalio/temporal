@@ -24,6 +24,10 @@
 
 package definition
 
+import (
+	"fmt"
+)
+
 type (
 	// WorkflowKey is the combinations which represent a workflow
 	WorkflowKey struct {
@@ -56,4 +60,8 @@ func (k *WorkflowKey) GetWorkflowID() string {
 
 func (k *WorkflowKey) GetRunID() string {
 	return k.RunID
+}
+
+func (k *WorkflowKey) String() string {
+	return fmt.Sprintf("%v/%v/%v", k.NamespaceID, k.WorkflowID, k.RunID)
 }

@@ -70,7 +70,7 @@ type (
 	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
 
 	SchedulerOptions struct {
-		WorkerCount             dynamicconfig.IntPropertyFn
+		WorkerCount             dynamicconfig.TypedSubscribable[int]
 		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
 		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}

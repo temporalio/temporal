@@ -66,6 +66,7 @@ func (s *fileBasedClientSuite) SetupSuite() {
 	}, logger, s.doneCh)
 	s.Require().NoError(err)
 	s.collection = dynamicconfig.NewCollection(s.client, logger)
+	s.collection.Start()
 }
 
 func (s *fileBasedClientSuite) TearDownSuite() {
@@ -368,6 +369,7 @@ testGetBoolPropertyKey:
 	s.NoError(err)
 
 	c := dynamicconfig.NewCollection(client, mockLogger)
+	c.Start()
 	sub := setting.Subscribe(c)
 
 	val1 := make(chan bool, 1)

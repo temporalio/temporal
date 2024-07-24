@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
@@ -136,6 +135,7 @@ func (u *Updater) ApplyRequest(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
+	u.wfKey = ms.GetWorkflowKey()
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
 
 	if !ms.IsWorkflowExecutionRunning() {
@@ -146,8 +146,6 @@ func (u *Updater) ApplyRequest(
 		}
 		return nil, consts.ErrWorkflowCompleted
 	}
-
-	u.wfKey = ms.GetWorkflowKey()
 
 	if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
 		// If workflow task is constantly failing, the update to that workflow will also fail.
@@ -235,8 +233,6 @@ func (u *Updater) OnSuccess(
 		// Speculative WFT was created and needs to be added directly to matching w/o transfer task.
 		// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 		//   Helper function needs to be extracted to avoid code duplication.
-		metrics.WorkflowExecutionUpdateSpeculativeWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
-
 		err := u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {

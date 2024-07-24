@@ -551,7 +551,6 @@ pollLoop:
 			}
 			return nil, err
 		}
-
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
 			return task.pollWorkflowTaskQueueResponse(), nil

@@ -51,6 +51,7 @@ type (
 		NamespaceCache            namespace.Registry
 		EagerNamespaceRefresher   EagerNamespaceRefresher
 		NDCHistoryResender        xdc.NDCHistoryResender
+		ResendHandler             eventhandler.ResendHandler
 		HighPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"HighPriorityTaskScheduler"`
 		// consider using a single TaskScheduler i.e. InterleavedWeightedRoundRobinScheduler instead of two
 		LowPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"LowPriorityTaskScheduler"`

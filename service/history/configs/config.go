@@ -98,6 +98,7 @@ type Config struct {
 	ShardIOTimeout               dynamicconfig.DurationPropertyFn
 	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
 	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
+	ShardFinalizerTimeout        dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -126,7 +127,7 @@ type Config struct {
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
-	TimerProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
+	TimerProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	TimerProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TimerProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TimerProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
@@ -140,11 +141,11 @@ type Config struct {
 	TimerQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	RetentionTimerJitterDuration                     dynamicconfig.DurationPropertyFn
 
-	MemoryTimerProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
+	MemoryTimerProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 
 	// TransferQueueProcessor settings
 	TransferTaskBatchSize                               dynamicconfig.IntPropertyFn
-	TransferProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
+	TransferProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	TransferProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TransferProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TransferProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
@@ -170,7 +171,7 @@ type Config struct {
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
-	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedPropertyFnWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
+	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedSubscribableWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
 	OutboundStandbyTaskMissingEventsDiscardDelay        dynamicconfig.DurationPropertyFnWithDestinationFilter
 	OutboundStandbyTaskMissingEventsDestinationDownErr  dynamicconfig.BoolPropertyFnWithDestinationFilter
 
@@ -302,7 +303,7 @@ type Config struct {
 	// ===== Visibility related =====
 	// VisibilityQueueProcessor settings
 	VisibilityTaskBatchSize                               dynamicconfig.IntPropertyFn
-	VisibilityProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
+	VisibilityProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	VisibilityProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	VisibilityProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
 	VisibilityProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
@@ -332,7 +333,7 @@ type Config struct {
 	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
-	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
+	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	ArchivalProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
 	ArchivalTaskBatchSize                               dynamicconfig.IntPropertyFn
 	ArchivalProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
@@ -421,6 +422,7 @@ func NewConfig(
 		ShardIOTimeout:               dynamicconfig.ShardIOTimeout.Get(dc),
 		ShardLingerOwnershipCheckQPS: dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
 		ShardLingerTimeLimit:         dynamicconfig.ShardLingerTimeLimit.Get(dc),
+		ShardFinalizerTimeout:        dynamicconfig.ShardFinalizerTimeout.Get(dc),
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
@@ -447,7 +449,7 @@ func NewConfig(
 		TaskSchedulerGlobalNamespaceMaxQPS:       dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
-		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Get(dc),
+		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),
 		TimerProcessorSchedulerActiveRoundRobinWeights:   dynamicconfig.TimerProcessorSchedulerActiveRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)).Get(dc),
 		TimerProcessorSchedulerStandbyRoundRobinWeights:  dynamicconfig.TimerProcessorSchedulerStandbyRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)).Get(dc),
 		TimerProcessorUpdateAckInterval:                  dynamicconfig.TimerProcessorUpdateAckInterval.Get(dc),
@@ -461,10 +463,10 @@ func NewConfig(
 		TransferQueueMaxReaderCount:                      dynamicconfig.TransferQueueMaxReaderCount.Get(dc),
 		RetentionTimerJitterDuration:                     dynamicconfig.RetentionTimerJitterDuration.Get(dc),
 
-		MemoryTimerProcessorSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Get(dc),
+		MemoryTimerProcessorSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
 
 		TransferTaskBatchSize:                               dynamicconfig.TransferTaskBatchSize.Get(dc),
-		TransferProcessorSchedulerWorkerCount:               dynamicconfig.TransferProcessorSchedulerWorkerCount.Get(dc),
+		TransferProcessorSchedulerWorkerCount:               dynamicconfig.TransferProcessorSchedulerWorkerCount.Subscribe(dc),
 		TransferProcessorSchedulerActiveRoundRobinWeights:   dynamicconfig.TransferProcessorSchedulerActiveRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)).Get(dc),
 		TransferProcessorSchedulerStandbyRoundRobinWeights:  dynamicconfig.TransferProcessorSchedulerStandbyRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)).Get(dc),
 		TransferProcessorMaxPollRPS:                         dynamicconfig.TransferProcessorMaxPollRPS.Get(dc),
@@ -489,7 +491,7 @@ func NewConfig(
 		OutboundQueueGroupLimiterBufferSize:                 dynamicconfig.OutboundQueueGroupLimiterBufferSize.Get(dc),
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),
 		OutboundQueueHostSchedulerMaxTaskRPS:                dynamicconfig.OutboundQueueHostSchedulerMaxTaskRPS.Get(dc),
-		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Get(dc),
+		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Subscribe(dc),
 		OutboundStandbyTaskMissingEventsDestinationDownErr:  dynamicconfig.OutboundStandbyTaskMissingEventsDestinationDownErr.Get(dc),
 		OutboundStandbyTaskMissingEventsDiscardDelay:        dynamicconfig.OutboundStandbyTaskMissingEventsDiscardDelay.Get(dc),
 
@@ -591,7 +593,7 @@ func NewConfig(
 		VisibilityTaskBatchSize:                               dynamicconfig.VisibilityTaskBatchSize.Get(dc),
 		VisibilityProcessorMaxPollRPS:                         dynamicconfig.VisibilityProcessorMaxPollRPS.Get(dc),
 		VisibilityProcessorMaxPollHostRPS:                     dynamicconfig.VisibilityProcessorMaxPollHostRPS.Get(dc),
-		VisibilityProcessorSchedulerWorkerCount:               dynamicconfig.VisibilityProcessorSchedulerWorkerCount.Get(dc),
+		VisibilityProcessorSchedulerWorkerCount:               dynamicconfig.VisibilityProcessorSchedulerWorkerCount.Subscribe(dc),
 		VisibilityProcessorSchedulerActiveRoundRobinWeights:   dynamicconfig.VisibilityProcessorSchedulerActiveRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)).Get(dc),
 		VisibilityProcessorSchedulerStandbyRoundRobinWeights:  dynamicconfig.VisibilityProcessorSchedulerStandbyRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)).Get(dc),
 		VisibilityProcessorMaxPollInterval:                    dynamicconfig.VisibilityProcessorMaxPollInterval.Get(dc),
@@ -626,7 +628,7 @@ func NewConfig(
 		ArchivalTaskBatchSize:                               dynamicconfig.ArchivalTaskBatchSize.Get(dc),
 		ArchivalProcessorMaxPollRPS:                         dynamicconfig.ArchivalProcessorMaxPollRPS.Get(dc),
 		ArchivalProcessorMaxPollHostRPS:                     dynamicconfig.ArchivalProcessorMaxPollHostRPS.Get(dc),
-		ArchivalProcessorSchedulerWorkerCount:               dynamicconfig.ArchivalProcessorSchedulerWorkerCount.Get(dc),
+		ArchivalProcessorSchedulerWorkerCount:               dynamicconfig.ArchivalProcessorSchedulerWorkerCount.Subscribe(dc),
 		ArchivalProcessorMaxPollInterval:                    dynamicconfig.ArchivalProcessorMaxPollInterval.Get(dc),
 		ArchivalProcessorMaxPollIntervalJitterCoefficient:   dynamicconfig.ArchivalProcessorMaxPollIntervalJitterCoefficient.Get(dc),
 		ArchivalProcessorUpdateAckInterval:                  dynamicconfig.ArchivalProcessorUpdateAckInterval.Get(dc),

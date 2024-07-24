@@ -56,12 +56,12 @@ type (
 
 		cancelClientSubscription func()
 
-		subscriptionLock sync.Mutex
+		subscriptionLock sync.Mutex          // protects subscriptions, subscriptionIdx, and callbackPool
 		subscriptions    map[Key]map[int]any // final "any" is *subscription[T]
 		subscriptionIdx  int
+		callbackPool     *goro.AdaptivePool
 
-		poller       goro.Group
-		callbackPool *goro.AdaptivePool
+		poller goro.Group
 	}
 
 	subscription[T any] struct {
@@ -108,22 +108,27 @@ var (
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 )
 
-// NewCollection creates a new collection
+// NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
+// Get will work without Start/Stop.
 func NewCollection(client Client, logger log.Logger) *Collection {
-	c := &Collection{
+	return &Collection{
 		client:        client,
 		logger:        logger,
 		errCount:      -1,
 		subscriptions: make(map[Key]map[int]any),
 	}
+}
+
+func (c *Collection) Start() {
 	s := DynamicConfigSubscriptionCallback.Get(c)()
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
 	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
-	if notifyingClient, ok := client.(NotifyingClient); ok {
+	if notifyingClient, ok := c.client.(NotifyingClient); ok {
 		c.cancelClientSubscription = notifyingClient.Subscribe(c.keysChanged)
 	} else {
 		c.poller.Go(c.pollForChanges)
 	}
-	return c
 }
 
 func (c *Collection) Stop() {
@@ -135,6 +140,7 @@ func (c *Collection) Stop() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
 	c.callbackPool.Stop()
+	c.callbackPool = nil
 }
 
 // Implement pingable.Pingable
@@ -144,6 +150,11 @@ func (c *Collection) GetPingChecks() []pingable.Check {
 			Name:    "dynamic config callbacks",
 			Timeout: 5 * time.Second,
 			Ping: func() []pingable.Pingable {
+				c.subscriptionLock.Lock()
+				defer c.subscriptionLock.Unlock()
+				if c.callbackPool == nil {
+					return nil
+				}
 				var wg sync.WaitGroup
 				wg.Add(1)
 				c.callbackPool.Do(wg.Done)
@@ -158,14 +169,17 @@ func (c *Collection) pollForChanges(ctx context.Context) error {
 	interval := DynamicConfigSubscriptionPollInterval.Get(c)
 	for ctx.Err() == nil {
 		util.InterruptibleSleep(ctx, interval())
-		c.pollOnce(ctx)
+		c.pollOnce()
 	}
 	return ctx.Err()
 }
 
-func (c *Collection) pollOnce(ctx context.Context) {
+func (c *Collection) pollOnce() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
+	if c.callbackPool == nil {
+		return
+	}
 
 	for key, subs := range c.subscriptions {
 		setting := queryRegistry(key)
@@ -182,6 +196,9 @@ func (c *Collection) pollOnce(ctx context.Context) {
 func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
+	if c.callbackPool == nil {
+		return
+	}
 
 	for key, cvs := range changed {
 		setting := queryRegistry(key)
