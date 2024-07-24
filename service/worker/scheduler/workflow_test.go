@@ -27,12 +27,12 @@ package scheduler
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -2316,7 +2316,7 @@ func (s *workflowSuite) TestStartScheduledAction() {
 		Manual: false,
 	}
 	_scheduler.Schedule.State.Paused = true
-	
+
 	result, workflowStarted := _scheduler.startScheduledAction(start)
 	assert.False(s.T(), workflowStarted)
 	assert.Nil(s.T(), result)
