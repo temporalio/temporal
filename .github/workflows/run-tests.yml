@@ -237,7 +237,7 @@ jobs:
             if [[ ${#dbs_arr[@]} == 0 ]]; then
               dbs='["sqlite"]'
             else
-              dbs=$(printf '%s\n' "${dbs_arr[@]}" | jq -R . | jq -s .)
+              dbs=$(jq -c -n '$ARGS.positional' --args "${dbs_arr[@]}")
             fi
           fi
           {
