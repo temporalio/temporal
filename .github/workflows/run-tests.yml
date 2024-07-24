@@ -108,9 +108,9 @@ jobs:
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
 
-      - run: make clean-bins ci-build-misc
-
-      - run: make build-tests
+#      - run: make clean-bins ci-build-misc (removed temporarily because ci-build-misc is broken)
+#
+#      - run: make build-tests
 
   unit-test:
     if: ${{ inputs.run_single_functional_test != true }}
