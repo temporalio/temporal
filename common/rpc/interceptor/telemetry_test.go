@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
@@ -358,18 +359,18 @@ func TestGetWorkflowTags(t *testing.T) {
 		runID      string
 	}{
 		{
-			name:       "Request with only workflowID",
+			name:       "Frontend StartWorkflowExecutionRequest with only workflowID",
 			req:        &workflowservice.StartWorkflowExecutionRequest{WorkflowId: wid},
 			workflowID: wid,
 		},
 		{
-			name:       "Request with workflowID and runID",
+			name:       "Frontend RecordActivityTaskHeartbeatByIdRequest with workflowID and runID",
 			req:        &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: wid, RunId: rid},
 			workflowID: wid,
 			runID:      rid,
 		},
 		{
-			name: "Request with execution",
+			name: "Frontend GetWorkflowExecutionHistoryRequest with execution",
 			req: &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: wid,
@@ -380,7 +381,7 @@ func TestGetWorkflowTags(t *testing.T) {
 			runID:      rid,
 		},
 		{
-			name: "Request with workflow_execution",
+			name: "Frontend RequestCancelWorkflowExecutionRequest with workflow_execution",
 			req: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: wid,
@@ -391,12 +392,62 @@ func TestGetWorkflowTags(t *testing.T) {
 			runID:      rid,
 		},
 		{
-			name: "Request with task_token",
+			name: "Frontend RespondActivityTaskCompletedRequest with task_token",
 			req: &workflowservice.RespondActivityTaskCompletedRequest{
 				TaskToken: taskTokenBytes,
 			},
 			workflowID: wid,
 			runID:      rid,
+		},
+		{
+			name: "Frontend RespondQueryTaskCompletedRequest (task_token is ignored)",
+			req: &workflowservice.RespondQueryTaskCompletedRequest{
+				TaskToken: taskTokenBytes,
+			},
+		},
+		{
+			name: "History DescribeWorkflowExecutionRequest",
+			req: &historyservice.DescribeWorkflowExecutionRequest{
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: wid,
+						RunId:      rid,
+					},
+				},
+			},
+			workflowID: wid,
+			runID:      rid,
+		},
+		{
+			name: "History RespondWorkflowTaskCompletedRequest",
+			req: &historyservice.RespondWorkflowTaskCompletedRequest{
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken: taskTokenBytes,
+				},
+			},
+			workflowID: wid,
+			runID:      rid,
+		},
+		{
+			name: "Matching QueryWorkflowRequest",
+			req: &matchingservice.QueryWorkflowRequest{
+				QueryRequest: &workflowservice.QueryWorkflowRequest{
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: wid,
+						RunId:      rid,
+					},
+				},
+			},
+			workflowID: wid,
+			runID:      rid,
+		},
+		{
+			name: "Matching RespondWorkflowTaskCompletedRequest",
+			req: &matchingservice.RespondQueryTaskCompletedRequest{
+				CompletedRequest: &workflowservice.RespondQueryTaskCompletedRequest{
+					TaskToken: taskTokenBytes,
+				},
+			},
 		},
 		{
 			name: "Nil request",
@@ -407,11 +458,30 @@ func TestGetWorkflowTags(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			tags := telemetry.getWorkflowTags(tt.req)
-			if len(tt.workflowID) > 0 {
-				assert.Contains(t, tags, tag.WorkflowID(tt.workflowID))
+			var (
+				workflowIDTag tag.Tag
+				runIDTag      tag.Tag
+			)
+			for _, tg := range tags {
+				if tg.Key() == tag.WorkflowID("").Key() {
+					workflowIDTag = tg
+				}
+				if tg.Key() == tag.WorkflowRunID("").Key() {
+					runIDTag = tg
+				}
 			}
-			if len(tt.runID) > 0 {
-				assert.Contains(t, tags, tag.WorkflowRunID(tt.runID))
+
+			if tt.workflowID != "" {
+				assert.NotNil(t, workflowIDTag)
+				assert.Equal(t, workflowIDTag.Value(), tt.workflowID)
+			} else {
+				assert.Nil(t, workflowIDTag)
+			}
+			if tt.runID != "" {
+				assert.NotNil(t, runIDTag)
+				assert.Equal(t, runIDTag.Value(), tt.runID)
+			} else {
+				assert.Nil(t, runIDTag)
 			}
 		})
 	}
