@@ -433,7 +433,7 @@ func (e *matchingEngineImpl) forceLoadAllNonRootPartitions(
 
 	for partitionId := 1; partitionId < partitionTotal; partitionId++ {
 
-		go func(partitionId int) {
+		go func() {
 			resp, err := e.matchingRawClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
 				NamespaceId: namespaceId.String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -459,7 +459,7 @@ func (e *matchingEngineImpl) forceLoadAllNonRootPartitions(
 				e.metricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitionUnnecessarilyCounter.Name()).Record(1)
 			}
 
-		}(partitionId)
+		}()
 	}
 	return nil
 }
