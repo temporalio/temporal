@@ -396,14 +396,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		// can forward their tasks the poller which caused the root partition to be loaded.
 		// These partitions could be managed by this matchingEngineImpl, but are most likely not.
 		// We skip checking and just make gRPC requests to force loading them all.
-		err := e.forceLoadAllNonRootPartitions(ctx, partition)
-		if err != nil {
-			e.logger.Error("Failed to force load all non-root partitions after root partition was loaded",
-				tag.WorkflowNamespaceID(partition.NamespaceId().String()),
-				tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
-				tag.WorkflowTaskQueueType(partition.TaskType()),
-				tag.Error(err))
-		}
+		pm.ForceLoadAllNonRootPartitions(ctx)
 	}
 
 	if err = pm.WaitUntilInitialized(ctx); err != nil {
@@ -411,57 +404,6 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, err
 	}
 	return pm, nil
-}
-
-func (e *matchingEngineImpl) forceLoadAllNonRootPartitions(
-	ctx context.Context,
-	rootPar tqid.Partition,
-) error {
-	namespaceId := rootPar.NamespaceId()
-
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespaceId)
-	if err != nil {
-		return err
-	}
-
-	nsName := namespaceEntry.Name()
-	taskQueue := rootPar.TaskQueue()
-
-	partitionTotal := e.config.NumTaskqueueReadPartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType())
-
-	e.metricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitions.Name()).Record(1)
-
-	for partitionId := 1; partitionId < partitionTotal; partitionId++ {
-
-		go func() {
-			resp, err := e.matchingRawClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
-				NamespaceId: namespaceId.String(),
-				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     taskQueue.Name(),
-					TaskQueueType: taskQueue.TaskType(),
-					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionId)},
-				},
-			})
-			if err != nil {
-				e.logger.Error("Failed to force load non-root partition after root partition was loaded",
-					tag.WorkflowNamespaceID(nsName.String()),
-					tag.WorkflowTaskQueueName(taskQueue.Name()),
-					tag.WorkflowTaskQueueType(taskQueue.TaskType()),
-					tag.Error(err))
-				return
-			}
-
-			if !resp.WasUnloaded {
-				// For the typical TaskQueue with 4 partitions, there is a 1/4 chance
-				// that a poller is load balanced to the root partition first.
-				// This metric will be used in conjunction with the one called earlier in the function
-				// To identify if we are making excessive/unnecessary/wasteful RPCs.
-				e.metricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitionUnnecessarilyCounter.Name()).Record(1)
-			}
-
-		}()
-	}
-	return nil
 }
 
 // Returns a taskQueuePartitionManager and a bool indicating if the taskQueue was newly created.

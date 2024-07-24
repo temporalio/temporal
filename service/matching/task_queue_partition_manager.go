@@ -80,6 +80,8 @@ type (
 		HasPollerAfter(buildId string, accessTime time.Time) bool
 		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues
 		HasAnyPollerAfter(accessTime time.Time) bool
+		// ForceLoadAllNonRootPartitions ensures that all partitions are loaded by their owners.
+		ForceLoadAllNonRootPartitions(ctx context.Context)
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		Describe(buildIds map[string]bool, includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
@@ -549,6 +551,53 @@ func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Durat
 
 func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) context.Context {
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(pm.ns.Name().String()))
+}
+
+// ForceLoadAllNonRootPartitions spins off go routines which make RPC calls to all the
+func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions(ctx context.Context) {
+	if !pm.partition.IsRoot() {
+		pm.logger.Info("ForceLoadAllNonRootPartitions called on non-root partition. Prevented circular keep alive (loaded) of partitions.")
+		return
+	}
+
+	partition := pm.partition
+	taskQueue := partition.TaskQueue()
+
+	namespaceId := partition.NamespaceId()
+	taskQueueName := taskQueue.Name()
+	taskQueueType := taskQueue.TaskType()
+	partitionTotal := pm.config.NumReadPartitions()
+
+	// record total - 1 as we won't try to forceLoad the Root partition.
+	pm.taggedMetricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitions.Name()).Record(int64(partitionTotal) - 1)
+
+	for partitionId := 1; partitionId < partitionTotal; partitionId++ {
+
+		go func() {
+			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
+				NamespaceId: namespaceId.String(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     taskQueueName,
+					TaskQueueType: taskQueueType,
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionId)},
+				},
+			})
+			if err != nil {
+				pm.logger.Error("Failed to force load non-root partition after root partition was loaded",
+					tag.Error(err))
+				return
+			}
+
+			if !resp.WasUnloaded {
+				// For the typical TaskQueue with 4 partitions, there is a 1/4 chance
+				// that a poller is load balanced to the root partition first.
+				// This metric will be used in conjunction with the one called earlier in the function
+				// To identify if we are making excessive/unnecessary/wasteful RPCs.
+				pm.taggedMetricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitionUnnecessarilyCounter.Name()).Record(1)
+			}
+
+		}()
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager, unloadCause unloadCause) {
