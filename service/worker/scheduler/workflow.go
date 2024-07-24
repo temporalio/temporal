@@ -1256,7 +1256,6 @@ func (s *scheduler) startScheduledAction(start *schedspb.BufferedStart) (*schedp
 		// try again to drain the buffer if paused or out of actions
 		return nil, false
 	}
-
 	metricsWithTag := s.metrics.WithTags(map[string]string{
 		metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
 	metricsWithTag.Counter(metrics.ScheduleActionAttempt.Name()).Inc(1)
@@ -1265,9 +1264,7 @@ func (s *scheduler) startScheduledAction(start *schedspb.BufferedStart) (*schedp
 
 	if err != nil {
 		s.logger.Error("Failed to start workflow", "error", err)
-
-		var workflowExecutionAlreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
-		if !errors.As(err, &workflowExecutionAlreadyStarted) {
+		if !isUserScheduleError(err) {
 			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
 		}
 		return result, false
@@ -1364,7 +1361,6 @@ func (s *scheduler) startWorkflow(
 	for {
 		var res schedspb.StartWorkflowResponse
 		err := workflow.ExecuteLocalActivity(ctx, s.a.StartWorkflow, req).Get(s.ctx, &res)
-
 		var appErr *temporal.ApplicationError
 		var details rateLimitedDetails
 		if errors.As(err, &appErr) && appErr.Type() == rateLimitedErrorType && appErr.Details(&details) == nil {
@@ -1563,4 +1559,13 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, s
 	s.compileSpec()
 	s.State.LastProcessedTime = timestamppb.New(now)
 	return s.getListInfo(false)
+}
+
+func isUserScheduleError(err error) bool {
+	var appErr *temporal.ApplicationError
+	var workflowExecutionAlreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	if errors.As(err, &appErr) && errors.As(appErr.Unwrap(), &workflowExecutionAlreadyStarted) {
+		return true
+	}
+	return false
 }
