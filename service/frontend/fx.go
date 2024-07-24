@@ -607,7 +607,6 @@ func AdminHandlerProvider(
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
-	rpcFactory common.RPCFactory,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -635,7 +634,6 @@ func AdminHandlerProvider(
 		healthServer,
 		eventSerializer,
 		timeSource,
-		rpcFactory,
 		taskCategoryRegistry,
 	}
 	return NewAdminHandler(args)

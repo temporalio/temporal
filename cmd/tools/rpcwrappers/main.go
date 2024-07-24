@@ -113,7 +113,6 @@ var (
 		"client.matching.PollActivityTaskQueue": true,
 		"client.matching.PollWorkflowTaskQueue": true,
 		"client.matching.QueryWorkflow":         true,
-		"client.matching.HealthCheck":           true,
 		// these do forwarding stats. too complicated.
 		"metricsClient.matching.AddActivityTask":       true,
 		"metricsClient.matching.AddWorkflowTask":       true,

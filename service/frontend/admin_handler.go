@@ -127,7 +127,6 @@ type (
 		saManager                  searchattribute.Manager
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
-		healthCheckClientFactory   HealthCheckClientFactory
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -160,7 +159,6 @@ type (
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
-		RpcFactory                          common.RPCFactory
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -214,12 +212,7 @@ func NewAdminHandler(
 		saManager:                  args.SaManager,
 		clusterMetadata:            args.ClusterMetadata,
 		healthServer:               args.HealthServer,
-		healthCheckClientFactory: NewHealthCheckClientFactory(
-			args.MembershipMonitor,
-			args.RpcFactory,
-			args.Config,
-		),
-		taskCategoryRegistry: args.CategoryRegistry,
+		taskCategoryRegistry:       args.CategoryRegistry,
 	}
 }
 
