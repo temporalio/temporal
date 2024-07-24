@@ -106,7 +106,7 @@ type (
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
 		matchingClient                   matchingservice.MatchingServiceClient
-		dcClient                         *dcClient
+		dcClient                         *DCClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -190,9 +190,40 @@ type (
 	httpPort       int
 )
 
+var (
+	// Override values for dynamic configs
+	staticOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.FrontendRPS.Key():                                         3000,
+		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
+		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
+		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,
+		dynamicconfig.SecondaryVisibilityWritingMode.Key():                      visibility.SecondaryVisibilityWritingModeOff,
+		dynamicconfig.WorkflowTaskHeartbeatTimeout.Key():                        5 * time.Second,
+		dynamicconfig.ReplicationTaskFetcherAggregationInterval.Key():           200 * time.Millisecond,
+		dynamicconfig.ReplicationTaskFetcherErrorRetryWait.Key():                50 * time.Millisecond,
+		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
+		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
+		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
+		dynamicconfig.FrontendEnableUpdateWorkflowExecution.Key():               true,
+		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key():  true,
+		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
+		dynamicconfig.ValidateUTF8SampleRPCRequest.Key():                        1.0,
+		dynamicconfig.ValidateUTF8SampleRPCResponse.Key():                       1.0,
+		dynamicconfig.ValidateUTF8SamplePersistence.Key():                       1.0,
+		dynamicconfig.ValidateUTF8FailRPCRequest.Key():                          true,
+		dynamicconfig.ValidateUTF8FailRPCResponse.Key():                         true,
+		dynamicconfig.ValidateUTF8FailPersistence.Key():                         true,
+		dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Key():                 true,
+		dynamicconfig.FrontendMaskInternalErrorDetails.Key():                    false,
+	}
+)
+
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
-	testDCClient := newTestDCClient(dynamicconfig.NewNoopClient())
+	testDCClient := NewTestDCClient(dynamicconfig.NewNoopClient())
+	for k, v := range staticOverrides {
+		testDCClient.OverrideValueByKey(t, k, v)
+	}
 	for k, v := range params.DynamicConfigOverrides {
 		testDCClient.OverrideValueByKey(t, k, v)
 	}
@@ -845,7 +876,7 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
-func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *dcClient) {
+func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *DCClient) {
 	if c.esConfig != nil {
 		client.OverrideValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
 	}

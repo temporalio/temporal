@@ -32,53 +32,24 @@ import (
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/persistence/visibility"
 )
 
 const NamespaceCacheRefreshInterval = time.Second
 
-var (
-	// Override values for dynamic configs
-	staticOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendRPS.Key():                                         3000,
-		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
-		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
-		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,
-		dynamicconfig.SecondaryVisibilityWritingMode.Key():                      visibility.SecondaryVisibilityWritingModeOff,
-		dynamicconfig.WorkflowTaskHeartbeatTimeout.Key():                        5 * time.Second,
-		dynamicconfig.ReplicationTaskFetcherAggregationInterval.Key():           200 * time.Millisecond,
-		dynamicconfig.ReplicationTaskFetcherErrorRetryWait.Key():                50 * time.Millisecond,
-		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
-		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
-		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
-		dynamicconfig.FrontendEnableUpdateWorkflowExecution.Key():               true,
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key():  true,
-		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
-		dynamicconfig.ValidateUTF8SampleRPCRequest.Key():                        1.0,
-		dynamicconfig.ValidateUTF8SampleRPCResponse.Key():                       1.0,
-		dynamicconfig.ValidateUTF8SamplePersistence.Key():                       1.0,
-		dynamicconfig.ValidateUTF8FailRPCRequest.Key():                          true,
-		dynamicconfig.ValidateUTF8FailRPCResponse.Key():                         true,
-		dynamicconfig.ValidateUTF8FailPersistence.Key():                         true,
-		dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Key():                 true,
-		dynamicconfig.FrontendMaskInternalErrorDetails.Key():                    false,
-	}
-)
-
-type dcClient struct {
+type DCClient struct {
 	sync.RWMutex
 	overrides map[dynamicconfig.Key]any
 	fallback  dynamicconfig.Client
 }
 
-func (d *dcClient) getRawValue(name dynamicconfig.Key) (any, bool) {
+func (d *DCClient) getRawValue(name dynamicconfig.Key) (any, bool) {
 	d.RLock()
 	defer d.RUnlock()
 	v, ok := d.overrides[name]
 	return v, ok
 }
 
-func (d *dcClient) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
+func (d *DCClient) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
 	if val, ok := d.getRawValue(name); ok {
 		return []dynamicconfig.ConstrainedValue{{Value: val}}
 	}
@@ -87,11 +58,11 @@ func (d *dcClient) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedV
 
 // OverrideValue overrides a value for the duration of a test. Once the test completes
 // the previous value (if any) will be restored
-func (d *dcClient) OverrideValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
+func (d *DCClient) OverrideValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
 	d.OverrideValueByKey(t, setting.Key(), value)
 }
 
-func (d *dcClient) OverrideValueByKey(t *testing.T, name dynamicconfig.Key, value any) {
+func (d *DCClient) OverrideValueByKey(t *testing.T, name dynamicconfig.Key, value any) {
 	d.Lock()
 	defer d.Unlock()
 	priorValue, existed := d.overrides[name]
@@ -109,15 +80,15 @@ func (d *dcClient) OverrideValueByKey(t *testing.T, name dynamicconfig.Key, valu
 	})
 }
 
-func (d *dcClient) RemoveOverride(setting dynamicconfig.GenericSetting) {
+func (d *DCClient) RemoveOverride(setting dynamicconfig.GenericSetting) {
 	d.Lock()
 	defer d.Unlock()
 	delete(d.overrides, setting.Key())
 }
 
-// newTestDCClient - returns a dynamic config client for functional testing
-func newTestDCClient(fallback dynamicconfig.Client) *dcClient {
-	return &dcClient{
+// NewTestDCClient - returns a dynamic config client for functional testing
+func NewTestDCClient(fallback dynamicconfig.Client) *DCClient {
+	return &DCClient{
 		overrides: maps.Clone(staticOverrides),
 		fallback:  fallback,
 	}
