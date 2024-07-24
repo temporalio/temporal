@@ -230,11 +230,10 @@ jobs:
               runs_on='["ubuntu-latest-16-cores"]'
             fi 
             dbs_arr=()
-            if [[ "${{ inputs.cassandra }}" != "true" ]]; then dbs_arr+="cassandra"; fi
-            if [[ "${{ inputs.sqlite }}" != "true" ]]; then dbs_arr+="sqlite"; fi
-            if [[ "${{ inputs.mysql8 }}" != "true" ]]; then dbs_arr+="mysql8"; fi
-            if [[ "${{ inputs.postgres12 }}" != "true" ]]; then dbs_arr+="postgres12"; fi
-            if [[ "${{ inputs.postgres12_pgx }}" != "true" ]]; then dbs_arr+="postgres12_pgx"; fi
+            if [[ "${{ inputs.cassandra }}" == "true" ]]; then dbs_arr+="cassandra"; fi
+            if [[ "${{ inputs.sqlite }}" == "true" ]]; then dbs_arr+="sqlite"; fi
+            if [[ "${{ inputs.mysql8 }}" == "true" ]]; then dbs_arr+="mysql8"; fi
+            if [[ "${{ inputs.postgres12 }}" == "true" ]]; then dbs_arr+="postgres12"; fi
             if [[ ${#dbs_arr[@]} == 0 ]]; then
               dbs='["sqlite"]'
             else
