@@ -145,7 +145,7 @@ jobs:
   integration-test:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Integration test
-    needs: [misc-checks, cache-docker-images]
+    needs: misc-checks
     strategy:
       fail-fast: false
       matrix:
@@ -235,7 +235,7 @@ jobs:
 
   functional-test:
     name: Functional test
-    needs: [misc-checks, cache-docker-images, set-up-functional-test]
+    needs: [misc-checks, set-up-functional-test]
     strategy:
       fail-fast: false
       matrix:
