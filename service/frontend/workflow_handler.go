@@ -3767,6 +3767,10 @@ func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, requ
 		return nil, errWorkerVersioningNotAllowed
 	}
 
+	if err := wh.validateVersionRuleBuildId(request); err != nil {
+		return nil, err
+	}
+
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	if err := wh.validateTaskQueue(taskQueue); err != nil {
 		return nil, err
@@ -4473,6 +4477,41 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
+	return nil
+}
+
+func (wh *WorkflowHandler) validateVersionRuleBuildId(request *workflowservice.UpdateWorkerVersioningRulesRequest) error {
+	validateBuildId := func(bid string) error {
+		if len(bid) > 255 {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("BuildId must be <= 255 characters, was %d", len(bid)))
+		}
+
+		if err := common.ValidateUTF8String("BuildId", bid); err != nil {
+			return err
+		}
+		return nil
+	}
+	switch request.GetOperation().(type) {
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
+		return validateBuildId(request.GetInsertAssignmentRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
+		return validateBuildId(request.GetReplaceAssignmentRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
+		return nil
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule:
+		if err := validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetTargetBuildId()); err != nil {
+			return err
+		}
+		if err := validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetSourceBuildId()); err != nil {
+			return err
+		}
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
+		return validateBuildId(request.GetReplaceCompatibleRedirectRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
+		return nil
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
+		return validateBuildId(request.GetCommitBuildId().GetTargetBuildId())
+	}
 	return nil
 }
 
