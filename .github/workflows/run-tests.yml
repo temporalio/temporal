@@ -232,6 +232,9 @@ jobs:
             echo "runs_on=$runs_on"
             echo "dbs=$dbs" 
           } >> "$GITHUB_OUTPUT"
+      - id: cat_output
+        run: |
+          cat $GITHUB_OUTPUT
 
   functional-test:
     name: Functional test
@@ -285,6 +288,8 @@ jobs:
       TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.test_timeout }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:
+      - name: Print functional test
+        run: echo "${{ needs.set-up-functional-test.outputs.dbs }}"
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-functional-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
