@@ -26,11 +26,9 @@ import (
 	"context"
 	"time"
 
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -42,49 +40,43 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
-// This is mostly copied from ExecutableActivityStateTask
-// The 4 replication executable task implemenatations are quite similar
-// we may want to do some refactoring later.
-
 type (
-	ExecutableSyncHSMTask struct {
+	ExecutableBackfillHistoryEventsTask struct {
 		ProcessToolBox
 
 		definition.WorkflowKey
 		ExecutableTask
+		// baseExecutionInfo *workflowpb.BaseExecutionInfo
 
-		taskAttr *replicationspb.SyncHSMAttributes
+		taskAttr *replicationspb.BackfillHistoryTaskAttributes
 
 		markPoisonPillAttempts int
 	}
 )
 
-var _ ctasks.Task = (*ExecutableSyncHSMTask)(nil)
-var _ TrackableExecutableTask = (*ExecutableSyncHSMTask)(nil)
+var _ ctasks.Task = (*ExecutableBackfillHistoryEventsTask)(nil)
+var _ TrackableExecutableTask = (*ExecutableBackfillHistoryEventsTask)(nil)
 
-// var _ BatchableTask = (*ExecutableSyncHSMTask)(nil)
-
-func NewExecutableSyncHSMTask(
+func NewExecutableBackfillHistoryEventsTask(
 	processToolBox ProcessToolBox,
 	taskID int64,
 	taskCreationTime time.Time,
-	task *replicationspb.SyncHSMAttributes,
 	sourceClusterName string,
-	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
-) *ExecutableSyncHSMTask {
-	return &ExecutableSyncHSMTask{
+) *ExecutableBackfillHistoryEventsTask {
+	task := replicationTask.GetBackfillHistoryTaskAttributes()
+	return &ExecutableBackfillHistoryEventsTask{
 		ProcessToolBox: processToolBox,
 
 		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
-			metrics.SyncHSMTaskScope,
+			metrics.BackfillHistoryEventsTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
-			priority,
+			replicationTask.Priority,
 			replicationTask,
 		),
 		taskAttr:               task,
@@ -92,11 +84,11 @@ func NewExecutableSyncHSMTask(
 	}
 }
 
-func (e *ExecutableSyncHSMTask) QueueID() interface{} {
+func (e *ExecutableBackfillHistoryEventsTask) QueueID() interface{} {
 	return e.WorkflowKey
 }
 
-func (e *ExecutableSyncHSMTask) Execute() error {
+func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
@@ -116,11 +108,12 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
-			metrics.OperationTag(metrics.SyncHSMTaskScope),
+			metrics.OperationTag(metrics.BackfillHistoryEventsTaskScope),
 			metrics.NamespaceTag(namespaceName),
 		)
 		return nil
 	}
+
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
@@ -131,22 +124,53 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 	if err != nil {
 		return err
 	}
+
 	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
-	return engine.SyncHSM(ctx, &shard.SyncHSMRequest{
+
+	events, newRunEvents, err := e.getDeserializedEvents()
+	if err != nil {
+		return err
+	}
+
+	return engine.BackfillHistoryEvents(ctx, &shard.BackfillHistoryEventsRequest{
 		WorkflowKey:         e.WorkflowKey,
-		StateMachineNode:    e.taskAttr.StateMachineNode,
-		EventVersionHistory: e.taskAttr.VersionHistory,
+		SourceClusterName:   e.SourceClusterName(),
+		VersionedHistory:    e.ReplicationTask().VersionedTransition,
+		VersionHistoryItems: e.taskAttr.EventVersionHistory,
+		Events:              events,
+		NewEvents:           newRunEvents,
+		NewRunID:            e.taskAttr.NewRunInfo.RunId,
 	})
 
 }
 
-func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
-	switch retryErr := err.(type) {
+func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
+	switch taskErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
+	case *serviceerrors.SyncState:
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
+		if nsError != nil {
+			return err
+		}
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		defer cancel()
+
+		if doContinue, syncStateErr := e.SyncState(
+			ctx,
+			e.ExecutableTask.SourceClusterName(),
+			taskErr,
+			ResendAttempt,
+		); syncStateErr != nil || !doContinue {
+			return err
+		}
+		return e.Execute()
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
@@ -161,14 +185,14 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 		if doContinue, resendErr := e.Resend(
 			ctx,
 			e.ExecutableTask.SourceClusterName(),
-			retryErr,
+			taskErr,
 			ResendAttempt,
 		); resendErr != nil || !doContinue {
 			return err
 		}
 		return e.Execute()
 	default:
-		e.Logger.Error("Sync HSM replication task encountered error",
+		e.Logger.Error("Backfill history events replication task encountered error",
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
@@ -179,15 +203,13 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 	}
 }
 
-func (e *ExecutableSyncHSMTask) MarkPoisonPill() error {
-
-	replicationTaskInfo := e.toReplicationTaskInfo()
+func (e *ExecutableBackfillHistoryEventsTask) MarkPoisonPill() error {
+	taskInfo := e.ReplicationTask().GetRawTaskInfo()
 
 	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
 		e.Logger.Error("MarkPoisonPill reached max attempts",
 			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(replicationTaskInfo),
-			tag.NewAnyTag("sync-hsm-task-attr", e.taskAttr),
+			tag.ReplicationTask(taskInfo),
 		)
 		return nil
 	}
@@ -201,43 +223,50 @@ func (e *ExecutableSyncHSMTask) MarkPoisonPill() error {
 		return err
 	}
 
-	e.Logger.Error("enqueue sync HSM replication task to DLQ",
+	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+	e.Logger.Error("enqueue sync versioned transition replication task to DLQ",
 		tag.ShardID(shardContext.GetShardID()),
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),
 		tag.WorkflowRunID(e.RunID),
 		tag.TaskID(e.ExecutableTask.TaskID()),
+		tag.SourceCluster(e.SourceClusterName()),
+		tag.ReplicationTask(taskInfo),
 	)
 
 	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), replicationTaskInfo)
+	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
 }
 
-func (e *ExecutableSyncHSMTask) toReplicationTaskInfo() *persistencespb.ReplicationTaskInfo {
-	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    e.NamespaceID,
-		WorkflowId:     e.WorkflowID,
-		RunId:          e.RunID,
-		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
-		TaskId:         e.ExecutableTask.TaskID(),
-		VisibilityTime: timestamppb.New(e.TaskCreationTime()),
+func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
+	eventBatches := [][]*historypb.HistoryEvent{}
+	for _, eventsBlob := range e.taskAttr.EventBatches {
+		events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+		if err != nil {
+			e.Logger.Error("unable to deserialize history events",
+				tag.WorkflowNamespaceID(e.NamespaceID),
+				tag.WorkflowID(e.WorkflowID),
+				tag.WorkflowRunID(e.RunID),
+				tag.TaskID(e.ExecutableTask.TaskID()),
+				tag.Error(err),
+			)
+			return nil, nil, err
+		}
+		eventBatches = append(eventBatches, events)
 	}
+
+	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.taskAttr.NewRunInfo.EventBatch)
+	if err != nil {
+		e.Logger.Error("unable to deserialize new run history events",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+		return nil, nil, err
+	}
+	return eventBatches, newRunEvents, err
 }
-
-// TODO: implement the following methods to batch syncHSM task if needed
-// if not implemented the task will be treated as unbatchable
-
-// func (e *ExecutableSyncHSMTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
-// 	panic("not implemented")
-// }
-
-// func (e *ExecutableSyncHSMTask) CanBatch() bool {
-// 	panic("not implemented")
-// }
-
-// func (e *ExecutableSyncHSMTask) MarkUnbatchable() {
-// 	panic("not implemented")
-// }

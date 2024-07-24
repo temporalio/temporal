@@ -310,6 +310,7 @@ message ReplicationTaskInfo {
     google.protobuf.Timestamp visibility_time = 16;
     string new_run_id = 17;
     temporal.server.api.enums.v1.TaskPriority priority = 18;
+    VersionedTransition versioned_transition = 19;
 }
 
 // visibility_task_data column
