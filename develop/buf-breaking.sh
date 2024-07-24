@@ -43,7 +43,7 @@ fi
 # case this is being run manually.
 $MAKE "$INTERNAL_BINPB"
 
-tmp=$(mktemp --tmpdir -d temporal-buf-breaking.XXXXXXXXX)
+tmp=$(mktemp -d temporal-buf-breaking.XXXXXXXXX)
 trap 'rm -rf $tmp' EXIT
 
 check_against_commit() {
