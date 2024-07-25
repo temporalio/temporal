@@ -27,7 +27,7 @@
 package sqlite
 
 // Version is the SQLite database release version
-const Version = "0.5"
+const Version = "0.6"
 
 // VisibilityVersion is the SQLite visibility database release version
 const VisibilityVersion = "0.1"

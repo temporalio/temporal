@@ -1010,7 +1010,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedWorkflow() {
 		// Send same Update request again, receiving the same Update result.
 		updateResultCh = s.sendUpdateNoError(tv, "1")
 		updateResult2 := <-updateResultCh
-		s.EqualValues(updateResult1.GetOutcome(), updateResult2.GetOutcome())
+		s.EqualValues(updateResult1, updateResult2)
 	})
 
 	s.Run("receive error from accepted Update", func() {

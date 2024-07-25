@@ -38,6 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
@@ -128,7 +129,7 @@ func (s *executableTaskSuite) SetupTest() {
 		receivedTime,
 		s.sourceCluster,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
-		nil,
+		&replicationspb.ReplicationTask{},
 	)
 }
 
@@ -643,7 +644,10 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 		now,
 		s.sourceCluster,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
-		&persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
+		&replicationspb.ReplicationTask{
+			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
+		},
 	)
 	namespaceEntryOld := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -717,7 +721,10 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 		now,
 		s.sourceCluster,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
-		&persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
+		&replicationspb.ReplicationTask{
+			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
+		},
 	)
 	namespaceEntryOld := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
