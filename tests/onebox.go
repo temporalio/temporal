@@ -106,7 +106,7 @@ type (
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
 		matchingClient                   matchingservice.MatchingServiceClient
-		dcClient                         *DCClient
+		dcClient                         *dynamicconfig.MemoryClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -190,6 +190,8 @@ type (
 	httpPort       int
 )
 
+const NamespaceCacheRefreshInterval = time.Second
+
 var (
 	// Override values for dynamic configs
 	staticOverrides = map[dynamicconfig.Key]any{
@@ -220,13 +222,7 @@ var (
 
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
-	testDCClient := NewTestDCClient(dynamicconfig.NewNoopClient())
-	for k, v := range staticOverrides {
-		testDCClient.OverrideValueByKey(t, k, v)
-	}
-	for k, v := range params.DynamicConfigOverrides {
-		testDCClient.OverrideValueByKey(t, k, v)
-	}
+	testDCClient := dynamicconfig.NewMemoryDCClient(dynamicconfig.NewNoopClient())
 	impl := &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
@@ -256,7 +252,13 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 	}
-	impl.overrideHistoryDynamicConfig(t, testDCClient)
+	for k, v := range staticOverrides {
+		impl.overrideDynamicConfigByKey(t, k, v)
+	}
+	for k, v := range params.DynamicConfigOverrides {
+		impl.overrideDynamicConfigByKey(t, k, v)
+	}
+	impl.overrideHistoryDynamicConfig(t)
 	return impl
 }
 
@@ -411,7 +413,7 @@ func (c *temporalImpl) WorkerGRPCServiceAddress() string {
 }
 
 func (c *temporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
-	c.dcClient.OverrideValue(t, setting, value)
+	c.overrideDynamicConfigByKey(t, setting.Key(), value)
 }
 
 func (c *temporalImpl) GetAdminClient() adminservice.AdminServiceClient {
@@ -876,38 +878,38 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
-func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *DCClient) {
+func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
 	if c.esConfig != nil {
-		client.OverrideValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
+		c.OverrideDCValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
-		client.OverrideValue(t, dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
+		c.OverrideDCValue(t, dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
-		client.OverrideValue(t, dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+		c.OverrideDCValue(t, dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
 	if c.historyConfig.HistorySizeLimitWarn != 0 {
-		client.OverrideValue(t, dynamicconfig.HistorySizeLimitWarn, c.historyConfig.HistorySizeLimitWarn)
+		c.OverrideDCValue(t, dynamicconfig.HistorySizeLimitWarn, c.historyConfig.HistorySizeLimitWarn)
 	}
 	if c.historyConfig.HistorySizeLimitError != 0 {
-		client.OverrideValue(t, dynamicconfig.HistorySizeLimitError, c.historyConfig.HistorySizeLimitError)
+		c.OverrideDCValue(t, dynamicconfig.HistorySizeLimitError, c.historyConfig.HistorySizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitError != 0 {
-		client.OverrideValue(t, dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
+		c.OverrideDCValue(t, dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitWarn != 0 {
-		client.OverrideValue(t, dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
+		c.OverrideDCValue(t, dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
 	}
 	if c.historyConfig.MutableStateSizeLimitError != 0 {
-		client.OverrideValue(t, dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
+		c.OverrideDCValue(t, dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
 	}
 	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
-		client.OverrideValue(t, dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
+		c.OverrideDCValue(t, dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
 	}
 
 	// For DeleteWorkflowExecution tests
-	client.OverrideValue(t, dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
-	client.OverrideValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
+	c.OverrideDCValue(t, dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
+	c.OverrideDCValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
 }
 
 func (c *temporalImpl) newRPCFactory(
@@ -1028,4 +1030,21 @@ func sdkClientFactoryProvider(
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
+}
+
+func (c *temporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) {
+	constrainedValues := c.dcClient.GetValue(name)
+	existed := len(constrainedValues) == 0
+	c.dcClient.OverrideValueByKey(name, value)
+	t.Cleanup(func() {
+		if existed {
+			var values []any
+			for _, v := range constrainedValues {
+				values = append(values, v)
+			}
+			c.dcClient.OverrideValueByKey(name, values)
+		} else {
+			c.dcClient.RemoveOverrideByKey(name)
+		}
+	})
 }

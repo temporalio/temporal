@@ -22,74 +22,56 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package dynamicconfig
 
 import (
 	"sync"
-	"testing"
-	"time"
-
-	"golang.org/x/exp/maps"
-
-	"go.temporal.io/server/common/dynamicconfig"
 )
 
-const NamespaceCacheRefreshInterval = time.Second
-
-type DCClient struct {
+type MemoryClient struct {
 	sync.RWMutex
-	overrides map[dynamicconfig.Key]any
-	fallback  dynamicconfig.Client
+	overrides map[Key]any
+	fallback  Client
 }
 
-func (d *DCClient) getRawValue(name dynamicconfig.Key) (any, bool) {
+func (d *MemoryClient) GetRawValue(name Key) (any, bool) {
 	d.RLock()
 	defer d.RUnlock()
 	v, ok := d.overrides[name]
 	return v, ok
 }
 
-func (d *DCClient) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
-	if val, ok := d.getRawValue(name); ok {
-		return []dynamicconfig.ConstrainedValue{{Value: val}}
+func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
+	if val, ok := d.GetRawValue(name); ok {
+		return []ConstrainedValue{{Value: val}}
 	}
 	return d.fallback.GetValue(name)
 }
 
-// OverrideValue overrides a value for the duration of a test. Once the test completes
-// the previous value (if any) will be restored
-func (d *DCClient) OverrideValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
-	d.OverrideValueByKey(t, setting.Key(), value)
+func (d *MemoryClient) OverrideValue(setting GenericSetting, value any) {
+	d.overrides[setting.Key()] = value
 }
 
-func (d *DCClient) OverrideValueByKey(t *testing.T, name dynamicconfig.Key, value any) {
+func (d *MemoryClient) OverrideValueByKey(name Key, value any) {
 	d.Lock()
 	defer d.Unlock()
-	priorValue, existed := d.overrides[name]
 	d.overrides[name] = value
-
-	t.Cleanup(func() {
-		d.Lock()
-		defer d.Unlock()
-
-		if existed {
-			d.overrides[name] = priorValue
-		} else {
-			delete(d.overrides, name)
-		}
-	})
 }
 
-func (d *DCClient) RemoveOverride(setting dynamicconfig.GenericSetting) {
+func (d *MemoryClient) RemoveOverride(setting GenericSetting) {
+	d.RemoveOverrideByKey(setting.Key())
+}
+
+func (d *MemoryClient) RemoveOverrideByKey(name Key) {
 	d.Lock()
 	defer d.Unlock()
-	delete(d.overrides, setting.Key())
+	delete(d.overrides, name)
 }
 
-// NewTestDCClient - returns a dynamic config client for functional testing
-func NewTestDCClient(fallback dynamicconfig.Client) *DCClient {
-	return &DCClient{
-		overrides: maps.Clone(staticOverrides),
+// NewMemoryDCClient - returns a memory based dynamic config client
+func NewMemoryDCClient(fallback Client) *MemoryClient {
+	return &MemoryClient{
+		overrides: make(map[Key]any),
 		fallback:  fallback,
 	}
 }

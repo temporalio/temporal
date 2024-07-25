@@ -112,11 +112,10 @@ func (s *namespaceTestSuite) SetupTest() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
-	dc := s.cluster.host.dcClient
 	// don't fail for this test, we're testing this behavior specifically
-	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailRPCRequest, false)
-	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
-	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
+	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.ValidateUTF8FailRPCRequest, false)
+	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
+	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
 
 	capture := s.cluster.host.captureMetricsHandler.StartCapture()
 	defer s.cluster.host.captureMetricsHandler.StopCapture(capture)
@@ -216,11 +215,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
 
-	dc := s.cluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
-	defer func() {
-		dc.RemoveOverride(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay)
-	}()
+	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
 
 	retention := 24 * time.Hour
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{

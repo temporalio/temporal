@@ -2022,9 +2022,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2187,9 +2186,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2272,9 +2270,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2449,13 +2446,12 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	})
 	s.Require().NoError(err)
 
-	dc := s.testCluster.host.dcClient
 	// Verify new workflows are considered reachable by v01 which is no longer queue default within the configured
 	// duration
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
-	dc.OverrideValue(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 	// Verify new workflows aren't reachable
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
@@ -2589,12 +2585,11 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	})
 	s.Require().NoError(err)
 
-	dc := s.testCluster.host.dcClient
 	// Verify new workflows are considered reachable by the unversioned worker immediately after making the queue versioned
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
-	dc.OverrideValue(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)

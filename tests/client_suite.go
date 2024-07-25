@@ -127,7 +127,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
-	s.testCluster.host.dcClient.OverrideValue(
+	s.testCluster.host.OverrideDCValue(
 		s.T(),
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
