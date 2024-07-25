@@ -61,7 +61,7 @@ func (s *healthCheckerSuite) SetupTest() {
 	s.resolver = membership.NewMockServiceResolver(s.controller)
 	s.membershipMonitor.EXPECT().GetResolver(gomock.Any()).Return(s.resolver, nil).AnyTimes()
 
-	s.checker = NewHealthChecker(
+	checker := NewHealthChecker(
 		primitives.HistoryService,
 		s.membershipMonitor,
 		func() float64 {
@@ -78,7 +78,12 @@ func (s *healthCheckerSuite) SetupTest() {
 			}
 		},
 		log.NewNoopLogger(),
-	).(*healthCheckerImpl)
+	)
+	healthChecker, ok := checker.(*healthCheckerImpl)
+	if !ok {
+		s.Fail("The constructor did not return correct type")
+	}
+	s.checker = healthChecker
 }
 
 func (s *healthCheckerSuite) TearDownTest() {
