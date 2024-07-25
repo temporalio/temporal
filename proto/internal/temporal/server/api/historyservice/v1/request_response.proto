@@ -124,6 +124,7 @@ message GetMutableStateResponse {
     // for this execution.
     string assigned_build_id = 22;
     string inherited_build_id = 23;
+    repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
 }
 
 message PollMutableStateRequest {

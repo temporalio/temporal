@@ -324,12 +324,27 @@ func convertSyncVersionedTransitionTask(
 					VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
 				}, nil
 			}
-
 			// TODO: we need to handle the following cases:
 			// 2. SyncVersionedTransitionTask
-			// 3. VerifyVersionedTransitionTask
 
-			return nil, nil
+			// TODO:
+			// When cache added, we only convert to this task when cached version transition greater than task version transition
+			return &replicationspb.ReplicationTask{
+				TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
+				SourceTaskId: taskInfo.TaskID,
+				Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
+					VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
+						NamespaceId: taskInfo.NamespaceID,
+						WorkflowId:  taskInfo.WorkflowID,
+						RunId:       taskInfo.RunID,
+						NewRunId:    taskInfo.NewRunID,
+						NextEventId: mutableState.GetNextEventID(),
+					},
+				},
+				VersionedTransition: taskInfo.VersionedTransition,
+				VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
+			}, nil
+
 		},
 	)
 
