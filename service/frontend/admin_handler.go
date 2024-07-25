@@ -238,6 +238,16 @@ func (adh *AdminHandler) Stop() {
 	}
 }
 
+func (adh *AdminHandler) DeepHealthCheck(
+	ctx context.Context,
+	request *adminservice.DeepHealthCheckRequest,
+) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+
+	// TODO: health check to history
+
+	return nil, serviceerror.NewUnimplemented("This API is not ready")
+}
+
 // AddSearchAttributes add search attribute to the cluster.
 func (adh *AdminHandler) AddSearchAttributes(
 	ctx context.Context,

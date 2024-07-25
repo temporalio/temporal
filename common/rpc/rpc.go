@@ -39,6 +39,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
@@ -296,7 +297,7 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	}
 	if service != "" {
 		// The URL instructs us to resolve via membership for frontend or internal-frontend.
-		r, err := d.monitor.GetResolver(primitives.ServiceName(service))
+		r, err := d.monitor.GetResolver(service)
 		if err != nil {
 			return nil, err
 		}
