@@ -222,7 +222,6 @@ var (
 
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
-	testDCClient := dynamicconfig.NewMemoryDCClient(dynamicconfig.NewNoopClient())
 	impl := &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
@@ -248,7 +247,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		spanExporters:                    params.SpanExporters,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
-		dcClient:                         testDCClient,
+		dcClient:                         dynamicconfig.NewMemoryDCClient(dynamicconfig.NewNoopClient()),
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 	}
