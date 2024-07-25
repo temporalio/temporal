@@ -146,10 +146,6 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
 	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.MaxCallbacksPerWorkflow, 2)
 	s.testCluster.host.OverrideDCValue(s.T(), callbacks.AllowedAddresses, []any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}})
-	//defer dc.RemoveOverride(dynamicconfig.EnableNexus)
-	//defer dc.RemoveOverride(dynamicconfig.FrontendCallbackURLMaxLength)
-	//defer dc.RemoveOverride(dynamicconfig.MaxCallbacksPerWorkflow)
-	//defer dc.RemoveOverride(callbacks.AllowedAddresses)
 
 	for _, tc := range cases {
 		s.T().Run(tc.name, func(t *testing.T) {
@@ -188,9 +184,6 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	s.testCluster.host.OverrideDCValue(s.T(), dynamicconfig.EnableNexus, true)
 	s.testCluster.host.OverrideDCValue(s.T(), callbacks.AllowedAddresses, []any{map[string]any{"Pattern": "*", "AllowInsecure": true}})
-	// TODO: PPV IS NEEDED?
-	//defer dc.RemoveOverride(dynamicconfig.EnableNexus)
-	//defer dc.RemoveOverride(callbacks.AllowedAddresses)
 
 	cases := []struct {
 		name       string
