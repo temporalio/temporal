@@ -17,6 +17,26 @@ on:
         description: "Whether to run a single test. If so, the rest of the input fields are required."
         type: boolean
         default: false
+      cassandra:
+        description: "cassandra"
+        type: boolean
+        default: false
+      sqlite:
+        description: "sqlite"
+        type: boolean
+        default: false
+      mysql8:
+        description: "mysql8"
+        type: boolean
+        default: false
+      postgres12:
+        description: "postgres12"
+        type: boolean
+        default: false
+      #      postgres12_pgx:
+      #        description: "postgres12_pgx"
+      #        type: boolean
+      #        default: false
       n_runs:
         description: "[Single Test Only] Number of times to repeat the single test per database type"
         type: number
@@ -35,17 +55,16 @@ on:
         options:
           - "16GB RAM (ubuntu-20.04)"
           - "64GB RAM (ubuntu-22.04)"
-      db:
-        description: "[Single Test Only] The DB to use for your tests"
-        type: choice
-        default: "sqlite"
-        options:
-          - cass_es
-          # - cass_es8
-          - sqlite
-          - mysql8
-          - postgres12
-          - postgres12_pgx
+#      db:
+#        description: "[Single Test Only] The DB to use for your tests"
+#        type: choice
+#        default: "sqlite"
+#        options:
+#          - cassandra
+#          - sqlite
+#          - mysql8
+#          - postgres12
+#          - postgres12_pgx
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: run-tests-${{ github.head_ref || github.run_id }}
@@ -72,6 +91,7 @@ jobs:
       test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
       single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
       runs_on: ${{ steps.generate_output.outputs.runs_on }}
+      dbs: ${{ steps.generate_output.outputs.dbs }}
     steps:
       - id: generate_output
         run: |
@@ -84,6 +104,16 @@ jobs:
             single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
             if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-22.04)" ]]; then
               runs_on='["ubuntu-latest-16-cores"]'
+            fi 
+            dbs_arr=()
+            if [[ "${{ inputs.cassandra }}" == "true" ]]; then dbs_arr+="cassandra"; fi
+            if [[ "${{ inputs.sqlite }}" == "true" ]]; then dbs_arr+="sqlite"; fi
+            if [[ "${{ inputs.mysql8 }}" == "true" ]]; then dbs_arr+="mysql8"; fi
+            if [[ "${{ inputs.postgres12 }}" == "true" ]]; then dbs_arr+="postgres12"; fi
+            if [[ ${#dbs_arr[@]} == 0 ]]; then
+              dbs='["sqlite"]'
+            else
+              dbs=$(jq -c -n '$ARGS.positional' --args "${dbs_arr[@]}")
             fi
           fi
           {
@@ -92,8 +122,12 @@ jobs:
             echo "github_timeout=$((timeout+5))"
             echo "test_timeout=${timeout}m"
             echo "single_test_args=$single_test_args"
-            echo "runs_on=$runs_on" 
+            echo "runs_on=$runs_on"
+            echo "dbs=$dbs" 
           } >> "$GITHUB_OUTPUT"
+      - id: cat_output
+        run: |
+          cat $GITHUB_OUTPUT
 
   functional-test:
     name: Functional test
@@ -105,7 +139,7 @@ jobs:
         shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_indices) }}
         name:
           - cass_es
-          # - cass_es8
+          - cass_es8
           - sqlite
           - mysql8
           - postgres12
@@ -115,10 +149,12 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
-          # - name: cass_es8
-          #   persistence_type: nosql
-          #   persistence_driver: cassandra
-          #   containers: [cassandra, elasticsearch8]
+            es_version: v7
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, elasticsearch8]
+            es_version: v8
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -145,9 +181,12 @@ jobs:
       TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.test_timeout }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:
-
-      - name: Run functional test
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && inputs.db == env.PERSISTENCE_DRIVER) }}
+      - name: Print functional test
         timeout-minutes: ${{ fromJSON(needs.set-up-functional-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
-        run: echo "make functional-test-coverage ${PERSISTENCE_DRIVER}"
+        run: echo "${{ needs.set-up-functional-test.outputs.dbs }}"
+
+#      - name: Run functional test
+#        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-functional-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+#        timeout-minutes: ${{ fromJSON(needs.set-up-functional-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
+#        run: echo "make functional-test-coverage ${PERSISTENCE_DRIVER}"
 
