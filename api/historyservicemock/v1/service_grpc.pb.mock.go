@@ -121,6 +121,26 @@ func (mr *MockHistoryServiceClientMockRecorder) CompleteNexusOperation(ctx, in i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperation", reflect.TypeOf((*MockHistoryServiceClient)(nil).CompleteNexusOperation), varargs...)
 }
 
+// DeepHealthCheck mocks base method.
+func (m *MockHistoryServiceClient) DeepHealthCheck(ctx context.Context, in *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeepHealthCheck", varargs...)
+	ret0, _ := ret[0].(*historyservice.DeepHealthCheckResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeepHealthCheck indicates an expected call of DeepHealthCheck.
+func (mr *MockHistoryServiceClientMockRecorder) DeepHealthCheck(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeepHealthCheck", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeepHealthCheck), varargs...)
+}
+
 // DeleteDLQTasks mocks base method.
 func (m *MockHistoryServiceClient) DeleteDLQTasks(ctx context.Context, in *historyservice.DeleteDLQTasksRequest, opts ...grpc.CallOption) (*historyservice.DeleteDLQTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -1544,6 +1564,21 @@ func (m *MockHistoryServiceServer) CompleteNexusOperation(arg0 context.Context, 
 func (mr *MockHistoryServiceServerMockRecorder) CompleteNexusOperation(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperation", reflect.TypeOf((*MockHistoryServiceServer)(nil).CompleteNexusOperation), arg0, arg1)
+}
+
+// DeepHealthCheck mocks base method.
+func (m *MockHistoryServiceServer) DeepHealthCheck(arg0 context.Context, arg1 *historyservice.DeepHealthCheckRequest) (*historyservice.DeepHealthCheckResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeepHealthCheck", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DeepHealthCheckResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeepHealthCheck indicates an expected call of DeepHealthCheck.
+func (mr *MockHistoryServiceServerMockRecorder) DeepHealthCheck(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeepHealthCheck", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeepHealthCheck), arg0, arg1)
 }
 
 // DeleteDLQTasks mocks base method.

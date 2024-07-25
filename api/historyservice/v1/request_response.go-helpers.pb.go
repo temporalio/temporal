@@ -4949,3 +4949,77 @@ func (this *InvokeStateMachineMethodResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type DeepHealthCheckRequest to the protobuf v3 wire format
+func (val *DeepHealthCheckRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DeepHealthCheckRequest from the protobuf v3 wire format
+func (val *DeepHealthCheckRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DeepHealthCheckRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DeepHealthCheckRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DeepHealthCheckRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DeepHealthCheckRequest
+	switch t := that.(type) {
+	case *DeepHealthCheckRequest:
+		that1 = t
+	case DeepHealthCheckRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DeepHealthCheckResponse to the protobuf v3 wire format
+func (val *DeepHealthCheckResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DeepHealthCheckResponse from the protobuf v3 wire format
+func (val *DeepHealthCheckResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DeepHealthCheckResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DeepHealthCheckResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DeepHealthCheckResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DeepHealthCheckResponse
+	switch t := that.(type) {
+	case *DeepHealthCheckResponse:
+		that1 = t
+	case DeepHealthCheckResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

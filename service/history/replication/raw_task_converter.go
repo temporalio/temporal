@@ -108,11 +108,13 @@ func (c *SourceTaskConverterImpl) Convert(
 	if err != nil {
 		return nil, err
 	}
-	rawTaskInfo, err := c.serializer.ParseReplicationTaskInfo(task)
-	if err != nil {
-		return nil, err
+	if replicationTask != nil {
+		rawTaskInfo, err := c.serializer.ParseReplicationTaskInfo(task)
+		if err != nil {
+			return nil, err
+		}
+		replicationTask.RawTaskInfo = rawTaskInfo
 	}
-	replicationTask.RawTaskInfo = rawTaskInfo
 	return replicationTask, nil
 }
 
