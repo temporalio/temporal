@@ -744,6 +744,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
 	)
+	HistoryHostErrorPercentage = NewGlobalFloatSetting(
+		"frontend.historyHostErrorPercentage",
+		50,
+		`HistoryHostErrorPercentage is the percentage to mark history service as unhealthy`,
+	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
