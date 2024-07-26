@@ -275,7 +275,7 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 	)
 	DeadlockInterval = NewGlobalDurationSetting(
 		"system.deadlock.Interval",
-		30*time.Second,
+		60*time.Second,
 		`How often the detector checks each root.`,
 	)
 	DeadlockMaxWorkersPerRoot = NewGlobalIntSetting(
