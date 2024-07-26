@@ -290,18 +290,7 @@ func (c *temporalImpl) Stop() error {
 }
 
 func (c *temporalImpl) FrontendGRPCAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7134"
-	case 1:
-		return "127.0.0.1:8134"
-	case 2:
-		return "127.0.0.1:9134"
-	case 3:
-		return "127.0.0.1:10134"
-	default:
-		return "127.0.0.1:7134"
-	}
+	return fmt.Sprintf("127.0.0.1:%d", 7134+1000*c.clusterNo)
 }
 
 func (c *temporalImpl) FrontendHTTPAddress() string {
@@ -320,57 +309,22 @@ func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
 }
 
 func (c *temporalImpl) HistoryServiceAddresses() []string {
-	var hosts []string
-	var startPort int
-	switch c.clusterNo {
-	case 0:
-		startPort = 7231
-	case 1:
-		startPort = 8231
-	case 2:
-		startPort = 9231
-	case 3:
-		startPort = 10231
-	default:
-		startPort = 7231
+	hosts := make([]string, c.historyConfig.NumHistoryHosts)
+	for i := range hosts {
+		hosts = append(hosts, fmt.Sprintf("127.0.0.1:%d", 7132+1000*c.clusterNo+i))
 	}
-	for i := 0; i < c.historyConfig.NumHistoryHosts; i++ {
-		port := startPort + i
-		hosts = append(hosts, fmt.Sprintf("127.0.0.1:%v", port))
-	}
-
 	c.logger.Info("History hosts", tag.Addresses(hosts))
 	return hosts
 }
 
 func (c *temporalImpl) MatchingGRPCServiceAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7136"
-	case 1:
-		return "127.0.0.1:8136"
-	case 2:
-		return "127.0.0.1:9136"
-	case 3:
-		return "127.0.0.1:10136"
-	default:
-		return "127.0.0.1:7136"
-	}
+	return fmt.Sprintf("127.0.0.1:%d", 7136+1000*c.clusterNo)
 }
 
 func (c *temporalImpl) WorkerGRPCServiceAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7138"
-	case 1:
-		return "127.0.0.1:8138"
-	case 2:
-		return "127.0.0.1:9138"
-	case 3:
-		return "127.0.0.1:10138"
-	default:
-		return "127.0.0.1:7138"
-	}
+	// Note that the worker does not actually listen on this port!
+	// This is for identification in membership only.
+	return fmt.Sprintf("127.0.0.1:%d", 7138+1000*c.clusterNo)
 }
 
 func (c *temporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
