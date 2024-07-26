@@ -29,6 +29,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
 	"strconv"
 	"sync"
@@ -82,6 +83,14 @@ import (
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/temporal"
+)
+
+const (
+	frontendPort     = 7134
+	frontendHTTPPort = 7144
+	historyPort      = 7132
+	matchingPort     = 7136
+	workerPort       = 7138 // not really listening
 )
 
 type (
@@ -301,46 +310,39 @@ func (c *temporalImpl) Stop() error {
 	return multierr.Combine(errs...)
 }
 
-func (c *temporalImpl) makeGRPCAddresses(num, basePort int) []string {
+func (c *temporalImpl) makeGRPCAddresses(num, port int) []string {
 	hosts := make([]string, num)
 	for i := range hosts {
-		hosts[i] = fmt.Sprintf("127.0.0.1:%d", basePort+1000*c.clusterNo+100*i)
+		hosts[i] = fmt.Sprintf("127.0.%d.%d:%d", c.clusterNo, i+1, port)
 	}
 	return hosts
 }
 
 func (c *temporalImpl) FrontendGRPCAddresses() []string {
-	return c.makeGRPCAddresses(c.frontendConfig.NumFrontendHosts, 7134)
+	return c.makeGRPCAddresses(c.frontendConfig.NumFrontendHosts, frontendPort)
 }
 
 func (c *temporalImpl) FrontendHTTPAddress() string {
-	host, port := c.FrontendHTTPHostPort()
-	return net.JoinHostPort(host, strconv.Itoa(port))
-}
-
-func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
-	addr0 := c.FrontendGRPCAddresses()[0]
-	if host, port, err := net.SplitHostPort(addr0); err != nil {
+	// randomize like a load balancer would
+	addrs := c.FrontendGRPCAddresses()
+	addr := addrs[rand.Intn(len(addrs))]
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
 		panic(fmt.Errorf("Invalid gRPC frontend address: %w", err))
-	} else if portNum, err := strconv.Atoi(port); err != nil {
-		panic(fmt.Errorf("Invalid gRPC frontend port: %w", err))
-	} else {
-		return host, portNum + 10
 	}
+	return net.JoinHostPort(host, strconv.Itoa(frontendHTTPPort))
 }
 
 func (c *temporalImpl) HistoryServiceAddresses() []string {
-	return c.makeGRPCAddresses(c.historyConfig.NumHistoryHosts, 7132)
+	return c.makeGRPCAddresses(c.historyConfig.NumHistoryHosts, historyPort)
 }
 
 func (c *temporalImpl) MatchingServiceAddresses() []string {
-	return c.makeGRPCAddresses(c.matchingConfig.NumMatchingHosts, 7136)
+	return c.makeGRPCAddresses(c.matchingConfig.NumMatchingHosts, matchingPort)
 }
 
 func (c *temporalImpl) WorkerServiceAddresses() []string {
-	// Note that the worker does not actually listen on this port!
-	// This is for identification in membership only.
-	return c.makeGRPCAddresses(c.workerConfig.NumWorkers, 7138)
+	return c.makeGRPCAddresses(c.workerConfig.NumWorkers, workerPort)
 }
 
 func (c *temporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
@@ -403,6 +405,7 @@ func (c *temporalImpl) startFrontend(
 	var matchingRawClient resource.MatchingRawClient
 
 	for _, host := range hostsByService[serviceName].All {
+		logger := log.With(c.logger, tag.Host(host))
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Invoke(c.setupMockAdminClient),
@@ -412,13 +415,11 @@ func (c *temporalImpl) startFrontend(
 			),
 			fx.Provide(c.frontendConfigProvider),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort {
-				_, port := c.FrontendHTTPHostPort()
-				return httpPort(port)
-			}),
+			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
-			fx.Provide(func() log.ThrottledLogger { return c.logger }),
-			fx.Provide(func() resource.NamespaceLogger { return c.logger }),
+			fx.Provide(func() log.Logger { return logger }),
+			fx.Provide(func() log.ThrottledLogger { return logger }),
+			fx.Provide(func() resource.NamespaceLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			static.MembershipModule(makeHostMap(hostsByService, serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
@@ -439,7 +440,6 @@ func (c *temporalImpl) startFrontend(
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -454,14 +454,14 @@ func (c *temporalImpl) startFrontend(
 		)
 		err := app.Err()
 		if err != nil {
-			c.logger.Fatal("unable to construct frontend service", tag.Error(err))
+			logger.Fatal("unable to construct frontend service", tag.Error(err))
 		}
 
 		c.fxApps = append(c.fxApps, app)
 		c.frontendNamespaceRegistries = append(c.frontendNamespaceRegistries, namespaceRegistry)
 
 		if err := app.Start(context.Background()); err != nil {
-			c.logger.Fatal("unable to start frontend service", tag.Error(err))
+			logger.Fatal("unable to start frontend service", tag.Error(err))
 		}
 	}
 
@@ -487,6 +487,7 @@ func (c *temporalImpl) startHistory(
 	serviceName := primitives.HistoryService
 
 	for _, host := range hostsByService[serviceName].All {
+		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
@@ -495,12 +496,10 @@ func (c *temporalImpl) startHistory(
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort {
-				_, port := c.FrontendHTTPHostPort()
-				return httpPort(port)
-			}),
+			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
-			fx.Provide(func() log.ThrottledLogger { return c.logger }),
+			fx.Provide(func() log.Logger { return logger }),
+			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			static.MembershipModule(makeHostMap(hostsByService, serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
@@ -516,7 +515,6 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -534,11 +532,11 @@ func (c *temporalImpl) startHistory(
 		)
 		err := app.Err()
 		if err != nil {
-			c.logger.Fatal("unable to construct history service", tag.Error(err))
+			logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
 		if err := app.Start(context.Background()); err != nil {
-			c.logger.Fatal("unable to start history service", tag.Error(err))
+			logger.Fatal("unable to start history service", tag.Error(err))
 		}
 	}
 
@@ -554,6 +552,7 @@ func (c *temporalImpl) startMatching(
 	serviceName := primitives.MatchingService
 
 	for _, host := range hostsByService[serviceName].All {
+		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
@@ -562,11 +561,9 @@ func (c *temporalImpl) startMatching(
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort {
-				_, port := c.FrontendHTTPHostPort()
-				return httpPort(port)
-			}),
-			fx.Provide(func() log.ThrottledLogger { return c.logger }),
+			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
+			fx.Provide(func() log.Logger { return logger }),
+			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			static.MembershipModule(makeHostMap(hostsByService, serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
@@ -582,7 +579,6 @@ func (c *temporalImpl) startMatching(
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
-			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
 			fx.Supply(c.spanExporters),
@@ -593,11 +589,11 @@ func (c *temporalImpl) startMatching(
 		)
 		err := app.Err()
 		if err != nil {
-			c.logger.Fatal("unable to start matching service", tag.Error(err))
+			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
 		if err := app.Start(context.Background()); err != nil {
-			c.logger.Fatal("unable to start matching service", tag.Error(err))
+			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
 	}
 
@@ -624,6 +620,7 @@ func (c *temporalImpl) startWorker(
 	}
 
 	for _, host := range hostsByService[serviceName].All {
+		logger := log.With(c.logger, tag.Host(host))
 		var workerService *worker.Service
 		app := fx.New(
 			fx.Invoke(c.setupMockAdminClient),
@@ -633,12 +630,10 @@ func (c *temporalImpl) startWorker(
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort {
-				_, port := c.FrontendHTTPHostPort()
-				return httpPort(port)
-			}),
+			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
-			fx.Provide(func() log.ThrottledLogger { return c.logger }),
+			fx.Provide(func() log.Logger { return logger }),
+			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			static.MembershipModule(makeHostMap(hostsByService, serviceName, host)),
 			fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
@@ -652,7 +647,6 @@ func (c *temporalImpl) startWorker(
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
@@ -667,13 +661,13 @@ func (c *temporalImpl) startWorker(
 		)
 		err := app.Err()
 		if err != nil {
-			c.logger.Fatal("unable to start worker service", tag.Error(err))
+			logger.Fatal("unable to start worker service", tag.Error(err))
 		}
 
 		c.fxApps = append(c.fxApps, app)
 		c.workerServices = append(c.workerServices, workerService)
 		if err := app.Start(context.Background()); err != nil {
-			c.logger.Fatal("unable to start worker service", tag.Error(err))
+			logger.Fatal("unable to start worker service", tag.Error(err))
 		}
 	}
 
@@ -720,12 +714,11 @@ func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
 
 func (c *temporalImpl) frontendConfigProvider() *config.Config {
 	// Set HTTP port and a test HTTP forwarded header
-	_, httpPort := c.FrontendHTTPHostPort()
 	return &config.Config{
 		Services: map[string]config.Service{
 			string(primitives.FrontendService): {
 				RPC: config.RPC{
-					HTTPPort: httpPort,
+					HTTPPort: frontendHTTPPort,
 					HTTPAdditionalForwardedHeaders: []string{
 						"this-header-forwarded",
 						"this-header-prefix-forwarded-*",
