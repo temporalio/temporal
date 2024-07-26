@@ -86,10 +86,9 @@ import (
 
 type (
 	temporalImpl struct {
-		frontendServices []*frontend.Service
-		matchingServices []*matching.Service
-		historyServices  []*history.Service
-		workerServices   []*worker.Service
+		// TODO: this is only used to refresh pernsworkermanager, we can get rid of this after
+		// it uses dynamic config subscriptions.
+		workerServices []*worker.Service
 
 		fxApps []*fx.App
 
@@ -460,7 +459,6 @@ func (c *temporalImpl) startFrontend(
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.frontendServices = append(c.frontendServices, frontendService)
 		c.frontendNamespaceRegistries = append(c.frontendNamespaceRegistries, namespaceRegistry)
 
 		if err := app.Start(context.Background()); err != nil {
@@ -566,7 +564,6 @@ func (c *temporalImpl) startHistory(
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
 		c.historyClients = append(c.historyClients, historyservice.NewHistoryServiceClient(historyConnection))
-		c.historyServices = append(c.historyServices, historyService)
 
 		if err := app.Start(context.Background()); err != nil {
 			c.logger.Fatal("unable to start history service", tag.Error(err))
@@ -652,7 +649,6 @@ func (c *temporalImpl) startMatching(
 			c.logger.Fatal("Failed to create connection for matching", tag.Error(err))
 		}
 		c.matchingClients = append(c.matchingClients, matchingservice.NewMatchingServiceClient(matchingConnection))
-		c.matchingServices = append(c.matchingServices, matchingService)
 
 		if err := app.Start(context.Background()); err != nil {
 			c.logger.Fatal("unable to start matching service", tag.Error(err))
