@@ -135,7 +135,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationStream.Key():                            true,
 		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
 	}
-	s.logger = log.NewNoopLogger()
+	s.logger = log.NewTestLogger()
 	s.setupSuite(
 		[]string{"cluster1", "cluster2"},
 		tests.WithFxOptionsForService(primitives.WorkerService,
