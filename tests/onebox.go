@@ -96,10 +96,7 @@ type (
 		historyApps []*fx.App
 		workerApp   *fx.App
 
-		matchingNamespaceRegistry  namespace.Registry
-		frontendNamespaceRegistry  namespace.Registry
-		historyNamespaceRegistries []namespace.Registry
-		workerNamespaceRegistry    namespace.Registry
+		frontendNamespaceRegistry namespace.Registry
 
 		adminClient                      adminservice.AdminServiceClient
 		frontendClient                   workflowservice.WorkflowServiceClient
@@ -533,7 +530,6 @@ func (c *temporalImpl) startHistory(
 
 		var historyService *history.Service
 		var clientBean client.Bean
-		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
 				persistenceConfig,
@@ -575,7 +571,7 @@ func (c *temporalImpl) startHistory(
 			history.QueueModule,
 			history.Module,
 			replication.Module,
-			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
+			fx.Populate(&historyService, &clientBean),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 		)
@@ -604,7 +600,6 @@ func (c *temporalImpl) startHistory(
 		c.historyApps = append(c.historyApps, app)
 		c.historyClient = NewHistoryClient(historyConnection)
 		c.historyServices = append(c.historyServices, historyService)
-		c.historyNamespaceRegistries = append(c.historyNamespaceRegistries, namespaceRegistry)
 
 		if err := app.Start(context.Background()); err != nil {
 			c.logger.Fatal("unable to start history service", tag.Error(err))
@@ -636,7 +631,6 @@ func (c *temporalImpl) startMatching(
 
 	var matchingService *matching.Service
 	var clientBean client.Bean
-	var namespaceRegistry namespace.Registry
 	app := fx.New(
 		fx.Supply(
 			persistenceConfig,
@@ -670,7 +664,7 @@ func (c *temporalImpl) startMatching(
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		matching.Module,
-		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
+		fx.Populate(&matchingService, &clientBean),
 		temporal.FxLogAdapter,
 		c.getFxOptionsForService(primitives.MatchingService),
 	)
@@ -693,7 +687,6 @@ func (c *temporalImpl) startMatching(
 	c.matchingClient = matchingservice.NewMatchingServiceClient(matchingConnection)
 	c.matchingApp = app
 	c.matchingService = matchingService
-	c.matchingNamespaceRegistry = namespaceRegistry
 	if err := app.Start(context.Background()); err != nil {
 		c.logger.Fatal("unable to start matching service", tag.Error(err))
 	}
@@ -734,7 +727,6 @@ func (c *temporalImpl) startWorker(
 
 	var workerService *worker.Service
 	var clientBean client.Bean
-	var namespaceRegistry namespace.Registry
 	app := fx.New(
 		fx.Supply(
 			persistenceConfig,
@@ -770,7 +762,7 @@ func (c *temporalImpl) startWorker(
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		worker.Module,
-		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
+		fx.Populate(&workerService, &clientBean),
 		temporal.FxLogAdapter,
 		c.getFxOptionsForService(primitives.WorkerService),
 	)
@@ -781,7 +773,6 @@ func (c *temporalImpl) startWorker(
 
 	c.workerApp = app
 	c.workerService = workerService
-	c.workerNamespaceRegistry = namespaceRegistry
 	if err := app.Start(context.Background()); err != nil {
 		c.logger.Fatal("unable to start worker service", tag.Error(err))
 	}
