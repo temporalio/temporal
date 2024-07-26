@@ -95,9 +95,11 @@ type (
 		ClusterNo              int
 		ClusterMetadata        cluster.Config
 		Persistence            persistencetests.TestBaseOptions
+		FrontendConfig         *FrontendConfig
 		HistoryConfig          *HistoryConfig
-		ESConfig               *esclient.Config
+		MatchingConfig         *MatchingConfig
 		WorkerConfig           *WorkerConfig
+		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
 		FaultInjection         config.FaultInjection `yaml:"faultInjection"`
 		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
@@ -105,13 +107,6 @@ type (
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
-	}
-
-	// WorkerConfig is the config for enabling/disabling Temporal worker
-	WorkerConfig struct {
-		EnableArchiver    bool
-		EnableReplicator  bool
-		StartWorkerAnyway bool
 	}
 )
 
@@ -300,7 +295,9 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		ESClient:                         esClient,
 		ArchiverMetadata:                 archiverBase.metadata,
 		ArchiverProvider:                 archiverBase.provider,
+		FrontendConfig:                   options.FrontendConfig,
 		HistoryConfig:                    options.HistoryConfig,
+		MatchingConfig:                   options.MatchingConfig,
 		WorkerConfig:                     options.WorkerConfig,
 		MockAdminClient:                  options.MockAdminClient,
 		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),

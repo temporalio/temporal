@@ -134,6 +134,11 @@ type (
 		taskCategoryRegistry tasks.TaskCategoryRegistry
 	}
 
+	// FrontendConfig is the config for the frontend service
+	FrontendConfig struct {
+		NumFrontendHosts int
+	}
+
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
 		NumHistoryShards           int32
@@ -146,6 +151,18 @@ type (
 		BlobSizeLimitWarn          int
 		MutableStateSizeLimitError int
 		MutableStateSizeLimitWarn  int
+	}
+
+	// MatchingConfig is the config for the matching service
+	MatchingConfig struct {
+		NumMatchingHosts int
+	}
+
+	// WorkerConfig is the config for the worker service
+	WorkerConfig struct {
+		EnableArchiver   bool
+		EnableReplicator bool
+		NumWorkers       int
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -165,10 +182,12 @@ type (
 		ArchiverMetadata                 carchiver.ArchivalMetadata
 		ArchiverProvider                 provider.ArchiverProvider
 		EnableReadHistoryFromArchival    bool
+		FrontendConfig                   *FrontendConfig
 		HistoryConfig                    *HistoryConfig
+		MatchingConfig                   *MatchingConfig
+		WorkerConfig                     *WorkerConfig
 		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
-		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		SpanExporters                    []otelsdktrace.SpanExporter
@@ -223,18 +242,12 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	return impl
 }
 
-func (c *temporalImpl) enableWorker() bool {
-	return c.workerConfig.StartWorkerAnyway || c.workerConfig.EnableArchiver || c.workerConfig.EnableReplicator
-}
-
 func (c *temporalImpl) Start() error {
 	hosts := make(map[primitives.ServiceName]static.Hosts)
 	hosts[primitives.FrontendService] = static.SingleLocalHost(c.FrontendGRPCAddress())
 	hosts[primitives.MatchingService] = static.SingleLocalHost(c.MatchingGRPCServiceAddress())
 	hosts[primitives.HistoryService] = static.Hosts{All: c.HistoryServiceAddresses()}
-	if c.enableWorker() {
-		hosts[primitives.WorkerService] = static.SingleLocalHost(c.WorkerGRPCServiceAddress())
-	}
+	hosts[primitives.WorkerService] = static.SingleLocalHost(c.WorkerGRPCServiceAddress())
 
 	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
@@ -252,11 +265,9 @@ func (c *temporalImpl) Start() error {
 	go c.startFrontend(hosts, &startWG)
 	startWG.Wait()
 
-	if c.enableWorker() {
-		startWG.Add(1)
-		go c.startWorker(hosts, &startWG)
-		startWG.Wait()
-	}
+	startWG.Add(1)
+	go c.startWorker(hosts, &startWG)
+	startWG.Wait()
 
 	return nil
 }
