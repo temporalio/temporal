@@ -64,7 +64,7 @@ check_against_commit() {
   fi
 }
 
-if [ "$PR_BASE_COMMIT" != "$COMMIT" ]; then
+if [[ "$PR_BASE_COMMIT" != "$COMMIT" ]]; then
   # We're running in GHA, using shallow clone. Fetch some commits from the PR
   # base so we can try to find the merge base.
   color "Fetching more commits from $PR_BASE_COMMIT..."
