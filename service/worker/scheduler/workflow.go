@@ -113,7 +113,7 @@ const (
 	maxListMatchingTimesCount = 1000
 
 	rateLimitedErrorType            = "RateLimited"
-	workflowExecutionAlreadyStarted = "WorkflowExecutionAlreadyStarted"
+	workflowExecutionAlreadyStarted = "serviceerror.WorkflowExecutionAlreadyStarted"
 
 	nextTimeCacheV1Size = 10
 
@@ -1563,11 +1563,8 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, s
 
 func isUserScheduleError(err error) bool {
 	var appError *temporal.ApplicationError
-	if errors.As(err, &appError) {
-		var innerError *temporal.ApplicationError
-		if errors.As(appError.Unwrap(), &innerError) && innerError.Type() == workflowExecutionAlreadyStarted {
-			return true
-		}
+	if errors.As(err, &appError) && appError.Type() == workflowExecutionAlreadyStarted {
+		return true
 	}
 	return false
 }

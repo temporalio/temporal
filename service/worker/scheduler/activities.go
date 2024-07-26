@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/util"
 	"reflect"
 	"time"
 
@@ -292,9 +293,11 @@ func translateError(err error, msgPrefix string) error {
 	}
 	message := fmt.Sprintf("%s: %s", msgPrefix, err.Error())
 	if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
-		return temporal.NewApplicationErrorWithCause(message, errType(err), err)
+		return temporal.NewApplicationErrorWithCause(message, errType(err), err, reflect.TypeOf(err))
 	}
-	return temporal.NewNonRetryableApplicationError(message, errType(err), err)
+
+	errorType := util.ErrorType(err)
+	return temporal.NewNonRetryableApplicationError(message, errorType, err)
 }
 
 type responseBuilder struct {
