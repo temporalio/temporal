@@ -94,11 +94,7 @@ type (
 
 		frontendNamespaceRegistries []namespace.Registry
 
-		// these are the individual clients:
-		historyClients  []historyservice.HistoryServiceClient
-		matchingClients []matchingservice.MatchingServiceClient
-
-		// these are the routing/load balancing clients:
+		// These are routing/load balancing clients but do not do retries:
 		adminClient    adminservice.AdminServiceClient
 		frontendClient workflowservice.WorkflowServiceClient
 		operatorClient operatorservice.OperatorServiceClient
@@ -540,18 +536,7 @@ func (c *temporalImpl) startHistory(
 		if err != nil {
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
 		}
-
 		c.fxApps = append(c.fxApps, app)
-		// TODO: this is not correct when there are multiple history hosts as later client will overwrite previous ones.
-		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
-		// depends on the fact that there's only one history host.
-		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(host, nil, c.logger)
-		if err != nil {
-			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
-		}
-		c.historyClients = append(c.historyClients, historyservice.NewHistoryServiceClient(historyConnection))
-
 		if err := app.Start(context.Background()); err != nil {
 			c.logger.Fatal("unable to start history service", tag.Error(err))
 		}
@@ -610,14 +595,7 @@ func (c *temporalImpl) startMatching(
 		if err != nil {
 			c.logger.Fatal("unable to start matching service", tag.Error(err))
 		}
-
 		c.fxApps = append(c.fxApps, app)
-		matchingConnection, err := rpc.Dial(host, nil, c.logger)
-		if err != nil {
-			c.logger.Fatal("Failed to create connection for matching", tag.Error(err))
-		}
-		c.matchingClients = append(c.matchingClients, matchingservice.NewMatchingServiceClient(matchingConnection))
-
 		if err := app.Start(context.Background()); err != nil {
 			c.logger.Fatal("unable to start matching service", tag.Error(err))
 		}
