@@ -117,10 +117,12 @@ type (
 		clusterNo                        int // cluster number
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
-		historyConfig                    *HistoryConfig
+		frontendConfig                   FrontendConfig
+		historyConfig                    HistoryConfig
+		matchingConfig                   MatchingConfig
+		workerConfig                     WorkerConfig
 		esConfig                         *esclient.Config
 		esClient                         esclient.Client
-		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		spanExporters                    []otelsdktrace.SpanExporter
@@ -182,10 +184,10 @@ type (
 		ArchiverMetadata                 carchiver.ArchivalMetadata
 		ArchiverProvider                 provider.ArchiverProvider
 		EnableReadHistoryFromArchival    bool
-		FrontendConfig                   *FrontendConfig
-		HistoryConfig                    *HistoryConfig
-		MatchingConfig                   *MatchingConfig
-		WorkerConfig                     *WorkerConfig
+		FrontendConfig                   FrontendConfig
+		HistoryConfig                    HistoryConfig
+		MatchingConfig                   MatchingConfig
+		WorkerConfig                     WorkerConfig
 		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
@@ -227,7 +229,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		esClient:                         params.ESClient,
 		archiverMetadata:                 params.ArchiverMetadata,
 		archiverProvider:                 params.ArchiverProvider,
+		frontendConfig:                   params.FrontendConfig,
 		historyConfig:                    params.HistoryConfig,
+		matchingConfig:                   params.MatchingConfig,
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
@@ -238,16 +242,23 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 	}
+
+	// set defaults
+	impl.frontendConfig.NumFrontendHosts = max(1, impl.frontendConfig.NumFrontendHosts)
+	impl.historyConfig.NumHistoryHosts = max(1, impl.historyConfig.NumHistoryHosts)
+	impl.matchingConfig.NumMatchingHosts = max(1, impl.matchingConfig.NumMatchingHosts)
+	impl.workerConfig.NumWorkers = max(1, impl.workerConfig.NumWorkers)
+
 	impl.overrideHistoryDynamicConfig(t, testDCClient)
 	return impl
 }
 
 func (c *temporalImpl) Start() error {
 	hosts := make(map[primitives.ServiceName]static.Hosts)
-	hosts[primitives.FrontendService] = static.SingleLocalHost(c.FrontendGRPCAddress())
-	hosts[primitives.MatchingService] = static.SingleLocalHost(c.MatchingGRPCServiceAddress())
+	hosts[primitives.FrontendService] = static.Hosts{All: c.FrontendGRPCAddresses()}
+	hosts[primitives.MatchingService] = static.Hosts{All: c.MatchingServiceAddresses()}
 	hosts[primitives.HistoryService] = static.Hosts{All: c.HistoryServiceAddresses()}
-	hosts[primitives.WorkerService] = static.SingleLocalHost(c.WorkerGRPCServiceAddress())
+	hosts[primitives.WorkerService] = static.Hosts{All: c.WorkerServiceAddresses()}
 
 	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
@@ -289,8 +300,16 @@ func (c *temporalImpl) Stop() error {
 	return multierr.Combine(errs...)
 }
 
-func (c *temporalImpl) FrontendGRPCAddress() string {
-	return fmt.Sprintf("127.0.0.1:%d", 7134+1000*c.clusterNo)
+func (c *temporalImpl) makeGRPCAddresses(num, basePort int) []string {
+	hosts := make([]string, num)
+	for i := range hosts {
+		hosts[i] = fmt.Sprintf("127.0.0.1:%d", basePort+1000*c.clusterNo+i)
+	}
+	return hosts
+}
+
+func (c *temporalImpl) FrontendGRPCAddresses() []string {
+	return c.makeGRPCAddresses(c.frontendConfig.NumFrontendHosts, 7134)
 }
 
 func (c *temporalImpl) FrontendHTTPAddress() string {
@@ -299,7 +318,8 @@ func (c *temporalImpl) FrontendHTTPAddress() string {
 }
 
 func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
-	if host, port, err := net.SplitHostPort(c.FrontendGRPCAddress()); err != nil {
+	addr0 := c.FrontendGRPCAddress()[0]
+	if host, port, err := net.SplitHostPort(addr0); err != nil {
 		panic(fmt.Errorf("Invalid gRPC frontend address: %w", err))
 	} else if portNum, err := strconv.Atoi(port); err != nil {
 		panic(fmt.Errorf("Invalid gRPC frontend port: %w", err))
@@ -309,22 +329,17 @@ func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
 }
 
 func (c *temporalImpl) HistoryServiceAddresses() []string {
-	hosts := make([]string, c.historyConfig.NumHistoryHosts)
-	for i := range hosts {
-		hosts = append(hosts, fmt.Sprintf("127.0.0.1:%d", 7132+1000*c.clusterNo+i))
-	}
-	c.logger.Info("History hosts", tag.Addresses(hosts))
-	return hosts
+	return c.makeGRPCAddresses(c.historyConfig.NumHistoryHosts, 7132)
 }
 
-func (c *temporalImpl) MatchingGRPCServiceAddress() string {
-	return fmt.Sprintf("127.0.0.1:%d", 7136+1000*c.clusterNo)
+func (c *temporalImpl) MatchingServiceAddresses() []string {
+	return c.makeGRPCAddresses(c.matchingConfigConfig.NumMatchingHosts, 7136)
 }
 
-func (c *temporalImpl) WorkerGRPCServiceAddress() string {
+func (c *temporalImpl) WorkerServiceAddresses() string {
 	// Note that the worker does not actually listen on this port!
 	// This is for identification in membership only.
-	return fmt.Sprintf("127.0.0.1:%d", 7138+1000*c.clusterNo)
+	return c.makeGRPCAddresses(c.workerConfig.NumWorkers, 7138)
 }
 
 func (c *temporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {

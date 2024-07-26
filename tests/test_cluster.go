@@ -95,10 +95,10 @@ type (
 		ClusterNo              int
 		ClusterMetadata        cluster.Config
 		Persistence            persistencetests.TestBaseOptions
-		FrontendConfig         *FrontendConfig
-		HistoryConfig          *HistoryConfig
-		MatchingConfig         *MatchingConfig
-		WorkerConfig           *WorkerConfig
+		FrontendConfig         FrontendConfig
+		HistoryConfig          HistoryConfig
+		MatchingConfig         MatchingConfig
+		WorkerConfig           WorkerConfig
 		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
 		FaultInjection         config.FaultInjection `yaml:"faultInjection"`
