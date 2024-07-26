@@ -28,8 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/util"
-	"reflect"
+
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -283,20 +283,17 @@ func (a *activities) TerminateWorkflow(ctx context.Context, req *schedspb.Termin
 	return translateError(err, "TerminateWorkflowExecution")
 }
 
-func errType(err error) string {
-	return reflect.TypeOf(err).Name()
-}
-
 func translateError(err error, msgPrefix string) error {
 	if err == nil {
 		return nil
 	}
 	message := fmt.Sprintf("%s: %s", msgPrefix, err.Error())
+	errorType := util.ErrorType(err)
+
 	if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
-		return temporal.NewApplicationErrorWithCause(message, errType(err), err)
+		return temporal.NewApplicationErrorWithCause(message, errorType, err)
 	}
 
-	errorType := util.ErrorType(err)
 	return temporal.NewNonRetryableApplicationError(message, errorType, err)
 }
 

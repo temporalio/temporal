@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -44,7 +43,6 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
@@ -2275,49 +2273,4 @@ func (s *workflowSuite) TestCANBySignal() {
 	}, 0) // 0 means use suggested
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-}
-
-func (s *workflowSuite) buildScheduleArgs() *schedspb.StartScheduleArgs {
-	startScheduleArgs := &schedspb.StartScheduleArgs{
-		Schedule: &schedpb.Schedule{
-			Spec: &schedpb.ScheduleSpec{
-				Calendar: []*schedpb.CalendarSpec{{
-					Minute: "17",
-					Hour:   "*",
-				}},
-			},
-			Action: s.defaultAction("myid"),
-			Policies: &schedpb.SchedulePolicies{
-				CatchupWindow: durationpb.New(1 * time.Hour),
-			},
-			State: &schedpb.ScheduleState{
-				Paused: true,
-			},
-		},
-		State: &schedspb.InternalState{
-			Namespace:     "myns",
-			NamespaceId:   "mynsid",
-			ScheduleId:    "myschedule",
-			ConflictToken: InitialConflictToken,
-			// workflow "woke up" after 6 hours
-			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
-		},
-	}
-	return startScheduleArgs
-}
-
-func (s *workflowSuite) TestStartScheduledAction() {
-	_scheduler := &scheduler{
-		StartScheduleArgs: s.buildScheduleArgs(),
-	}
-	_scheduler.metrics = sdkclient.MetricsNopHandler
-
-	start := &schedspb.BufferedStart{
-		Manual: false,
-	}
-	_scheduler.Schedule.State.Paused = true
-
-	result, workflowStarted := _scheduler.startScheduledAction(start)
-	assert.False(s.T(), workflowStarted)
-	assert.Nil(s.T(), result)
 }

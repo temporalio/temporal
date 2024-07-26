@@ -1217,13 +1217,38 @@ func (s *scheduler) processBuffer() bool {
 	}
 
 	isRunning := len(s.Info.RunningWorkflows) > 0
-
+	tryAgain := false
 	action := ProcessBuffer(s.State.BufferedStarts, isRunning, s.resolveOverlapPolicy)
 
 	s.State.BufferedStarts = action.NewBuffer
 	s.Info.OverlapSkipped += action.OverlapSkipped
 
-	tryAgain := s.startScheduledActions(action)
+	// Try starting whatever we're supposed to start now
+	allStarts := action.OverlappingStarts
+	if action.NonOverlappingStart != nil {
+		allStarts = append(allStarts, action.NonOverlappingStart)
+	}
+	for _, start := range allStarts {
+		if !s.canTakeScheduledAction(start.Manual, true) {
+			// try again to drain the buffer if paused or out of actions
+			tryAgain = true
+			continue
+		}
+		result, err := s.startWorkflow(start, req)
+		metricsWithTag := s.metrics.WithTags(map[string]string{
+			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
+		if err != nil {
+			s.logger.Error("Failed to start workflow", "error", err)
+			if !isUserScheduleError(err) {
+				metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
+			}
+			tryAgain = true
+			continue
+		}
+		metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Inc(1)
+		nonOverlapping := start == action.NonOverlappingStart
+		s.recordAction(result, nonOverlapping)
+	}
 
 	// Terminate or cancel if required (terminate overrides cancel if both are present)
 	if action.NeedTerminate {
@@ -1248,49 +1273,6 @@ func (s *scheduler) processBuffer() bool {
 		}
 	}
 
-	return tryAgain
-}
-
-func (s *scheduler) startScheduledAction(start *schedspb.BufferedStart) (*schedpb.ScheduleActionResult, bool) {
-	if !s.canTakeScheduledAction(start.Manual, true) {
-		// try again to drain the buffer if paused or out of actions
-		return nil, false
-	}
-	metricsWithTag := s.metrics.WithTags(map[string]string{
-		metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
-	metricsWithTag.Counter(metrics.ScheduleActionAttempt.Name()).Inc(1)
-	executionInfo := s.Schedule.Action.GetStartWorkflow()
-	result, err := s.startWorkflow(start, executionInfo)
-
-	if err != nil {
-		s.logger.Error("Failed to start workflow", "error", err)
-		if !isUserScheduleError(err) {
-			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
-		}
-		return result, false
-	}
-	metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Inc(1)
-
-	return result, true
-}
-
-func (s *scheduler) startScheduledActions(
-	action ProcessBufferResult[*schedspb.BufferedStart],
-) (tryAgain bool) {
-	// Try starting whatever we're supposed to start now
-	allStarts := action.OverlappingStarts
-	if action.NonOverlappingStart != nil {
-		allStarts = append(allStarts, action.NonOverlappingStart)
-	}
-	tryAgain = false
-	for _, start := range allStarts {
-		result, workflowStarted := s.startScheduledAction(start)
-		tryAgain = tryAgain || (!workflowStarted)
-		if result != nil {
-			nonOverlapping := start == action.NonOverlappingStart
-			s.recordAction(result, nonOverlapping)
-		}
-	}
 	return tryAgain
 }
 
