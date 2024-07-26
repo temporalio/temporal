@@ -304,7 +304,7 @@ func (c *temporalImpl) Stop() error {
 func (c *temporalImpl) makeGRPCAddresses(num, basePort int) []string {
 	hosts := make([]string, num)
 	for i := range hosts {
-		hosts[i] = fmt.Sprintf("127.0.0.1:%d", basePort+1000*c.clusterNo+i)
+		hosts[i] = fmt.Sprintf("127.0.0.1:%d", basePort+1000*c.clusterNo+100*i)
 	}
 	return hosts
 }
