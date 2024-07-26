@@ -898,7 +898,9 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	// disable per-ns worker so that the schedule workflow never runs
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
 
 	schedule := &schedulepb.Schedule{
@@ -959,7 +961,9 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	s.NoError(err)
 
 	dc.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
 }
 
@@ -974,10 +978,14 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	// to the actual rate limiter object to refresh it directly.
 	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
 	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
 
 	var runs int32
@@ -1036,10 +1044,14 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.SchedulerNamespaceStartWorkflowRPS)
 	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 }
 
 func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
