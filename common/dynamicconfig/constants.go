@@ -746,7 +746,7 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	)
 	HistoryHostErrorPercentage = NewGlobalFloatSetting(
 		"frontend.historyHostErrorPercentage",
-		50,
+		0.5,
 		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
