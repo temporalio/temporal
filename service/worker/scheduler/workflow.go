@@ -40,7 +40,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -113,7 +112,8 @@ const (
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
 
-	rateLimitedErrorType = "RateLimited"
+	rateLimitedErrorType            = "RateLimited"
+	workflowExecutionAlreadyStarted = "WorkflowExecutionAlreadyStarted"
 
 	nextTimeCacheV1Size = 10
 
@@ -1562,10 +1562,12 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, s
 }
 
 func isUserScheduleError(err error) bool {
-	var appErr *temporal.ApplicationError
-	var workflowExecutionAlreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
-	if errors.As(err, &appErr) && errors.As(appErr.Unwrap(), &workflowExecutionAlreadyStarted) {
-		return true
+	var appError *temporal.ApplicationError
+	if errors.As(err, &appError) {
+		var innerError *temporal.ApplicationError
+		if errors.As(appError.Unwrap(), &innerError) && innerError.Type() == workflowExecutionAlreadyStarted {
+			return true
+		}
 	}
 	return false
 }
