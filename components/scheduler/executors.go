@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/failure/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"golang.org/x/exp/slices"
+	"google.golang.org/protobuf/proto"
 	"time"
 
 	"github.com/google/uuid"
@@ -72,6 +73,7 @@ type (
 		MetricsHandler    metrics.Handler
 		Logger            log.Logger
 		SpecBuilder       *scheduler.SpecBuilder
+		FrontendClient    workflowservice.WorkflowServiceClient
 		HistoryClient     resource.HistoryClient
 		NamespaceRegistry namespace.Registry
 		Config            *Config
@@ -134,10 +136,11 @@ func (e taskExecutor) executeSchedulerRunTask(
 			return err
 		}
 		prevS, err := hsm.MachineData[*Scheduler](node)
-		prevArgs = prevS.HsmSchedulerState
 		if err != nil {
 			return err
 		}
+		prevArgs = prevS.HsmSchedulerState
+
 		// Ensure that this is copy, so later (stateful) processing does not update state machine without protection
 		s = Scheduler{
 			HsmSchedulerState: common.CloneProto(prevS.HsmSchedulerState),
@@ -287,7 +290,7 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 			tryAgain = true
 			continue
 		}
-		result, err := e.startWorkflow(ctx, s, start, req)
+		result, err := e.startWorkflow(ctx, s, ref, start, req)
 		metricsWithTag := e.MetricsHandler.WithTags(metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 		if err != nil {
 			e.Logger.Error("Failed to start workflow", tag.Error(err))
@@ -417,6 +420,7 @@ func (e taskExecutor) processBackfills(s *Scheduler, tweakables *Tweakables) {
 func (e taskExecutor) startWorkflow(
 	ctx context.Context,
 	s *Scheduler,
+	ref hsm.Ref,
 	start *schedspb.BufferedStart,
 	newWorkflow *workflowpb.NewWorkflowExecutionInfo,
 ) (*schedpb.ScheduleActionResult, error) {
@@ -431,6 +435,24 @@ func (e taskExecutor) startWorkflow(
 		// ALLOW_ALL runs don't participate in lastCompletionResult/continuedFailure at all
 		lastCompletionResult = nil
 		continuedFailure = nil
+	}
+
+	callbackInternal := &persistencepb.Callback{
+		Variant: &persistencepb.Callback_Hsm{
+			Hsm: &persistencepb.Callback_HSM{
+				NamespaceId: ref.WorkflowKey.NamespaceID,
+				WorkflowId:  ref.WorkflowKey.WorkflowID,
+				RunId:       ref.WorkflowKey.RunID,
+				Ref:         ref.StateMachineRef,
+				Method:      ProcessWorkflowCompletionEvent{}.Name(),
+			},
+		},
+	}
+	serializedCallback, err := proto.Marshal(callbackInternal)
+	if err != nil {
+		// TODO(Tianyu): original implementation translates this error which may not be relevant any more
+		// TODO(Tianyu): On failure, need to figure out how HSM-based implementation should retry, as we can no longer rely on automatic activity retries.
+		return nil, err
 	}
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
@@ -452,20 +474,16 @@ func (e taskExecutor) startWorkflow(
 		LastCompletionResult: lastCompletionResult,
 		ContinuedFailure:     continuedFailure,
 		Namespace:            s.Args.State.Namespace,
-		// TODO(Tianyu): Add callback here
-		CompletionCallbacks: []*commonpb.Callback{},
+		CompletionCallbacks: []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{
+					Data: serializedCallback,
+				},
+			},
+		}},
 	}
 
-	histRequest := common.CreateHistoryStartWorkflowRequest(
-		s.Args.State.Namespace,
-		req,
-		nil,
-		nil,
-		time.Now().UTC(),
-	)
-	histRequest.
-
-	res, err := e.HistoryClient.StartWorkflowExecution(ctx, histRequest)
+	res, err := e.FrontendClient.StartWorkflowExecution(ctx, req)
 	if err != nil {
 		// TODO(Tianyu): original implementation translates this error which may not be relevant any more
 		// TODO(Tianyu): On failure, need to figure out how HSM-based implementation should retry, as we can no longer rely on automatic activity retries.

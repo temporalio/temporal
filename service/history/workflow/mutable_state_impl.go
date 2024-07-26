@@ -2246,6 +2246,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 					Header: variant.Nexus.GetHeader(),
 				},
 			}
+		case *commonpb.Callback_Internal_:
+			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
+			if err != nil {
+				return err
+			}
 		}
 		machine := callbacks.NewCallback(startEvent.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
 		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
