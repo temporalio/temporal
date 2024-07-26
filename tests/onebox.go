@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -122,8 +123,6 @@ type (
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		abstractDataStoreFactory         persistenceClient.AbstractDataStoreFactory
 		visibilityStoreFactory           visibility.VisibilityStoreFactory
-		shutdownCh                       chan struct{}
-		shutdownWG                       sync.WaitGroup
 		clusterNo                        int // cluster number
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
@@ -138,6 +137,7 @@ type (
 		spanExporters                    []otelsdktrace.SpanExporter
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
+		hostsByService                   map[primitives.ServiceName]static.Hosts
 
 		onGetClaims          func(*authorization.AuthInfo) (*authorization.Claims, error)
 		onAuthorize          func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
@@ -233,7 +233,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
 		abstractDataStoreFactory:         params.AbstractDataStoreFactory,
 		visibilityStoreFactory:           params.VisibilityStoreFactory,
-		shutdownCh:                       make(chan struct{}),
 		clusterNo:                        params.ClusterNo,
 		esConfig:                         params.ESConfig,
 		esClient:                         params.ESClient,
@@ -254,41 +253,35 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	}
 
 	// set defaults
-	impl.frontendConfig.NumFrontendHosts = max(1, impl.frontendConfig.NumFrontendHosts)
-	impl.historyConfig.NumHistoryHosts = max(1, impl.historyConfig.NumHistoryHosts)
-	impl.matchingConfig.NumMatchingHosts = max(1, impl.matchingConfig.NumMatchingHosts)
-	impl.workerConfig.NumWorkers = max(1, impl.workerConfig.NumWorkers)
+	const minNodes = 1
+	impl.frontendConfig.NumFrontendHosts = max(minNodes, impl.frontendConfig.NumFrontendHosts)
+	impl.historyConfig.NumHistoryHosts = max(minNodes, impl.historyConfig.NumHistoryHosts)
+	impl.matchingConfig.NumMatchingHosts = max(minNodes, impl.matchingConfig.NumMatchingHosts)
+	impl.workerConfig.NumWorkers = max(minNodes, impl.workerConfig.NumWorkers)
+
+	m := make(map[primitives.ServiceName]static.Hosts)
+	m[primitives.FrontendService] = static.Hosts{All: impl.FrontendGRPCAddresses()}
+	m[primitives.MatchingService] = static.Hosts{All: impl.MatchingServiceAddresses()}
+	m[primitives.HistoryService] = static.Hosts{All: impl.HistoryServiceAddresses()}
+	m[primitives.WorkerService] = static.Hosts{All: impl.WorkerServiceAddresses()}
+	impl.hostsByService = m
 
 	impl.overrideHistoryDynamicConfig(t, testDCClient)
+
 	return impl
 }
 
 func (c *temporalImpl) Start() error {
-	hosts := make(map[primitives.ServiceName]static.Hosts)
-	hosts[primitives.FrontendService] = static.Hosts{All: c.FrontendGRPCAddresses()}
-	hosts[primitives.MatchingService] = static.Hosts{All: c.MatchingServiceAddresses()}
-	hosts[primitives.HistoryService] = static.Hosts{All: c.HistoryServiceAddresses()}
-	hosts[primitives.WorkerService] = static.Hosts{All: c.WorkerServiceAddresses()}
-
 	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
 	if err := c.createSystemNamespace(); err != nil {
 		return err
 	}
 
-	var startWG sync.WaitGroup
-	startWG.Add(2)
-	go c.startHistory(hosts, &startWG)
-	go c.startMatching(hosts, &startWG)
-	startWG.Wait()
-
-	startWG.Add(1)
-	go c.startFrontend(hosts, &startWG)
-	startWG.Wait()
-
-	startWG.Add(1)
-	go c.startWorker(hosts, &startWG)
-	startWG.Wait()
+	c.startMatching()
+	c.startHistory()
+	c.startFrontend()
+	c.startWorker()
 
 	return nil
 }
@@ -297,17 +290,21 @@ func (c *temporalImpl) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	c.shutdownWG.Add(len(c.fxApps))
-
+	slices.Reverse(c.fxApps) // less log spam if we go backwards
 	var errs []error
 	for _, app := range c.fxApps {
 		errs = append(errs, app.Stop(ctx))
 	}
 
-	close(c.shutdownCh)
-	c.shutdownWG.Wait()
-
 	return multierr.Combine(errs...)
+}
+
+func (c *temporalImpl) makeHostMap(serviceName primitives.ServiceName, self string) map[primitives.ServiceName]static.Hosts {
+	hostMap := maps.Clone(c.hostsByService)
+	hosts := hostMap[serviceName]
+	hosts.Self = self
+	hostMap[serviceName] = hosts
+	return hostMap
 }
 
 func (c *temporalImpl) makeGRPCAddresses(num, port int) []string {
@@ -393,10 +390,7 @@ func (c *temporalImpl) copyPersistenceConfig() config.Persistence {
 	return persistenceConfig
 }
 
-func (c *temporalImpl) startFrontend(
-	hostsByService map[primitives.ServiceName]static.Hosts,
-	startWG *sync.WaitGroup,
-) {
+func (c *temporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
 	// steal these references from one frontend, it doesn't matter which
@@ -404,7 +398,7 @@ func (c *temporalImpl) startFrontend(
 	var historyRawClient resource.HistoryRawClient
 	var matchingRawClient resource.MatchingRawClient
 
-	for _, host := range hostsByService[serviceName].All {
+	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
@@ -421,7 +415,7 @@ func (c *temporalImpl) startFrontend(
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(func() resource.NamespaceLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(makeHostMap(hostsByService, serviceName, host)),
+			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -474,19 +468,12 @@ func (c *temporalImpl) startFrontend(
 	// We also set the history and matching clients here, stealing them from one of the frontends.
 	c.historyClient = historyRawClient
 	c.matchingClient = matchingRawClient
-
-	startWG.Done()
-	<-c.shutdownCh
-	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startHistory(
-	hostsByService map[primitives.ServiceName]static.Hosts,
-	startWG *sync.WaitGroup,
-) {
+func (c *temporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
 
-	for _, host := range hostsByService[serviceName].All {
+	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Invoke(c.setupMockAdminClient),
@@ -501,7 +488,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(makeHostMap(hostsByService, serviceName, host)),
+			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -539,19 +526,12 @@ func (c *temporalImpl) startHistory(
 			logger.Fatal("unable to start history service", tag.Error(err))
 		}
 	}
-
-	startWG.Done()
-	<-c.shutdownCh
-	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startMatching(
-	hostsByService map[primitives.ServiceName]static.Hosts,
-	startWG *sync.WaitGroup,
-) {
+func (c *temporalImpl) startMatching() {
 	serviceName := primitives.MatchingService
 
-	for _, host := range hostsByService[serviceName].All {
+	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Invoke(c.setupMockAdminClient),
@@ -565,7 +545,7 @@ func (c *temporalImpl) startMatching(
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(makeHostMap(hostsByService, serviceName, host)),
+			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -596,16 +576,9 @@ func (c *temporalImpl) startMatching(
 			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
 	}
-
-	startWG.Done()
-	<-c.shutdownCh
-	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorker(
-	hostsByService map[primitives.ServiceName]static.Hosts,
-	startWG *sync.WaitGroup,
-) {
+func (c *temporalImpl) startWorker() {
 	serviceName := primitives.WorkerService
 
 	clusterConfigCopy := cluster.Config{
@@ -619,7 +592,7 @@ func (c *temporalImpl) startWorker(
 		clusterConfigCopy.EnableGlobalNamespace = true
 	}
 
-	for _, host := range hostsByService[serviceName].All {
+	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		var workerService *worker.Service
 		app := fx.New(
@@ -635,7 +608,7 @@ func (c *temporalImpl) startWorker(
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(makeHostMap(hostsByService, serviceName, host)),
+			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -670,10 +643,6 @@ func (c *temporalImpl) startWorker(
 			logger.Fatal("unable to start worker service", tag.Error(err))
 		}
 	}
-
-	startWG.Done()
-	<-c.shutdownCh
-	c.shutdownWG.Done()
 }
 
 func (c *temporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
@@ -874,16 +843,4 @@ func sdkClientFactoryProvider(
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
-}
-
-func makeHostMap(
-	hostsByService map[primitives.ServiceName]static.Hosts,
-	serviceName primitives.ServiceName,
-	self string,
-) map[primitives.ServiceName]static.Hosts {
-	hostMap := maps.Clone(hostsByService)
-	hosts := hostMap[serviceName]
-	hosts.Self = self
-	hostMap[serviceName] = hosts
-	return hostMap
 }
