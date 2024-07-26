@@ -25,6 +25,7 @@
 package tasks
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -32,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/rand"
-	"golang.org/x/exp/slices"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"

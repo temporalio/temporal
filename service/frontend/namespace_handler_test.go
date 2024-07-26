@@ -26,12 +26,12 @@ package frontend
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/slices"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
