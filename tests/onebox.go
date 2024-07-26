@@ -91,10 +91,7 @@ type (
 		historyServices []*history.Service
 		workerService   *worker.Service
 
-		frontendApp *fx.App
-		matchingApp *fx.App
-		historyApps []*fx.App
-		workerApp   *fx.App
+		fxApps []*fx.App
 
 		frontendNamespaceRegistry namespace.Registry
 
@@ -268,28 +265,17 @@ func (c *temporalImpl) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	var errs error
+	c.shutdownWG.Add(len(c.fxApps))
 
-	if c.enableWorker() {
-		c.shutdownWG.Add(1)
-		errs = multierr.Combine(errs, c.workerApp.Stop(ctx))
+	var errs []error
+	for _, app := range c.fxApps {
+		errs = append(errs, app.Stop(ctx))
 	}
-
-	c.shutdownWG.Add(3)
-
-	if err := c.frontendApp.Stop(ctx); err != nil {
-		return err
-	}
-	for _, historyApp := range c.historyApps {
-		errs = multierr.Combine(errs, historyApp.Stop(ctx))
-	}
-
-	errs = multierr.Combine(errs, c.matchingApp.Stop(ctx))
 
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
 
-	return errs
+	return multierr.Combine(errs...)
 }
 
 func (c *temporalImpl) FrontendGRPCAddress() string {
@@ -427,7 +413,7 @@ func (c *temporalImpl) startFrontend(
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
 	var rpcFactory common.RPCFactory
-	feApp := fx.New(
+	app := fx.New(
 		fx.Supply(
 			persistenceConfig,
 			serviceName,
@@ -474,7 +460,7 @@ func (c *temporalImpl) startFrontend(
 		temporal.FxLogAdapter,
 		c.getFxOptionsForService(primitives.FrontendService),
 	)
-	err = feApp.Err()
+	err = app.Err()
 	if err != nil {
 		c.logger.Fatal("unable to construct frontend service", tag.Error(err))
 	}
@@ -487,7 +473,7 @@ func (c *temporalImpl) startFrontend(
 		}
 	}
 
-	c.frontendApp = feApp
+	c.fxApps = append(c.fxApps, app)
 	c.frontendService = frontendService
 	c.frontendNamespaceRegistry = namespaceRegistry
 	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
@@ -495,7 +481,7 @@ func (c *temporalImpl) startFrontend(
 	c.adminClient = NewAdminClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
-	if err := feApp.Start(context.Background()); err != nil {
+	if err := app.Start(context.Background()); err != nil {
 		c.logger.Fatal("unable to start frontend service", tag.Error(err))
 	}
 
@@ -597,7 +583,7 @@ func (c *temporalImpl) startHistory(
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
 
-		c.historyApps = append(c.historyApps, app)
+		c.fxApps = append(c.fxApps, app)
 		c.historyClient = NewHistoryClient(historyConnection)
 		c.historyServices = append(c.historyServices, historyService)
 
@@ -680,12 +666,12 @@ func (c *temporalImpl) startMatching(
 		}
 	}
 
+	c.fxApps = append(c.fxApps, app)
 	matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
 	if err != nil {
 		c.logger.Fatal("Failed to create connection for matching", tag.Error(err))
 	}
 	c.matchingClient = matchingservice.NewMatchingServiceClient(matchingConnection)
-	c.matchingApp = app
 	c.matchingService = matchingService
 	if err := app.Start(context.Background()); err != nil {
 		c.logger.Fatal("unable to start matching service", tag.Error(err))
@@ -771,7 +757,7 @@ func (c *temporalImpl) startWorker(
 		c.logger.Fatal("unable to start worker service", tag.Error(err))
 	}
 
-	c.workerApp = app
+	c.fxApps = append(c.fxApps, app)
 	c.workerService = workerService
 	if err := app.Start(context.Background()); err != nil {
 		c.logger.Fatal("unable to start worker service", tag.Error(err))
