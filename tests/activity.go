@@ -1155,7 +1155,7 @@ func (s *FunctionalSuite) TestActivityTaskCompleteForceCompletion() {
 
 func (s *FunctionalSuite) TestActivityTaskCompleteRejectCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.testCluster.GetHost().FrontendGRPCAddresses()[],
+		HostPort:  s.testCluster.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: s.namespace,
 	})
 	s.NoError(err)
