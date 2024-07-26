@@ -70,7 +70,12 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 	if err != nil {
 		return enumsspb.HEALTH_STATE_UNSPECIFIED, err
 	}
+
 	hosts := resolver.AvailableMembers()
+	if len(hosts) == 0 {
+		return enumsspb.HEALTH_STATE_SERVING, nil
+	}
+
 	receiveCh := make(chan enumsspb.HealthState, len(hosts))
 	for _, host := range hosts {
 		go func(hostAddress string) {
@@ -79,7 +84,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 				hostAddress,
 			)
 			if err != nil {
-				h.logger.Warn("Failed to ping deep health check", tag.Error(err), tag.ServerName(string(h.serviceName)))
+				h.logger.Warn("failed to ping deep health check", tag.Error(err), tag.ServerName(string(h.serviceName)))
 			}
 			receiveCh <- resp
 		}(host.GetAddress())
