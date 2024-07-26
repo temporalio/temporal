@@ -92,11 +92,11 @@ func (t *TestMapper) GetAlias(fieldName string, namespace string) (string, error
 	}
 	if namespace == "error-namespace" {
 		return "", serviceerror.NewInternal("mapper error")
-	} else if namespace == "test-namespace" || namespace == t.Namespace {
+	}
+	if namespace == "test-namespace" || namespace == t.Namespace {
 		if fieldName == "pass-through" {
 			return fieldName, nil
 		}
-
 		return "AliasFor" + fieldName, nil
 	}
 
