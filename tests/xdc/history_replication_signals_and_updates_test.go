@@ -193,7 +193,7 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 
 func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *tests.TestCluster) hrsuTestCluster {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  cluster.GetHost().FrontendGRPCAddress(),
+		HostPort:  cluster.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(t.s.logger),
 	})

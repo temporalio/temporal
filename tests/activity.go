@@ -1118,6 +1118,7 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 
 func (s *FunctionalSuite) TestActivityTaskCompleteForceCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		// TODO: do load-balancing
 		HostPort:  s.testCluster.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: s.namespace,
 	})
@@ -1155,6 +1156,7 @@ func (s *FunctionalSuite) TestActivityTaskCompleteForceCompletion() {
 
 func (s *FunctionalSuite) TestActivityTaskCompleteRejectCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		// TODO: do load-balancing
 		HostPort:  s.testCluster.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: s.namespace,
 	})
