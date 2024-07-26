@@ -375,6 +375,14 @@ func (c *temporalImpl) GetFrontendNamespaceRegistries() []namespace.Registry {
 	return c.frontendNamespaceRegistries
 }
 
+func (c *temporalImpl) setupMockAdminClient(clientBean client.Bean) {
+	if c.mockAdminClient != nil && clientBean != nil {
+		for serviceName, client := range c.mockAdminClient {
+			clientBean.SetRemoteAdminClient(serviceName, client)
+		}
+	}
+}
+
 func (c *temporalImpl) copyPersistenceConfig() config.Persistence {
 	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
@@ -399,9 +407,9 @@ func (c *temporalImpl) startFrontend(
 	var matchingRawClient resource.MatchingRawClient
 
 	for _, host := range hostsByService[serviceName].All {
-		var clientBean client.Bean
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
+			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
@@ -444,19 +452,13 @@ func (c *temporalImpl) startFrontend(
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&clientBean, &namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient),
+			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 		)
 		err := app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct frontend service", tag.Error(err))
-		}
-
-		if c.mockAdminClient != nil && clientBean != nil {
-			for serviceName, client := range c.mockAdminClient {
-				clientBean.SetRemoteAdminClient(serviceName, client)
-			}
 		}
 
 		c.fxApps = append(c.fxApps, app)
@@ -489,8 +491,8 @@ func (c *temporalImpl) startHistory(
 	serviceName := primitives.HistoryService
 
 	for _, host := range hostsByService[serviceName].All {
-		var clientBean client.Bean
 		app := fx.New(
+			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
@@ -531,19 +533,12 @@ func (c *temporalImpl) startHistory(
 			history.QueueModule,
 			history.Module,
 			replication.Module,
-			fx.Populate(&clientBean),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 		)
 		err := app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
-		}
-
-		if c.mockAdminClient != nil && clientBean != nil {
-			for serviceName, client := range c.mockAdminClient {
-				clientBean.SetRemoteAdminClient(serviceName, client)
-			}
 		}
 
 		c.fxApps = append(c.fxApps, app)
@@ -574,8 +569,8 @@ func (c *temporalImpl) startMatching(
 	serviceName := primitives.MatchingService
 
 	for _, host := range hostsByService[serviceName].All {
-		var clientBean client.Bean
 		app := fx.New(
+			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
@@ -608,18 +603,12 @@ func (c *temporalImpl) startMatching(
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			matching.Module,
-			fx.Populate(&clientBean),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 		)
 		err := app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to start matching service", tag.Error(err))
-		}
-		if c.mockAdminClient != nil && clientBean != nil {
-			for serviceName, client := range c.mockAdminClient {
-				clientBean.SetRemoteAdminClient(serviceName, client)
-			}
 		}
 
 		c.fxApps = append(c.fxApps, app)
@@ -658,8 +647,8 @@ func (c *temporalImpl) startWorker(
 
 	for _, host := range hostsByService[serviceName].All {
 		var workerService *worker.Service
-		var clientBean client.Bean
 		app := fx.New(
+			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
@@ -694,7 +683,7 @@ func (c *temporalImpl) startWorker(
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			worker.Module,
-			fx.Populate(&workerService, &clientBean),
+			fx.Populate(&workerService),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 		)
