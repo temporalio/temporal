@@ -287,9 +287,9 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ListNexusEndpointsRequest",
 		"DeleteNexusEndpointRequest":
 		// Always route these requests to the same matching node for all namespaces.
-		tq = fieldWithPath{path: "\"not-applicable\""}
+		tq = fieldWithPath{path: `"not-applicable"`}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
-		nsID = fieldWithPath{path: "\"not-applicable\""}
+		nsID = fieldWithPath{path: `"not-applicable"`}
 	default:
 		tqp = tryFindOneNestedField(t, "TaskQueuePartition", "request", 1)
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
