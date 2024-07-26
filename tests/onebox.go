@@ -393,11 +393,12 @@ func (c *temporalImpl) startFrontend(
 ) {
 	serviceName := primitives.FrontendService
 
-	// steal this reference from one frontend, it doesn't matter which
+	// steal these references from one frontend, it doesn't matter which
 	var rpcFactory common.RPCFactory
+	var historyRawClient resource.HistoryRawClient
+	var matchingRawClient resource.MatchingRawClient
 
 	for _, host := range hostsByService[serviceName].All {
-		var frontendService *frontend.Service
 		var clientBean client.Bean
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
@@ -443,7 +444,7 @@ func (c *temporalImpl) startFrontend(
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&frontendService, &clientBean, &namespaceRegistry, &rpcFactory),
+			fx.Populate(&clientBean, &namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 		)
@@ -472,6 +473,10 @@ func (c *temporalImpl) startFrontend(
 	c.adminClient = adminservice.NewAdminServiceClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
+	// We also set the history and matching clients here, stealing them from one of the frontends.
+	c.historyClient = historyRawClient
+	c.matchingClient = matchingRawClient
+
 	startWG.Done()
 	<-c.shutdownCh
 	c.shutdownWG.Done()
@@ -484,7 +489,6 @@ func (c *temporalImpl) startHistory(
 	serviceName := primitives.HistoryService
 
 	for _, host := range hostsByService[serviceName].All {
-		var historyService *history.Service
 		var clientBean client.Bean
 		app := fx.New(
 			fx.Supply(
@@ -527,7 +531,7 @@ func (c *temporalImpl) startHistory(
 			history.QueueModule,
 			history.Module,
 			replication.Module,
-			fx.Populate(&historyService, &clientBean),
+			fx.Populate(&clientBean),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 		)
@@ -570,7 +574,6 @@ func (c *temporalImpl) startMatching(
 	serviceName := primitives.MatchingService
 
 	for _, host := range hostsByService[serviceName].All {
-		var matchingService *matching.Service
 		var clientBean client.Bean
 		app := fx.New(
 			fx.Supply(
@@ -605,7 +608,7 @@ func (c *temporalImpl) startMatching(
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			matching.Module,
-			fx.Populate(&matchingService, &clientBean),
+			fx.Populate(&clientBean),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 		)
