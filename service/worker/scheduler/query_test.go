@@ -27,25 +27,37 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
 
+const (
+	testNamespace = namespace.Name("test-namespace")
+)
+
 func TestFieldNameAggInterceptor(t *testing.T) {
 	s := require.New(t)
-	fnInterceptor := newFieldNameAggInterceptor()
+	fnInterceptor := newFieldNameAggInterceptor(
+		testNamespace,
+		searchattribute.TestNameTypeMap,
+		searchattribute.NewTestMapperProvider(nil),
+	)
 
-	_, err := fnInterceptor.Name("foo", query.FieldNameFilter)
+	_, err := fnInterceptor.Name("CustomIntField", query.FieldNameFilter)
 	s.NoError(err)
-	s.Equal(map[string]bool{"foo": true}, fnInterceptor.names)
+	s.Equal(map[string]bool{"CustomIntField": true}, fnInterceptor.names)
 
-	_, err = fnInterceptor.Name("bar", query.FieldNameFilter)
+	_, err = fnInterceptor.Name("CustomKeywordField", query.FieldNameFilter)
 	s.NoError(err)
-	s.Equal(map[string]bool{"foo": true, "bar": true}, fnInterceptor.names)
+	s.Equal(map[string]bool{"CustomIntField": true, "CustomKeywordField": true}, fnInterceptor.names)
 
-	_, err = fnInterceptor.Name("foo", query.FieldNameFilter)
+	_, err = fnInterceptor.Name("CustomIntField", query.FieldNameFilter)
 	s.NoError(err)
-	s.Equal(map[string]bool{"foo": true, "bar": true}, fnInterceptor.names)
+	s.Equal(map[string]bool{"CustomIntField": true, "CustomKeywordField": true}, fnInterceptor.names)
+
+	_, err = fnInterceptor.Name("search-attribute-not-found", query.FieldNameFilter)
+	s.Error(err)
 }
 
 func TestGetQueryFields(t *testing.T) {
@@ -103,6 +115,12 @@ func TestGetQueryFields(t *testing.T) {
 			expectedFields: nil,
 			expectedErrMsg: "invalid query",
 		},
+		{
+			name:           "invalid custom search attribute",
+			input:          "Foo = 'bar'",
+			expectedFields: nil,
+			expectedErrMsg: "invalid search attribute: Foo",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -110,7 +128,12 @@ func TestGetQueryFields(t *testing.T) {
 			tc.name,
 			func(t *testing.T) {
 				s := require.New(t)
-				fields, err := getQueryFields(tc.input, searchattribute.TestNameTypeMap)
+				fields, err := getQueryFields(
+					testNamespace,
+					searchattribute.TestNameTypeMap,
+					searchattribute.NewTestMapperProvider(nil),
+					tc.input,
+				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
 					s.Equal(len(tc.expectedFields), len(fields))
@@ -173,6 +196,11 @@ func TestValidateVisibilityQuery(t *testing.T) {
 			input:          "CustomKeywordField = foo",
 			expectedErrMsg: "invalid query",
 		},
+		{
+			name:           "invalid custom search attribute",
+			input:          "Foo = foo",
+			expectedErrMsg: "invalid search attribute: Foo",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -180,7 +208,12 @@ func TestValidateVisibilityQuery(t *testing.T) {
 			tc.name,
 			func(t *testing.T) {
 				s := require.New(t)
-				err := ValidateVisibilityQuery(tc.input, searchattribute.TestNameTypeMap)
+				err := ValidateVisibilityQuery(
+					testNamespace,
+					searchattribute.TestNameTypeMap,
+					searchattribute.NewTestMapperProvider(nil),
+					tc.input,
+				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
 				} else {
