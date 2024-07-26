@@ -375,16 +375,8 @@ func (c *temporalImpl) GetFrontendNamespaceRegistries() []namespace.Registry {
 	return c.frontendNamespaceRegistries
 }
 
-func (c *temporalImpl) startFrontend(
-	hostsByService map[primitives.ServiceName]static.Hosts,
-	startWG *sync.WaitGroup,
-) {
-	serviceName := primitives.FrontendService
-
-	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
-	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for frontend", tag.Error(err))
-	}
+func (c *temporalImpl) copyPersistenceConfig() config.Persistence {
+	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
 		persistenceConfig.VisibilityStore = esDataStoreName
@@ -392,6 +384,14 @@ func (c *temporalImpl) startFrontend(
 			Elasticsearch: c.esConfig,
 		}
 	}
+	return persistenceConfig
+}
+
+func (c *temporalImpl) startFrontend(
+	hostsByService map[primitives.ServiceName]static.Hosts,
+	startWG *sync.WaitGroup,
+) {
+	serviceName := primitives.FrontendService
 
 	// steal this reference from one frontend, it doesn't matter which
 	var rpcFactory common.RPCFactory
@@ -402,7 +402,7 @@ func (c *temporalImpl) startFrontend(
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
-				persistenceConfig,
+				c.copyPersistenceConfig(),
 				serviceName,
 			),
 			fx.Provide(c.frontendConfigProvider),
@@ -447,7 +447,7 @@ func (c *temporalImpl) startFrontend(
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 		)
-		err = app.Err()
+		err := app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct frontend service", tag.Error(err))
 		}
@@ -483,24 +483,12 @@ func (c *temporalImpl) startHistory(
 ) {
 	serviceName := primitives.HistoryService
 
-	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
-	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
-	}
-	if c.esConfig != nil {
-		esDataStoreName := "es-visibility"
-		persistenceConfig.VisibilityStore = esDataStoreName
-		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-			Elasticsearch: c.esConfig,
-		}
-	}
-
 	for _, host := range hostsByService[serviceName].All {
 		var historyService *history.Service
 		var clientBean client.Bean
 		app := fx.New(
 			fx.Supply(
-				persistenceConfig,
+				c.copyPersistenceConfig(),
 				serviceName,
 			),
 			fx.Provide(c.GetMetricsHandler),
@@ -543,7 +531,7 @@ func (c *temporalImpl) startHistory(
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 		)
-		err = app.Err()
+		err := app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
 		}
@@ -581,24 +569,12 @@ func (c *temporalImpl) startMatching(
 ) {
 	serviceName := primitives.MatchingService
 
-	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
-	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
-	}
-	if c.esConfig != nil {
-		esDataStoreName := "es-visibility"
-		persistenceConfig.VisibilityStore = esDataStoreName
-		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-			Elasticsearch: c.esConfig,
-		}
-	}
-
 	for _, host := range hostsByService[serviceName].All {
 		var matchingService *matching.Service
 		var clientBean client.Bean
 		app := fx.New(
 			fx.Supply(
-				persistenceConfig,
+				c.copyPersistenceConfig(),
 				serviceName,
 			),
 			fx.Provide(c.GetMetricsHandler),
@@ -633,7 +609,7 @@ func (c *temporalImpl) startMatching(
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 		)
-		err = app.Err()
+		err := app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to start matching service", tag.Error(err))
 		}
@@ -666,18 +642,6 @@ func (c *temporalImpl) startWorker(
 ) {
 	serviceName := primitives.WorkerService
 
-	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
-	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
-	}
-	if c.esConfig != nil {
-		esDataStoreName := "es-visibility"
-		persistenceConfig.VisibilityStore = esDataStoreName
-		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-			Elasticsearch: c.esConfig,
-		}
-	}
-
 	clusterConfigCopy := cluster.Config{
 		EnableGlobalNamespace:    c.clusterMetadataConfig.EnableGlobalNamespace,
 		FailoverVersionIncrement: c.clusterMetadataConfig.FailoverVersionIncrement,
@@ -694,7 +658,7 @@ func (c *temporalImpl) startWorker(
 		var clientBean client.Bean
 		app := fx.New(
 			fx.Supply(
-				persistenceConfig,
+				c.copyPersistenceConfig(),
 				serviceName,
 			),
 			fx.Provide(c.GetMetricsHandler),
@@ -731,7 +695,7 @@ func (c *temporalImpl) startWorker(
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 		)
-		err = app.Err()
+		err := app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to start worker service", tag.Error(err))
 		}
@@ -911,26 +875,19 @@ func (c *temporalImpl) Authorize(
 	return authorization.Result{Decision: authorization.DecisionAllow}, nil
 }
 
-// copyPersistenceConfig makes a deepcopy of persistence config.
+// copyPersistenceConfig makes a deep copy of persistence config.
 // This is just a temp fix for the race condition of persistence config.
 // The race condition happens because all the services are using the same datastore map in the config.
 // Also all services will retry to modify the maxQPS field in the datastore during start up and use the modified maxQPS value to create a persistence factory.
-func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, error) {
-	copiedDataStores := make(map[string]config.DataStore)
-	for name, value := range pConfig.DataStores {
-		copiedDataStore := config.DataStore{}
-		encodedDataStore, err := json.Marshal(value)
-		if err != nil {
-			return pConfig, err
-		}
-
-		if err = json.Unmarshal(encodedDataStore, &copiedDataStore); err != nil {
-			return pConfig, err
-		}
-		copiedDataStores[name] = copiedDataStore
+func copyPersistenceConfig(cfg config.Persistence) config.Persistence {
+	var newCfg config.Persistence
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		panic("copy persistence config: " + err.Error())
+	} else if err = json.Unmarshal(b, &newCfg); err != nil {
+		panic("copy persistence config: " + err.Error())
 	}
-	pConfig.DataStores = copiedDataStores
-	return pConfig, nil
+	return newCfg
 }
 
 func sdkClientFactoryProvider(
