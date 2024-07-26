@@ -453,6 +453,17 @@ func (p *ackMgrImpl) ConvertTask(
 			task,
 			p.workflowCache,
 		)
+	case *tasks.SyncVersionedTransitionTask:
+		return convertSyncVersionedTransitionTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.shardContext.GetShardID(),
+			p.workflowCache,
+			p.eventBlobCache,
+			p.executionMgr,
+			p.logger,
+		)
 	default:
 		return nil, errUnknownReplicationTask
 	}

@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -64,7 +65,8 @@ const (
 
 var (
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrUnknownReplicationTask     = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrCorruptedHistoryEventBatch = errors.New("corrupted history event batch, empty events")
 )
 
 type (
@@ -417,7 +419,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 
 		if len(events) == 0 {
 			p.logger.Error("Empty events in a batch")
-			return nil, fmt.Errorf("corrupted history event batch, empty events")
+			return nil, ErrCorruptedHistoryEventBatch
 		}
 		firstEvent := events[0]
 		lastEvent := events[len(events)-1]

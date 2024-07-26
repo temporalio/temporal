@@ -511,7 +511,7 @@ func NewMutableStateInChain(
 	runID string,
 	startTime time.Time,
 	currentMutableState MutableState,
-) (MutableState, error) {
+) (*MutableStateImpl, error) {
 	newMutableState := NewMutableState(
 		shardContext,
 		eventsCache,
@@ -2030,6 +2030,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	// Workflow runTimeout is already set to the correct value in
 	// validateContinueAsNewWorkflowExecutionAttributes
+	// TODO: make this consistent with other fields, i.e. either always fallback
+	// to the value in the previous execution or always use the value in the command
+	// for other fields as well.
 	runTimeout := command.GetWorkflowRunTimeout()
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -4398,12 +4401,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		command,
 	)
 
-	firstRunID, err := ms.GetFirstRunID(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	newMutableState := NewMutableState(
+	newMutableState, err := NewMutableStateInChain(
 		ms.shard,
 		ms.shard.GetEventsCache(),
 		ms.logger,
@@ -4411,7 +4409,16 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		ms.executionInfo.WorkflowId,
 		newRunID,
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
+		ms,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	firstRunID, err := ms.GetFirstRunID(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,
@@ -4422,21 +4429,6 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		rootInfo,
 	); err != nil {
 		return nil, nil, err
-	}
-
-	// TODO: should this be in the "Apply" function? How does this work with replication?
-	oldCallbacks := callbacks.MachineCollection(ms.HSM())
-	newCallbacks := callbacks.MachineCollection(newMutableState.HSM())
-	for _, node := range oldCallbacks.List() {
-		cb, err := oldCallbacks.Data(node.Key.ID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if _, ok := cb.GetTrigger().GetVariant().(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); ok {
-			if _, err := newCallbacks.Add(node.Key.ID, cb); err != nil {
-				return nil, nil, err
-			}
-		}
 	}
 
 	if err = newMutableState.SetHistoryTree(

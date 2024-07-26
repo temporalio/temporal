@@ -110,6 +110,21 @@ func (c *retryableClient) CloseShard(
 	return resp, err
 }
 
+func (c *retryableClient) DeepHealthCheck(
+	ctx context.Context,
+	request *adminservice.DeepHealthCheckRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DeepHealthCheckResponse, error) {
+	var resp *adminservice.DeepHealthCheckResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeepHealthCheck(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,

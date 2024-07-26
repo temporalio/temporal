@@ -553,3 +553,10 @@ message ListQueuesResponse {
   repeated QueueInfo queues = 1;
   bytes next_page_token = 2;
 }
+
+message DeepHealthCheckRequest {
+}
+
+message DeepHealthCheckResponse {
+  temporal.server.api.enums.v1.HealthState state = 1;
+}

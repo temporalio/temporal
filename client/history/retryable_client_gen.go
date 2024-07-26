@@ -80,6 +80,21 @@ func (c *retryableClient) CompleteNexusOperation(
 	return resp, err
 }
 
+func (c *retryableClient) DeepHealthCheck(
+	ctx context.Context,
+	request *historyservice.DeepHealthCheckRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeepHealthCheckResponse, error) {
+	var resp *historyservice.DeepHealthCheckResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeepHealthCheck(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,

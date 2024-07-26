@@ -40,6 +40,7 @@ import "temporal/api/nexus/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/workflow/v1/message.proto";
@@ -943,4 +944,12 @@ message InvokeStateMachineMethodRequest {
 message InvokeStateMachineMethodResponse {
     // Output, in serialized bytes, of the method. Users specify a serializer during method registration for each state machine.
     bytes output = 1;
+}
+
+message DeepHealthCheckRequest {
+    string host_address = 1;
+}
+
+message DeepHealthCheckResponse {
+    temporal.server.api.enums.v1.HealthState state = 1;
 }

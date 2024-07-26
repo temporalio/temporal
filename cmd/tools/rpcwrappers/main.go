@@ -35,10 +35,11 @@ import (
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"golang.org/x/exp/slices"
 )
 
 type (
@@ -53,6 +54,10 @@ type (
 		path  string
 	}
 )
+
+func (f fieldWithPath) found() bool {
+	return f.path != ""
+}
 
 var (
 	services = []service{
@@ -105,6 +110,7 @@ var (
 		"client.history.DeleteDLQTasks":         true,
 		"client.history.ListQueues":             true,
 		"client.history.ListTasks":              true,
+		"client.history.DeepHealthCheck":        true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
@@ -180,6 +186,16 @@ func findOneNestedField(t reflect.Type, name string, path string, maxDepth int) 
 	return fields[0]
 }
 
+func tryFindOneNestedField(t reflect.Type, name string, path string, maxDepth int) fieldWithPath {
+	fields := findNestedField(t, name, path, maxDepth)
+	if len(fields) == 0 {
+		return fieldWithPath{}
+	} else if len(fields) > 1 {
+		panic(fmt.Sprintf("Found more than one %s in %s (%v)", name, t, fields))
+	}
+	return fields[0]
+}
+
 func makeGetHistoryClient(reqType reflect.Type) string {
 	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
@@ -235,7 +251,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	// this magically figures out how to get a MatchingServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
-	var nsID, tq, tqt fieldWithPath
+	var nsID, tqp, tq, tqt fieldWithPath
 
 	switch t.Name() {
 	case "GetBuildIdTaskQueueMappingRequest":
@@ -271,16 +287,29 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ListNexusEndpointsRequest",
 		"DeleteNexusEndpointRequest":
 		// Always route these requests to the same matching node for all namespaces.
-		tq = fieldWithPath{path: "\"not-applicable\""}
+		tq = fieldWithPath{path: `"not-applicable"`}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
 		nsID = fieldWithPath{path: `"not-applicable"`}
 	default:
+		tqp = tryFindOneNestedField(t, "TaskQueuePartition", "request", 1)
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = findOneNestedField(t, "TaskQueueType", "request", 2)
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	}
 
-	if nsID.path != "" && tq.path != "" && tqt.path != "" {
+	if !nsID.found() {
+		panic("I don't know how to get a client from a " + t.String())
+	}
+
+	if tqp.found() {
+		return fmt.Sprintf(
+			`p := tqid.PartitionFromPartitionProto(%s, %s)
+
+	client, err := c.getClientForTaskQueuePartition(p)`,
+			tqp.path, nsID.path)
+	}
+
+	if tq.found() && tqt.found() {
 		partitionMaker := fmt.Sprintf("tqid.PartitionFromProto(%s, %s, %s)", tq.path, nsID.path, tqt.path)
 		// Some task queue fields are full messages, some are just strings
 		isTaskQueueMessage := tq.field != nil && tq.field.Type == reflect.TypeOf((*taskqueue.TaskQueue)(nil))
@@ -293,6 +322,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)`,
 			partitionMaker)
 	}

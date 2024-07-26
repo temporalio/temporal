@@ -2455,6 +2455,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 				closeTransferTaskId = 10
 			}
 			workflowKey := definition.NewWorkflowKey(uuid.New(), uuid.New(), uuid.New())
+			mockMutableState.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				NamespaceId:         workflowKey.NamespaceID,
 				WorkflowId:          workflowKey.WorkflowID,
