@@ -85,7 +85,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 			return "", err
 		}
 		if mapper != nil {
-			fieldName, err = mapper.GetFieldName(name, ni.namespace.String())
+			fieldName, err = mapper.GetFieldName(name, ni.namespace.String(), ni.searchAttributesTypeMap)
 			if err != nil {
 				return "", err
 			}

@@ -464,7 +464,8 @@ func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
 	attributes *commonpb.SearchAttributes,
 	namespaceName namespace.Name,
 ) (*commonpb.SearchAttributes, error) {
-	sa, err := searchattribute.UnaliasFields(wh.saMapperProvider, attributes, namespaceName.String())
+	saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
+	sa, err := searchattribute.UnaliasFields(wh.saMapperProvider, attributes, saNameType, namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
@@ -3016,7 +3017,12 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	// Unalias startWorkflow search attributes only for validation.
 	// Keep aliases in the request, because the request will be
 	// sent back to frontend to start workflows, which will unalias at that point.
-	unaliasedStartWorkflowSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, startWorkflow.GetSearchAttributes(), namespaceName.String())
+	saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
+	unaliasedStartWorkflowSas, err := searchattribute.UnaliasFields(wh.saMapperProvider,
+		startWorkflow.GetSearchAttributes(),
+		saNameType,
+		namespaceName.String(),
+	)
 	if err != nil {
 		return err
 	}
@@ -3169,7 +3175,8 @@ func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
 	if ei == nil {
 		return nil
 	}
-	annotatedAttributes, err := wh.annotateSearchAttributes(ei.GetSearchAttributes(), nsName)
+	saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
+	annotatedAttributes, err := wh.annotateSearchAttributes(ei.GetSearchAttributes(), saNameType, nsName)
 	if err != nil {
 		return fmt.Errorf("annotate search attributes: %w", err)
 	}
@@ -3190,11 +3197,13 @@ func (wh *WorkflowHandler) getScheduledWorkflowExecutionInfoFrom(
 
 func (wh *WorkflowHandler) annotateSearchAttributes(
 	searchAttributes *commonpb.SearchAttributes,
+	nameTypeMap searchattribute.NameTypeMap,
 	nsName string,
 ) (*commonpb.SearchAttributes, error) {
 	unaliasedSearchAttrs, err := searchattribute.UnaliasFields(
 		wh.saMapperProvider,
 		searchAttributes,
+		nameTypeMap,
 		nsName,
 	)
 	if err != nil {

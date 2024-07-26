@@ -381,7 +381,11 @@ func (m *CustomSearchAttributesMapper) GetAlias(fieldName string, namespace stri
 	return alias, nil
 }
 
-func (m *CustomSearchAttributesMapper) GetFieldName(alias string, namespace string) (string, error) {
+func (m *CustomSearchAttributesMapper) GetFieldName(alias string, namespace string, typeMap NameTypeMap) (string, error) {
+	if alias == "ScheduleId" && !typeMap.IsDefined("scheduleId") {
+		return "temporal-sys-scheduler:" + alias, nil
+	}
+
 	fieldName, ok := m.aliasToField[alias]
 	if !ok {
 		return "", serviceerror.NewInvalidArgument(

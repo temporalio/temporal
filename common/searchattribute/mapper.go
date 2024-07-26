@@ -39,7 +39,7 @@ type (
 	// Returned error must be from the serviceerror package.
 	Mapper interface {
 		GetAlias(fieldName string, namespace string) (string, error)
-		GetFieldName(alias string, namespace string) (string, error)
+		GetFieldName(alias string, namespace string, typeMap NameTypeMap) (string, error)
 	}
 
 	noopMapper struct{}
@@ -74,7 +74,7 @@ func (m *noopMapper) GetAlias(fieldName string, _ string) (string, error) {
 	return fieldName, nil
 }
 
-func (m *noopMapper) GetFieldName(alias string, _ string) (string, error) {
+func (m *noopMapper) GetFieldName(alias string, _ string, typeMap NameTypeMap) (string, error) {
 	return alias, nil
 }
 
@@ -91,8 +91,8 @@ func (m *backCompMapper_v1_20) GetAlias(fieldName string, namespaceName string) 
 	return alias, nil
 }
 
-func (m *backCompMapper_v1_20) GetFieldName(alias string, namespaceName string) (string, error) {
-	fieldName, firstErr := m.mapper.GetFieldName(alias, namespaceName)
+func (m *backCompMapper_v1_20) GetFieldName(alias string, namespaceName string, typeMap NameTypeMap) (string, error) {
+	fieldName, firstErr := m.mapper.GetFieldName(alias, namespaceName, typeMap)
 	if firstErr != nil {
 		_, err := m.emptyStringNameTypeMap.getType(alias, customCategory)
 		if err != nil {
@@ -188,6 +188,7 @@ func AliasFields(
 func UnaliasFields(
 	mapperProvider MapperProvider,
 	searchAttributes *commonpb.SearchAttributes,
+	nameTypeMap NameTypeMap,
 	namespaceName string,
 ) (*commonpb.SearchAttributes, error) {
 	mapper, err := mapperProvider.GetMapper(namespace.Name(namespaceName))
@@ -206,8 +207,7 @@ func UnaliasFields(
 			newIndexedFields[saName] = saPayload
 			continue
 		}
-
-		fieldName, err := mapper.GetFieldName(saName, namespaceName)
+		fieldName, err := mapper.GetFieldName(saName, namespaceName, nameTypeMap)
 		if err != nil {
 			return nil, err
 		}

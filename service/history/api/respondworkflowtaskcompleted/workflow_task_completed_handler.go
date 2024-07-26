@@ -928,6 +928,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	unaliasedSas, err := searchattribute.UnaliasFields(
 		handler.searchAttributesMapperProvider,
 		attr.GetSearchAttributes(),
+		saNameType,
 		namespaceName.String(),
 	)
 	if err != nil {
@@ -1045,6 +1046,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 	unaliasedSas, err := searchattribute.UnaliasFields(
 		handler.searchAttributesMapperProvider,
 		attr.GetSearchAttributes(),
+		saTypeMap,
 		targetNamespace.String(),
 	)
 	if err != nil {
@@ -1192,6 +1194,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 	unaliasedSas, err := searchattribute.UnaliasFields(
 		handler.searchAttributesMapperProvider,
 		attr.GetSearchAttributes(),
+		saTypeMap,
 		namespace.String(),
 	)
 	if err != nil {
