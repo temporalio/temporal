@@ -238,7 +238,7 @@ func (s *xdcBaseSuite) failover(
 	namespace string,
 	targetCluster string,
 	targetFailoverVersion int64,
-	client tests.FrontendClient,
+	client workflowservice.WorkflowServiceClient,
 ) {
 	// wait for replication task propagation
 	time.Sleep(4 * time.Second)

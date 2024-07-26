@@ -365,7 +365,7 @@ func (s *NexusStateReplicationSuite) waitOperationRetry(
 	}, time.Second*10, time.Millisecond*100)
 }
 
-func (s *NexusStateReplicationSuite) pollWorkflowTask(ctx context.Context, client tests.FrontendClient, ns string) *workflowservice.PollWorkflowTaskQueueResponse {
+func (s *NexusStateReplicationSuite) pollWorkflowTask(ctx context.Context, client workflowservice.WorkflowServiceClient, ns string) *workflowservice.PollWorkflowTaskQueueResponse {
 	pollRes, err := client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: ns,
 		TaskQueue: &taskqueuepb.TaskQueue{

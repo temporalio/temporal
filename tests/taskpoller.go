@@ -58,7 +58,7 @@ type (
 
 	// TaskPoller is used in functional tests to poll workflow or activity task queues.
 	TaskPoller struct {
-		Client                       FrontendClient
+		Client                       workflowservice.WorkflowServiceClient
 		Namespace                    string
 		TaskQueue                    *taskqueuepb.TaskQueue
 		StickyTaskQueue              *taskqueuepb.TaskQueue

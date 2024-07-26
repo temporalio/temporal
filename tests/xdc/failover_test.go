@@ -3003,7 +3003,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	verifyHistory(workflowID, resp.GetRunId())
 }
 
-func (s *FunctionalClustersTestSuite) getHistory(client tests.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.WorkflowServiceClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(tests.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,

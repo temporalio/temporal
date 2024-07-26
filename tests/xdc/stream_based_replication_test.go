@@ -162,7 +162,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 }
 
 func (s *streamBasedReplicationTestSuite) importTestEvents(
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 	namespaceName namespace.Name,
 	namespaceId namespace.ID,
 	versions []int64,
@@ -294,7 +294,7 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 	runID string,
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 	verifyWorkflowNotExists bool,
 ) {
 	if len(eventBatches) == 0 {

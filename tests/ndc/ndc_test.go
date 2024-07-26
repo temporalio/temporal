@@ -2189,7 +2189,7 @@ func (s *NDCFunctionalTestSuite) applyEvents(
 	taskqueue string,
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 ) {
 	historyClient = history.NewRetryableClient(
 		historyClient,
@@ -2226,7 +2226,7 @@ func (s *NDCFunctionalTestSuite) importEvents(
 	taskqueue string,
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 	verifyWorkflowNotExists bool,
 ) {
 	if len(eventBatches) == 0 {

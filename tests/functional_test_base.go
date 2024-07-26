@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -70,8 +71,8 @@ type (
 		testClusterFactory     TestClusterFactory
 		testCluster            *TestCluster
 		testClusterConfig      *TestClusterConfig
-		client                 FrontendClient
-		adminClient            AdminClient
+		client                 workflowservice.WorkflowServiceClient
+		adminClient            adminservice.AdminServiceClient
 		operatorClient         operatorservice.OperatorServiceClient
 		httpAPIAddress         string
 		Logger                 log.Logger
@@ -143,8 +144,8 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 			s.Require().NoError(err)
 		}
 
-		s.client = NewFrontendClient(connection)
-		s.adminClient = NewAdminClient(connection)
+		s.client = workflowservice.NewWorkflowServiceClient(connection)
+		s.adminClient = adminservice.NewAdminServiceClient(connection)
 		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
 	} else {

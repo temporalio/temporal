@@ -35,7 +35,7 @@ import (
 )
 
 func (s *FunctionalSuite) TestUserMetadata() {
-	getDescribeWorkflowExecutionInfo := func(client FrontendClient, namespace string, workflowID string, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	getDescribeWorkflowExecutionInfo := func(client workflowservice.WorkflowServiceClient, namespace string, workflowID string, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{

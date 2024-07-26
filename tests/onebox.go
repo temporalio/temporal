@@ -457,8 +457,8 @@ func (c *temporalImpl) startFrontend(
 	c.frontendService = frontendService
 	c.frontendNamespaceRegistry = namespaceRegistry
 	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
-	c.frontendClient = NewFrontendClient(connection)
-	c.adminClient = NewAdminClient(connection)
+	c.frontendClient = workflowservice.NewWorkflowServiceClient(connection)
+	c.adminClient = adminservice.NewAdminServiceClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
 	if err := app.Start(context.Background()); err != nil {
@@ -564,7 +564,7 @@ func (c *temporalImpl) startHistory(
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.historyClient = NewHistoryClient(historyConnection)
+		c.historyClients = append(c.historyClients, historyservice.NewHistoryServiceClient(historyConnection))
 		c.historyServices = append(c.historyServices, historyService)
 
 		if err := app.Start(context.Background()); err != nil {
