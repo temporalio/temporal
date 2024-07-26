@@ -27,8 +27,9 @@ package membership
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
-	"sync/atomic"
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc/resolver"
@@ -36,45 +37,89 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-// GRPCResolver is an empty type used to enforce a dependency using fx so that we're guaranteed to have initialized
-// the global builder before we use it.
-type GRPCResolver struct{}
+const (
+	grpcResolverScheme = "membership"
+
+	// Go's URL parser allows ~ in hostnames
+	delim = "~"
+)
+
+type (
+	// grpcBuilder implements grpc/resolver.Builder. These should be one of these.
+	grpcBuilder struct {
+		resolvers sync.Map // pointer as string -> *GRPCResolver
+	}
+
+	// GRPCResolver and the resolvers map in grpcBuilder is used to pass a Monitor through a string url.
+	GRPCResolver struct {
+		monitor Monitor
+	}
+
+	// grpcResolver is a single instance of a resolver.
+	grpcResolver struct {
+		cc       resolver.ClientConn
+		r        ServiceResolver
+		notifyCh chan *ChangedEvent
+		wg       sync.WaitGroup
+	}
+)
 
 var (
 	GRPCResolverModule = fx.Options(
-		fx.Provide(initializeBuilder),
+		fx.Provide(newGRPCResolver),
 	)
 
 	globalGrpcBuilder grpcBuilder
 )
 
 func init() {
-	// This must be called in init to avoid race conditions. We don't have a Monitor yet, so we'll leave it nil and
-	// initialize it with fx.
+	// This must be called in init to avoid race conditions.
 	resolver.Register(&globalGrpcBuilder)
 }
 
-func initializeBuilder(monitor Monitor) GRPCResolver {
-	globalGrpcBuilder.monitor.Store(monitor)
-	return GRPCResolver{}
+// Most code should not use this, this is only exposed for code that has to recognize and use a
+// grpc membership url outside of grpc.
+func GetServiceResolverFromURL(u *url.URL) (ServiceResolver, error) {
+	return globalGrpcBuilder.getServiceResolver(u)
 }
 
-type grpcBuilder struct {
-	monitor atomic.Value // Monitor
+// This should only be used in unit tests. For normal code, use the *GRPCResolver provided by fx.
+// Monitor may be nil if it's not needed, but then note that GetServiceResolverFromURL will panic.
+func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) string {
+	return newGRPCResolver(monitor).MakeURL(service)
+}
+
+func newGRPCResolver(monitor Monitor) *GRPCResolver {
+	res := &GRPCResolver{monitor: monitor}
+	globalGrpcBuilder.resolvers.Store(fmt.Sprintf("%p", res), res)
+	return res
+}
+
+func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
+	return fmt.Sprintf("%s://%s%s%p", grpcResolverScheme, string(service), delim, g)
 }
 
 func (m *grpcBuilder) Scheme() string {
-	return ResolverScheme
+	return grpcResolverScheme
 }
 
-func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {
-	monitor, ok := m.monitor.Load().(Monitor)
+func (m *grpcBuilder) getServiceResolver(u *url.URL) (ServiceResolver, error) {
+	if u.Scheme != grpcResolverScheme {
+		return nil, errors.New("not a grpc resolver url")
+	}
+	service, ptr, found := strings.Cut(u.Host, delim)
+	if !found {
+		return nil, errors.New("invalid grpc resolver url")
+	}
+	v, ok := m.resolvers.Load(ptr)
 	if !ok {
 		return nil, errors.New("grpc resolver has not been initialized yet")
 	}
-	// See MakeURL: the service ends up as the "host" of the parsed URL
-	service := target.URL.Host
-	serviceResolver, err := monitor.GetResolver(primitives.ServiceName(service))
+	return v.(*GRPCResolver).monitor.GetResolver(primitives.ServiceName(service))
+}
+
+func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {
+	serviceResolver, err := m.getServiceResolver(&target.URL)
 	if err != nil {
 		return nil, err
 	}
@@ -87,13 +132,6 @@ func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ re
 		return nil, err
 	}
 	return grpcResolver, nil
-}
-
-type grpcResolver struct {
-	cc       resolver.ClientConn
-	r        ServiceResolver
-	notifyCh chan *ChangedEvent
-	wg       sync.WaitGroup
 }
 
 func (m *grpcResolver) start() error {
