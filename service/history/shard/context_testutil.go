@@ -30,6 +30,7 @@ import (
 	"sync"
 
 	"github.com/golang/mock/gomock"
+	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -210,6 +211,11 @@ func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 func (s *ContextTest) SetLoggers(l log.Logger) {
 	s.throttledLogger = l
 	s.contextTaggedLogger = l
+}
+
+// SetMetricsHandler sets  s.metricsHandler. Only used by tests.
+func (s *ContextTest) SetMetricsHandler(h metrics.Handler) {
+	s.metricsHandler = h
 }
 
 // SetHistoryClientForTesting sets history client. Only used by tests.
