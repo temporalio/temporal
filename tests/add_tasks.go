@@ -254,7 +254,7 @@ func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
 		ShardId: 0,
 	})
 	s.Error(err)
-	s.Contains(strings.ToLower(err.Error()), "shard id")
+	s.Contains(strings.ToLower(err.Error()), "invalid shardid")
 }
 
 func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
