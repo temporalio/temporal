@@ -38,11 +38,16 @@ func (d *MemoryClient) GetRawValue(name Key) (any, bool) {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 	v, ok := d.overrides[name]
+	if value, ok := v.([]ConstrainedValue); ok {
+		return value[0].Value, true
+	}
 	return v, ok
 }
 
 func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
-	if v, ok := d.GetRawValue(name); ok {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+	if v, ok := d.overrides[name]; ok {
 		if value, ok := v.([]ConstrainedValue); ok {
 			return value
 		}
