@@ -168,7 +168,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, f
 }
 
 func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope), metrics.NamespaceTag(key.NamespaceID.String()))
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
@@ -180,7 +180,7 @@ func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 }
 
 func (e *CacheImpl) DeleteEvent(key EventKey) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope), metrics.NamespaceTag(key.NamespaceID.String()))
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
@@ -197,7 +197,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
 
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope), metrics.NamespaceTag(key.NamespaceID.String()))
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
