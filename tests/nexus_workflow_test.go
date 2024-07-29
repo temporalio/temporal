@@ -779,12 +779,12 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionErrors() {
 		require.Equal(t, 1, len(snap["nexus_completion_request_preprocess_errors"]))
 	})
 
-	//s.T().Run("NamespaceNotFound", func(t *testing.T) {
-	//	publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path("namespace-doesnt-exist")
-	//	res, snap := s.sendNexusCompletionRequest(ctx, t, publicCallbackUrl, completion, "")
-	//	require.Equal(t, http.StatusNotFound, res.StatusCode)
-	//	require.Equal(t, 1, len(snap["nexus_completion_request_preprocess_errors"]))
-	//})
+	s.T().Run("NamespaceNotFound", func(t *testing.T) {
+		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path("namespace-doesnt-exist")
+		res, snap := s.sendNexusCompletionRequest(ctx, t, publicCallbackUrl, completion, "")
+		require.Equal(t, http.StatusNotFound, res.StatusCode)
+		require.Equal(t, 1, len(snap["nexus_completion_request_preprocess_errors"]))
+	})
 
 	s.T().Run("InvalidToken", func(t *testing.T) {
 		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
@@ -794,27 +794,27 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionErrors() {
 		require.Equal(t, 1, len(snap["nexus_completion_requests"]))
 		require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_bad_request"})
 	})
-	//
-	//s.T().Run("InvalidClientVersion", func(t *testing.T) {
-	//	publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
-	//	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
-	//	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
-	//
-	//	req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
-	//	require.NoError(t, err)
-	//	req.Header.Set("User-Agent", "Nexus-go-sdk/v99.0.0")
-	//
-	//	res, err := http.DefaultClient.Do(req)
-	//	require.NoError(t, err)
-	//	_, err = io.ReadAll(res.Body)
-	//	require.NoError(t, err)
-	//	defer res.Body.Close()
-	//
-	//	snap := capture.Snapshot()
-	//	require.Equal(t, http.StatusBadRequest, res.StatusCode)
-	//	require.Equal(t, 1, len(snap["nexus_completion_requests"]))
-	//	require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "unsupported_client"})
-	//})
+
+	s.T().Run("InvalidClientVersion", func(t *testing.T) {
+		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
+		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
+		req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
+		require.NoError(t, err)
+		req.Header.Set("User-Agent", "Nexus-go-sdk/v99.0.0")
+
+		res, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_, err = io.ReadAll(res.Body)
+		require.NoError(t, err)
+		defer res.Body.Close()
+
+		snap := capture.Snapshot()
+		require.Equal(t, http.StatusBadRequest, res.StatusCode)
+		require.Equal(t, 1, len(snap["nexus_completion_requests"]))
+		require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "unsupported_client"})
+	})
 }
 
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionAuthErrors() {
