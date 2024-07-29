@@ -275,7 +275,7 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 	)
 	DeadlockInterval = NewGlobalDurationSetting(
 		"system.deadlock.Interval",
-		30*time.Second,
+		60*time.Second,
 		`How often the detector checks each root.`,
 	)
 	DeadlockMaxWorkersPerRoot = NewGlobalIntSetting(
@@ -743,6 +743,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		"frontend.maskInternalErrorDetails",
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
+	)
+	HistoryHostErrorPercentage = NewGlobalFloatSetting(
+		"frontend.historyHostErrorPercentage",
+		0.5,
+		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -2191,6 +2196,16 @@ that task will be sent to DLQ.`,
 		"history.enableWorkflowIdReuseStartTimeValidation",
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
+	)
+	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
+		"history.healthPersistenceLatencyFailure",
+		500,
+		"History service health check on persistence average latency (millisecond) threshold",
+	)
+	HealthPersistenceErrorRatio = NewGlobalFloatSetting(
+		"history.healthPersistenceErrorRatio",
+		0.90,
+		"History service health check on persistence error ratio",
 	)
 
 	// keys for worker

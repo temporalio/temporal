@@ -101,6 +101,7 @@ var (
 		"/temporal.server.api.historyservice.v1.HistoryService/ListTasks":                              1,
 		"/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation":                 1,
 		"/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod":               1,
+		"/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck":                        1,
 	}
 
 	APIPrioritiesOrdered = []int{OperatorPriority, 1}

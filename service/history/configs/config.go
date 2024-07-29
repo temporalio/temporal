@@ -356,6 +356,9 @@ type Config struct {
 
 	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFnWithNamespaceFilter[schedulerhsm.Tweakables]
+
+	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
+	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -648,6 +651,9 @@ func NewConfig(
 
 		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
 		HsmSchedulerTweakables:      schedulerhsm.CurrentTweakables.Get(dc),
+
+		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
+		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
 	}
 
 	return cfg

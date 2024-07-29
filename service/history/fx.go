@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -120,6 +121,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceExecutionManager:  args.PersistenceExecutionManager,
 		persistenceShardManager:      args.PersistenceShardManager,
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
+		persistenceHealthSignal:      args.PersistenceHealthSignal,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
@@ -194,7 +196,8 @@ func RateLimitInterceptorProvider(
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{
-			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+			healthpb.Health_Check_FullMethodName:                         0, // exclude health check requests from rate limiting.
+			historyservice.HistoryService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
 		},
 	)
 }
