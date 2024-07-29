@@ -319,8 +319,9 @@ func NewMutableState(
 	s.executionState = &persistencespb.WorkflowExecutionState{
 		RunId: runID,
 
-		State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		State:     enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime: timestamppb.New(startTime),
 	}
 	s.approximateSize += s.executionState.Size()
 
