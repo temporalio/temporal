@@ -202,7 +202,7 @@ func (s *FunctionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
 func (s *FunctionalSuite) TestEagerWorkflowStart_TerminateDuplicate() {
 
 	// reset reuse minimal interval to allow workflow termination
-	s.overrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.overrideDynamicConfig(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,

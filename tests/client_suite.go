@@ -128,6 +128,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
 	s.overrideDynamicConfig(
+		s.T(),
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
