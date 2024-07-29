@@ -220,7 +220,7 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.HistoryCacheGetOrCreateCurrentScope),
 		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
-		metrics.NamespaceTag(namespaceID.String()),
+		metrics.NamespaceIDTag(namespaceID.String()),
 	)
 	metrics.CacheRequests.With(handler).Record(1)
 	start := time.Now()
@@ -263,7 +263,7 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.HistoryCacheGetOrCreateScope),
 		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
-		metrics.NamespaceTag(namespaceID.String()),
+		metrics.NamespaceIDTag(namespaceID.String()),
 	)
 	metrics.CacheRequests.With(handler).Record(1)
 	start := time.Now()

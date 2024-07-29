@@ -486,7 +486,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		release1(nil)
 		snapshot := capture.Snapshot()
 		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
-		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"]
+		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"]
 	}, 150*time.Millisecond, 100*time.Millisecond)
 
 	capture = metricsHandler.StartCapture()
@@ -502,7 +502,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		release2(nil)
 		snapshot := capture.Snapshot()
 		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 200*time.Millisecond)
-		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace"]
+		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"]
 	}, 300*time.Millisecond, 200*time.Millisecond)
 }
 
