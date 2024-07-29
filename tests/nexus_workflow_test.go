@@ -772,7 +772,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionErrors() {
 	s.NoError(err)
 
 	s.T().Run("ConfigDisabled", func(t *testing.T) {
-		s.testCluster.host.OverrideDCValue(t, dynamicconfig.EnableNexus, false)
+		s.overrideDynamicConfig(dynamicconfig.EnableNexus, false)
 		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
 		res, snap := s.sendNexusCompletionRequest(ctx, t, publicCallbackUrl, completion, "")
 		require.Equal(t, http.StatusNotFound, res.StatusCode)
@@ -843,8 +843,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionAuthErrors() {
 
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionInternalAuth() {
 	// Set URL template with invalid host
-	s.testCluster.host.OverrideDCValue(
-		s.T(),
+	s.overrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,
 		"http://INTERNAL/namespaces/{{.NamespaceName}}/nexus/callback")
 

@@ -247,12 +247,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		spanExporters:                    params.SpanExporters,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
-		dcClient:                         dynamicconfig.NewMemoryDCClient(dynamicconfig.NewNoopClient()),
+		dcClient:                         dynamicconfig.NewMemoryClient(dynamicconfig.StaticClient(staticOverrides)),
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
-	}
-	for k, v := range staticOverrides {
-		impl.overrideDynamicConfigByKey(t, k, v)
 	}
 	for k, v := range params.DynamicConfigOverrides {
 		impl.overrideDynamicConfigByKey(t, k, v)
@@ -1032,16 +1029,11 @@ func sdkClientFactoryProvider(
 }
 
 func (c *temporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) {
-	constrainedValues := c.dcClient.GetValue(name)
-	existed := len(constrainedValues) == 0
+	existingValues := c.dcClient.GetValue(name)
 	c.dcClient.OverrideValueByKey(name, value)
 	t.Cleanup(func() {
-		if existed {
-			var values []any
-			for _, v := range constrainedValues {
-				values = append(values, v)
-			}
-			c.dcClient.OverrideValueByKey(name, values)
+		if len(existingValues) > 0 {
+			c.dcClient.OverrideValueByKey(name, existingValues)
 		} else {
 			c.dcClient.RemoveOverrideByKey(name)
 		}

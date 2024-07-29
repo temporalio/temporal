@@ -29,32 +29,35 @@ import (
 )
 
 type MemoryClient struct {
-	sync.RWMutex
+	lock      sync.RWMutex
 	overrides map[Key]any
 	fallback  Client
 }
 
 func (d *MemoryClient) GetRawValue(name Key) (any, bool) {
-	d.RLock()
-	defer d.RUnlock()
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	v, ok := d.overrides[name]
 	return v, ok
 }
 
 func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
-	if val, ok := d.GetRawValue(name); ok {
-		return []ConstrainedValue{{Value: val}}
+	if v, ok := d.GetRawValue(name); ok {
+		if value, ok := v.([]ConstrainedValue); ok {
+			return value
+		}
+		return []ConstrainedValue{{Value: v}}
 	}
 	return d.fallback.GetValue(name)
 }
 
 func (d *MemoryClient) OverrideValue(setting GenericSetting, value any) {
-	d.overrides[setting.Key()] = value
+	d.OverrideValueByKey(setting.Key(), value)
 }
 
 func (d *MemoryClient) OverrideValueByKey(name Key, value any) {
-	d.Lock()
-	defer d.Unlock()
+	d.lock.Lock()
+	defer d.lock.Unlock()
 	d.overrides[name] = value
 }
 
@@ -63,13 +66,13 @@ func (d *MemoryClient) RemoveOverride(setting GenericSetting) {
 }
 
 func (d *MemoryClient) RemoveOverrideByKey(name Key) {
-	d.Lock()
-	defer d.Unlock()
+	d.lock.Lock()
+	defer d.lock.Unlock()
 	delete(d.overrides, name)
 }
 
-// NewMemoryDCClient - returns a memory based dynamic config client
-func NewMemoryDCClient(fallback Client) *MemoryClient {
+// NewMemoryClient - returns a memory based dynamic config client
+func NewMemoryClient(fallback Client) *MemoryClient {
 	return &MemoryClient{
 		overrides: make(map[Key]any),
 		fallback:  fallback,
