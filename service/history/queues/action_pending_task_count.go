@@ -25,9 +25,8 @@
 package queues
 
 import (
+	"slices"
 	"time"
-
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/common/collection"
 )

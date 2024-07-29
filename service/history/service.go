@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log"
@@ -92,6 +93,8 @@ func (s *Service) Start() {
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+
+	reflection.Register(s.server)
 
 	go func() {
 		s.logger.Info("Starting to serve on history listener")

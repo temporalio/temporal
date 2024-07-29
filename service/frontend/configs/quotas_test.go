@@ -26,13 +26,13 @@ package configs
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"

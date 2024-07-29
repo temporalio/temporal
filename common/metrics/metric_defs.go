@@ -524,9 +524,11 @@ const (
 	SyncActivityTaskScope = "SyncActivityTask"
 	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
 	SyncWorkflowStateTaskScope = "SyncWorkflowStateTask"
-	// SyncWatermarkScope is the scope used by closed workflow task replication processing
 	// SyncHSMTaskScope is the scope used by sync HSM replication task
-	SyncHSMTaskScope   = "SyncHSMTask"
+	SyncHSMTaskScope = "SyncHSMTask"
+	// BackfillHistoryEventsTaskScope is the scope used by backfill history events replication processing
+	BackfillHistoryEventsTaskScope = "BackfillHistoryEventsTask"
+	// SyncWatermarkScope is the scope used by closed workflow task replication processing
 	SyncWatermarkScope = "SyncWatermark"
 	// NoopTaskScope is the scope used by noop task
 	NoopTaskScope = "NoopTask"
@@ -732,6 +734,9 @@ var (
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
+	FinalizerItemsCompleted    = NewCounterDef("finalizer_items_completed")
+	FinalizerItemsUnfinished   = NewCounterDef("finalizer_items_unfinished")
+	FinalizerLatency           = NewTimerDef("finalizer_latency")
 	TaskRequests               = NewCounterDef(
 		"task_requests",
 		WithDescription("The number of history tasks processed."),
@@ -911,6 +916,7 @@ var (
 	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
 	ReplicationStreamError                = NewCounterDef("replication_stream_error")
 	ReplicationServiceError               = NewCounterDef("replication_service_error")
+	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
@@ -965,8 +971,8 @@ var (
 	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
 	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")
 	CircuitBreakerExecutableBlocked         = NewCounterDef("circuit_breaker_executable_blocked")
-	DynamicWorkerPoolSchedulerBufferSize    = NewCounterDef("dynamic_worker_pool_scheduler_buffer_size")
-	DynamicWorkerPoolSchedulerActiveWorkers = NewCounterDef("dynamic_worker_pool_scheduler_active_workers")
+	DynamicWorkerPoolSchedulerBufferSize    = NewGaugeDef("dynamic_worker_pool_scheduler_buffer_size")
+	DynamicWorkerPoolSchedulerActiveWorkers = NewGaugeDef("dynamic_worker_pool_scheduler_active_workers")
 	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
@@ -1111,6 +1117,10 @@ var (
 	ScheduleActionSuccess = NewCounterDef(
 		"schedule_action_success",
 		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
+	)
+	ScheduleActionAttempt = NewCounterDef(
+		"schedule_action_attempt",
+		WithDescription("The number of schedule actions attempts"),
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",

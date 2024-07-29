@@ -29,12 +29,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -576,41 +573,13 @@ func lockCurrentExecutionIfExists(
 func createOrUpdateCurrentExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
+	row sqlplugin.CurrentExecutionsRow,
 	createMode p.CreateWorkflowMode,
-	shardID int32,
-	namespaceID primitives.UUID,
-	workflowID string,
-	runID primitives.UUID,
-	state enumsspb.WorkflowExecutionState,
-	status enumspb.WorkflowExecutionStatus,
-	createRequestID string,
-	lastWriteVersion int64,
 ) error {
-
-	row := sqlplugin.CurrentExecutionsRow{
-		ShardID:          shardID,
-		NamespaceID:      namespaceID,
-		WorkflowID:       workflowID,
-		RunID:            runID,
-		CreateRequestID:  createRequestID,
-		State:            state,
-		Status:           status,
-		LastWriteVersion: lastWriteVersion,
-	}
 
 	switch createMode {
 	case p.CreateWorkflowModeUpdateCurrent:
-		if err := updateCurrentExecution(ctx,
-			tx,
-			shardID,
-			namespaceID,
-			workflowID,
-			runID,
-			createRequestID,
-			state,
-			status,
-			row.LastWriteVersion,
-		); err != nil {
+		if err := updateCurrentExecution(ctx, tx, row); err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("createOrUpdateCurrentExecution failed. Failed to reuse workflow ID. Error: %v", err))
 		}
 	case p.CreateWorkflowModeBrandNew:
@@ -963,15 +932,8 @@ func assertNotCurrentExecution(
 func assertRunIDAndUpdateCurrentExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	shardID int32,
-	namespaceID primitives.UUID,
-	workflowID string,
-	newRunID primitives.UUID,
+	row sqlplugin.CurrentExecutionsRow,
 	previousRunID primitives.UUID,
-	createRequestID string,
-	state enumsspb.WorkflowExecutionState,
-	status enumspb.WorkflowExecutionStatus,
-	lastWriteVersion int64,
 ) error {
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
@@ -993,25 +955,15 @@ func assertRunIDAndUpdateCurrentExecution(
 	}
 	if err := assertCurrentExecution(ctx,
 		tx,
-		shardID,
-		namespaceID,
-		workflowID,
+		row.ShardID,
+		row.NamespaceID,
+		row.WorkflowID,
 		assertFn,
 	); err != nil {
 		return err
 	}
 
-	return updateCurrentExecution(ctx,
-		tx,
-		shardID,
-		namespaceID,
-		workflowID,
-		newRunID,
-		createRequestID,
-		state,
-		status,
-		lastWriteVersion,
-	)
+	return updateCurrentExecution(ctx, tx, row)
 }
 
 func assertCurrentExecution(
@@ -1055,26 +1007,10 @@ func assertRunIDMismatch(requestRunID primitives.UUID, currentRow *sqlplugin.Cur
 func updateCurrentExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	shardID int32,
-	namespaceID primitives.UUID,
-	workflowID string,
-	runID primitives.UUID,
-	createRequestID string,
-	state enumsspb.WorkflowExecutionState,
-	status enumspb.WorkflowExecutionStatus,
-	lastWriteVersion int64,
+	row sqlplugin.CurrentExecutionsRow,
 ) error {
 
-	result, err := tx.UpdateCurrentExecutions(ctx, &sqlplugin.CurrentExecutionsRow{
-		ShardID:          shardID,
-		NamespaceID:      namespaceID,
-		WorkflowID:       workflowID,
-		RunID:            runID,
-		CreateRequestID:  createRequestID,
-		State:            state,
-		Status:           status,
-		LastWriteVersion: lastWriteVersion,
-	})
+	result, err := tx.UpdateCurrentExecutions(ctx, &row)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("updateCurrentExecution failed. Error: %v", err))
 	}

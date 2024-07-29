@@ -743,6 +743,13 @@ func (e *historyEngineImpl) SyncHSM(
 	return e.nDCHSMStateReplicator.SyncHSMState(ctx, request)
 }
 
+func (e *historyEngineImpl) BackfillHistoryEvents(
+	ctx context.Context,
+	request *shard.BackfillHistoryEventsRequest,
+) error {
+	return e.nDCHistoryReplicator.BackfillHistoryEvents(ctx, request)
+}
+
 // ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
 func (e *historyEngineImpl) ReplicateWorkflowState(
 	ctx context.Context,
@@ -870,6 +877,10 @@ func (e *historyEngineImpl) GetReplicationTasksIter(
 	maxExclusiveTaskID int64,
 ) (collection.Iterator[tasks.Task], error) {
 	return e.replicationAckMgr.GetReplicationTasksIter(ctx, pollingCluster, minInclusiveTaskID, maxExclusiveTaskID)
+}
+
+func (e *historyEngineImpl) GetMaxReplicationTaskInfo() (int64, time.Time) {
+	return e.replicationAckMgr.GetMaxTaskInfo()
 }
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(

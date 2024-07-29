@@ -72,7 +72,6 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -251,8 +250,8 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 		{
 			Name: s.String() + "-shard-lock",
 			// rwLock may be held for the duration of renewing shard rangeID, which are called with a
-			// timeout of shardIOTimeout. add a few more seconds for reliability.
-			Timeout: s.config.ShardIOTimeout() + 5*time.Second,
+			// timeout of shardIOTimeout.
+			Timeout: s.config.ShardIOTimeout() + 30*time.Second,
 			Ping: func() []pingable.Pingable {
 				// call rwLock.Lock directly to bypass metrics since this isn't a real request
 				s.rwLock.Lock()
@@ -266,7 +265,7 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 			Name: s.String() + "-io-semaphore",
 			// ioSemaphore is for the duration of a persistence op which has a persistence connection timeout
 			// of 10 sec.
-			Timeout: 10 * time.Second,
+			Timeout: 10*time.Second + 30*time.Second,
 			Ping: func() []pingable.Pingable {
 				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
 				s.ioSemaphore.Release(1)
@@ -1495,9 +1494,7 @@ func (s *ContextImpl) FinishStop() {
 
 	// Run finalizer to cleanup any of the shard's associated resources that are registered.
 	if s.finalizer != nil {
-		s.finalizer.Run(
-			goro.NewAdaptivePool(cclock.NewRealTimeSource(), 5, 15, 10*time.Millisecond, 10),
-			s.config.ShardFinalizerTimeout())
+		s.finalizer.Run(s.config.ShardFinalizerTimeout())
 	}
 }
 
@@ -2103,7 +2100,7 @@ func newContext(
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
-		finalizer:               finalizer.New(taggedLogger),
+		finalizer:               finalizer.New(taggedLogger, metricsHandler),
 		contextTaggedLogger:     taggedLogger,
 		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:           factory,
