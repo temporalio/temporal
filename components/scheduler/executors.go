@@ -100,7 +100,11 @@ func RegisterExecutor(
 		exec.executeSchedulerWaitTask); err != nil {
 		return err
 	}
-	return hsm.RegisterImmediateExecutor(registry, exec.executeSchedulerRunTask)
+	if err := hsm.RegisterImmediateExecutor(registry, exec.executeSchedulerRunTask); err != nil {
+		return err
+	}
+
+	return hsm.RegisterRemoteMethod[*persistencepb.HSMCallbackArg, any, hsm.RemoteMethod[*persistencepb.HSMCallbackArg, any]](registry, exec.processWorkflowCompletionEvent)
 }
 
 func (e taskExecutor) executeSchedulerWaitTask(
@@ -627,9 +631,11 @@ func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hs
 			s.Args.State.ConflictToken++
 		}
 
-		// TODO(Tianyu): Check that this is the last completion result since we no longer poll in order
-		// handle last completion/failure
 		if r != nil {
+			// Even though workflows may complete out of order, it is still ok to overwrite with the result of a workflow
+			// that started earlier but completed later -- this is because last result is mostly for debug and visibility
+			// purposes. Note that this behavior is slightly different from the old code that polls in order and will
+			// always show results in the order they start
 			s.Args.State.LastCompletionResult = r
 			s.Args.State.ContinuedFailure = nil
 		} else if f != nil {
