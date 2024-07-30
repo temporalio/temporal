@@ -89,9 +89,6 @@ const (
 )
 
 const (
-	// Schedules are implemented by a workflow whose ID is this string plus the schedule ID.
-	WorkflowIDPrefix = "temporal-sys-scheduler:"
-
 	// This is an example of a timestamp that's appended to the workflow
 	// id, used for validation in the frontend.
 	AppendedTimestampForValidation = "-2009-11-10T23:00:00Z"

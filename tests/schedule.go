@@ -27,6 +27,7 @@ package tests
 import (
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/primitives"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -689,7 +690,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 	s.NoError(err)
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 5*time.Second, 200*time.Millisecond)
 
-	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: primitives.WorkflowIDPrefix + sid})
 	expectedHistory := `1 WorkflowExecutionStarted`
 	s.EqualHistoryEvents(expectedHistory, events)
 
@@ -839,7 +840,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	s.NoError(err)
 	s.EqualValues(1, len(describeResp.Info.RunningWorkflows))
 
-	events1 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	events1 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: primitives.WorkflowIDPrefix + sid})
 	expectedHistory := `
  1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -864,7 +865,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	// now it has timed out, but the scheduler hasn't noticed yet. we can prove it by checking
 	// its history.
 
-	events2 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	events2 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: primitives.WorkflowIDPrefix + sid})
 	s.EqualHistoryEvents(expectedHistory, events2)
 
 	// when we describe we'll force a refresh and see it timed out
@@ -877,7 +878,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 
 	// check scheduler has gotten the refresh and done some stuff. signal is sent without waiting so we need to wait.
 	s.Eventually(func() bool {
-		events3 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+		events3 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: primitives.WorkflowIDPrefix + sid})
 		return len(events3) > len(events2)
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -1090,7 +1091,7 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 
 	// there should be only four side effects for 13 runs, and only two mentioning "Next"
 	// (cache refills)
-	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: primitives.WorkflowIDPrefix + sid})
 	var sideEffects, nextTimeSideEffects int
 	for _, e := range events {
 		if marker := e.GetMarkerRecordedEventAttributes(); marker.GetMarkerName() == "SideEffect" {

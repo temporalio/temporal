@@ -35,6 +35,7 @@ import (
 const (
 	NamespaceID           = "NamespaceId"
 	WorkflowID            = "WorkflowId"
+	ScheduleID            = "ScheduleId"
 	RunID                 = "RunId"
 	WorkflowType          = "WorkflowType"
 	StartTime             = "StartTime"

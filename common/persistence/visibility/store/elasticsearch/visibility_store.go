@@ -757,7 +757,7 @@ func (s *VisibilityStore) convertQuery(
 	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider)
 	queryConverter := NewQueryConverter(
 		nameInterceptor,
-		NewValuesInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider),
+		NewValuesInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider, nameInterceptor),
 		saTypeMap,
 	)
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)

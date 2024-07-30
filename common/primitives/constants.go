@@ -50,3 +50,8 @@ const (
 const (
 	DefaultHistoryMaxAutoResetPoints = 20
 )
+
+const (
+	// WorkflowIDPrefix ID prefix for schedules that are implemented by a workflow
+	WorkflowIDPrefix = "temporal-sys-scheduler:"
+)

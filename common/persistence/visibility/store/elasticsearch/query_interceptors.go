@@ -25,7 +25,9 @@
 package elasticsearch
 
 import (
+	"go.temporal.io/server/common/primitives"
 	"strconv"
+	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -36,17 +38,24 @@ import (
 )
 
 type (
+	fieldTransformation struct {
+		originalField string
+		newField      string
+	}
+
 	nameInterceptor struct {
 		namespace                      namespace.Name
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		seenNamespaceDivision          bool
+		fieldTransformations           map[string]fieldTransformation
 	}
 
 	valuesInterceptor struct {
 		namespace                      namespace.Name
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
+		nameInterceptor                *nameInterceptor
 	}
 )
 
@@ -66,26 +75,46 @@ func NewValuesInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	nameInterceptor *nameInterceptor,
 ) *valuesInterceptor {
 	return &valuesInterceptor{
 		namespace:                      namespaceName,
 		searchAttributesTypeMap:        saTypeMap,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		nameInterceptor:                nameInterceptor,
 	}
 }
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
-	if searchattribute.IsMappable(name) {
+	if strings.EqualFold(fieldName, searchattribute.ScheduleID) {
+		if _, err := ni.searchAttributesTypeMap.GetType(fieldName); err != nil {
+			// Not a custom SA, so convert to WorkflowId
+			fieldName = searchattribute.WorkflowID
+		}
+	}
+
+	if searchattribute.IsMappable(fieldName) {
 		mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
 		if err != nil {
 			return "", err
 		}
 		if mapper != nil {
-			fieldName, err = mapper.GetFieldName(name, ni.namespace.String())
+			fieldName, err = mapper.GetFieldName(fieldName, ni.namespace.String())
 			if err != nil {
 				return "", err
 			}
+		}
+	}
+
+	// Store the transformation if the field name has changed
+	if fieldName != name {
+		if ni.fieldTransformations == nil {
+			ni.fieldTransformations = make(map[string]fieldTransformation)
+		}
+		ni.fieldTransformations[fieldName] = fieldTransformation{
+			originalField: name,
+			newField:      fieldName,
 		}
 	}
 
@@ -145,6 +174,15 @@ func (vi *valuesInterceptor) Values(fieldName string, values ...interface{}) ([]
 		if err != nil {
 			return nil, err
 		}
+
+		// Check for field transformations
+		if transformation, exists := vi.nameInterceptor.fieldTransformations[fieldName]; exists {
+			value, err = vi.applyFieldTransformation(transformation, value)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		value, err = validateValueType(name, value, fieldType)
 		if err != nil {
 			return nil, err
@@ -152,6 +190,16 @@ func (vi *valuesInterceptor) Values(fieldName string, values ...interface{}) ([]
 		result = append(result, value)
 	}
 	return result, nil
+}
+
+func (vi *valuesInterceptor) applyFieldTransformation(transformation fieldTransformation, value interface{}) (interface{}, error) {
+	switch {
+	case transformation.originalField == searchattribute.ScheduleID && transformation.newField == searchattribute.WorkflowID:
+		if strValue, ok := value.(string); ok {
+			return primitives.WorkflowIDPrefix + strValue, nil
+		}
+	}
+	return value, nil
 }
 
 func parseSystemSearchAttributeValues(name string, value any) (any, error) {
