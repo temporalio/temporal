@@ -349,8 +349,10 @@ func NewMutableStateFromDB(
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
-	// startTime will be overridden by DB record
 	startTime := time.Time{}
+	if dbRecord.ExecutionState.StartTime != nil {
+		startTime = dbRecord.ExecutionState.StartTime.AsTime()
+	}
 	mutableState := NewMutableState(
 		shard,
 		eventsCache,
