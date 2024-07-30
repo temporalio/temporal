@@ -198,6 +198,9 @@ type Config struct {
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// Health check
+	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -308,6 +311,8 @@ func NewConfig(
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
+
+		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
 	}
 }
 

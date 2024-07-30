@@ -47,6 +47,7 @@ const (
 
 	instance       = "instance"
 	namespace      = "namespace"
+	namespaceID    = "namespace_id"
 	namespaceState = "namespace_state"
 	sourceCluster  = "source_cluster"
 	targetCluster  = "target_cluster"
@@ -109,6 +110,17 @@ func NamespaceTag(value string) Tag {
 	}
 	return &tagImpl{
 		key:   namespace,
+		value: value,
+	}
+}
+
+// NamespaceIDTag returns a new namespace ID tag.
+func NamespaceIDTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{
+		key:   namespaceID,
 		value: value,
 	}
 }

@@ -127,6 +127,7 @@ type (
 		saManager                  searchattribute.Manager
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
+		historyHealthChecker       HealthChecker
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -182,6 +183,20 @@ func NewAdminHandler(
 		args.Logger,
 	)
 
+	historyHealthChecker := NewHealthChecker(
+		primitives.HistoryService,
+		args.MembershipMonitor,
+		args.Config.HistoryHostErrorPercentage,
+		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
+			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
+			if err != nil {
+				return enumsspb.HEALTH_STATE_UNSPECIFIED, err
+			}
+			return resp.GetState(), nil
+		},
+		args.Logger,
+	)
+
 	return &AdminHandler{
 		logger:                args.Logger,
 		status:                common.DaemonStatusInitialized,
@@ -212,6 +227,7 @@ func NewAdminHandler(
 		saManager:                  args.SaManager,
 		clusterMetadata:            args.ClusterMetadata,
 		healthServer:               args.HealthServer,
+		historyHealthChecker:       historyHealthChecker,
 		taskCategoryRegistry:       args.CategoryRegistry,
 	}
 }
@@ -240,12 +256,13 @@ func (adh *AdminHandler) Stop() {
 
 func (adh *AdminHandler) DeepHealthCheck(
 	ctx context.Context,
-	request *adminservice.DeepHealthCheckRequest,
+	_ *adminservice.DeepHealthCheckRequest,
 ) (_ *adminservice.DeepHealthCheckResponse, retError error) {
-
-	// TODO: health check to history
-
-	return nil, serviceerror.NewUnimplemented("This API is not ready")
+	healthStatus, err := adh.historyHealthChecker.Check(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.

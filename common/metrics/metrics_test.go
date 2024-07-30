@@ -26,12 +26,12 @@ package metrics_test
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 var (
