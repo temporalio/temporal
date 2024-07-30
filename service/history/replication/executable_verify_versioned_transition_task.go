@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/workflow"
@@ -139,19 +138,14 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 
 	// case 1: versioned transition up to date on current mutable state
 	if err == nil {
-		if ms.GetNextEventID() < e.taskAttr.NextEventId {
-			return serviceerror.NewDataLoss(fmt.Sprintf("Workflow event missed. NamespaceId: %v, workflowId: %v, runId: %v, nextEventId: %v, versionedTransition: %v",
-				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId, e.ReplicationTask().VersionedTransition))
+		if ms.GetNextEventID() <= e.taskAttr.LastVersionHistoryItem.GetEventId() {
+			return serviceerror.NewDataLoss(fmt.Sprintf("Workflow event missed. NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
+				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.LastVersionHistoryItem.EventId, e.ReplicationTask().VersionedTransition))
 		}
 		return e.verifyNewRunExist(ctx)
 	}
 
-	nextEventId := e.taskAttr.NextEventId
-	eventVersion := e.ReplicationTask().VersionedTransition.NamespaceFailoverVersion
-	_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(ms.GetExecutionInfo().VersionHistories, &historyspb.VersionHistoryItem{
-		EventId: nextEventId - 1,
-		Version: eventVersion,
-	})
+	_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(ms.GetExecutionInfo().VersionHistories, e.taskAttr.LastVersionHistoryItem)
 	// case 2: events are to date on non-current branch
 	if err == nil {
 		return e.verifyNewRunExist(ctx)
@@ -197,6 +191,9 @@ func (e *ExecutableVerifyVersionedTransitionTask) getRetryReplication(ctx contex
 	if err != nil {
 		return err
 	}
+	// TODO: Current resend logic made an assumption that current task has the last batch of events,
+	// so the resend start/end events are exclusive/exclusive. We need to re-visit this logic when working on
+	// sync state task and consolidate the event resend logic
 	return serviceerrors.NewRetryReplication(
 		"retry replication",
 		e.NamespaceID,
@@ -204,8 +201,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) getRetryReplication(ctx contex
 		e.RunID,
 		item.EventId,
 		item.Version,
-		e.taskAttr.NextEventId,
-		e.ReplicationTask().VersionedTransition.NamespaceFailoverVersion,
+		e.taskAttr.LastVersionHistoryItem.GetEventId()+1,
+		e.taskAttr.LastVersionHistoryItem.GetVersion(),
 	)
 }
 

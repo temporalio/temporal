@@ -219,7 +219,6 @@ message VerifyVersionedTransitionTaskAttributes {
     string namespace_id = 1;
     string workflow_id = 2;
     string run_id = 3;
-    int64 next_event_id = 4;
+    temporal.server.api.history.v1.VersionHistoryItem last_version_history_item = 4;
     string new_run_id = 5;
-    temporal.server.api.history.v1.VersionHistoryItem last_version_history_item = 6;
 }

@@ -336,11 +336,11 @@ func convertSyncVersionedTransitionTask(
 				SourceTaskId: taskInfo.TaskID,
 				Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
 					VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-						NamespaceId: taskInfo.NamespaceID,
-						WorkflowId:  taskInfo.WorkflowID,
-						RunId:       taskInfo.RunID,
-						NewRunId:    taskInfo.NewRunID,
-						NextEventId: taskInfo.NextEventID,
+						NamespaceId:            taskInfo.NamespaceID,
+						WorkflowId:             taskInfo.WorkflowID,
+						RunId:                  taskInfo.RunID,
+						NewRunId:               taskInfo.NewRunID,
+						LastVersionHistoryItem: taskInfo.LastVersionHistoryItem,
 					},
 				},
 				VersionedTransition: taskInfo.VersionedTransition,
