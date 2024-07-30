@@ -26,6 +26,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historypb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
@@ -42,7 +43,8 @@ type (
 		NextEventID  int64
 		NewRunID     string
 
-		VersionedTransition *persistencespb.VersionedTransition
+		VersionedTransition    *persistencespb.VersionedTransition
+		LastVersionHistoryItem *historypb.VersionHistoryItem
 	}
 )
 

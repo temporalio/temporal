@@ -29,8 +29,9 @@ import (
 
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/workflow"
 
@@ -117,25 +118,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
-	)
-	if err != nil {
-		return err
-	}
-
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return err
-	}
-	mu, err := engine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceId: e.NamespaceID,
-		Execution: &common.WorkflowExecution{
-			WorkflowId: e.WorkflowID,
-			RunId:      e.RunID,
-		},
-	})
+	ms, err := e.getMutableState(ctx, e.RunID)
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:
@@ -150,41 +133,32 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			return err
 		}
 	}
-	verifyNewRun := func() error {
-		if len(e.taskAttr.NewRunId) == 0 {
-			return nil
-		}
-		_, err = engine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			NamespaceId: e.NamespaceID,
-			Execution: &common.WorkflowExecution{
-				WorkflowId: e.WorkflowID,
-				RunId:      e.taskAttr.NewRunId,
-			},
-		})
-		switch err.(type) {
-		case nil:
-			return nil
-		case *serviceerror.NotFound:
-			return serviceerror.NewDataLoss(fmt.Sprintf("workflow new run not found. NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
-				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId))
-		default:
-			return err
-		}
-	}
 
-	transitionHistory := mu.TransitionHistory
+	transitionHistory := ms.GetExecutionInfo().TransitionHistory
 	err = workflow.TransitionHistoryStalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
 
-	if err == nil { // versioned transition up to date on current mutable state
-		if mu.NextEventId < e.taskAttr.NextEventId {
+	// case 1: versioned transition up to date on current mutable state
+	if err == nil {
+		if ms.GetNextEventID() < e.taskAttr.NextEventId {
 			return serviceerror.NewDataLoss(fmt.Sprintf("Workflow event missed. NamespaceId: %v, workflowId: %v, runId: %v, nextEventId: %v, versionedTransition: %v",
 				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId, e.ReplicationTask().VersionedTransition))
 		}
-		return verifyNewRun()
+		return e.verifyNewRunExist(ctx)
 	}
-	// versioned transition is not up-to-date
+
+	nextEventId := e.taskAttr.NextEventId
+	eventVersion := e.ReplicationTask().VersionedTransition.NamespaceFailoverVersion
+	_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(ms.GetExecutionInfo().VersionHistories, &historyspb.VersionHistoryItem{
+		EventId: nextEventId - 1,
+		Version: eventVersion,
+	})
+	// case 2: events are to date on non-current branch
+	if err == nil {
+		return e.verifyNewRunExist(ctx)
+	}
+
+	// case 3: verify task has newer versioned transition, need to sync state
 	if workflow.CompareVersionedTransition(e.ReplicationTask().VersionedTransition, transitionHistory[len(transitionHistory)-1]) > 0 {
-		// maybe emit metrics? this may indicate task lose
 		return serviceerrors.NewSyncState(
 			"mutable state not up to date",
 			e.NamespaceID,
@@ -193,28 +167,84 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.ReplicationTask().VersionedTransition,
 		)
 	}
+	// case 4: verify task is an older versioned transition, and events are not up-to-date, resend the events
+	return e.getRetryReplication(ctx, ms)
+}
 
-	// mutable state has new branch and new versioned transition, verify the old branch has up-to-date info
-	nextEventId := e.taskAttr.NextEventId
-	if nextEventId <= 1 {
-		return verifyNewRun()
+func (e *ExecutableVerifyVersionedTransitionTask) getRetryReplication(ctx context.Context, ms workflow.MutableState) error {
+	sourceAdmin, err := e.ClientBean.GetRemoteAdminClient(e.SourceClusterName())
+	if err != nil {
+		return err
 	}
-	eventVersion := e.ReplicationTask().VersionedTransition.NamespaceFailoverVersion
-	_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(mu.VersionHistories, &historyspb.VersionHistoryItem{
-		EventId: nextEventId - 1,
-		Version: eventVersion,
+	res, err := sourceAdmin.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: e.NamespaceID,
+		Execution: &common.WorkflowExecution{
+			WorkflowId: e.WorkflowID,
+			RunId:      e.RunID,
+		},
 	})
 	if err != nil {
-		// maybe emit metrics? this may indicate task lose
-		return serviceerrors.NewSyncState(
-			"non current branch, event not up to date",
-			e.NamespaceID,
-			e.WorkflowID,
-			e.RunID,
-			e.ReplicationTask().VersionedTransition,
-		)
+		return err
 	}
-	return verifyNewRun()
+	// calculate the events diff for resend
+	sourceHistories := res.DatabaseMutableState.GetExecutionInfo().VersionHistories
+	index, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(sourceHistories, e.taskAttr.LastVersionHistoryItem)
+	if err != nil {
+		return err
+	}
+	sourceHistory := sourceHistories.Histories[index]
+	item, _, err := versionhistory.FindLCAVersionHistoryItemAndIndex(ms.GetExecutionInfo().VersionHistories, sourceHistory)
+	if err != nil {
+		return err
+	}
+	return serviceerrors.NewRetryReplication(
+		"retry replication",
+		e.NamespaceID,
+		e.WorkflowID,
+		e.RunID,
+		item.EventId,
+		item.Version,
+		e.taskAttr.NextEventId,
+		e.ReplicationTask().VersionedTransition.NamespaceFailoverVersion,
+	)
+}
+
+func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.Context) error {
+	if len(e.taskAttr.NewRunId) == 0 {
+		return nil
+	}
+	_, err := e.getMutableState(ctx, e.taskAttr.NewRunId)
+	switch err.(type) {
+	case nil:
+		return nil
+	case *serviceerror.NotFound:
+		return serviceerror.NewDataLoss(fmt.Sprintf("workflow new run not found. NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
+			e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId))
+	default:
+		return err
+	}
+}
+
+func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Context, runId string) (_ workflow.MutableState, retError error) {
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(e.NamespaceID),
+		e.WorkflowID,
+	)
+	wfContext, release, err := e.WorkflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		shardContext,
+		namespace.ID(e.NamespaceID),
+		&common.WorkflowExecution{
+			WorkflowId: e.WorkflowID,
+			RunId:      runId,
+		},
+		locks.PriorityLow,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { release(retError) }()
+	return wfContext.LoadMutableState(ctx, shardContext)
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
@@ -236,6 +266,26 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 			taskErr,
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {
+			return err
+		}
+		return e.Execute()
+	case *serviceerrors.RetryReplication:
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
+		if nsError != nil {
+			return err
+		}
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		defer cancel()
+
+		if doContinue, resendErr := e.Resend(
+			ctx,
+			e.ExecutableTask.SourceClusterName(),
+			taskErr,
+			ResendAttempt,
+		); resendErr != nil || !doContinue {
 			return err
 		}
 		return e.Execute()

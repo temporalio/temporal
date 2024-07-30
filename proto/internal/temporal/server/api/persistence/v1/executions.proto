@@ -311,6 +311,7 @@ message ReplicationTaskInfo {
     string new_run_id = 17;
     temporal.server.api.enums.v1.TaskPriority priority = 18;
     VersionedTransition versioned_transition = 19;
+    temporal.server.api.history.v1.VersionHistoryItem last_version_history_item = 20;
 }
 
 // visibility_task_data column

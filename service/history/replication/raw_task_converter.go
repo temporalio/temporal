@@ -340,7 +340,7 @@ func convertSyncVersionedTransitionTask(
 						WorkflowId:  taskInfo.WorkflowID,
 						RunId:       taskInfo.RunID,
 						NewRunId:    taskInfo.NewRunID,
-						NextEventId: mutableState.GetNextEventID(),
+						NextEventId: taskInfo.NextEventID,
 					},
 				},
 				VersionedTransition: taskInfo.VersionedTransition,
