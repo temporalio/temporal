@@ -319,8 +319,9 @@ func NewMutableState(
 	s.executionState = &persistencespb.WorkflowExecutionState{
 		RunId: runID,
 
-		State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		State:     enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime: timestamppb.New(startTime),
 	}
 	s.approximateSize += s.executionState.Size()
 
@@ -348,8 +349,10 @@ func NewMutableStateFromDB(
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
-	// startTime will be overridden by DB record
 	startTime := time.Time{}
+	if dbRecord.ExecutionState.StartTime != nil {
+		startTime = dbRecord.ExecutionState.StartTime.AsTime()
+	}
 	mutableState := NewMutableState(
 		shard,
 		eventsCache,
