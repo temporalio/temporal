@@ -532,7 +532,7 @@ Loop:
 			continue Loop
 		}
 		operation := func() error {
-			task, err := s.taskConverter.Convert(item)
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID)
 			if err != nil {
 				return err
 			}

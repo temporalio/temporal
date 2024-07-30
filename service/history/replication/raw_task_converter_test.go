@@ -72,6 +72,7 @@ type (
 		controller       *gomock.Controller
 		shardContext     *shard.ContextTest
 		workflowCache    *wcache.MockCache
+		progressCache    *MockProgressCache
 		executionManager *persistence.MockExecutionManager
 		logger           log.Logger
 
@@ -142,6 +143,7 @@ func (s *rawTaskConverterSuite) SetupTest() {
 		config,
 	)
 	s.workflowCache = wcache.NewMockCache(s.controller)
+	s.progressCache = NewMockProgressCache(s.controller)
 	s.executionManager = s.shardContext.Resource.ExecutionMgr
 	s.logger = s.shardContext.GetLogger()
 
@@ -1062,6 +1064,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
 func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill() {
 	ctx := context.Background()
 	shardID := int32(12)
+	clusterID := int32(3)
 	firstEventID := int64(999)
 	nextEventID := int64(1911)
 	version := int64(288)
@@ -1122,7 +1125,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories:  versionHistories,
 		TransitionHistory: transitionHistory,
-	}).Times(2)
+	}).Times(3)
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   versionHistory.BranchToken,
 		MinEventID:    firstEventID,
@@ -1182,8 +1185,18 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		HistoryEventBlobs: []*commonpb.DataBlob{newEvents},
 		NextPageToken:     nil,
 	}, nil)
+	s.progressCache.EXPECT().Get(
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.runID,
+		},
+		clusterID,
+		versionHistory,
+	).Return(nil, false)
 
-	result, err := convertSyncVersionedTransitionTask(ctx, s.shardContext, task, shardID, s.workflowCache, nil, s.executionManager, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, s.shardContext, task, shardID, s.workflowCache, nil, s.progressCache, clusterID, s.executionManager, s.logger)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK,
