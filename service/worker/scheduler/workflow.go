@@ -29,10 +29,10 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -112,7 +112,8 @@ const (
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
 
-	rateLimitedErrorType = "RateLimited"
+	rateLimitedErrorType            = "RateLimited"
+	workflowExecutionAlreadyStarted = "serviceerror.WorkflowExecutionAlreadyStarted"
 
 	nextTimeCacheV1Size = 10
 
@@ -1217,7 +1218,6 @@ func (s *scheduler) processBuffer() bool {
 
 	isRunning := len(s.Info.RunningWorkflows) > 0
 	tryAgain := false
-
 	action := ProcessBuffer(s.State.BufferedStarts, isRunning, s.resolveOverlapPolicy)
 
 	s.State.BufferedStarts = action.NewBuffer
@@ -1236,13 +1236,13 @@ func (s *scheduler) processBuffer() bool {
 		}
 		result, err := s.startWorkflow(start, req)
 		metricsWithTag := s.metrics.WithTags(map[string]string{
-			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
+			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow,
+		})
 		if err != nil {
 			s.logger.Error("Failed to start workflow", "error", err)
-			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
-			// TODO: we could put this back in the buffer and retry (after a delay) up until
-			// the catchup window. of course, it's unlikely that this workflow would be making
-			// progress while we're unable to start a new one, so maybe it's not that valuable.
+			if !isUserScheduleError(err) {
+				metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
+			}
 			tryAgain = true
 			continue
 		}
@@ -1344,7 +1344,6 @@ func (s *scheduler) startWorkflow(
 	for {
 		var res schedspb.StartWorkflowResponse
 		err := workflow.ExecuteLocalActivity(ctx, s.a.StartWorkflow, req).Get(s.ctx, &res)
-
 		var appErr *temporal.ApplicationError
 		var details rateLimitedDetails
 		if errors.As(err, &appErr) && appErr.Type() == rateLimitedErrorType && appErr.Details(&details) == nil {
@@ -1543,4 +1542,12 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, s
 	s.compileSpec()
 	s.State.LastProcessedTime = timestamppb.New(now)
 	return s.getListInfo(false)
+}
+
+func isUserScheduleError(err error) bool {
+	var appError *temporal.ApplicationError
+	if errors.As(err, &appError) && appError.Type() == workflowExecutionAlreadyStarted {
+		return true
+	}
+	return false
 }
