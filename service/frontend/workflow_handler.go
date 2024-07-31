@@ -4528,7 +4528,9 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 					),
 				)
 			}
-
+		case *commonpb.Callback_Internal_:
+			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
+			continue
 		default:
 			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
 		}

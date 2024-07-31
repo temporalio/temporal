@@ -35,12 +35,12 @@ func (p ProcessWorkflowCompletionEvent) Name() string {
 	return "scheduler.process_workflow_completion_event"
 }
 
-func (p ProcessWorkflowCompletionEvent) SerializeOutput(t any) ([]byte, error) {
+func (p ProcessWorkflowCompletionEvent) SerializeOutput(_ any) ([]byte, error) {
 	// ProcessWorkflowCompletionEvent outputs void and therefore does nothing for serialization.
 	return nil, nil
 }
 
-func (p ProcessWorkflowCompletionEvent) DeserializeInput(data []byte) (*persistencepb.HSMCallbackArg, error) {
+func (p ProcessWorkflowCompletionEvent) DeserializeInput(data []byte) (any, error) {
 	output := &persistencepb.HSMCallbackArg{}
 	if err := proto.Unmarshal(data, output); err != nil {
 		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
