@@ -600,7 +600,7 @@ func (e taskExecutor) cancelWorkflow(
 }
 
 func getWorkflowResult(input *persistencepb.HSMCallbackArg) (*commonpb.Payloads, *failure.Failure, error) {
-	switch input.LastEvent.EventType {
+	switch input.LastEvent.EventType { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		if attrs := input.LastEvent.GetWorkflowExecutionCompletedEventAttributes(); attrs == nil {
 			return nil, nil, errNoAttrs
@@ -622,6 +622,16 @@ func getWorkflowResult(input *persistencepb.HSMCallbackArg) (*commonpb.Payloads,
 	return nil, nil, nil
 }
 
+func (e taskExecutor) logPauseOnError(s *Scheduler, lastEventType enumspb.EventType, id string, f *failure.Failure) {
+	if lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED {
+		s.Args.Schedule.State.Notes = fmt.Sprintf("paused due to workflow failure: %s: %s", id, f.Message)
+		e.Logger.Debug("paused due to workflow failure", tag.WorkflowID(id), tag.NewStringTag("message", f.Message))
+	} else if lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
+		s.Args.Schedule.State.Notes = fmt.Sprintf("paused due to workflow timeout: %s", id)
+		e.Logger.Debug("paused due to workflow timeout", tag.WorkflowID(id))
+	}
+}
+
 func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hsm.Environment, ref hsm.Ref, input any) (any, error) {
 	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
 	// This is a workaround and should be
@@ -631,13 +641,14 @@ func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hs
 	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
 	smRef.MachineLastUpdateVersionedTransition = nil
 	smRef.MachineTransitionCount = 0
-
-	castInput := input.(*persistencepb.HSMCallbackArg) //nolint:revive
-	return nil, env.Access(ctx, hsm.Ref{
+	newRef := hsm.Ref{
 		WorkflowKey:     ref.WorkflowKey,
 		StateMachineRef: smRef,
 		TaskID:          0,
-	}, hsm.AccessWrite, func(node *hsm.Node) error {
+	}
+
+	castInput := input.(*persistencepb.HSMCallbackArg) //nolint:revive
+	return nil, env.Access(ctx, newRef, hsm.AccessWrite, func(node *hsm.Node) error {
 		s, err := hsm.MachineData[*Scheduler](node)
 		if err != nil {
 			return err
@@ -645,6 +656,7 @@ func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hs
 
 		tweakables := e.Config.Tweakables(s.Args.State.Namespace)
 		match := func(ex *commonpb.WorkflowExecution) bool { return ex.WorkflowId == castInput.WorkflowId }
+
 		if idx := slices.IndexFunc(s.Args.Info.RunningWorkflows, match); idx >= 0 {
 			s.Args.Info.RunningWorkflows = slices.Delete(s.Args.Info.RunningWorkflows, idx, idx+1)
 		} else {
@@ -667,14 +679,7 @@ func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hs
 		pauseOnFailure := s.Args.Schedule.Policies.PauseOnFailure && failedStatus && !s.Args.Schedule.State.Paused
 		if pauseOnFailure {
 			s.Args.Schedule.State.Paused = true
-			if lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED {
-
-				s.Args.Schedule.State.Notes = fmt.Sprintf("paused due to workflow failure: %s: %s", castInput.WorkflowId, f.Message)
-				e.Logger.Debug("paused due to workflow failure", tag.WorkflowID(castInput.WorkflowId), tag.NewStringTag("message", f.Message))
-			} else if lastEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
-				s.Args.Schedule.State.Notes = fmt.Sprintf("paused due to workflow timeout: %s", castInput.WorkflowId)
-				e.Logger.Debug("paused due to workflow timeout", tag.WorkflowID(castInput.WorkflowId))
-			}
+			e.logPauseOnError(s, lastEventType, castInput.WorkflowId, f)
 			s.Args.State.ConflictToken++
 		}
 
