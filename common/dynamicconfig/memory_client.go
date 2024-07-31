@@ -34,11 +34,6 @@ type MemoryClient struct {
 }
 
 func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
-	value := d.GetOverriddenValue(name)
-	return value
-}
-
-func (d *MemoryClient) GetOverriddenValue(name Key) []ConstrainedValue {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 	if v, ok := d.overrides[name]; ok {
