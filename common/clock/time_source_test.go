@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
 	"go.temporal.io/server/common/clock"
 )
 
@@ -38,6 +39,15 @@ func TestNewRealClock_Now(t *testing.T) {
 	source := clock.NewRealTimeSource()
 	location := source.Now().Location()
 	assert.Equal(t, "UTC", location.String())
+}
+
+func TestNewRealClock_Since(t *testing.T) {
+	t.Parallel()
+
+	source := clock.NewRealTimeSource()
+	start := source.Now()
+	time.Sleep(5 * time.Millisecond)
+	assert.True(t, source.Since(start) >= 5*time.Millisecond)
 }
 
 func TestNewRealClock_AfterFunc(t *testing.T) {
