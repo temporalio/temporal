@@ -30,6 +30,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -78,6 +79,7 @@ type (
 		config                  *configs.Config
 		isTieredStackEnabled    bool
 		flowController          SenderFlowController
+		sendLock                sync.Mutex
 	}
 )
 
@@ -588,6 +590,8 @@ Loop:
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+	s.sendLock.Lock()
+	defer s.sendLock.Unlock()
 	err := s.server.Send(payload)
 	if err != nil {
 		s.logger.Error("ReplicationStreamError Stream Sender unable to send", tag.Error(err))
