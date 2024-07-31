@@ -609,7 +609,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 }
 
 // GetHSMCallbackArg converts a workflow completion event into a [persistencepb.HSMCallbackArg].
-func (ms *MutableStateImpl) GetHSMCallbackArg(ctx context.Context) (*persistencepb.HSMCallbackArg, error) {
+func (ms *MutableStateImpl) GetHSMCallbackArg(ctx context.Context) (*persistencespb.HSMCallbackArg, error) {
 	workflowKey := ms.GetWorkflowKey()
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
