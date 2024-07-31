@@ -193,7 +193,7 @@ func (vi *valuesInterceptor) Values(fieldName string, values ...interface{}) ([]
 	return result, nil
 }
 
-func (vi *valuesInterceptor) applyFieldTransformation(transformation fieldTransformation, value interface{}) (interface{}, error) {
+func (vi *valuesInterceptor) applyFieldTransformation(transformation fieldTransformation, value any) (any, error) {
 	switch {
 	case transformation.originalField == searchattribute.ScheduleID && transformation.newField == searchattribute.WorkflowID:
 		if strValue, ok := value.(string); ok {
