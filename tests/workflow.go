@@ -123,7 +123,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 
 	// setting this to 0 to be sure we are terminating old workflow
-	s.overrideDynamicConfig(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.overrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	testCases := []struct {
 		name                     string
@@ -982,7 +982,7 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
 	// reset reuse minimal interval to allow workflow termination
-	s.overrideDynamicConfig(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.overrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	runMultiOp := func(
 		tv *testvars.TestVars,

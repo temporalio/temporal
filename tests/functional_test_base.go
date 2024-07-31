@@ -438,6 +438,6 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 	return err
 }
 
-func (s *FunctionalTestBase) overrideDynamicConfig(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
-	s.testCluster.host.overrideDynamicConfigByKey(t, setting.Key(), value)
+func (s *FunctionalTestBase) overrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) {
+	s.testCluster.host.overrideDynamicConfigByKey(s.T(), setting.Key(), value)
 }

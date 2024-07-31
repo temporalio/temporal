@@ -2022,8 +2022,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2186,8 +2186,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2270,8 +2270,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2451,7 +2451,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
-	s.overrideDynamicConfig(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+	s.overrideDynamicConfig(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 	// Verify new workflows aren't reachable
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
@@ -2589,7 +2589,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
-	s.overrideDynamicConfig(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+	s.overrideDynamicConfig(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)

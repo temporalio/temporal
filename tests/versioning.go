@@ -456,8 +456,8 @@ func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
 	// ensure at least two hops
 	const partCount = 1 + partitionTreeDegree + partitionTreeDegree*partitionTreeDegree
 
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, partCount)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, partCount)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partCount)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partCount)
 
 	for _, buildId := range []string{"foo", "foo-v2", "foo-v3"} {
 		s.addNewDefaultBuildId(ctx, tq, buildId)
@@ -511,18 +511,18 @@ func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 
 			s.Run(name, func() {
 				if forceForward {
-					s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-					s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-					s.overrideDynamicConfig(s.T(), dynamicconfig.TestMatchingLBForceReadPartition, 5)
-					s.overrideDynamicConfig(s.T(), dynamicconfig.TestMatchingLBForceWritePartition, 11)
+					s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+					s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+					s.overrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
+					s.overrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
 				} else {
-					s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-					s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+					s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+					s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 				}
 				if forceAsync {
-					s.overrideDynamicConfig(s.T(), dynamicconfig.TestMatchingDisableSyncMatch, true)
+					s.overrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
 				} else {
-					s.overrideDynamicConfig(s.T(), dynamicconfig.TestMatchingDisableSyncMatch, false)
+					s.overrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
 				}
 
 				subtest()
@@ -2159,7 +2159,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	// Reduce user data long poll time for faster propagation of the versioning data. This is needed because of the
 	// exponential minWaitTime logic in userDataManagerImpl that gets triggered because rules change very fast in
 	// this test.
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingGetUserDataLongPollTimeout, 2*time.Second)
+	s.overrideDynamicConfig(dynamicconfig.MatchingGetUserDataLongPollTimeout, 2*time.Second)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1.0")
@@ -2435,7 +2435,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityEager() {
-	s.overrideDynamicConfig(s.T(), dynamicconfig.EnableActivityEagerExecution, true)
+	s.overrideDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
@@ -2507,8 +2507,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tq := s.randomizeStr(s.T().Name())
 	crosstq := s.randomizeStr(s.T().Name())
@@ -2851,8 +2851,8 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tq := s.randomizeStr(s.T().Name())
 	crosstq := s.randomizeStr(s.T().Name())
@@ -4261,8 +4261,8 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	// force one partition since DescribeTaskQueue only goes to the root
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
@@ -4327,8 +4327,8 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 }
 
 func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	s.overrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
@@ -4926,9 +4926,9 @@ func (s *VersioningIntegSuite) waitForPropagation(
 	condition func(data *persistencespb.VersioningData) bool,
 ) {
 	if partitionCount <= 0 {
-		v, ok := s.testCluster.host.dcClient.GetRawValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
-		s.True(ok, "versioning tests require setting explicit number of partitions")
-		partitionCount, ok = v.(int)
+		v := s.testCluster.host.dcClient.GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
+		s.NotEmpty(v, "versioning tests require setting explicit number of partitions")
+		_, ok := v[0].Value.(int)
 		s.True(ok, "partition count is not an int")
 	}
 

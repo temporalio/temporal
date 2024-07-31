@@ -247,9 +247,12 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		spanExporters:                    params.SpanExporters,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
-		dcClient:                         dynamicconfig.NewMemoryClient(dynamicconfig.StaticClient(staticOverrides)),
+		dcClient:                         dynamicconfig.NewMemoryClient(),
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
+	}
+	for k, v := range staticOverrides {
+		impl.overrideDynamicConfigByKey(t, k, v)
 	}
 	for k, v := range params.DynamicConfigOverrides {
 		impl.overrideDynamicConfigByKey(t, k, v)

@@ -31,20 +31,14 @@ import (
 type MemoryClient struct {
 	lock      sync.RWMutex
 	overrides map[Key]any
-	fallback  Client
-}
-
-func (d *MemoryClient) GetRawValue(name Key) (any, bool) {
-	d.lock.RLock()
-	defer d.lock.RUnlock()
-	v, ok := d.overrides[name]
-	if value, ok := v.([]ConstrainedValue); ok {
-		return value[0].Value, true
-	}
-	return v, ok
 }
 
 func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
+	value := d.GetOverriddenValue(name)
+	return value
+}
+
+func (d *MemoryClient) GetOverriddenValue(name Key) []ConstrainedValue {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 	if v, ok := d.overrides[name]; ok {
@@ -53,7 +47,7 @@ func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
 		}
 		return []ConstrainedValue{{Value: v}}
 	}
-	return d.fallback.GetValue(name)
+	return nil
 }
 
 func (d *MemoryClient) OverrideValue(setting GenericSetting, value any) {
@@ -77,9 +71,8 @@ func (d *MemoryClient) RemoveOverrideByKey(name Key) {
 }
 
 // NewMemoryClient - returns a memory based dynamic config client
-func NewMemoryClient(fallback Client) *MemoryClient {
+func NewMemoryClient() *MemoryClient {
 	return &MemoryClient{
 		overrides: make(map[Key]any),
-		fallback:  fallback,
 	}
 }

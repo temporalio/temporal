@@ -630,7 +630,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 	wid := "sched-test-experimental-hsm-wf"
 	wt := "sched-test-experimental-hsm-wt"
 
-	s.overrideDynamicConfig(s.T(), schedulerhsm.UseExperimentalHsmScheduler, true)
+	s.overrideDynamicConfig(schedulerhsm.UseExperimentalHsmScheduler, true)
 
 	type myData struct {
 		Stuff  string
@@ -893,7 +893,7 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	wt := "sched-test-list-before-run-wt"
 
 	// disable per-ns worker so that the schedule workflow never runs
-	s.overrideDynamicConfig(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.overrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 
@@ -967,8 +967,8 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	// waiting one minute) we have to cause the whole worker to be stopped and started. The
 	// sleeps are needed because the refresh is asynchronous, and there's no way to get access
 	// to the actual rate limiter object to refresh it directly.
-	s.overrideDynamicConfig(s.T(), dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.overrideDynamicConfig(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
+	s.overrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
@@ -1030,7 +1030,7 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	}
 
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.SchedulerNamespaceStartWorkflowRPS)
-	s.overrideDynamicConfig(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.overrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
