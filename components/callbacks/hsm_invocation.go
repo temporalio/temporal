@@ -31,19 +31,19 @@ import (
 	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 )
 
 type CanGetHSMCallbackArg interface {
-	GetHSMCallbackArg(ctx context.Context) (*persistencepb.HSMCallbackArg, error)
+	GetHSMCallbackArg(ctx context.Context) (*persistencespb.HSMCallbackArg, error)
 }
 
 type hsmInvocation struct {
-	hsm         *persistencepb.Callback_HSM
-	callbackArg *persistencepb.HSMCallbackArg
+	hsm         *persistencespb.Callback_HSM
+	callbackArg *persistencespb.HSMCallbackArg
 }
 
 func isRetryableRpcResponse(err error) bool {
