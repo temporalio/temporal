@@ -3514,7 +3514,12 @@ func (wh *WorkflowHandler) ListSchedules(
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
-		if err := scheduler.ValidateVisibilityQuery(request.Query, saNameType); err != nil {
+		if err := scheduler.ValidateVisibilityQuery(
+			namespaceName,
+			saNameType,
+			wh.saMapperProvider,
+			request.Query,
+		); err != nil {
 			return nil, err
 		}
 		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)

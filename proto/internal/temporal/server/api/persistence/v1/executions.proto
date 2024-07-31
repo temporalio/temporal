@@ -261,6 +261,7 @@ message WorkflowExecutionState {
     temporal.server.api.enums.v1.WorkflowExecutionState state = 3;
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
     VersionedTransition last_update_versioned_transition = 5;
+    google.protobuf.Timestamp start_time = 6;
 }
 
 // transfer column

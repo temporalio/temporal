@@ -1028,26 +1028,28 @@ var (
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
 
 	// Worker
-	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
-	ExecutorTasksErrCount                           = NewCounterDef("executor_err")
-	ExecutorTasksDeferredCount                      = NewCounterDef("executor_deferred")
-	ExecutorTasksDroppedCount                       = NewCounterDef("executor_dropped")
-	StartedCount                                    = NewCounterDef("started")
-	StoppedCount                                    = NewCounterDef("stopped")
-	TaskProcessedCount                              = NewGaugeDef("task_processed")
-	TaskDeletedCount                                = NewGaugeDef("task_deleted")
-	TaskQueueProcessedCount                         = NewGaugeDef("taskqueue_processed")
-	TaskQueueDeletedCount                           = NewGaugeDef("taskqueue_deleted")
-	TaskQueueOutstandingCount                       = NewGaugeDef("taskqueue_outstanding")
-	HistoryArchiverArchiveNonRetryableErrorCount    = NewCounterDef("history_archiver_archive_non_retryable_error")
-	HistoryArchiverArchiveTransientErrorCount       = NewCounterDef("history_archiver_archive_transient_error")
-	HistoryArchiverArchiveSuccessCount              = NewCounterDef("history_archiver_archive_success")
-	HistoryArchiverTotalUploadSize                  = NewBytesHistogramDef("history_archiver_total_upload_size")
-	HistoryArchiverHistorySize                      = NewBytesHistogramDef("history_archiver_history_size")
-	HistoryArchiverDuplicateArchivalsCount          = NewCounterDef("history_archiver_duplicate_archivals")
-	HistoryArchiverBlobExistsCount                  = NewCounterDef("history_archiver_blob_exists")
-	HistoryArchiverBlobSize                         = NewBytesHistogramDef("history_archiver_blob_size")
-	HistoryWorkflowExecutionCacheLatency            = NewTimerDef("history_workflow_execution_cache_latency")
+	ExecutorTasksDoneCount                        = NewCounterDef("executor_done")
+	ExecutorTasksErrCount                         = NewCounterDef("executor_err")
+	ExecutorTasksDeferredCount                    = NewCounterDef("executor_deferred")
+	ExecutorTasksDroppedCount                     = NewCounterDef("executor_dropped")
+	StartedCount                                  = NewCounterDef("started")
+	StoppedCount                                  = NewCounterDef("stopped")
+	TaskProcessedCount                            = NewGaugeDef("task_processed")
+	TaskDeletedCount                              = NewGaugeDef("task_deleted")
+	TaskQueueProcessedCount                       = NewGaugeDef("taskqueue_processed")
+	TaskQueueDeletedCount                         = NewGaugeDef("taskqueue_deleted")
+	TaskQueueOutstandingCount                     = NewGaugeDef("taskqueue_outstanding")
+	HistoryArchiverArchiveNonRetryableErrorCount  = NewCounterDef("history_archiver_archive_non_retryable_error")
+	HistoryArchiverArchiveTransientErrorCount     = NewCounterDef("history_archiver_archive_transient_error")
+	HistoryArchiverArchiveSuccessCount            = NewCounterDef("history_archiver_archive_success")
+	HistoryArchiverTotalUploadSize                = NewBytesHistogramDef("history_archiver_total_upload_size")
+	HistoryArchiverHistorySize                    = NewBytesHistogramDef("history_archiver_history_size")
+	HistoryArchiverDuplicateArchivalsCount        = NewCounterDef("history_archiver_duplicate_archivals")
+	HistoryArchiverBlobExistsCount                = NewCounterDef("history_archiver_blob_exists")
+	HistoryArchiverBlobSize                       = NewBytesHistogramDef("history_archiver_blob_size")
+	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
+	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
+
 	VisibilityArchiverArchiveNonRetryableErrorCount = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount    = NewCounterDef("visibility_archiver_archive_transient_error")
 	VisibilityArchiveSuccessCount                   = NewCounterDef("visibility_archiver_archive_success")
@@ -1115,6 +1117,10 @@ var (
 	ScheduleActionSuccess = NewCounterDef(
 		"schedule_action_success",
 		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
+	)
+	ScheduleActionAttempt = NewCounterDef(
+		"schedule_action_attempt",
+		WithDescription("The number of schedule actions attempts"),
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",

@@ -30,12 +30,12 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"text/template"
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -567,7 +567,7 @@ func readLicenseFile(path string) string {
 
 func main() {
 	serviceFlag := flag.String("service", "", "which service to generate rpc client wrappers for")
-	licenseFlag := flag.String("licence_file", "../../LICENSE", "path to license to copy into header")
+	licenseFlag := flag.String("license_file", "../../LICENSE", "path to license to copy into header")
 	flag.Parse()
 
 	i := slices.IndexFunc(services, func(s service) bool { return s.name == *serviceFlag })

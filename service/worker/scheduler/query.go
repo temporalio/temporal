@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/exp/maps"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
@@ -36,25 +37,36 @@ import (
 
 type (
 	fieldNameAggInterceptor struct {
-		names map[string]bool
+		baseInterceptor query.FieldNameInterceptor
+		names           map[string]bool
 	}
 )
 
 var _ query.FieldNameInterceptor = (*fieldNameAggInterceptor)(nil)
 
-func (i *fieldNameAggInterceptor) Name(name string, _ query.FieldNameUsage) (string, error) {
+func (i *fieldNameAggInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	i.names[name] = true
-	return name, nil
+	return i.baseInterceptor.Name(name, usage)
 }
 
-func newFieldNameAggInterceptor() *fieldNameAggInterceptor {
+func newFieldNameAggInterceptor(
+	namespaceName namespace.Name,
+	saNameType searchattribute.NameTypeMap,
+	saMapperProvider searchattribute.MapperProvider,
+) *fieldNameAggInterceptor {
 	return &fieldNameAggInterceptor{
-		names: make(map[string]bool),
+		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider),
+		names:           make(map[string]bool),
 	}
 }
 
-func ValidateVisibilityQuery(queryString string, saNameType searchattribute.NameTypeMap) error {
-	fields, err := getQueryFields(queryString, saNameType)
+func ValidateVisibilityQuery(
+	namespaceName namespace.Name,
+	saNameType searchattribute.NameTypeMap,
+	saMapperProvider searchattribute.MapperProvider,
+	queryString string,
+) error {
+	fields, err := getQueryFields(namespaceName, saNameType, saMapperProvider, queryString)
 	if err != nil {
 		return err
 	}
@@ -68,8 +80,13 @@ func ValidateVisibilityQuery(queryString string, saNameType searchattribute.Name
 	return nil
 }
 
-func getQueryFields(queryString string, saNameType searchattribute.NameTypeMap) ([]string, error) {
-	fnInterceptor := newFieldNameAggInterceptor()
+func getQueryFields(
+	namespaceName namespace.Name,
+	saNameType searchattribute.NameTypeMap,
+	saMapperProvider searchattribute.MapperProvider,
+	queryString string,
+) ([]string, error) {
+	fnInterceptor := newFieldNameAggInterceptor(namespaceName, saNameType, saMapperProvider)
 	queryConverter := elasticsearch.NewQueryConverter(fnInterceptor, nil, saNameType)
 	_, err := queryConverter.ConvertWhereOrderBy(queryString)
 	if err != nil {

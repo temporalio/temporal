@@ -29,8 +29,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"go.temporal.io/api/serviceerror"
+	"time"
 
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -202,10 +203,10 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		WorkflowID:       workflowID,
 		RunID:            runID,
 		CreateRequestID:  newWorkflow.ExecutionState.CreateRequestId,
-		StartTime:        nil,
 		State:            newWorkflow.ExecutionState.State,
 		Status:           newWorkflow.ExecutionState.Status,
 		LastWriteVersion: lastWriteVersion,
+		StartTime:        getStartTimeFromState(newWorkflow.ExecutionState),
 	}
 
 	if err := createOrUpdateCurrentExecution(ctx, tx, row, request.Mode); err != nil {
@@ -404,6 +405,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.LastWriteVersion = newWorkflow.LastWriteVersion
 			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
 			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
+			row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
 
 			if !bytes.Equal(namespaceID, row.NamespaceID) {
 				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
@@ -414,6 +416,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.Status = updateWorkflow.ExecutionState.Status
 			row.LastWriteVersion = updateWorkflow.LastWriteVersion
 			row.RunID = runID
+			row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
 			// we still call update only to update the current record
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, runID); err != nil {
@@ -511,10 +514,10 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 			WorkflowID:       workflowID,
 			RunID:            runID,
 			CreateRequestID:  createRequestID,
-			StartTime:        nil,
 			State:            state,
 			Status:           status,
 			LastWriteVersion: lastWriteVersion,
+			StartTime:        getStartTimeFromState(executionState),
 		}
 		var prevRunID primitives.UUID
 		if currentWorkflow != nil {
@@ -723,4 +726,12 @@ func (m *sqlExecutionStore) ListConcreteExecutions(
 	_ *p.ListConcreteExecutionsRequest,
 ) (*p.InternalListConcreteExecutionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
+}
+
+func getStartTimeFromState(state *persistence.WorkflowExecutionState) *time.Time {
+	if state == nil || state.StartTime == nil {
+		return nil
+	}
+	startTime := state.StartTime.AsTime()
+	return &startTime
 }
