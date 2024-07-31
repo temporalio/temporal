@@ -26,7 +26,6 @@ package elasticsearch
 
 import (
 	"strconv"
-	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -86,7 +85,7 @@ func NewValuesInterceptor(
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
-	if strings.EqualFold(fieldName, searchattribute.ScheduleID) {
+	if fieldName == searchattribute.ScheduleID {
 		if _, err := ni.searchAttributesTypeMap.GetType(fieldName); err != nil {
 			// Not a custom SA, so convert to WorkflowId
 			fieldName = searchattribute.WorkflowID
