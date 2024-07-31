@@ -25,10 +25,11 @@
 package elasticsearch
 
 import (
-	"go.temporal.io/server/common/primitives"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/common/primitives"
 
 	enumspb "go.temporal.io/api/enums/v1"
 

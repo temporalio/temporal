@@ -27,10 +27,11 @@ package tests
 import (
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/primitives"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/primitives"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"

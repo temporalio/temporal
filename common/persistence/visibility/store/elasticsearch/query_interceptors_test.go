@@ -25,8 +25,9 @@
 package elasticsearch
 
 import (
-	"go.temporal.io/server/common/primitives"
 	"testing"
+
+	"go.temporal.io/server/common/primitives"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
