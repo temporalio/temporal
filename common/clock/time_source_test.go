@@ -46,8 +46,14 @@ func TestNewRealClock_Since(t *testing.T) {
 
 	source := clock.NewRealTimeSource()
 	start := source.Now()
-	time.Sleep(5 * time.Millisecond)
-	assert.True(t, source.Since(start) >= 5*time.Millisecond)
+	assert.Eventually(
+		t,
+		func() bool {
+			return source.Since(start) >= 5*time.Millisecond
+		},
+		time.Second,
+		time.Millisecond,
+	)
 }
 
 func TestNewRealClock_AfterFunc(t *testing.T) {
