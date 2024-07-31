@@ -725,6 +725,11 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 
 	var currentRunID string
 
+	var startTime *time.Time
+	if currentWorkflow != nil && currentWorkflow.ExecutionState != nil {
+		startTime = timestamp.TimeValuePtr(currentWorkflow.ExecutionState.StartTime)
+	}
+
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
@@ -733,7 +738,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			namespaceID,
 			workflowID,
 			resetWorkflow.ExecutionState.RunId,
-			timestamp.TimeValuePtr(currentWorkflow.ExecutionState.StartTime),
+			startTime,
 		); err != nil {
 			return err
 		}
