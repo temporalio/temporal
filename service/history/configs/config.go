@@ -277,8 +277,8 @@ type Config struct {
 
 	ReplicationStreamSyncStatusDuration                 dynamicconfig.DurationPropertyFn
 	ReplicationProcessorSchedulerQueueSize              dynamicconfig.IntPropertyFn
-	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.IntPropertyFn
-	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
+	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.TypedSubscribable[int]
+	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationEagerRefreshNamespace              dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
@@ -514,8 +514,8 @@ func NewConfig(
 		ReplicationEnableUpdateWithNewTaskMerge:             dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Get(dc),
 		ReplicationStreamSyncStatusDuration:                 dynamicconfig.ReplicationStreamSyncStatusDuration.Get(dc),
 		ReplicationProcessorSchedulerQueueSize:              dynamicconfig.ReplicationProcessorSchedulerQueueSize.Get(dc),
-		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Get(dc),
-		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Get(dc),
+		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Subscribe(dc),
+		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Subscribe(dc),
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationEagerRefreshNamespace:              dynamicconfig.EnableEagerNamespaceRefresher.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
