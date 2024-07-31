@@ -117,3 +117,17 @@ func (m NameTypeMap) IsDefined(name string) bool {
 	}
 	return false
 }
+
+func (m NameTypeMap) Copy() NameTypeMap {
+	copiedCustomSearchAttributes := make(map[string]enumspb.IndexedValueType, len(m.customSearchAttributes))
+	for key, value := range m.customSearchAttributes {
+		copiedCustomSearchAttributes[key] = value
+	}
+	return NameTypeMap{
+		customSearchAttributes: copiedCustomSearchAttributes,
+	}
+}
+
+func (m NameTypeMap) AddCustomSearchAttribute(name string, value enumspb.IndexedValueType) {
+	m.customSearchAttributes[name] = value
+}

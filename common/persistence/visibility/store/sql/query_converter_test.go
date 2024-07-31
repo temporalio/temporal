@@ -56,6 +56,7 @@ type (
 		output   any
 		retValue any
 		err      error
+		setup    func()
 	}
 )
 
@@ -510,6 +511,7 @@ func (s *queryConverterSuite) TestConvertIsExpr() {
 }
 
 func (s *queryConverterSuite) TestConvertColName() {
+	originalSaTypeMap := s.queryConverter.saTypeMap
 	var tests = []testCase{
 		{
 			name:     "invalid: column name expression",
@@ -604,12 +606,51 @@ func (s *queryConverterSuite) TestConvertColName() {
 			),
 			err: nil,
 		},
+		{
+			name:   "ScheduleId as custom SA",
+			input:  searchattribute.ScheduleID,
+			output: searchattribute.ScheduleID,
+			retValue: newSAColName(
+				searchattribute.ScheduleID,
+				searchattribute.ScheduleID,
+				searchattribute.ScheduleID,
+				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			),
+			err: nil,
+			setup: func() {
+				typeMap := originalSaTypeMap.Copy()
+				typeMap.AddCustomSearchAttribute(searchattribute.ScheduleID, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+				s.queryConverter.saTypeMap = typeMap
+			},
+		},
+		{
+			name:   "ScheduleId as non-custom SA",
+			input:  searchattribute.ScheduleID,
+			output: "workflow_id",
+			retValue: newSAColName(
+				"workflow_id",
+				searchattribute.ScheduleID,
+				searchattribute.WorkflowID,
+				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			),
+			err: nil,
+		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
+			// Reset saTypeMap to original state
+			s.queryConverter.saTypeMap = originalSaTypeMap
+
 			// reset internal state of seenNamespaceDivision
 			s.queryConverter.seenNamespaceDivision = false
+			s.queryConverter.fieldTransformations = make(map[string]fieldTransformation)
+
+			// Run setup function if provided
+			if tc.setup != nil {
+				tc.setup()
+			}
+
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
 			s.NoError(err)
@@ -720,10 +761,32 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			output: "('foo', 'bar')",
 			err:    nil,
 		},
+		{
+			name:  "ScheduleId transformation",
+			input: "'test-schedule'",
+			args: map[string]any{
+				"saName": searchattribute.WorkflowID,
+				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			output: fmt.Sprintf("'%stest-schedule'", searchattribute.ScheduleWorkflowIDPrefix),
+			err:    nil,
+			setup: func() {
+				s.queryConverter.fieldTransformations = make(map[string]fieldTransformation)
+				s.queryConverter.fieldTransformations[searchattribute.WorkflowID] = fieldTransformation{
+					originalField: searchattribute.ScheduleID,
+					newField:      searchattribute.WorkflowID,
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
+			// Run setup function if provided
+			if tc.setup != nil {
+				tc.setup()
+			}
+
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
 			s.NoError(err)

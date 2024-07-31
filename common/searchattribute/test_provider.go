@@ -112,7 +112,7 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 	if namespace == "error-namespace" {
 		return "", serviceerror.NewInternal("mapper error")
 	} else if namespace == "test-namespace" || namespace == t.Namespace {
-		if alias == "pass-through" {
+		if alias == "pass-through" || alias == ScheduleID {
 			return alias, nil
 		}
 		if strings.HasPrefix(alias, "AliasFor") {

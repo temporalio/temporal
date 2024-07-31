@@ -62,13 +62,19 @@ type (
 
 	QueryConverter struct {
 		pluginQueryConverter
-		namespaceName namespace.Name
-		namespaceID   namespace.ID
-		saTypeMap     searchattribute.NameTypeMap
-		saMapper      searchattribute.Mapper
-		queryString   string
+		namespaceName        namespace.Name
+		namespaceID          namespace.ID
+		saTypeMap            searchattribute.NameTypeMap
+		saMapper             searchattribute.Mapper
+		queryString          string
+		fieldTransformations map[string]fieldTransformation
 
 		seenNamespaceDivision bool
+	}
+
+	fieldTransformation struct {
+		originalField string
+		newField      string
 	}
 
 	queryParams struct {
@@ -465,9 +471,20 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
 	saFieldName := saAlias
-	if searchattribute.IsMappable(saAlias) {
+	if c.fieldTransformations == nil {
+		c.fieldTransformations = make(map[string]fieldTransformation)
+	}
+
+	if saFieldName == searchattribute.ScheduleID {
+		if _, err := c.saTypeMap.GetType(saFieldName); err != nil {
+			// Not a custom SA, so convert to WorkflowId
+			saFieldName = searchattribute.WorkflowID
+		}
+	}
+
+	if searchattribute.IsMappable(saFieldName) {
 		var err error
-		saFieldName, err = c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
+		saFieldName, err = c.saMapper.GetFieldName(saFieldName, c.namespaceName.String())
 		if err != nil {
 			return nil, query.NewConverterError(
 				"%s: column name '%s' is not a valid search attribute",
@@ -476,6 +493,14 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 			)
 		}
 	}
+
+	if saFieldName != saAlias {
+		c.fieldTransformations[saFieldName] = fieldTransformation{
+			originalField: saAlias,
+			newField:      saFieldName,
+		}
+	}
+
 	saType, err := c.saTypeMap.GetType(saFieldName)
 	if err != nil {
 		// This should never happen since it came from mapping.
@@ -514,6 +539,14 @@ func (c *QueryConverter) convertValueExpr(
 		if err != nil {
 			return err
 		}
+
+		if transformation, exists := c.fieldTransformations[saName]; exists {
+			value, err = c.applyFieldTransformation(transformation, value)
+			if err != nil {
+				return err
+			}
+		}
+
 		switch v := value.(type) {
 		case string:
 			// escape strings for safety
@@ -673,6 +706,16 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 		)
 	}
 	return nil
+}
+
+func (c *QueryConverter) applyFieldTransformation(transformation fieldTransformation, value any) (any, error) {
+	switch {
+	case transformation.originalField == searchattribute.ScheduleID && transformation.newField == searchattribute.WorkflowID:
+		if strValue, ok := value.(string); ok {
+			return searchattribute.ScheduleWorkflowIDPrefix + strValue, nil
+		}
+	}
+	return value, nil
 }
 
 func escapeLikeValueForPrefixSearch(in string, escape byte) string {
