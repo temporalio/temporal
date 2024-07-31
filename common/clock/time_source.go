@@ -33,6 +33,7 @@ type (
 	// TimeSource is an interface to make it easier to test code that uses time.
 	TimeSource interface {
 		Now() time.Time
+		Since(t time.Time) time.Duration
 		AfterFunc(d time.Duration, f func()) Timer
 		NewTimer(d time.Duration) (<-chan time.Time, Timer)
 	}
