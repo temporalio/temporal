@@ -27,6 +27,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,6 +39,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -592,6 +594,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			namespaceID,
 			workflowID,
 			runID,
+			timestamp.TimeValuePtr(updateWorkflow.ExecutionState.StartTime),
 		); err != nil {
 			return err
 		}
@@ -730,6 +733,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			namespaceID,
 			workflowID,
 			resetWorkflow.ExecutionState.RunId,
+			timestamp.TimeValuePtr(currentWorkflow.ExecutionState.StartTime),
 		); err != nil {
 			return err
 		}
@@ -872,6 +876,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 	namespaceID string,
 	workflowID string,
 	runID string,
+	startTime *time.Time,
 ) error {
 
 	if resp, err := d.GetCurrentExecution(ctx, &p.GetCurrentExecutionRequest{
@@ -892,6 +897,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 			State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
 			LastWriteVersion: 0,
+			StartTime:        startTime,
 		}
 	}
 
