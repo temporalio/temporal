@@ -2873,7 +2873,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
-	workflowID := primitives.WorkflowIDPrefix + request.ScheduleId
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	if err := wh.validateWorkflowID(workflowID); err != nil {
 		return nil, err
@@ -3040,7 +3040,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, err
 	}
 
-	workflowID := primitives.WorkflowIDPrefix + request.ScheduleId
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
 
 	// first describe to get memo and search attributes
@@ -3235,7 +3235,7 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		return nil, errRequestIDTooLong
 	}
 
-	workflowID := primitives.WorkflowIDPrefix + request.ScheduleId
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceName := namespace.Name(request.Namespace)
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -3328,7 +3328,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, errRequestIDTooLong
 	}
 
-	workflowID := primitives.WorkflowIDPrefix + request.ScheduleId
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3391,7 +3391,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		return nil, errSchedulesNotAllowed
 	}
 
-	workflowID := primitives.WorkflowIDPrefix + request.ScheduleId
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3455,7 +3455,7 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
-	workflowID := primitives.WorkflowIDPrefix + request.ScheduleId
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3547,7 +3547,7 @@ func (wh *WorkflowHandler) ListSchedules(
 		info := wh.decodeScheduleListInfo(memo)
 		memo = wh.cleanScheduleMemo(memo)
 		workflowID := ex.GetExecution().GetWorkflowId()
-		scheduleID := strings.TrimPrefix(workflowID, primitives.WorkflowIDPrefix)
+		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix)
 		schedules[i] = &schedpb.ScheduleListEntry{
 			ScheduleId:       scheduleID,
 			Memo:             memo,

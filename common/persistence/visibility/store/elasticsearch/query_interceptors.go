@@ -33,7 +33,6 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -196,7 +195,7 @@ func (vi *valuesInterceptor) applyFieldTransformation(transformation fieldTransf
 	switch {
 	case transformation.originalField == searchattribute.ScheduleID && transformation.newField == searchattribute.WorkflowID:
 		if strValue, ok := value.(string); ok {
-			return primitives.WorkflowIDPrefix + strValue, nil
+			return searchattribute.ScheduleWorkflowIDPrefix + strValue, nil
 		}
 	}
 	return value, nil
