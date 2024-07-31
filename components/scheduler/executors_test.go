@@ -105,7 +105,7 @@ func TestProcessScheduleWaitTask(t *testing.T) {
 	err = reg.ExecuteTimerTask(
 		env,
 		node,
-		schedulerhsm.SchedulerWaitTask{Deadline: env.Now()},
+		schedulerhsm.SchedulerWaitTask{},
 	)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.SCHEDULER_STATE_EXECUTING, schedulerHsm.HsmState)
@@ -195,7 +195,7 @@ func TestProcessScheduleRunTask(t *testing.T) {
 	require.Equal(t, enumsspb.SCHEDULER_STATE_WAITING, schedulerHsm.HsmState)
 }
 
-func newMutableState(t *testing.T) mutableState {
+func newMutableState(*testing.T) mutableState {
 	return mutableState{}
 }
 

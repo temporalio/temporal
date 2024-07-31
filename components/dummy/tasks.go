@@ -35,7 +35,7 @@ const (
 )
 
 type ImmediateTask struct {
-	Destination string
+	destination string
 }
 
 var _ hsm.Task = ImmediateTask{}
@@ -44,8 +44,12 @@ func (ImmediateTask) Type() string {
 	return TaskTypeImmediate
 }
 
-func (t ImmediateTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.Destination}
+func (ImmediateTask) Deadline() time.Time {
+	return hsm.Immediate
+}
+
+func (t ImmediateTask) Destination() string {
+	return t.destination
 }
 
 func (ImmediateTask) Concurrent() bool {
@@ -54,11 +58,8 @@ func (ImmediateTask) Concurrent() bool {
 
 type ImmediateTaskSerializer struct{}
 
-func (ImmediateTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return ImmediateTask{Destination: kind.Destination}, nil
-	}
-	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
+func (ImmediateTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return ImmediateTask{destination: attrs.Destination}, nil
 }
 
 func (ImmediateTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
@@ -66,7 +67,7 @@ func (ImmediateTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type TimerTask struct {
-	Deadline   time.Time
+	deadline   time.Time
 	concurrent bool
 }
 
@@ -76,8 +77,12 @@ func (TimerTask) Type() string {
 	return TaskTypeTimer
 }
 
-func (t TimerTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindTimer{Deadline: t.Deadline}
+func (t TimerTask) Deadline() time.Time {
+	return t.deadline
+}
+
+func (TimerTask) Destination() string {
+	return ""
 }
 
 func (t TimerTask) Concurrent() bool {
@@ -91,11 +96,8 @@ func (t TimerTask) Validate(*hsm.Node) error {
 
 type TimerTaskSerializer struct{}
 
-func (TimerTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return TimerTask{Deadline: kind.Deadline, concurrent: len(data) > 0}, nil
-	}
-	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
+func (TimerTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return TimerTask{deadline: attrs.Deadline, concurrent: len(data) > 0}, nil
 }
 
 func (s TimerTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {

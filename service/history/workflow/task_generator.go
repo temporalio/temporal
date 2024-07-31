@@ -865,17 +865,25 @@ func generateSubStateMachineTask(
 		Type: task.Type(),
 		Data: data,
 	}
-	switch kind := task.Kind().(type) {
-	case hsm.TaskKindOutbound:
+	// NOTE: at the moment deadline is mutually exclusive with destination.
+	// This will change when we add the outbound timer queue.
+	if task.Deadline() != hsm.Immediate {
+		if task.Destination() != "" {
+			// TODO: support outbound timer tasks.
+			return fmt.Errorf("task cannot have both a deadline and destination due to missing outbound timer queue implementation")
+		}
+		TrackStateMachineTimer(mutableState, task.Deadline(), taskInfo)
+	} else if task.Destination() != "" {
 		mutableState.AddTasks(&tasks.StateMachineOutboundTask{
 			StateMachineTask: tasks.StateMachineTask{
 				WorkflowKey: mutableState.GetWorkflowKey(),
 				Info:        taskInfo,
 			},
-			Destination: kind.Destination,
+			Destination: task.Destination(),
 		})
-	case hsm.TaskKindTimer:
-		TrackStateMachineTimer(mutableState, kind.Deadline, taskInfo)
+	} else {
+		// TODO: support "transfer" tasks - immediate without destination.
+		return fmt.Errorf("task has no deadline or destination")
 	}
 
 	return nil
