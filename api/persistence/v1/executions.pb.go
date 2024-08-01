@@ -158,23 +158,24 @@ type WorkflowExecutionInfo struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	NamespaceId                             string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId                              string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	ParentNamespaceId                       string                 `protobuf:"bytes,3,opt,name=parent_namespace_id,json=parentNamespaceId,proto3" json:"parent_namespace_id,omitempty"`
-	ParentWorkflowId                        string                 `protobuf:"bytes,4,opt,name=parent_workflow_id,json=parentWorkflowId,proto3" json:"parent_workflow_id,omitempty"`
-	ParentRunId                             string                 `protobuf:"bytes,5,opt,name=parent_run_id,json=parentRunId,proto3" json:"parent_run_id,omitempty"`
-	ParentInitiatedId                       int64                  `protobuf:"varint,6,opt,name=parent_initiated_id,json=parentInitiatedId,proto3" json:"parent_initiated_id,omitempty"`
-	CompletionEventBatchId                  int64                  `protobuf:"varint,7,opt,name=completion_event_batch_id,json=completionEventBatchId,proto3" json:"completion_event_batch_id,omitempty"`
-	TaskQueue                               string                 `protobuf:"bytes,9,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	WorkflowTypeName                        string                 `protobuf:"bytes,10,opt,name=workflow_type_name,json=workflowTypeName,proto3" json:"workflow_type_name,omitempty"`
-	WorkflowExecutionTimeout                *durationpb.Duration   `protobuf:"bytes,11,opt,name=workflow_execution_timeout,json=workflowExecutionTimeout,proto3" json:"workflow_execution_timeout,omitempty"`
-	WorkflowRunTimeout                      *durationpb.Duration   `protobuf:"bytes,12,opt,name=workflow_run_timeout,json=workflowRunTimeout,proto3" json:"workflow_run_timeout,omitempty"`
-	DefaultWorkflowTaskTimeout              *durationpb.Duration   `protobuf:"bytes,13,opt,name=default_workflow_task_timeout,json=defaultWorkflowTaskTimeout,proto3" json:"default_workflow_task_timeout,omitempty"`
-	LastEventTaskId                         int64                  `protobuf:"varint,17,opt,name=last_event_task_id,json=lastEventTaskId,proto3" json:"last_event_task_id,omitempty"`
-	LastFirstEventId                        int64                  `protobuf:"varint,18,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
-	LastCompletedWorkflowTaskStartedEventId int64                  `protobuf:"varint,19,opt,name=last_completed_workflow_task_started_event_id,json=lastCompletedWorkflowTaskStartedEventId,proto3" json:"last_completed_workflow_task_started_event_id,omitempty"`
-	StartTime                               *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	LastUpdateTime                          *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
+	NamespaceId                             string               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	WorkflowId                              string               `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	ParentNamespaceId                       string               `protobuf:"bytes,3,opt,name=parent_namespace_id,json=parentNamespaceId,proto3" json:"parent_namespace_id,omitempty"`
+	ParentWorkflowId                        string               `protobuf:"bytes,4,opt,name=parent_workflow_id,json=parentWorkflowId,proto3" json:"parent_workflow_id,omitempty"`
+	ParentRunId                             string               `protobuf:"bytes,5,opt,name=parent_run_id,json=parentRunId,proto3" json:"parent_run_id,omitempty"`
+	ParentInitiatedId                       int64                `protobuf:"varint,6,opt,name=parent_initiated_id,json=parentInitiatedId,proto3" json:"parent_initiated_id,omitempty"`
+	CompletionEventBatchId                  int64                `protobuf:"varint,7,opt,name=completion_event_batch_id,json=completionEventBatchId,proto3" json:"completion_event_batch_id,omitempty"`
+	TaskQueue                               string               `protobuf:"bytes,9,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	WorkflowTypeName                        string               `protobuf:"bytes,10,opt,name=workflow_type_name,json=workflowTypeName,proto3" json:"workflow_type_name,omitempty"`
+	WorkflowExecutionTimeout                *durationpb.Duration `protobuf:"bytes,11,opt,name=workflow_execution_timeout,json=workflowExecutionTimeout,proto3" json:"workflow_execution_timeout,omitempty"`
+	WorkflowRunTimeout                      *durationpb.Duration `protobuf:"bytes,12,opt,name=workflow_run_timeout,json=workflowRunTimeout,proto3" json:"workflow_run_timeout,omitempty"`
+	DefaultWorkflowTaskTimeout              *durationpb.Duration `protobuf:"bytes,13,opt,name=default_workflow_task_timeout,json=defaultWorkflowTaskTimeout,proto3" json:"default_workflow_task_timeout,omitempty"`
+	LastEventTaskId                         int64                `protobuf:"varint,17,opt,name=last_event_task_id,json=lastEventTaskId,proto3" json:"last_event_task_id,omitempty"`
+	LastFirstEventId                        int64                `protobuf:"varint,18,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
+	LastCompletedWorkflowTaskStartedEventId int64                `protobuf:"varint,19,opt,name=last_completed_workflow_task_started_event_id,json=lastCompletedWorkflowTaskStartedEventId,proto3" json:"last_completed_workflow_task_started_event_id,omitempty"`
+	// Deprecated. use `WorkflowExecutionState.start_time`
+	StartTime      *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	LastUpdateTime *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
 	// Workflow task fields.
 	WorkflowTaskVersion               int64                  `protobuf:"varint,22,opt,name=workflow_task_version,json=workflowTaskVersion,proto3" json:"workflow_task_version,omitempty"`
 	WorkflowTaskScheduledEventId      int64                  `protobuf:"varint,23,opt,name=workflow_task_scheduled_event_id,json=workflowTaskScheduledEventId,proto3" json:"workflow_task_scheduled_event_id,omitempty"`

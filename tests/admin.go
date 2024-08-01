@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
@@ -117,4 +118,12 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 	s.Equal(response1.DatabaseMutableState.ExecutionState.State, response2.DatabaseMutableState.ExecutionState.State)
 	s.Equal(response1.DatabaseMutableState.ExecutionState.Status, response2.DatabaseMutableState.ExecutionState.Status)
 	s.Equal(response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
+
+	s.NotNil(response1.DatabaseMutableState.ExecutionState.StartTime)
+	s.NotNil(response2.DatabaseMutableState.ExecutionState.StartTime)
+
+	timeBefore := timestamp.TimeValue(response1.DatabaseMutableState.ExecutionState.StartTime)
+	timeAfter := timestamp.TimeValue(response2.DatabaseMutableState.ExecutionState.StartTime)
+
+	s.False(timeAfter.Before(timeBefore))
 }
