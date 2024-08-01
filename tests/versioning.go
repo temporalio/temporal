@@ -4962,7 +4962,7 @@ func (s *VersioningIntegSuite) waitForPropagation(
 			}
 		}
 		return len(remaining) == 0
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, time.Second)
 }
 
 func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {
