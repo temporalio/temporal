@@ -23,9 +23,9 @@
 package dummy
 
 import (
-	"fmt"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -52,8 +52,8 @@ func (t ImmediateTask) Destination() string {
 	return t.destination
 }
 
-func (ImmediateTask) Concurrent() bool {
-	return false
+func (ImmediateTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	return hsm.ValidateNotTransitioned(ref, node)
 }
 
 type ImmediateTaskSerializer struct{}
@@ -67,8 +67,7 @@ func (ImmediateTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type TimerTask struct {
-	deadline   time.Time
-	concurrent bool
+	deadline time.Time
 }
 
 var _ hsm.Task = TimerTask{}
@@ -85,30 +84,19 @@ func (TimerTask) Destination() string {
 	return ""
 }
 
-func (t TimerTask) Concurrent() bool {
-	return t.concurrent
-}
-
-func (t TimerTask) Validate(*hsm.Node) error {
-	// In case the task is considered concurrent, consider it valid for now.
+func (t TimerTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	return nil
 }
 
 type TimerTaskSerializer struct{}
 
 func (TimerTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
-	return TimerTask{deadline: attrs.Deadline, concurrent: len(data) > 0}, nil
+	return TimerTask{deadline: attrs.Deadline}, nil
 }
 
 func (s TimerTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
-	if tt, ok := task.(TimerTask); ok {
-		if tt.concurrent {
-			// Non empty data marks the task as concurrent.
-			return []byte{1}, nil
-		}
-		return nil, nil
-	}
-	return nil, fmt.Errorf("incompatible task: %v", task)
+	// No-op.
+	return nil, nil
 }
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {

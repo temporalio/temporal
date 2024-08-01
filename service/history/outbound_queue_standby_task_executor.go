@@ -120,12 +120,7 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 	}
 
 	err = e.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		if smt.Concurrent() {
-			//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
-			concurrentSmt := smt.(hsm.ConcurrentTask)
-			return concurrentSmt.Validate(node)
-		}
-		return nil
+		return smt.Validate(ref.StateMachineRef, node)
 	})
 
 	if err != nil {

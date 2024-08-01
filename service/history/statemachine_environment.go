@@ -267,27 +267,18 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return fmt.Errorf("%w: initial versioned transition mismatch", consts.ErrStaleReference)
 	}
 
-	if ref.StateMachineRef.MachineLastUpdateVersionedTransition == nil {
-		// ref is concurrent or when transition history was disabled when the node was last updated.
-		return nil
+	if ref.StateMachineRef.GetMachineLastUpdateVersionedTransition().GetTransitionCount() == 0 {
+		// Transition history was disabled when the node was last updated.
+		return ref.Validate(ref.StateMachineRef, node)
 	}
 
-	if node.InternalRepr().GetLastUpdateVersionedTransition().TransitionCount == 0 {
+	if node.InternalRepr().GetLastUpdateVersionedTransition().GetTransitionCount() == 0 {
 		// transition history was disabled after the ref was generated.
 		// fallback to the old validation logic.
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
 
-	// Non-nil MachineLastUpdatedVersionedTransition marks the reference as non-concurrent and can be
-	// invalidated with the check below.
-	if workflow.CompareVersionedTransition(
-		ref.StateMachineRef.MachineLastUpdateVersionedTransition,
-		node.InternalRepr().GetLastUpdateVersionedTransition(),
-	) != 0 {
-		return fmt.Errorf("%w: last update versioned transition mismatch", consts.ErrStaleReference)
-	}
-
-	return nil
+	return ref.Validate(ref.StateMachineRef, node)
 }
 
 func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistory(ms workflow.MutableState, ref hsm.Ref, potentialStaleState bool) error {
@@ -319,13 +310,11 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 		return fmt.Errorf("%w: state machine ref initial failover version mismatch", consts.ErrStaleReference)
 	}
 
-	// Only check for strict equality if the ref has non zero MachineTransitionCount, which marks the task as non-concurrent.
-	if ref.StateMachineRef.MachineTransitionCount != 0 &&
-		node.InternalRepr().GetTransitionCount() != ref.StateMachineRef.MachineTransitionCount {
-		return fmt.Errorf("%w: state machine transitions != ref transitions", consts.ErrStaleReference)
+	// This is only expected to be set on tasks for now.
+	if ref.Validate == nil {
+		return nil
 	}
-
-	return nil
+	return ref.Validate(ref.StateMachineRef, node)
 }
 
 // getValidatedMutableState loads mutable state and validates it with the given function.
