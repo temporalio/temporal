@@ -91,9 +91,6 @@ func (e taskExecutor) executeSchedulerWaitTask(
 	node *hsm.Node,
 	task SchedulerWaitTask,
 ) error {
-	if err := node.CheckRunning(); err != nil {
-		return err
-	}
 	return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
 		return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
 	})
@@ -115,9 +112,6 @@ func (e taskExecutor) executeSchedulerRunTask(
 	var s Scheduler
 	var prevArgs *schedspb.HsmSchedulerState
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		if err := node.CheckRunning(); err != nil {
-			return err
-		}
 		prevS, err := hsm.MachineData[*Scheduler](node)
 		prevArgs = prevS.HsmSchedulerState
 		if err != nil {

@@ -94,7 +94,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		return respond(err)
 	}
 
-	ref, smt, err := stateMachineTask(e.shardContext, task)
+	ref, _, err := stateMachineTask(e.shardContext, task)
 	if err != nil {
 		return respond(err)
 	}
@@ -109,12 +109,8 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	}
 
 	actionFn := func(ctx context.Context) (any, error) {
+		// Use the Access function to Validate() the reference and node.
 		err := e.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-			if smt.Concurrent() {
-				//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
-				concurrentSmt := smt.(hsm.ConcurrentTask)
-				return concurrentSmt.Validate(node)
-			}
 			return nil
 		})
 		if err != nil {

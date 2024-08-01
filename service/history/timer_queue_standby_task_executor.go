@@ -519,13 +519,9 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 		processedTimers, err := t.executeStateMachineTimers(
 			mutableState,
 			func(node *hsm.Node, task hsm.Task) error {
-				if task.Concurrent() {
-					//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
-					concurrentTask := task.(hsm.ConcurrentTask)
-					return concurrentTask.Validate(node)
-				}
-				// If the task is expired and still valid in the standby queue,
-				// then the state machine is stale.
+				// If this line of code is reached, the task's Validate() function returned no error, which indicates
+				// that it is still expected to run. Return ErrTaskRetry to wait the machine to transition on the active
+				// cluster.
 				return consts.ErrTaskRetry
 			},
 		)

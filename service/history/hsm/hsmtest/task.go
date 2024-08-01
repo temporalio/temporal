@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -63,8 +64,11 @@ func (t *Task) Destination() string {
 	return t.attrs.Destination
 }
 
-func (t *Task) Concurrent() bool {
-	return t.IsConcurrent
+func (t *Task) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if t.IsConcurrent {
+		return hsm.ValidateNotTransitioned(ref, node)
+	}
+	return nil
 }
 
 type TaskSerializer struct{}

@@ -225,6 +225,11 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	ref := hsm.Ref{
 		WorkflowKey:     ms.GetWorkflowKey(),
 		StateMachineRef: timer.Ref,
+		Validate:        smt.Validate,
+	}
+	// TODO(bergundy): I think we never want to execute tasks on zombie workflows, not sure why we check write access.
+	if err := t.validateNotZombieWorkflow(ms, hsm.AccessWrite); err != nil {
+		return err
 	}
 	if err := t.validateStateMachineRef(ms, ref, false); err != nil {
 		return err
@@ -266,6 +271,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 		for _, timer := range group.Infos {
 			err := t.executeSingleStateMachineTimer(ms, group.Deadline.AsTime(), timer, execute)
 			if err != nil {
+				// This includes errors such as ErrStaleReference and ErrWorkflowCompleted.
 				if !errors.As(err, new(*serviceerror.NotFound)) {
 					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(
 						1,
@@ -281,7 +287,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 					1,
 					metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
 				)
-				t.logger.Warn("Skipped state machine timer", tag.Error(err))
+				t.logger.Info("Skipped state machine timer", tag.Error(err))
 			}
 		}
 		// Remove the processed timer group.

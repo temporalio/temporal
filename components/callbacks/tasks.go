@@ -25,6 +25,7 @@ package callbacks
 import (
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -57,8 +58,8 @@ func (t InvocationTask) Deadline() time.Time {
 	return hsm.Immediate
 }
 
-func (InvocationTask) Concurrent() bool {
-	return false
+func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	return hsm.ValidateNotTransitioned(ref, node)
 }
 
 type InvocationTaskSerializer struct{}
@@ -81,16 +82,16 @@ func (BackoffTask) Type() string {
 	return TaskTypeBackoff
 }
 
-func (BackoffTask) Concurrent() bool {
-	return false
-}
-
 func (t BackoffTask) Deadline() time.Time {
 	return t.deadline
 }
 
 func (BackoffTask) Destination() string {
 	return ""
+}
+
+func (BackoffTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	return hsm.ValidateNotTransitioned(ref, node)
 }
 
 type BackoffTaskSerializer struct{}

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 )
@@ -56,12 +57,11 @@ func (TimeoutTask) Destination() string {
 	return ""
 }
 
-func (TimeoutTask) Concurrent() bool {
-	return true
-}
-
 // Validate checks if the timeout task is still valid to execute for the given node state.
-func (t TimeoutTask) Validate(node *hsm.Node) error {
+func (t TimeoutTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
 	op, err := hsm.MachineData[Operation](node)
 	if err != nil {
 		return err
@@ -105,8 +105,11 @@ func (t InvocationTask) Destination() string {
 	return t.EndpointName
 }
 
-func (InvocationTask) Concurrent() bool {
-	return false
+func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type InvocationTaskSerializer struct{}
@@ -137,8 +140,11 @@ func (t BackoffTask) Destination() string {
 	return ""
 }
 
-func (BackoffTask) Concurrent() bool {
-	return false
+func (BackoffTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type BackoffTaskSerializer struct{}
@@ -169,8 +175,11 @@ func (t CancelationTask) Destination() string {
 	return t.EndpointName
 }
 
-func (CancelationTask) Concurrent() bool {
-	return false
+func (CancelationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type CancelationTaskSerializer struct{}
@@ -201,8 +210,11 @@ func (CancelationBackoffTask) Destination() string {
 	return ""
 }
 
-func (CancelationBackoffTask) Concurrent() bool {
-	return false
+func (CancelationBackoffTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type CancelationBackoffTaskSerializer struct{}

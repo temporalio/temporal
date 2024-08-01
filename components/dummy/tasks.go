@@ -25,6 +25,7 @@ package dummy
 import (
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -51,8 +52,8 @@ func (t ImmediateTask) Destination() string {
 	return t.destination
 }
 
-func (ImmediateTask) Concurrent() bool {
-	return false
+func (ImmediateTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	return hsm.ValidateNotTransitioned(ref, node)
 }
 
 type ImmediateTaskSerializer struct{}
@@ -83,8 +84,8 @@ func (TimerTask) Destination() string {
 	return ""
 }
 
-func (TimerTask) Concurrent() bool {
-	return false
+func (TimerTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	return hsm.ValidateNotTransitioned(ref, node)
 }
 
 type TimerTaskSerializer struct{}
