@@ -308,11 +308,12 @@ func (f *outboundQueueFactory) CreateQueue(
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.OutboundTaskBatchSize,
-				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
+				MaxPendingTasksCount: f.Config.OutboundQueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.OutboundProcessorPollBackoffInterval,
 			},
 			MonitorOptions: queues.MonitorOptions{
-				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
+				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,
+				// Shared configuration with other queues.
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
