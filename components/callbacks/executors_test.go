@@ -82,7 +82,7 @@ func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationC
 	return ms.completionNexus, nil
 }
 
-func (ms mutableState) GetGetHSMCallbackArg(ctx context.Context) (*persistencespb.HSMCallbackArg, error) {
+func (ms mutableState) GetHSMCallbackArg(ctx context.Context) (*persistencespb.HSMCallbackArg, error) {
 	return ms.completionHsm, nil
 }
 
