@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -197,7 +198,7 @@ func (wm *perNamespaceWorkerManager) Stop() {
 
 	wm.lock.Lock()
 	workers := expmaps.Values(wm.workers)
-	expmaps.Clear(wm.workers)
+	maps.DeleteFunc(wm.workers, func(_ namespace.ID, _ *perNamespaceWorker) bool { return true })
 	wm.lock.Unlock()
 
 	for _, worker := range workers {
