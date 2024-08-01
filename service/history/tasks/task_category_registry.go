@@ -26,8 +26,7 @@ package tasks
 
 import (
 	"fmt"
-
-	"golang.org/x/exp/maps"
+	"maps"
 )
 
 type (
