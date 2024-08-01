@@ -281,28 +281,26 @@ func convertSyncVersionedTransitionTask(
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			currentVersionHistory, currentEvents, newEvents, _, err := getVersionHistoryAndEventsWithNewRun(
-				ctx,
-				shardContext,
-				shardID,
-				definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-				taskInfo.VersionedTransition.NamespaceFailoverVersion,
-				taskInfo.FirstEventID,
-				taskInfo.NextEventID,
-				taskInfo.NewRunID,
-				workflowCache,
-				eventBlobCache,
-				executionManager,
-				logger,
-			)
-			if err != nil {
-				return nil, err
-			}
-
 			transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-
 			// 1. task versioned transition not on current transition history
 			if workflow.TransitionHistoryStalenessCheck(transitionHistory, taskInfo.VersionedTransition) != nil {
+				currentVersionHistory, currentEvents, newEvents, _, err := getVersionHistoryAndEventsWithNewRun(
+					ctx,
+					shardContext,
+					shardID,
+					definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+					taskInfo.VersionedTransition.NamespaceFailoverVersion,
+					taskInfo.FirstEventID,
+					taskInfo.NextEventID,
+					taskInfo.NewRunID,
+					workflowCache,
+					eventBlobCache,
+					executionManager,
+					logger,
+				)
+				if err != nil {
+					return nil, err
+				}
 				if len(currentEvents) == 0 && len(taskInfo.NewRunID) == 0 {
 					return nil, nil
 				}
@@ -331,16 +329,27 @@ func convertSyncVersionedTransitionTask(
 
 			// TODO:
 			// When cache added, we only convert to this task when cached version transition greater than task version transition
+			versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+				mutableState.GetExecutionInfo().VersionHistories,
+				versionhistory.NewVersionHistoryItem(
+					taskInfo.FirstEventID,
+					taskInfo.VersionedTransition.NamespaceFailoverVersion,
+				),
+			)
+			if err != nil {
+				return nil, err
+			}
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 				SourceTaskId: taskInfo.TaskID,
 				Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
 					VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-						NamespaceId:            taskInfo.NamespaceID,
-						WorkflowId:             taskInfo.WorkflowID,
-						RunId:                  taskInfo.RunID,
-						NewRunId:               taskInfo.NewRunID,
-						LastVersionHistoryItem: taskInfo.LastVersionHistoryItem,
+						NamespaceId:         taskInfo.NamespaceID,
+						WorkflowId:          taskInfo.WorkflowID,
+						RunId:               taskInfo.RunID,
+						NewRunId:            taskInfo.NewRunID,
+						EventVersionHistory: mutableState.GetExecutionInfo().VersionHistories.Histories[versionHistoryIndex].GetItems(),
+						NextEventId:         taskInfo.NextEventID,
 					},
 				},
 				VersionedTransition: taskInfo.VersionedTransition,
