@@ -148,12 +148,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	}
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: ns,
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster2.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: ns,
 	})
 	s.NoError(err)
@@ -279,12 +279,12 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	ns := s.createGlobalNamespace()
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: ns,
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster2.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: ns,
 	})
 	s.NoError(err)
@@ -365,7 +365,7 @@ func (s *NexusStateReplicationSuite) waitOperationRetry(
 	}, time.Second*10, time.Millisecond*100)
 }
 
-func (s *NexusStateReplicationSuite) pollWorkflowTask(ctx context.Context, client tests.FrontendClient, ns string) *workflowservice.PollWorkflowTaskQueueResponse {
+func (s *NexusStateReplicationSuite) pollWorkflowTask(ctx context.Context, client workflowservice.WorkflowServiceClient, ns string) *workflowservice.PollWorkflowTaskQueueResponse {
 	pollRes, err := client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: ns,
 		TaskQueue: &taskqueuepb.TaskQueue{

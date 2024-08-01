@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -70,8 +71,8 @@ type (
 		testClusterFactory     TestClusterFactory
 		testCluster            *TestCluster
 		testClusterConfig      *TestClusterConfig
-		client                 FrontendClient
-		adminClient            AdminClient
+		client                 workflowservice.WorkflowServiceClient
+		adminClient            adminservice.AdminServiceClient
 		operatorClient         operatorservice.OperatorServiceClient
 		httpAPIAddress         string
 		Logger                 log.Logger
@@ -143,8 +144,8 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 			s.Require().NoError(err)
 		}
 
-		s.client = NewFrontendClient(connection)
-		s.adminClient = NewAdminClient(connection)
+		s.client = workflowservice.NewWorkflowServiceClient(connection)
+		s.adminClient = adminservice.NewAdminServiceClient(connection)
 		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
 	} else {
@@ -199,7 +200,7 @@ func ApplyTestClusterParams(options []Option) TestClusterParams {
 // If the Logger is not set, this method creates a new log.TestLogger which logs to stdout and stderr.
 func (s *FunctionalTestBase) setupLogger() {
 	if s.Logger == nil {
-		s.Logger = log.NewNoopLogger()
+		s.Logger = log.NewTestLogger()
 	}
 }
 
@@ -240,8 +241,6 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	if TestFlags.TestClusterConfigFile != "" {
 		configLocation = TestFlags.TestClusterConfigFile
 	}
-	// This is just reading a config so it's less of a security concern
-	// #nosec
 	confContent, err := os.ReadFile(configLocation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read test cluster config file %s: %w", configLocation, err)

@@ -227,8 +227,10 @@ func (s *xdcBaseSuite) createGlobalNamespace() string {
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Wait for namespace record to be replicated and loaded into memory.
-		_, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
-		assert.NoError(t, err)
+		for _, r := range s.cluster2.GetHost().GetFrontendNamespaceRegistries() {
+			_, err := r.GetNamespace(namespace.Name(ns))
+			assert.NoError(t, err)
+		}
 	}, 15*time.Second, 500*time.Millisecond)
 
 	return ns
@@ -238,7 +240,7 @@ func (s *xdcBaseSuite) failover(
 	namespace string,
 	targetCluster string,
 	targetFailoverVersion int64,
-	client tests.FrontendClient,
+	client workflowservice.WorkflowServiceClient,
 ) {
 	// wait for replication task propagation
 	time.Sleep(4 * time.Second)

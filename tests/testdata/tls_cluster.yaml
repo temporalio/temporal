@@ -7,7 +7,6 @@ historyconfig:
 workerconfig:
   enablearchiver: false
   enablereplicator: false
-  startworkeranyway: true
 generatemtls: true
 esconfig:
   version: "${ES_VERSION}"

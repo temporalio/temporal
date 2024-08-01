@@ -375,7 +375,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	s.NoError(err)
 
 	activeSDKClient, err := client.Dial(client.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(s.logger),
 	})
@@ -515,7 +515,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	s.Equal("result", result)
 }
 
-func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, frontendClient tests.FrontendClient, ns string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
+func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, frontendClient workflowservice.WorkflowServiceClient, ns string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
 	res, err := frontendClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: ns,
 		Identity:  uuid.NewString(),
@@ -567,8 +567,10 @@ func (s *NexusRequestForwardingSuite) createNexusRequestForwardingNamespace() st
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Wait for namespace record to be replicated and loaded into memory.
-		_, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
-		assert.NoError(t, err)
+		for _, r := range s.cluster2.GetHost().GetFrontendNamespaceRegistries() {
+			_, err := r.GetNamespace(namespace.Name(ns))
+			assert.NoError(t, err)
+		}
 	}, 15*time.Second, 500*time.Millisecond)
 
 	return ns

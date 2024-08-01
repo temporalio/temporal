@@ -93,7 +93,7 @@ func TestNDCReplicationTaskBatching(t *testing.T) {
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
-	s.logger = log.NewNoopLogger()
+	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 	s.testClusterFactory = tests.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
@@ -113,7 +113,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 
 	passiveClusterConfig := clusterConfigs[1]
-	passiveClusterConfig.WorkerConfig = &tests.WorkerConfig{}
+	passiveClusterConfig.WorkerConfig = tests.WorkerConfig{}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
