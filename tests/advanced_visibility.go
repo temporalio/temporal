@@ -29,6 +29,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"strconv"
 	"strings"
 	"time"
@@ -2647,6 +2648,112 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	})
 	s.Require().NoError(err)
 	s.Require().Equal(0, len(res.BuildIdReachability[0].TaskQueueReachability))
+}
+
+func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
+	ctx := NewContext()
+
+	// Test 1: List schedule with "scheduleId" query
+	scheduleID := "test-schedule-" + uuid.New()
+	workflowType := "test-workflow-type"
+	workflowID := "test-schedule-" + uuid.New()
+
+	schedule := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		RequestId:  uuid.New(),
+		ScheduleId: scheduleID,
+		Schedule: &schedulepb.Schedule{
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   workflowID,
+						WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: "default"},
+					},
+				},
+			},
+			Policies: &schedulepb.SchedulePolicies{},
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(time.Hour)},
+				},
+			},
+		},
+	}
+
+	_, err := s.client.CreateSchedule(ctx, schedule)
+	s.NoError(err)
+
+	query := fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, scheduleID)
+	listRequest := &workflowservice.ListSchedulesRequest{
+		Namespace:       s.namespace,
+		MaximumPageSize: 1,
+		Query:           query,
+	}
+
+	var listResponse *workflowservice.ListSchedulesResponse
+	s.Eventually(func() bool {
+		listResponse, err = s.client.ListSchedules(ctx, listRequest)
+		return err == nil && len(listResponse.Schedules) == 1
+	}, 10*time.Second, 100*time.Millisecond)
+
+	s.NoError(err)
+	s.Equal(1, len(listResponse.Schedules))
+	s.Equal(scheduleID, listResponse.Schedules[0].ScheduleId)
+
+	// Test 2: List schedule with custom "scheduleId" search attribute
+	addSearchAttributesRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  primitives.SystemLocalNamespace,
+		WorkflowId: "add-search-attribute-" + uuid.New(),
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "add-search-attributes",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "system",
+		},
+		Input: payloads.EncodeString(fmt.Sprintf(`{"SearchAttributes": {"%s": "Keyword"}}`, searchattribute.ScheduleID)),
+	}
+	_, err = s.client.StartWorkflowExecution(ctx, addSearchAttributesRequest)
+	s.NoError(err)
+
+	// Create the schedule with the new search attribute and verify it can be listed
+	customScheduleID := "test-schedule-" + uuid.New()
+	customSearchAttrValue := "testScheduleId"
+
+	var createdSchedule *schedulepb.ScheduleListEntry
+	s.Eventually(func() bool {
+		searchAttributes := &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				searchattribute.ScheduleID: payload.EncodeString(customSearchAttrValue),
+			},
+		}
+
+		schedule.ScheduleId = customScheduleID
+		schedule.SearchAttributes = searchAttributes
+
+		_, err := s.client.CreateSchedule(ctx, schedule)
+		if err != nil {
+			return false
+		}
+
+		query := fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
+		listRequest := &workflowservice.ListSchedulesRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 1,
+			Query:           query,
+		}
+
+		listResponse, err := s.client.ListSchedules(ctx, listRequest)
+		if err != nil || len(listResponse.Schedules) != 1 {
+			return false
+		}
+
+		createdSchedule = listResponse.Schedules[0]
+		return createdSchedule.ScheduleId == customScheduleID
+	}, 30*time.Second, 1*time.Second)
+
+	s.NotNil(createdSchedule)
+	s.Equal(customScheduleID, createdSchedule.ScheduleId)
 }
 
 func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
