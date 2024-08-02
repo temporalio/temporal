@@ -50,7 +50,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	repicationpb "go.temporal.io/server/api/replication/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/payloads"
@@ -136,8 +135,8 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	mockStreamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
 	mockStreamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: &repicationpb.WorkflowReplicationMessages{
-				ReplicationTasks:           []*repicationpb.ReplicationTask{},
+			Messages: &replicationspb.WorkflowReplicationMessages{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{},
 				ExclusiveHighWatermark:     100,
 				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
 			},

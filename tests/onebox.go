@@ -370,10 +370,8 @@ func (c *temporalImpl) GetFrontendNamespaceRegistries() []namespace.Registry {
 }
 
 func (c *temporalImpl) setupMockAdminClient(clientBean client.Bean) {
-	if c.mockAdminClient != nil && clientBean != nil {
-		for serviceName, client := range c.mockAdminClient {
-			clientBean.SetRemoteAdminClient(serviceName, client)
-		}
+	for cluster, client := range c.mockAdminClient {
+		clientBean.SetRemoteAdminClient(cluster, client)
 	}
 }
 
