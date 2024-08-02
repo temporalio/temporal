@@ -2042,7 +2042,7 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueM
 
 // Responsible for emitting and updating loaded_task_queue_family_count, loaded_task_queue_count and
 // loaded_task_queue_partition_count metrics
-func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitionManagerImpl, delta int) {
+func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartitionManager, delta int) {
 
 	// each metric shall be accessed based on the mentioned parameters
 	taskQueueFamilyParameters := taskQueueCounterKey{
@@ -2081,18 +2081,18 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitio
 
 	e.metricsHandler.Gauge(metrics.LoadedTaskQueueFamilyGauge.Name()).Record(
 		float64(loadedTaskQueueFamilyCounter),
-		metrics.NamespaceTag(pm.ns.Name().String()),
+		metrics.NamespaceTag(pm.Namespace().Name().String()),
 	)
 
 	metrics.LoadedTaskQueueGauge.With(e.metricsHandler).Record(
 		float64(loadedTaskQueueCounter),
-		metrics.NamespaceTag(pm.ns.Name().String()),
+		metrics.NamespaceTag(pm.Namespace().Name().String()),
 		metrics.TaskTypeTag(taskQueueParameters.taskType.String()),
 	)
 
 	metrics.LoadedTaskQueuePartitionGauge.With(e.metricsHandler).Record(
 		float64(loadedTaskQueuePartitionCounter),
-		metrics.NamespaceTag(pm.ns.Name().String()),
+		metrics.NamespaceTag(pm.Namespace().Name().String()),
 		metrics.TaskTypeTag(taskQueueParameters.taskType.String()),
 		metrics.PartitionTypeTag(taskQueuePartitionParameters.partitionType.String()),
 	)

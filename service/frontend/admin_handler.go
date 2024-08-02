@@ -47,7 +47,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -1678,11 +1677,7 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 ) (retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	ctxMetadata, ok := metadata.FromIncomingContext(clientCluster.Context())
-	if !ok {
-		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
-	}
-	_, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	_, serverClusterShardID, err := history.DecodeClusterShardMD(headers.NewGRPCHeaderGetter(clientCluster.Context()))
 	if err != nil {
 		return err
 	}
