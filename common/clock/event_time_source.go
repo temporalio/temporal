@@ -54,6 +54,8 @@ type (
 	}
 )
 
+var _ TimeSource = (*EventTimeSource)(nil)
+
 // NewEventTimeSource returns a EventTimeSource with the current time set to Unix zero: 1970-01-01 00:00:00 +0000 UTC.
 func NewEventTimeSource() *EventTimeSource {
 	return &EventTimeSource{
@@ -67,6 +69,10 @@ func (ts *EventTimeSource) Now() time.Time {
 	defer ts.mu.RUnlock()
 
 	return ts.now
+}
+
+func (ts *EventTimeSource) Since(t time.Time) time.Duration {
+	return ts.Now().Sub(t)
 }
 
 // AfterFunc return a timer that will fire after the specified duration. It is important to note that the timeSource is

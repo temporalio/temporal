@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
 	"go.temporal.io/server/common/clock"
 )
 
@@ -81,6 +82,25 @@ func ExampleEventTimeSource() {
 	// advancing time source by 1 second
 	// timer fired
 	// time source advanced
+}
+
+func TestEventTimeSource_Since(t *testing.T) {
+	t.Parallel()
+
+	// Create a new fake time source.
+	source := clock.NewEventTimeSource()
+
+	// No delta expected yet
+	start := source.Now()
+	assert.Equal(t, time.Duration(0), source.Since(start))
+
+	// Advance by one
+	source.Advance(1 * time.Second)
+	assert.Equal(t, 1*time.Second, source.Since(start))
+
+	// Advance back to start
+	source.Advance(-1 * time.Second)
+	assert.Equal(t, time.Duration(0), source.Since(start))
 }
 
 func TestEventTimeSource_AfterFunc(t *testing.T) {

@@ -98,7 +98,7 @@ const (
 )
 
 // Scheduled tasks with timestamp after this will not be created.
-// Those tasks are too far in the future and pratically never fire and just consume storage space.
+// Those tasks are too far in the future and practically never fire and just consume storage space.
 // NOTE: this value is less than timer.MaxAllowedTimer so that no capped timers will be created.
 var maxScheduledTaskDuration = time.Hour * 24 * 365 * 99
 
@@ -319,8 +319,9 @@ func NewMutableState(
 	s.executionState = &persistencespb.WorkflowExecutionState{
 		RunId: runID,
 
-		State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		State:     enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime: timestamppb.New(startTime),
 	}
 	s.approximateSize += s.executionState.Size()
 
@@ -348,8 +349,7 @@ func NewMutableStateFromDB(
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
-	// startTime will be overridden by DB record
-	startTime := time.Time{}
+	startTime := timestamp.TimeValue(dbRecord.ExecutionState.StartTime)
 	mutableState := NewMutableState(
 		shard,
 		eventsCache,
