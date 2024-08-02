@@ -93,12 +93,11 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		if mapper != nil {
 			fieldName, err = mapper.GetFieldName(fieldName, ni.namespace.String())
 			if err != nil {
-				if name == searchattribute.ScheduleID {
-					// Not a custom SA, so convert to WorkflowId
-					fieldName = searchattribute.WorkflowID
-				} else {
+				if name != searchattribute.ScheduleID {
 					return "", err
 				}
+				// Not a custom SA, so convert to WorkflowId
+				fieldName = searchattribute.WorkflowID
 			}
 		}
 	}

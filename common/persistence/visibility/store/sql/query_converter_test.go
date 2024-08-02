@@ -1075,8 +1075,8 @@ func TestSupportedTypeRangeCond(t *testing.T) {
 }
 
 func newMapper(
-	getAlias func(fieldName, namespace string) (string, error),
-	getFieldName func(alias, namespace string) (string, error),
+	getAlias func(fieldName, ns string) (string, error),
+	getFieldName func(alias, ns string) (string, error),
 ) searchattribute.Mapper {
 	return &FlexibleMapper{
 		GetAliasFunc:     getAlias,

@@ -479,16 +479,15 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 		var err error
 		saFieldName, err = c.saMapper.GetFieldName(saFieldName, c.namespaceName.String())
 		if err != nil {
-			if saAlias == searchattribute.ScheduleID {
-				// Not a custom SA, so convert to WorkflowId
-				saFieldName = searchattribute.WorkflowID
-			} else {
+			if saAlias != searchattribute.ScheduleID {
 				return nil, query.NewConverterError(
 					"%s: column name '%s' is not a valid search attribute",
 					query.InvalidExpressionErrMessage,
 					saAlias,
 				)
 			}
+			// Not a custom SA, so convert to WorkflowId
+			saFieldName = searchattribute.WorkflowID
 		}
 	}
 
