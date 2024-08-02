@@ -102,6 +102,7 @@ type (
 
 		fxApps []*fx.App
 
+		// This is used to wait for namespace registries to have noticed a change in some xdc tests.
 		frontendNamespaceRegistries []namespace.Registry
 
 		// These are routing/load balancing clients but do not do retries:
@@ -259,12 +260,12 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	impl.matchingConfig.NumMatchingHosts = max(minNodes, impl.matchingConfig.NumMatchingHosts)
 	impl.workerConfig.NumWorkers = max(minNodes, impl.workerConfig.NumWorkers)
 
-	m := make(map[primitives.ServiceName]static.Hosts)
-	m[primitives.FrontendService] = static.Hosts{All: impl.FrontendGRPCAddresses()}
-	m[primitives.MatchingService] = static.Hosts{All: impl.MatchingServiceAddresses()}
-	m[primitives.HistoryService] = static.Hosts{All: impl.HistoryServiceAddresses()}
-	m[primitives.WorkerService] = static.Hosts{All: impl.WorkerServiceAddresses()}
-	impl.hostsByService = m
+	impl.hostsByService = map[primitives.ServiceName]static.Hosts{
+		primitives.FrontendService: static.Hosts{All: impl.FrontendGRPCAddresses()},
+		primitives.MatchingService: static.Hosts{All: impl.MatchingServiceAddresses()},
+		primitives.HistoryService:  static.Hosts{All: impl.HistoryServiceAddresses()},
+		primitives.WorkerService:   static.Hosts{All: impl.WorkerServiceAddresses()},
+	}
 
 	impl.overrideHistoryDynamicConfig(t, testDCClient)
 
