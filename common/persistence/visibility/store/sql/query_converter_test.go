@@ -1089,10 +1089,10 @@ type FlexibleMapper struct {
 	GetFieldNameFunc func(alias, namespace string) (string, error)
 }
 
-func (m *FlexibleMapper) GetAlias(fieldName, namespace string) (string, error) {
-	return m.GetAliasFunc(fieldName, namespace)
+func (m *FlexibleMapper) GetAlias(fieldName, ns string) (string, error) {
+	return m.GetAliasFunc(fieldName, ns)
 }
 
-func (m *FlexibleMapper) GetFieldName(alias, namespace string) (string, error) {
-	return m.GetFieldNameFunc(alias, namespace)
+func (m *FlexibleMapper) GetFieldName(alias, ns string) (string, error) {
+	return m.GetFieldNameFunc(alias, ns)
 }
