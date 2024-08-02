@@ -27,7 +27,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/maps"
+	expmaps "golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -96,5 +96,5 @@ func getQueryFields(
 		}
 		return nil, err
 	}
-	return maps.Keys(fnInterceptor.names), nil
+	return expmaps.Keys(fnInterceptor.names), nil
 }

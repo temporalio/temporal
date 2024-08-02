@@ -25,11 +25,10 @@
 package tests
 
 import (
+	"maps"
 	"sync"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"

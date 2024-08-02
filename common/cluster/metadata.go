@@ -29,13 +29,12 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"

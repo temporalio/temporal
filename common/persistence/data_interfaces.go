@@ -130,6 +130,7 @@ type (
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
+		StartTime        *time.Time
 	}
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record
