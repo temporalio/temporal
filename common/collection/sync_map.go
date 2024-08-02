@@ -47,6 +47,24 @@ func (m *SyncMap[K, V]) Get(key K) (value V, ok bool) {
 	return
 }
 
+func (m *SyncMap[K, V]) GetOrSet(key K, value V) (v V, exist bool) {
+	m.RLock()
+	value, ok := m.contents[key]
+	m.RUnlock()
+	if ok {
+		return value, ok
+	}
+
+	m.Lock()
+	defer m.Unlock()
+	value, ok = m.contents[key]
+	if ok {
+		return value, ok
+	}
+	m.contents[key] = value
+	return value, false
+}
+
 func (m *SyncMap[K, V]) Set(key K, value V) {
 	m.Lock()
 	defer m.Unlock()
@@ -67,4 +85,14 @@ func (m *SyncMap[K, V]) Pop(key K) (value V, ok bool) {
 		delete(m.contents, key)
 	}
 	return value, ok
+}
+
+func (m *SyncMap[K, V]) KeySet() []K {
+	m.Lock()
+	defer m.Unlock()
+	keys := make([]K, 0, len(m.contents))
+	for k, _ := range m.contents {
+		keys = append(keys, k)
+	}
+	return keys
 }
