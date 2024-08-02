@@ -108,6 +108,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
 		require.NoError(t, err)
 		_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Identity:  "test",
+			Namespace: s.namespace,
 			TaskToken: pollResp.TaskToken,
 			Commands: []*commandpb.Command{
 				{
@@ -225,6 +226,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 		})
 		require.NoError(t, err)
 		_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: s.namespace,
 			Identity:  "test",
 			TaskToken: pollResp.TaskToken,
 			Commands: []*commandpb.Command{
@@ -435,6 +437,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	})
 	s.NoError(err)
 	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -673,6 +676,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncFailure() {
 		})
 		require.NoError(t, err)
 		_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: s.namespace,
 			Identity:  "test",
 			TaskToken: pollResp.TaskToken,
 			Commands: []*commandpb.Command{
@@ -928,6 +932,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionInternalAuth() 
 	})
 	s.NoError(err)
 	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
