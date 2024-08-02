@@ -180,10 +180,8 @@ func (c *clientImpl) ForceLoadTaskQueuePartition(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
 
-	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueuePartition().GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueuePartition().GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
