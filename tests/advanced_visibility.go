@@ -2696,7 +2696,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	s.Eventually(func() bool {
 		listResponse, err = s.client.ListSchedules(ctx, listRequest)
 		return err == nil && len(listResponse.Schedules) == 1
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 30*time.Second, 1*time.Second)
 
 	s.NoError(err)
 	s.Equal(1, len(listResponse.Schedules))
@@ -2720,9 +2720,6 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	_, err = s.client.CreateSchedule(ctx, schedule)
 	s.NoError(err)
 
-	time.Sleep(61000)
-
-	var createdSchedule *schedulepb.ScheduleListEntry
 	s.Eventually(func() bool {
 		query := fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
 		listRequest := &workflowservice.ListSchedulesRequest{
@@ -2736,12 +2733,10 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 			return false
 		}
 
-		createdSchedule = listResponse.Schedules[0]
+		createdSchedule := listResponse.Schedules[0]
+
 		return createdSchedule.ScheduleId == customScheduleID
 	}, 30*time.Second, 1*time.Second)
-
-	s.NotNil(createdSchedule)
-	s.Equal(customScheduleID, createdSchedule.ScheduleId)
 }
 
 func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
@@ -2816,30 +2811,24 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 
 func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Context, attrName string) {
 	// Add new search attribute
-	request := &operatorservice.AddSearchAttributesRequest{
+	_, err := s.operatorClient.AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			attrName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 		Namespace: s.namespace,
-	}
-
-	_, err := s.testCluster.GetOperatorClient().AddSearchAttributes(ctx, request)
+	})
 	s.NoError(err)
 
 	// Wait for search attribute to be available
 	s.Eventually(func() bool {
-		descResp, err := s.client.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		descResp, err := s.operatorClient.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
 			Namespace: s.namespace,
 		})
 		if err != nil {
 			return false
 		}
 
-		for _, attr := range descResp.Config.CustomSearchAttributeAliases {
-			if attr == attrName {
-				return true
-			}
-		}
-		return false
+		_, exists := descResp.CustomAttributes[attrName]
+		return exists
 	}, 30*time.Second, 1*time.Second)
 }

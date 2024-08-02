@@ -85,13 +85,6 @@ func NewValuesInterceptor(
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
-	if fieldName == searchattribute.ScheduleID {
-		if _, err := ni.searchAttributesTypeMap.GetType(fieldName); err != nil {
-			// Not a custom SA, so convert to WorkflowId
-			fieldName = searchattribute.WorkflowID
-		}
-	}
-
 	if searchattribute.IsMappable(fieldName) {
 		mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
 		if err != nil {
@@ -100,7 +93,12 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		if mapper != nil {
 			fieldName, err = mapper.GetFieldName(fieldName, ni.namespace.String())
 			if err != nil {
-				return "", err
+				if name == searchattribute.ScheduleID {
+					// Not a custom SA, so convert to WorkflowId
+					fieldName = searchattribute.WorkflowID
+				} else {
+					return "", err
+				}
 			}
 		}
 	}

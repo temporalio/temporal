@@ -26,6 +26,7 @@ package sql
 
 import (
 	"fmt"
+	"go.temporal.io/api/serviceerror"
 	"testing"
 	"time"
 
@@ -607,7 +608,7 @@ func (s *queryConverterSuite) TestConvertColName() {
 			err: nil,
 		},
 		{
-			name:   "ScheduleId as custom SA",
+			name:   "ScheduleId when there is a ScheduleId custom SA",
 			input:  searchattribute.ScheduleID,
 			output: searchattribute.ScheduleID,
 			retValue: newSAColName(
@@ -624,7 +625,7 @@ func (s *queryConverterSuite) TestConvertColName() {
 			},
 		},
 		{
-			name:   "ScheduleId as non-custom SA",
+			name:   "ScheduleId when there is no ScheduleId custom SA",
 			input:  searchattribute.ScheduleID,
 			output: "workflow_id",
 			retValue: newSAColName(
@@ -634,6 +635,18 @@ func (s *queryConverterSuite) TestConvertColName() {
 				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			),
 			err: nil,
+			setup: func() {
+				s.queryConverter.saMapper = newMapper(
+					func(alias, namespace string) (string, error) {
+						return alias, nil
+					},
+					func(fieldName, namespace string) (string, error) {
+						return "", serviceerror.NewInvalidArgument(
+							fmt.Sprintf("Namespace %s has no mapping defined for field name %s", namespace, fieldName),
+						)
+					},
+				)
+			},
 		},
 	}
 
@@ -1059,4 +1072,27 @@ func TestSupportedTypeRangeCond(t *testing.T) {
 			s.False(isSupportedTypeRangeCond(tp), msg)
 		}
 	}
+}
+
+func newMapper(
+	getAlias func(fieldName, namespace string) (string, error),
+	getFieldName func(alias, namespace string) (string, error),
+) searchattribute.Mapper {
+	return &FlexibleMapper{
+		GetAliasFunc:     getAlias,
+		GetFieldNameFunc: getFieldName,
+	}
+}
+
+type FlexibleMapper struct {
+	GetAliasFunc     func(fieldName, namespace string) (string, error)
+	GetFieldNameFunc func(alias, namespace string) (string, error)
+}
+
+func (m *FlexibleMapper) GetAlias(fieldName, namespace string) (string, error) {
+	return m.GetAliasFunc(fieldName, namespace)
+}
+
+func (m *FlexibleMapper) GetFieldName(alias, namespace string) (string, error) {
+	return m.GetFieldNameFunc(alias, namespace)
 }

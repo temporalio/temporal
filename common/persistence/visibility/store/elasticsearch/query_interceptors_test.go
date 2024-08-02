@@ -25,6 +25,7 @@
 package elasticsearch
 
 import (
+	"fmt"
 	"go.temporal.io/api/enums/v1"
 	"testing"
 
@@ -58,7 +59,7 @@ func (s *QueryInterceptorSuite) TearDownTest() {
 }
 
 func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
-	mockNameInterceptor := s.createMockNameInterceptor()
+	mockNameInterceptor := s.createMockNameInterceptor(nil)
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
@@ -98,7 +99,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 }
 
 func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
-	mockNameInterceptor := s.createMockNameInterceptor()
+	mockNameInterceptor := s.createMockNameInterceptor(nil)
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
@@ -144,7 +145,7 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 }
 
 func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
-	mockNameInterceptor := s.createMockNameInterceptor()
+	mockNameInterceptor := s.createMockNameInterceptor(nil)
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
@@ -193,7 +194,7 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 
 // Verifies the nameInterceptor correctly transforms ScheduleID to WorkflowID and stores the transformation.
 func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
-	ni := s.createMockNameInterceptor()
+	ni := s.createMockNameInterceptor(&mockErrorMapper{})
 
 	fieldName, err := ni.Name(searchattribute.ScheduleID, query.FieldNameFilter)
 	s.NoError(err)
@@ -209,7 +210,7 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 // Ensures the valuesInterceptor applies the ScheduleID to WorkflowID transformation,
 // including prepending the WorkflowIDPrefix.
 func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
-	mockNameInterceptor := s.createMockNameInterceptor()
+	mockNameInterceptor := s.createMockNameInterceptor(nil)
 	mockNameInterceptor.fieldTransformations[searchattribute.ScheduleID] = fieldTransformation{
 		originalField: searchattribute.ScheduleID,
 		newField:      searchattribute.WorkflowID,
@@ -230,7 +231,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 
 // Ensures the valuesInterceptor doesn't modify values when no transformation is needed.
 func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
-	mockNameInterceptor := s.createMockNameInterceptor()
+	mockNameInterceptor := s.createMockNameInterceptor(nil)
 
 	typeMap := searchattribute.TestNameTypeMap.Copy()
 	typeMap.AddCustomSearchAttribute(searchattribute.ScheduleID, enums.INDEXED_VALUE_TYPE_KEYWORD)
@@ -248,11 +249,21 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	s.Equal("test-workflow-id", values[0])
 }
 
-func (s *QueryInterceptorSuite) createMockNameInterceptor() *nameInterceptor {
+func (s *QueryInterceptorSuite) createMockNameInterceptor(mapper searchattribute.Mapper) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      "test-namespace",
 		searchAttributesTypeMap:        searchattribute.TestNameTypeMap,
-		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(mapper),
 		fieldTransformations:           make(map[string]fieldTransformation),
 	}
+}
+
+type mockErrorMapper struct{}
+
+func (m *mockErrorMapper) GetAlias(fieldName string, namespace string) (string, error) {
+	return fieldName, nil // Just return the field name as is
+}
+
+func (m *mockErrorMapper) GetFieldName(alias string, namespace string) (string, error) {
+	return "", fmt.Errorf("mock error: GetFieldName always fails")
 }

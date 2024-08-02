@@ -475,22 +475,20 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 		c.fieldTransformations = make(map[string]fieldTransformation)
 	}
 
-	if saFieldName == searchattribute.ScheduleID {
-		if _, err := c.saTypeMap.GetType(saFieldName); err != nil {
-			// Not a custom SA, so convert to WorkflowId
-			saFieldName = searchattribute.WorkflowID
-		}
-	}
-
 	if searchattribute.IsMappable(saFieldName) {
 		var err error
 		saFieldName, err = c.saMapper.GetFieldName(saFieldName, c.namespaceName.String())
 		if err != nil {
-			return nil, query.NewConverterError(
-				"%s: column name '%s' is not a valid search attribute",
-				query.InvalidExpressionErrMessage,
-				saAlias,
-			)
+			if saAlias == searchattribute.ScheduleID {
+				// Not a custom SA, so convert to WorkflowId
+				saFieldName = searchattribute.WorkflowID
+			} else {
+				return nil, query.NewConverterError(
+					"%s: column name '%s' is not a valid search attribute",
+					query.InvalidExpressionErrMessage,
+					saAlias,
+				)
+			}
 		}
 	}
 
