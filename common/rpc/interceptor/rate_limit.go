@@ -30,10 +30,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/headers"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -74,8 +73,7 @@ func (i *RateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-	if err := i.Allow(info.FullMethod, headers.GRPCHeaderGetter{Metadata: md}); err != nil {
+	if err := i.Allow(info.FullMethod, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 		return nil, err
 	}
 

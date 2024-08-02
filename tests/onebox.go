@@ -881,7 +881,7 @@ func (c *temporalImpl) newRPCFactory(
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
 	logger log.Logger,
-	grpcResolver membership.GRPCResolver,
+	grpcResolver *membership.GRPCResolver,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	monitor membership.Monitor,
 	httpPort httpPort,
@@ -905,8 +905,8 @@ func (c *temporalImpl) newRPCFactory(
 		sn,
 		logger,
 		tlsConfigProvider,
-		membership.MakeResolverURL(primitives.FrontendService),
-		membership.MakeResolverURL(primitives.FrontendService),
+		grpcResolver.MakeURL(primitives.FrontendService),
+		grpcResolver.MakeURL(primitives.FrontendService),
 		int(httpPort),
 		frontendTLSConfig,
 		nil,
@@ -975,7 +975,7 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 }
 
 func sdkClientFactoryProvider(
-	resolver membership.GRPCResolver,
+	grpcResolver *membership.GRPCResolver,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
@@ -989,7 +989,7 @@ func sdkClientFactoryProvider(
 		}
 	}
 	return sdk.NewClientFactory(
-		membership.MakeResolverURL(primitives.FrontendService),
+		grpcResolver.MakeURL(primitives.FrontendService),
 		tlsConfig,
 		metricsHandler,
 		logger,
