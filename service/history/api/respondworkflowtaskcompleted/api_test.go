@@ -27,6 +27,7 @@ package respondworkflowtaskcompleted
 import (
 	"context"
 	"errors"
+	"maps"
 	"testing"
 	"time"
 
@@ -41,7 +42,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"

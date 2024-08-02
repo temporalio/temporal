@@ -25,6 +25,7 @@
 package tasks
 
 import (
+	"math/rand"
 	"slices"
 	"testing"
 
@@ -32,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/rand"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
