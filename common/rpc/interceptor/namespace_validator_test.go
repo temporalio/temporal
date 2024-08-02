@@ -45,6 +45,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
@@ -59,6 +61,15 @@ type (
 	}
 )
 
+func (s *namespaceValidatorSuite) NewNamespaceValidatorInterceptor() *NamespaceValidatorInterceptor {
+	return NewNamespaceValidatorInterceptor(
+		s.mockRegistry,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetIntPropertyFn(100))
+}
+
 func TestNamespaceValidatorSuite(t *testing.T) {
 	suite.Run(t, &namespaceValidatorSuite{})
 }
@@ -71,7 +82,6 @@ func (s *namespaceValidatorSuite) TearDownSuite() {
 
 func (s *namespaceValidatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-
 	s.controller = gomock.NewController(s.T())
 	s.mockRegistry = namespace.NewMockRegistry(s.controller)
 }
@@ -86,10 +96,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotSet(
 		WorkflowId:  "wid",
 	})
 
-	nvi := NewNamespaceValidatorInterceptor(
-		s.mockRegistry,
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+	nvi := s.NewNamespaceValidatorInterceptor()
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -139,6 +146,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotFoun
 
 	nvi := NewNamespaceValidatorInterceptor(
 		s.mockRegistry,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 		dynamicconfig.GetBoolPropertyFn(false),
 		dynamicconfig.GetIntPropertyFn(100))
 	serverInfo := &grpc.UnaryServerInfo{
@@ -411,10 +420,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 					}), nil)
 			}
 
-			nvi := NewNamespaceValidatorInterceptor(
-				s.mockRegistry,
-				dynamicconfig.GetBoolPropertyFn(false),
-				dynamicconfig.GetIntPropertyFn(100))
+			nvi := s.NewNamespaceValidatorInterceptor()
 			serverInfo := &grpc.UnaryServerInfo{
 				FullMethod: testCase.method,
 			}
@@ -486,10 +492,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 				},
 			}), nil)
 
-		nvi := NewNamespaceValidatorInterceptor(
-			s.mockRegistry,
-			dynamicconfig.GetBoolPropertyFn(false),
-			dynamicconfig.GetIntPropertyFn(100))
+		nvi := s.NewNamespaceValidatorInterceptor()
 		serverInfo := &grpc.UnaryServerInfo{
 			FullMethod: testCase.method,
 		}
@@ -511,10 +514,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 }
 
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_DescribeNamespace_Id() {
-	nvi := NewNamespaceValidatorInterceptor(
-		s.mockRegistry,
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+	nvi := s.NewNamespaceValidatorInterceptor()
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -541,10 +541,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_DescribeNamespac
 }
 
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_GetClusterInfo() {
-	nvi := NewNamespaceValidatorInterceptor(
-		s.mockRegistry,
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+	nvi := s.NewNamespaceValidatorInterceptor()
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -562,10 +559,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_GetClusterInfo()
 }
 
 func (s *namespaceValidatorSuite) Test_Intercept_RegisterNamespace() {
-	nvi := NewNamespaceValidatorInterceptor(
-		s.mockRegistry,
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+	nvi := s.NewNamespaceValidatorInterceptor()
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -650,12 +644,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 					},
 				},
 			})
-
-		req := &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Namespace: testCase.requestNamespaceName.String(),
-			TaskToken: taskToken,
-		}
-		queryReq := &workflowservice.RespondQueryTaskCompletedRequest{
+		req := &workflowservice.RespondQueryTaskCompletedRequest{
 			Namespace: testCase.requestNamespaceName.String(),
 			TaskToken: taskToken,
 		}
@@ -673,13 +662,16 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 			})
 
 		// 2 times because of RespondQueryTaskCompleted.
-		s.mockRegistry.EXPECT().GetNamespace(testCase.requestNamespaceName).Return(requestNamespace, nil).Times(2)
-		s.mockRegistry.EXPECT().GetNamespaceByID(testCase.tokenNamespaceID).Return(tokenNamespace, nil).Times(2)
+		s.mockRegistry.EXPECT().GetNamespace(testCase.requestNamespaceName).Return(requestNamespace, nil).Times(1)
+		s.mockRegistry.EXPECT().GetNamespaceByID(testCase.tokenNamespaceID).Return(tokenNamespace, nil).Times(1)
 
 		nvi := NewNamespaceValidatorInterceptor(
 			s.mockRegistry,
+			log.NewNoopLogger(),
+			metrics.NoopMetricsHandler,
 			dynamicconfig.GetBoolPropertyFn(testCase.enableTokenNamespaceEnforcement),
 			dynamicconfig.GetIntPropertyFn(100))
+
 		serverInfo := &grpc.UnaryServerInfo{
 			FullMethod: api.WorkflowServicePrefix + "RandomMethod",
 		}
@@ -687,20 +679,14 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 		handlerCalled := false
 		_, err := nvi.StateValidationIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
 			handlerCalled = true
-			return &workflowservice.RespondWorkflowTaskCompletedResponse{}, nil
-		})
-		_, queryErr := nvi.StateValidationIntercept(context.Background(), queryReq, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
-			handlerCalled = true
 			return &workflowservice.RespondQueryTaskCompletedResponse{}, nil
 		})
 
 		if testCase.expectedErr != nil {
 			s.IsType(testCase.expectedErr, err)
-			s.IsType(testCase.expectedErr, queryErr)
 			s.False(handlerCalled)
 		} else {
 			s.NoError(err)
-			s.NoError(queryErr)
 			s.True(handlerCalled)
 		}
 	}
@@ -720,11 +706,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_DescribeHistoryHostRequests() {
 	}
 
 	for _, testCase := range testCases {
-		nvi := NewNamespaceValidatorInterceptor(
-			s.mockRegistry,
-			dynamicconfig.GetBoolPropertyFn(false),
-			dynamicconfig.GetIntPropertyFn(100),
-		)
+		nvi := s.NewNamespaceValidatorInterceptor()
 		serverInfo := &grpc.UnaryServerInfo{
 			FullMethod: api.WorkflowServicePrefix + "random",
 		}
@@ -807,6 +789,8 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 
 		nvi := NewNamespaceValidatorInterceptor(
 			s.mockRegistry,
+			log.NewNoopLogger(),
+			metrics.NoopMetricsHandler,
 			dynamicconfig.GetBoolPropertyFn(false),
 			dynamicconfig.GetIntPropertyFn(100),
 		)
@@ -830,10 +814,9 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 }
 
 func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
-	nvi := NewNamespaceValidatorInterceptor(
-		s.mockRegistry,
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(10))
+	namespaceShort := "namespace"
+	namespaceLong := "namespaceTooLongSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoSoLong"
+	nvi := s.NewNamespaceValidatorInterceptor()
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: api.WorkflowServicePrefix + "random",
 	}
@@ -844,7 +827,7 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 				Info: &persistencespb.NamespaceInfo{
 					Id:    uuid.New().String(),
-					Name:  "namespace",
+					Name:  namespaceShort,
 					State: enumspb.NAMESPACE_STATE_REGISTERED,
 				},
 			},
@@ -856,15 +839,15 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 				Info: &persistencespb.NamespaceInfo{
 					Id:    uuid.New().String(),
-					Name:  "namespaceTooLong",
+					Name:  namespaceLong,
 					State: enumspb.NAMESPACE_STATE_REGISTERED,
 				},
 			},
 		})
-	s.mockRegistry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(requestNamespace, nil).AnyTimes()
-	s.mockRegistry.EXPECT().GetNamespace(namespace.Name("namespaceTooLong")).Return(requestNamespaceTooLong, nil).AnyTimes()
+	s.mockRegistry.EXPECT().GetNamespace(namespace.Name(namespaceShort)).Return(requestNamespace, nil).AnyTimes()
+	s.mockRegistry.EXPECT().GetNamespace(namespace.Name(namespaceLong)).Return(requestNamespaceTooLong, nil).AnyTimes()
 
-	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespace"}
+	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: namespaceShort}
 	handlerCalled := false
 	_, err := nvi.NamespaceValidateIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
 		handlerCalled = true
@@ -873,7 +856,7 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 	s.True(handlerCalled)
 	s.NoError(err)
 
-	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespaceTooLong"}
+	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: namespaceLong}
 	handlerCalled = false
 	_, err = nvi.NamespaceValidateIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
 		handlerCalled = true
@@ -881,76 +864,4 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 	})
 	s.False(handlerCalled)
 	s.Error(err)
-}
-
-func (s *namespaceValidatorSuite) TestSetNamespace() {
-	namespaceRequestName := uuid.New().String()
-	namespaceEntryName := uuid.New().String()
-	namespaceEntry := namespace.FromPersistentState(
-		&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				Config:            &persistencespb.NamespaceConfig{},
-				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-				Info: &persistencespb.NamespaceInfo{
-					Id:    uuid.New().String(),
-					Name:  namespaceEntryName,
-					State: enumspb.NAMESPACE_STATE_REGISTERED,
-				},
-			},
-		})
-
-	nvi := NewNamespaceValidatorInterceptor(
-		s.mockRegistry,
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(10),
-	)
-
-	queryReq := &workflowservice.RespondQueryTaskCompletedRequest{}
-	nvi.setNamespace(namespaceEntry, queryReq)
-	s.Equal(namespaceEntryName, queryReq.Namespace)
-	queryReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, queryReq)
-	s.Equal(namespaceRequestName, queryReq.Namespace)
-
-	completeWorkflowTaskReq := &workflowservice.RespondWorkflowTaskCompletedRequest{}
-	nvi.setNamespace(namespaceEntry, completeWorkflowTaskReq)
-	s.Equal(namespaceEntryName, completeWorkflowTaskReq.Namespace)
-	completeWorkflowTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, completeWorkflowTaskReq)
-	s.Equal(namespaceRequestName, completeWorkflowTaskReq.Namespace)
-
-	failWorkflowTaskReq := &workflowservice.RespondWorkflowTaskFailedRequest{}
-	nvi.setNamespace(namespaceEntry, failWorkflowTaskReq)
-	s.Equal(namespaceEntryName, failWorkflowTaskReq.Namespace)
-	failWorkflowTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, failWorkflowTaskReq)
-	s.Equal(namespaceRequestName, failWorkflowTaskReq.Namespace)
-
-	heartbeatActivityTaskReq := &workflowservice.RecordActivityTaskHeartbeatRequest{}
-	nvi.setNamespace(namespaceEntry, heartbeatActivityTaskReq)
-	s.Equal(namespaceEntryName, heartbeatActivityTaskReq.Namespace)
-	heartbeatActivityTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, heartbeatActivityTaskReq)
-	s.Equal(namespaceRequestName, heartbeatActivityTaskReq.Namespace)
-
-	cancelActivityTaskReq := &workflowservice.RespondActivityTaskCanceledRequest{}
-	nvi.setNamespace(namespaceEntry, cancelActivityTaskReq)
-	s.Equal(namespaceEntryName, cancelActivityTaskReq.Namespace)
-	cancelActivityTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, cancelActivityTaskReq)
-	s.Equal(namespaceRequestName, cancelActivityTaskReq.Namespace)
-
-	completeActivityTaskReq := &workflowservice.RespondActivityTaskCompletedRequest{}
-	nvi.setNamespace(namespaceEntry, completeActivityTaskReq)
-	s.Equal(namespaceEntryName, completeActivityTaskReq.Namespace)
-	completeActivityTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, completeActivityTaskReq)
-	s.Equal(namespaceRequestName, completeActivityTaskReq.Namespace)
-
-	failActivityTaskReq := &workflowservice.RespondActivityTaskFailedRequest{}
-	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
-	s.Equal(namespaceEntryName, failActivityTaskReq.Namespace)
-	failActivityTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
-	s.Equal(namespaceRequestName, failActivityTaskReq.Namespace)
 }

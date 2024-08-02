@@ -602,6 +602,7 @@ var (
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
 	ServiceErrInvalidArgumentCounter         = NewCounterDef("service_errors_invalid_argument")
+	ServiceErrNamespaceNotSetCounter         = NewCounterDef("service_errors_namespace_not_set")
 	ServiceErrNamespaceNotActiveCounter      = NewCounterDef("service_errors_namespace_not_active")
 	ServiceErrResourceExhaustedCounter       = NewCounterDef("service_errors_resource_exhausted")
 	ServiceErrNotFoundCounter                = NewCounterDef("service_errors_entity_not_found")

@@ -37,6 +37,9 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -48,6 +51,8 @@ type (
 	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
+		logger                          log.Logger
+		metricsHandler                  metrics.Handler
 		tokenSerializer                 common.TaskTokenSerializer
 		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
 		maxNamespaceLength              dynamicconfig.IntPropertyFn
@@ -111,11 +116,15 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).Namesp
 
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn,
 	maxNamespaceLength dynamicconfig.IntPropertyFn,
 ) *NamespaceValidatorInterceptor {
 	return &NamespaceValidatorInterceptor{
 		namespaceRegistry:               namespaceRegistry,
+		logger:                          logger,
+		metricsHandler:                  metricsHandler,
 		tokenSerializer:                 common.NewProtoTaskTokenSerializer(),
 		enableTokenNamespaceEnforcement: enableTokenNamespaceEnforcement,
 		maxNamespaceLength:              maxNamespaceLength,
@@ -128,12 +137,16 @@ func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	err := ni.setNamespaceIfNotPresent(req)
-	if err != nil {
-		return nil, err
-	}
 	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
 	if hasNamespace {
+
+		if reqWithNamespace.GetNamespace() == "" {
+			err := errNamespaceNotSet
+			metrics.ServiceErrNamespaceNotSetCounter.With(ni.metricsHandler).Record(1)
+			ni.logger.Error("namespace not provided for request", tag.Error(err))
+			return nil, err
+		}
+
 		if err := ni.ValidateName(reqWithNamespace.GetNamespace()); err != nil {
 			return nil, err
 		}
@@ -148,68 +161,6 @@ func (ni *NamespaceValidatorInterceptor) ValidateName(ns string) error {
 		return errNamespaceTooLong
 	}
 	return nil
-}
-
-func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
-	req interface{},
-) error {
-	switch request := req.(type) {
-	case NamespaceNameGetter:
-		if request.GetNamespace() == "" {
-			namespaceEntry, err := ni.extractNamespaceFromTaskToken(req)
-			if err != nil {
-				return err
-			}
-			ni.setNamespace(namespaceEntry, req)
-		}
-		return nil
-	default:
-		return nil
-	}
-}
-
-func (ni *NamespaceValidatorInterceptor) setNamespace(
-	namespaceEntry *namespace.Namespace,
-	req interface{},
-) {
-	switch request := req.(type) {
-	case *workflowservice.RespondQueryTaskCompletedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	case *workflowservice.RespondWorkflowTaskCompletedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	case *workflowservice.RespondWorkflowTaskFailedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	case *workflowservice.RecordActivityTaskHeartbeatRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	case *workflowservice.RespondActivityTaskCanceledRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	case *workflowservice.RespondActivityTaskCompletedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	case *workflowservice.RespondActivityTaskFailedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	case *workflowservice.RespondNexusTaskCompletedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	case *workflowservice.RespondNexusTaskFailedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
-		}
-	}
 }
 
 // StateValidationIntercept runs ValidateState - see docstring for that method.
