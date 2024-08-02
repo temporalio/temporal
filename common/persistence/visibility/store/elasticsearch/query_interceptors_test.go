@@ -26,15 +26,15 @@ package elasticsearch
 
 import (
 	"fmt"
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/primitives"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
 
