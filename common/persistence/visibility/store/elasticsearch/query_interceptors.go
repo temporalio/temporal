@@ -110,7 +110,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		if ni.fieldTransformations == nil {
 			ni.fieldTransformations = make(map[string]fieldTransformation)
 		}
-		ni.fieldTransformations[fieldName] = fieldTransformation{
+		ni.fieldTransformations[name] = fieldTransformation{
 			originalField: name,
 			newField:      fieldName,
 		}
@@ -147,19 +147,23 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 }
 
 func (vi *valuesInterceptor) Values(fieldName string, values ...interface{}) ([]interface{}, error) {
-	fieldType, err := vi.searchAttributesTypeMap.GetType(fieldName)
+	name := fieldName
+	if _, exists := vi.nameInterceptor.fieldTransformations[fieldName]; exists {
+		name = vi.nameInterceptor.fieldTransformations[fieldName].newField
+	}
+
+	fieldType, err := vi.searchAttributesTypeMap.GetType(name)
 	if err != nil {
 		return nil, query.NewConverterError("invalid search attribute: %s", fieldName)
 	}
 
-	name := fieldName
-	if searchattribute.IsMappable(fieldName) {
+	if searchattribute.IsMappable(name) {
 		mapper, err := vi.searchAttributesMapperProvider.GetMapper(vi.namespace)
 		if err != nil {
 			return nil, err
 		}
 		if mapper != nil {
-			name, err = mapper.GetAlias(fieldName, vi.namespace.String())
+			name, err = mapper.GetAlias(name, vi.namespace.String())
 			if err != nil {
 				return nil, err
 			}
@@ -168,7 +172,7 @@ func (vi *valuesInterceptor) Values(fieldName string, values ...interface{}) ([]
 
 	var result []interface{}
 	for _, value := range values {
-		value, err = parseSystemSearchAttributeValues(fieldName, value)
+		value, err = parseSystemSearchAttributeValues(name, value)
 		if err != nil {
 			return nil, err
 		}

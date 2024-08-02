@@ -29,6 +29,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.temporal.io/api/operatorservice/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"strconv"
 	"strings"
@@ -2702,40 +2703,27 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	s.Equal(scheduleID, listResponse.Schedules[0].ScheduleId)
 
 	// Test 2: List schedule with custom "scheduleId" search attribute
-	addSearchAttributesRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:  primitives.SystemLocalNamespace,
-		WorkflowId: "add-search-attribute-" + uuid.New(),
-		WorkflowType: &commonpb.WorkflowType{
-			Name: "add-search-attributes",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "system",
-		},
-		Input: payloads.EncodeString(fmt.Sprintf(`{"SearchAttributes": {"%s": "Keyword"}}`, searchattribute.ScheduleID)),
-	}
-	_, err = s.client.StartWorkflowExecution(ctx, addSearchAttributesRequest)
-	s.NoError(err)
+	s.addCustomKeywordSearchAttribute(ctx, searchattribute.ScheduleID)
 
 	// Create the schedule with the new search attribute and verify it can be listed
 	customScheduleID := "test-schedule-" + uuid.New()
 	customSearchAttrValue := "testScheduleId"
 
+	schedule.RequestId = uuid.New()
+	schedule.ScheduleId = customScheduleID
+	schedule.SearchAttributes = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			searchattribute.ScheduleID: payload.EncodeString(customSearchAttrValue),
+		},
+	}
+
+	_, err = s.client.CreateSchedule(ctx, schedule)
+	s.NoError(err)
+
+	time.Sleep(61000)
+
 	var createdSchedule *schedulepb.ScheduleListEntry
 	s.Eventually(func() bool {
-		searchAttributes := &commonpb.SearchAttributes{
-			IndexedFields: map[string]*commonpb.Payload{
-				searchattribute.ScheduleID: payload.EncodeString(customSearchAttrValue),
-			},
-		}
-
-		schedule.ScheduleId = customScheduleID
-		schedule.SearchAttributes = searchAttributes
-
-		_, err := s.client.CreateSchedule(ctx, schedule)
-		if err != nil {
-			return false
-		}
-
 		query := fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
 		listRequest := &workflowservice.ListSchedulesRequest{
 			Namespace:       s.namespace,
@@ -2824,4 +2812,34 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
 	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
+}
+
+func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Context, attrName string) {
+	// Add new search attribute
+	request := &operatorservice.AddSearchAttributesRequest{
+		SearchAttributes: map[string]enumspb.IndexedValueType{
+			attrName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+		Namespace: s.namespace,
+	}
+
+	_, err := s.testCluster.GetOperatorClient().AddSearchAttributes(ctx, request)
+	s.NoError(err)
+
+	// Wait for search attribute to be available
+	s.Eventually(func() bool {
+		descResp, err := s.client.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: s.namespace,
+		})
+		if err != nil {
+			return false
+		}
+
+		for _, attr := range descResp.Config.CustomSearchAttributeAliases {
+			if attr == attrName {
+				return true
+			}
+		}
+		return false
+	}, 30*time.Second, 1*time.Second)
 }

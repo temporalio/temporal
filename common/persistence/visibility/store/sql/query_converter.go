@@ -495,7 +495,7 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 	}
 
 	if saFieldName != saAlias {
-		c.fieldTransformations[saFieldName] = fieldTransformation{
+		c.fieldTransformations[saAlias] = fieldTransformation{
 			originalField: saAlias,
 			newField:      saFieldName,
 		}

@@ -765,14 +765,14 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "ScheduleId transformation",
 			input: "'test-schedule'",
 			args: map[string]any{
-				"saName": searchattribute.WorkflowID,
+				"saName": searchattribute.ScheduleID,
 				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			output: fmt.Sprintf("'%stest-schedule'", searchattribute.ScheduleWorkflowIDPrefix),
 			err:    nil,
 			setup: func() {
 				s.queryConverter.fieldTransformations = make(map[string]fieldTransformation)
-				s.queryConverter.fieldTransformations[searchattribute.WorkflowID] = fieldTransformation{
+				s.queryConverter.fieldTransformations[searchattribute.ScheduleID] = fieldTransformation{
 					originalField: searchattribute.ScheduleID,
 					newField:      searchattribute.WorkflowID,
 				}

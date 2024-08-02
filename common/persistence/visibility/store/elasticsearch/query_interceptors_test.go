@@ -25,6 +25,7 @@
 package elasticsearch
 
 import (
+	"go.temporal.io/api/enums/v1"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -199,7 +200,7 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 	s.Equal(searchattribute.WorkflowID, fieldName)
 
 	s.Len(ni.fieldTransformations, 1)
-	transformation, exists := ni.fieldTransformations[searchattribute.WorkflowID]
+	transformation, exists := ni.fieldTransformations[searchattribute.ScheduleID]
 	s.True(exists)
 	s.Equal(searchattribute.ScheduleID, transformation.originalField)
 	s.Equal(searchattribute.WorkflowID, transformation.newField)
@@ -209,7 +210,7 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 // including prepending the WorkflowIDPrefix.
 func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 	mockNameInterceptor := s.createMockNameInterceptor()
-	mockNameInterceptor.fieldTransformations[searchattribute.WorkflowID] = fieldTransformation{
+	mockNameInterceptor.fieldTransformations[searchattribute.ScheduleID] = fieldTransformation{
 		originalField: searchattribute.ScheduleID,
 		newField:      searchattribute.WorkflowID,
 	}
@@ -221,7 +222,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 		mockNameInterceptor,
 	)
 
-	values, err := vi.Values(searchattribute.WorkflowID, "test-schedule-id")
+	values, err := vi.Values(searchattribute.ScheduleID, "test-schedule-id")
 	s.NoError(err)
 	s.Len(values, 1)
 	s.Equal(searchattribute.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
@@ -230,14 +231,18 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 // Ensures the valuesInterceptor doesn't modify values when no transformation is needed.
 func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	mockNameInterceptor := s.createMockNameInterceptor()
+
+	typeMap := searchattribute.TestNameTypeMap.Copy()
+	typeMap.AddCustomSearchAttribute(searchattribute.ScheduleID, enums.INDEXED_VALUE_TYPE_KEYWORD)
+
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestNameTypeMap,
+		typeMap,
 		searchattribute.NewTestMapperProvider(nil),
 		mockNameInterceptor,
 	)
 
-	values, err := vi.Values(searchattribute.WorkflowID, "test-workflow-id")
+	values, err := vi.Values(searchattribute.ScheduleID, "test-workflow-id")
 	s.NoError(err)
 	s.Len(values, 1)
 	s.Equal("test-workflow-id", values[0])
