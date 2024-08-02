@@ -127,8 +127,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 		clusterConfigs[i].ClusterMetadata.ClusterInformation[s.clusterNames[i]] = cluster.ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: int64(i + 1),
-			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
-			HTTPAddress:            fmt.Sprintf("127.0.0.1:%d144", 7+i),
+			RPCAddress:             fmt.Sprintf("127.0.%d.1:7134", i),
+			HTTPAddress:            fmt.Sprintf("127.0.%d.1:7144", i),
 		}
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[i].EnableMetricsCapture = true
