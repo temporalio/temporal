@@ -593,7 +593,7 @@ func (c *temporalImpl) startWorker() {
 		logger := log.With(c.logger, tag.Host(host))
 		var workerService *worker.Service
 		app := fx.New(
-			fx.Invoke(c.setupMockAdminClient),
+			// fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
