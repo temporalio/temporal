@@ -27,6 +27,7 @@ package elasticsearch
 import (
 	"fmt"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/primitives"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -226,7 +227,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 	values, err := vi.Values(searchattribute.ScheduleID, "test-schedule-id")
 	s.NoError(err)
 	s.Len(values, 1)
-	s.Equal(searchattribute.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
+	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
 }
 
 // Ensures the valuesInterceptor doesn't modify values when no transformation is needed.

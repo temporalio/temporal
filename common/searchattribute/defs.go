@@ -71,8 +71,7 @@ const (
 	// Used by scheduler workflow.
 	TemporalSchedulePaused = "TemporalSchedulePaused"
 
-	ScheduleWorkflowIDPrefix = "temporal-sys-scheduler:"
-	ReservedPrefix           = "Temporal"
+	ReservedPrefix = "Temporal"
 
 	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
 	// search attribute in visibility.

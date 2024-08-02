@@ -27,6 +27,7 @@ package sql
 import (
 	"fmt"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/primitives"
 	"testing"
 	"time"
 
@@ -781,7 +782,7 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 				"saName": searchattribute.ScheduleID,
 				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
-			output: fmt.Sprintf("'%stest-schedule'", searchattribute.ScheduleWorkflowIDPrefix),
+			output: fmt.Sprintf("'%stest-schedule'", primitives.ScheduleWorkflowIDPrefix),
 			err:    nil,
 			setup: func() {
 				s.queryConverter.fieldTransformations = make(map[string]fieldTransformation)

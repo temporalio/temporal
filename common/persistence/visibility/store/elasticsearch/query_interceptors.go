@@ -25,6 +25,7 @@
 package elasticsearch
 
 import (
+	"go.temporal.io/server/common/primitives"
 	"strconv"
 	"time"
 
@@ -195,7 +196,7 @@ func (vi *valuesInterceptor) applyFieldTransformation(transformation fieldTransf
 	switch {
 	case transformation.originalField == searchattribute.ScheduleID && transformation.newField == searchattribute.WorkflowID:
 		if strValue, ok := value.(string); ok {
-			return searchattribute.ScheduleWorkflowIDPrefix + strValue, nil
+			return primitives.ScheduleWorkflowIDPrefix + strValue, nil
 		}
 	}
 	return value, nil

@@ -27,6 +27,7 @@ package sql
 import (
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/primitives"
 	"strconv"
 	"strings"
 	"time"
@@ -709,7 +710,7 @@ func (c *QueryConverter) applyFieldTransformation(transformation fieldTransforma
 	switch {
 	case transformation.originalField == searchattribute.ScheduleID && transformation.newField == searchattribute.WorkflowID:
 		if strValue, ok := value.(string); ok {
-			return searchattribute.ScheduleWorkflowIDPrefix + strValue, nil
+			return primitives.ScheduleWorkflowIDPrefix + strValue, nil
 		}
 	}
 	return value, nil
