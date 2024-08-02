@@ -49,17 +49,17 @@ func (m *SyncMap[K, V]) Get(key K) (value V, ok bool) {
 
 func (m *SyncMap[K, V]) GetOrSet(key K, value V) (v V, exist bool) {
 	m.RLock()
-	value, ok := m.contents[key]
+	currentValue, ok := m.contents[key]
 	m.RUnlock()
 	if ok {
-		return value, ok
+		return currentValue, ok
 	}
 
 	m.Lock()
 	defer m.Unlock()
-	value, ok = m.contents[key]
+	currentValue, ok = m.contents[key]
 	if ok {
-		return value, ok
+		return currentValue, ok
 	}
 	m.contents[key] = value
 	return value, false
