@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -44,7 +45,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -126,6 +126,7 @@ type (
 		saManager                  searchattribute.Manager
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
+		historyHealthChecker       HealthChecker
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -181,6 +182,20 @@ func NewAdminHandler(
 		args.Logger,
 	)
 
+	historyHealthChecker := NewHealthChecker(
+		primitives.HistoryService,
+		args.MembershipMonitor,
+		args.Config.HistoryHostErrorPercentage,
+		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
+			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
+			if err != nil {
+				return enumsspb.HEALTH_STATE_UNSPECIFIED, err
+			}
+			return resp.GetState(), nil
+		},
+		args.Logger,
+	)
+
 	return &AdminHandler{
 		logger:                args.Logger,
 		status:                common.DaemonStatusInitialized,
@@ -211,6 +226,7 @@ func NewAdminHandler(
 		saManager:                  args.SaManager,
 		clusterMetadata:            args.ClusterMetadata,
 		healthServer:               args.HealthServer,
+		historyHealthChecker:       historyHealthChecker,
 		taskCategoryRegistry:       args.CategoryRegistry,
 	}
 }
@@ -235,6 +251,17 @@ func (adh *AdminHandler) Stop() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
+}
+
+func (adh *AdminHandler) DeepHealthCheck(
+	ctx context.Context,
+	_ *adminservice.DeepHealthCheckRequest,
+) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+	healthStatus, err := adh.historyHealthChecker.Check(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.

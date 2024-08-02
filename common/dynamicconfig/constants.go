@@ -275,7 +275,7 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 	)
 	DeadlockInterval = NewGlobalDurationSetting(
 		"system.deadlock.Interval",
-		30*time.Second,
+		60*time.Second,
 		`How often the detector checks each root.`,
 	)
 	DeadlockMaxWorkersPerRoot = NewGlobalIntSetting(
@@ -743,6 +743,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		"frontend.maskInternalErrorDetails",
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
+	)
+	HistoryHostErrorPercentage = NewGlobalFloatSetting(
+		"frontend.historyHostErrorPercentage",
+		0.5,
+		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -1402,8 +1407,8 @@ before discarding the task`,
 	QueuePendingTaskCriticalCount = NewGlobalIntSetting(
 		"history.queuePendingTaskCriticalCount",
 		9000,
-		`QueuePendingTaskCriticalCount is the max number of pending task in one queue
-before triggering queue slice splitting and unloading`,
+		`Max number of pending tasks in a history queue before triggering slice splitting and unloading.
+NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskCriticalCount.`,
 	)
 	QueueReaderStuckCriticalAttempts = NewGlobalIntSetting(
 		"history.queueReaderStuckCriticalAttempts",
@@ -1421,11 +1426,12 @@ before force compacting slices`,
 	QueuePendingTaskMaxCount = NewGlobalIntSetting(
 		"history.queuePendingTasksMaxCount",
 		10000,
-		`QueuePendingTaskMaxCount is the max number of task pending tasks in one queue before stop
-loading new tasks into memory. While QueuePendingTaskCriticalCount won't stop task loading
-for the entire queue but only trigger a queue action to unload tasks. Ideally this max count
-limit should not be hit and task unloading should happen once critical count is exceeded. But
-since queue action is async, we need this hard limit.`,
+		`The max number of task pending tasks in a history queue before stopping loading new tasks into memory. This
+limit is in addition to queuePendingTaskCriticalCount which controls when to unload already loaded tasks but doesn't
+prevent loading new tasks. Ideally this max count limit should not be hit and task unloading should happen once critical
+count is exceeded. But since queue action is async, we need this hard limit.
+NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskMaxCount.
+`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
@@ -1616,6 +1622,20 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		"history.outboundTaskBatchSize",
 		100,
 		`OutboundTaskBatchSize is batch size for outboundQueueFactory`,
+	)
+	OutboundQueuePendingTaskMaxCount = NewGlobalIntSetting(
+		"history.outboundQueuePendingTasksMaxCount",
+		10000,
+		`The max number of task pending tasks in the outbound queue before stopping loading new tasks into memory. This
+limit is in addition to outboundQueuePendingTaskCriticalCount which controls when to unload already loaded tasks but
+doesn't prevent loading new tasks. Ideally this max count limit should not be hit and task unloading should happen once
+critical count is exceeded. But since queue action is async, we need this hard limit.
+`,
+	)
+	OutboundQueuePendingTaskCriticalCount = NewGlobalIntSetting(
+		"history.outboundQueuePendingTaskCriticalCount",
+		9000,
+		`Max number of pending tasks in the outbound queue before triggering slice splitting and unloading.`,
 	)
 	OutboundProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.outboundProcessorMaxPollRPS",
@@ -2191,6 +2211,16 @@ that task will be sent to DLQ.`,
 		"history.enableWorkflowIdReuseStartTimeValidation",
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
+	)
+	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
+		"history.healthPersistenceLatencyFailure",
+		500,
+		"History service health check on persistence average latency (millisecond) threshold",
+	)
+	HealthPersistenceErrorRatio = NewGlobalFloatSetting(
+		"history.healthPersistenceErrorRatio",
+		0.90,
+		"History service health check on persistence error ratio",
 	)
 
 	// keys for worker

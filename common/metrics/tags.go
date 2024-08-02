@@ -47,6 +47,7 @@ const (
 
 	instance       = "instance"
 	namespace      = "namespace"
+	namespaceID    = "namespace_id"
 	namespaceState = "namespace_state"
 	sourceCluster  = "source_cluster"
 	targetCluster  = "target_cluster"
@@ -109,6 +110,17 @@ func NamespaceTag(value string) Tag {
 	}
 	return &tagImpl{
 		key:   namespace,
+		value: value,
+	}
+}
+
+// NamespaceIDTag returns a new namespace ID tag.
+func NamespaceIDTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{
+		key:   namespaceID,
 		value: value,
 	}
 }
@@ -290,8 +302,8 @@ func ServiceErrorTypeTag(err error) Tag {
 	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(util.ErrorType(err), errorPrefix)}
 }
 
-func NexusOutcomeTag(outcome string) Tag {
-	return &tagImpl{key: nexusOutcomeTagName, value: outcome}
+func OutcomeTag(outcome string) Tag {
+	return &tagImpl{key: outcomeTagName, value: outcome}
 }
 
 func NexusMethodTag(value string) Tag {

@@ -109,6 +109,9 @@ type (
 		// ParseReplicationTask is unique among these methods in that it does not serialize or deserialize a type to or
 		// from a byte array. Instead, it takes a proto and "parses" it into a more structured type.
 		ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
+		// ParseReplicationTaskInfo is unique among these methods in that it does not serialize or deserialize a type to or
+		// from a byte array. Instead, it takes a structured type and "parses" it into proto
+		ParseReplicationTaskInfo(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error)
 
 		SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
 		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)

@@ -354,4 +354,11 @@ service HistoryService {
     // canceled.
     rpc CompleteNexusOperation (CompleteNexusOperationRequest) returns (CompleteNexusOperationResponse) {
     }
+
+    rpc InvokeStateMachineMethod (InvokeStateMachineMethodRequest) returns (InvokeStateMachineMethodResponse) {
+    }
+
+    // Deep health check history service dependencies health status
+    rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {
+    }
 }

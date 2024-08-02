@@ -41,6 +41,8 @@ var ErrConcurrentTaskNotImplemented = errors.New("concurrent task not implemente
 // ErrNotRegistered is returned by a [Registry] when trying to get a type that is not registered.
 var ErrNotRegistered error = notRegisteredError{"not registered"}
 
+var ErrSerializationFailed = errors.New("serialization failed")
+
 // notRegisteredError is returned by a [Registry] when trying to get a type that is not registered.
 type notRegisteredError struct {
 	Message string
@@ -64,8 +66,9 @@ type Registry struct {
 	// The actual value is ImmediateExecutor[T].
 	immediateExecutors map[string]any
 	// The actual value is TimerExecutor[T].
-	timerExecutors map[string]any
-	events         map[enumspb.EventType]EventDefinition
+	timerExecutors  map[string]any
+	remoteExecutors map[string]any
+	events          map[enumspb.EventType]EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
@@ -140,6 +143,27 @@ func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T
 	return nil
 }
 
+// RegisterRemoteMethod registers an [RemoteExecutor] for the given remote method definition.
+// Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
+func RegisterRemoteMethod[I any, O any, R RemoteMethod[I, O]](r *Registry, executor RemoteExecutor[I, O]) error {
+	var method R
+	methodName := method.Name()
+	if existing, ok := r.remoteExecutors[methodName]; ok {
+		return fmt.Errorf(
+			"%w: executor already registered for method %v: %v",
+			ErrDuplicateRegistration,
+			methodName,
+			existing,
+		)
+	}
+
+	r.remoteExecutors[methodName] = remoteMethodDefinition[I, O]{
+		method:   method,
+		executor: executor,
+	}
+	return nil
+}
+
 // RegisterTimerExecutor registers a [TimerExecutor] for the given task type.
 // Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
 func RegisterTimerExecutor[T Task](r *Registry, executor TimerExecutor[T]) error {
@@ -207,6 +231,39 @@ func (r *Registry) execute(
 		return values[0].Interface().(error)
 	}
 	return nil
+}
+
+// ExecuteRemoteMethod gets an [RemoteExecutor] from the registry and invokes it.
+// Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
+func (r *Registry) ExecuteRemoteMethod(
+	ctx context.Context,
+	env Environment,
+	ref Ref,
+	methodName string,
+	serializedInput []byte,
+) ([]byte, error) {
+	defn, ok := r.remoteExecutors[methodName]
+	if !ok {
+		return nil, fmt.Errorf("executor for remote method %v: %w", methodName, ErrNotRegistered)
+	}
+	untypedDefn := defn.(untypedRemoteMethodDefinition) //nolint:revive
+
+	input, err := untypedDefn.DeserializeUntyped(serializedInput)
+	if err != nil {
+		return nil, fmt.Errorf("executor for remote method %v failed to deserialize input: %w", methodName, err)
+	}
+
+	output, err := untypedDefn.InvokeUntyped(ctx, env, ref, input)
+
+	if err != nil {
+		return nil, err
+	}
+
+	serializedOutput, err := untypedDefn.SerializeUntyped(output)
+	if err != nil {
+		return nil, fmt.Errorf("executor for remote method %v failed to serialize output: %w", methodName, err)
+	}
+	return serializedOutput, nil
 }
 
 // ExecuteTimerTask gets a [TimerExecutor] from the registry and invokes it.

@@ -103,6 +103,10 @@ func NewClient(
 	}
 }
 
+func (c *clientImpl) DeepHealthCheck(ctx context.Context, request *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
+	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).historyClient.DeepHealthCheck(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeHistoryHost(
 	ctx context.Context,
 	request *historyservice.DescribeHistoryHostRequest,

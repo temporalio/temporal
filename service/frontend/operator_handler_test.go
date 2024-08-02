@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
+	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -816,7 +816,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 						opts ...any,
 					) (*workflowservice.UpdateNamespaceResponse, error) {
 						s.Len(r.Config.CustomSearchAttributeAliases, len(tc.customSearchAttributesToAdd))
-						aliases := maps.Values(r.Config.CustomSearchAttributeAliases)
+						aliases := expmaps.Values(r.Config.CustomSearchAttributeAliases)
 						for _, saName := range tc.customSearchAttributesToAdd {
 							s.Contains(aliases, saName)
 						}
