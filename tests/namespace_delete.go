@@ -113,9 +113,9 @@ func (s *namespaceTestSuite) SetupTest() {
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
 	// don't fail for this test, we're testing this behavior specifically
-	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.ValidateUTF8FailRPCRequest, false)
-	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
-	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailRPCRequest, false)
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
 
 	capture := s.cluster.host.captureMetricsHandler.StartCapture()
 	defer s.cluster.host.captureMetricsHandler.StopCapture(capture)

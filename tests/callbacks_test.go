@@ -142,17 +142,17 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 		},
 	}
 
-	s.overrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
-	s.overrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
-	s.overrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
-	s.overrideDynamicConfig(
+	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
+	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
+	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
+	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
 	)
 
 	for _, tc := range cases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			s.overrideDynamicConfig(dynamicconfig.EnableNexus, tc.allow)
+			s.OverrideDynamicConfig(dynamicconfig.EnableNexus, tc.allow)
 			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
 			for _, url := range tc.urls {
 				cbs = append(cbs, &commonpb.Callback{
@@ -185,8 +185,8 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 }
 
 func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
-	s.overrideDynamicConfig(dynamicconfig.EnableNexus, true)
-	s.overrideDynamicConfig(
+	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
+	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
