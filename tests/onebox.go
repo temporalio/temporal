@@ -977,7 +977,7 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 }
 
 func sdkClientFactoryProvider(
-	resolver *membership.GRPCResolver,
+	grpcResolver *membership.GRPCResolver,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
@@ -991,7 +991,7 @@ func sdkClientFactoryProvider(
 		}
 	}
 	return sdk.NewClientFactory(
-		resolver.MakeURL(primitives.FrontendService),
+		grpcResolver.MakeURL(primitives.FrontendService),
 		tlsConfig,
 		metricsHandler,
 		logger,

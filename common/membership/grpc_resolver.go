@@ -45,7 +45,7 @@ const (
 )
 
 type (
-	// grpcBuilder implements grpc/resolver.Builder. These should be one of these.
+	// grpcBuilder implements grpc/resolver.Builder. This is a singleton that's registered with grpc.
 	grpcBuilder struct {
 		resolvers sync.Map // pointer as string -> *GRPCResolver
 	}
@@ -69,7 +69,12 @@ var (
 		fx.Provide(newGRPCResolver),
 	)
 
+	_ resolver.Builder = (*grpcBuilder)(nil)
+
 	globalGrpcBuilder grpcBuilder
+
+	errInvalidUrl     = errors.New("invalid grpc resolver url")
+	errNotInitialized = errors.New("grpc resolver has not been initialized yet")
 )
 
 func init() {
@@ -105,15 +110,15 @@ func (m *grpcBuilder) Scheme() string {
 
 func (m *grpcBuilder) getServiceResolver(u *url.URL) (ServiceResolver, error) {
 	if u.Scheme != grpcResolverScheme {
-		return nil, errors.New("not a grpc resolver url")
+		return nil, errInvalidUrl
 	}
 	service, ptr, found := strings.Cut(u.Host, delim)
 	if !found {
-		return nil, errors.New("invalid grpc resolver url")
+		return nil, errInvalidUrl
 	}
 	v, ok := m.resolvers.Load(ptr)
 	if !ok {
-		return nil, errors.New("grpc resolver has not been initialized yet")
+		return nil, errNotInitialized
 	}
 	return v.(*GRPCResolver).monitor.GetResolver(primitives.ServiceName(service))
 }
