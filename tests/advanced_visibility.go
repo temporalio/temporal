@@ -2685,22 +2685,26 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	_, err := s.client.CreateSchedule(ctx, schedule)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, scheduleID)
 	listRequest := &workflowservice.ListSchedulesRequest{
 		Namespace:       s.namespace,
 		MaximumPageSize: 1,
-		Query:           query,
+		Query:           fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, scheduleID),
 	}
 
-	var listResponse *workflowservice.ListSchedulesResponse
 	s.Eventually(func() bool {
-		listResponse, err = s.client.ListSchedules(ctx, listRequest)
-		return err == nil && len(listResponse.Schedules) == 1
+		listResponse, err := s.client.ListSchedules(ctx, listRequest)
+		if err != nil || len(listResponse.Schedules) != 1 {
+			return false
+		}
+
+		return listResponse.Schedules[0].ScheduleId == scheduleID
 	}, 30*time.Second, 1*time.Second)
 
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s")`, searchattribute.ScheduleID, scheduleID)
+	listResponse, err := s.client.ListSchedules(ctx, listRequest)
 	s.NoError(err)
-	s.Equal(1, len(listResponse.Schedules))
-	s.Equal(scheduleID, listResponse.Schedules[0].ScheduleId)
+	s.Len(listResponse.Schedules, 1)
+	s.Equal(listResponse.Schedules[0].ScheduleId, scheduleID)
 
 	// Test 2: List schedule with custom "scheduleId" search attribute
 	s.addCustomKeywordSearchAttribute(ctx, searchattribute.ScheduleID)
@@ -2720,23 +2724,21 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	_, err = s.client.CreateSchedule(ctx, schedule)
 	s.NoError(err)
 
+	listRequest.Query = fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
 	s.Eventually(func() bool {
-		query := fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
-		listRequest := &workflowservice.ListSchedulesRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 1,
-			Query:           query,
-		}
-
 		listResponse, err := s.client.ListSchedules(ctx, listRequest)
 		if err != nil || len(listResponse.Schedules) != 1 {
 			return false
 		}
 
-		createdSchedule := listResponse.Schedules[0]
-
-		return createdSchedule.ScheduleId == customScheduleID
+		return listResponse.Schedules[0].ScheduleId == customScheduleID
 	}, 30*time.Second, 1*time.Second)
+
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s")`, searchattribute.ScheduleID, customSearchAttrValue)
+	listResponse, err = s.client.ListSchedules(ctx, listRequest)
+	s.NoError(err)
+	s.Len(listResponse.Schedules, 1)
+	s.Equal(listResponse.Schedules[0].ScheduleId, customScheduleID)
 }
 
 func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {

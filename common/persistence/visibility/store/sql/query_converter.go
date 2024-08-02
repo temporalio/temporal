@@ -27,7 +27,6 @@ package sql
 import (
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/primitives"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
 

@@ -25,7 +25,6 @@
 package elasticsearch
 
 import (
-	"go.temporal.io/server/common/primitives"
 	"strconv"
 	"time"
 
@@ -33,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
 
