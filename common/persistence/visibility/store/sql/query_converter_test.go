@@ -26,8 +26,6 @@ package sql
 
 import (
 	"fmt"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/primitives"
 	"testing"
 	"time"
 
@@ -37,8 +35,10 @@ import (
 	"github.com/temporalio/sqlparser"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
 
