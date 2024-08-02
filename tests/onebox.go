@@ -29,6 +29,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"strconv"
 	"sync"
@@ -36,15 +37,11 @@ import (
 	"time"
 
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.uber.org/fx"
-	"go.uber.org/multierr"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/membership/static"
-
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.uber.org/fx"
+	"go.uber.org/multierr"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -60,6 +57,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
