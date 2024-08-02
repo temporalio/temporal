@@ -370,13 +370,21 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	partition tqid.Partition,
 	create bool,
 	loadCause loadCause,
-) (taskQueuePartitionManager, bool, error) {
-	key := partition.Key()
+) (retPM taskQueuePartitionManager, retCreated bool, retErr error) {
+	defer func() {
+		if retErr != nil || retPM == nil {
+			return
+		}
 
+		if retErr = retPM.WaitUntilInitialized(ctx); retErr != nil {
+			e.unloadTaskQueuePartition(retPM, unloadCauseInitError)
+		}
+	}()
+
+	key := partition.Key()
 	e.partitionsLock.RLock()
 	pm, ok := e.partitions[key]
 	e.partitionsLock.RUnlock()
-
 	if ok {
 		return pm, false, nil
 	}
@@ -385,49 +393,43 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, false, nil
 	}
 
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
+	if err != nil {
+		return nil, false, err
+	}
+	nsName := namespaceEntry.Name()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
+	tqConfig.loadCause = loadCause
+	userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, partition, tqConfig, e.logger, e.namespaceRegistry)
+	newPM, err := newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, userDataManager)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// If it gets here, write lock and check again in case a task queue is created between the two locks
 	e.partitionsLock.Lock()
-	// Check taskQueue hasn't been created since we unlocked
 	pm, ok = e.partitions[key]
 	if ok {
 		e.partitionsLock.Unlock()
 		return pm, false, nil
 	}
 
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
-	if err != nil {
-		e.partitionsLock.Unlock()
-		return nil, false, err
-	}
-
-	nsName := namespaceEntry.Name()
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
-	tqConfig.loadCause = loadCause
-	userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, partition, tqConfig, e.logger, e.namespaceRegistry)
-	pm, err = newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, userDataManager)
-	if err != nil {
-		e.partitionsLock.Unlock()
-		return nil, false, err
-	}
-
-	e.partitions[key] = pm
+	e.partitions[key] = newPM
 	e.partitionsLock.Unlock()
 
-	pm.Start()
-
-	if pm.Partition().IsRoot() {
+	newPM.Start()
+	if newPM.Partition().IsRoot() {
 		// Whenever a root partition is loaded we need to force all other partitions to load.
 		// If there is a backlog of tasks on any child partitions force loading will ensure that they
 		// can forward their tasks the poller which caused the root partition to be loaded.
 		// These partitions could be managed by this matchingEngineImpl, but are most likely not.
 		// We skip checking and just make gRPC requests to force loading them all.
-		pm.ForceLoadAllNonRootPartitions(ctx)
-	}
 
-	if err = pm.WaitUntilInitialized(ctx); err != nil {
-		e.unloadTaskQueuePartition(pm, unloadCauseInitError)
-		return nil, false, err
+		// We specifically use a background context because some callers of this function are
+		// returning (and defer cancel() before the go routines started by ForceLoadAllNonRootPartitions complete
+		newPM.ForceLoadAllNonRootPartitions(context.Background())
 	}
-	return pm, true, nil
+	return newPM, true, nil
 }
 
 // For use in tests
