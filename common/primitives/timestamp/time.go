@@ -42,6 +42,14 @@ func TimeValue(t *timestamppb.Timestamp) time.Time {
 	return t.AsTime()
 }
 
+func TimeValuePtr(t *timestamppb.Timestamp) *time.Time {
+	if t == nil {
+		return nil
+	}
+	result := t.AsTime()
+	return &result
+}
+
 func DurationValue(d *durationpb.Duration) time.Duration {
 	if d == nil {
 		return 0

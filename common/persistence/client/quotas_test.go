@@ -26,6 +26,7 @@ package client
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -34,7 +35,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/temporalapi"
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/api/workflowservice/v1"
 )

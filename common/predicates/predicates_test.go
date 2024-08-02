@@ -25,7 +25,7 @@
 package predicates
 
 import (
-	"golang.org/x/exp/maps"
+	"maps"
 )
 
 var _ Predicate[int] = (*testPredicate)(nil)

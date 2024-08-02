@@ -33,6 +33,7 @@ type (
 	// TimeSource is an interface to make it easier to test code that uses time.
 	TimeSource interface {
 		Now() time.Time
+		Since(t time.Time) time.Duration
 		AfterFunc(d time.Duration, f func()) Timer
 		NewTimer(d time.Duration) (<-chan time.Time, Timer)
 	}
@@ -50,6 +51,8 @@ type (
 	RealTimeSource struct{}
 )
 
+var _ TimeSource = (*RealTimeSource)(nil)
+
 // NewRealTimeSource returns a timeSource that uses the real wall timeSource time.
 func NewRealTimeSource() RealTimeSource {
 	return RealTimeSource{}
@@ -58,6 +61,11 @@ func NewRealTimeSource() RealTimeSource {
 // Now returns the current time, with the location set to UTC.
 func (ts RealTimeSource) Now() time.Time {
 	return time.Now().UTC()
+}
+
+// Since returns the time elapsed since t
+func (ts RealTimeSource) Since(t time.Time) time.Duration {
+	return time.Since(t)
 }
 
 // AfterFunc is a pass-through to time.AfterFunc.
