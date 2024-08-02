@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/searchattribute"
@@ -65,7 +64,6 @@ import (
 type VersioningIntegSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
-	*require.Assertions
 	FunctionalTestBase
 	sdkClient sdkclient.Client
 }
@@ -126,9 +124,6 @@ func (s *VersioningIntegSuite) TearDownSuite() {
 
 func (s *VersioningIntegSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -4928,8 +4923,9 @@ func (s *VersioningIntegSuite) waitForPropagation(
 	if partitionCount <= 0 {
 		v := s.testCluster.host.dcClient.GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
 		s.NotEmpty(v, "versioning tests require setting explicit number of partitions")
-		_, ok := v[0].Value.(int)
+		count, ok := v[0].Value.(int)
 		s.True(ok, "partition count is not an int")
+		partitionCount = count
 	}
 
 	type partAndType struct {
@@ -4962,7 +4958,7 @@ func (s *VersioningIntegSuite) waitForPropagation(
 			}
 		}
 		return len(remaining) == 0
-	}, 10*time.Second, time.Second)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {
