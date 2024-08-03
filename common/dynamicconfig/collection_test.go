@@ -622,4 +622,9 @@ func (s *subscriptionSuite) TestSubscriptionWithDefault() {
 	s.client.Set(setting.Key(), nil)
 	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
 	s.Equal(100, <-vals)
+
+	// test nil callback
+	v, cancel := setting.Subscribe(s.cln)(nil)
+	s.Equal(100, v)
+	cancel() // this is no-op, but can only test that it's callable.
 }
