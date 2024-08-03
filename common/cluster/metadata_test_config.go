@@ -99,7 +99,6 @@ func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 			FailoverVersionIncrement: TestFailoverVersionIncrement,
 			MasterClusterName:        masterClusterName,
 			CurrentClusterName:       TestCurrentClusterName,
-			ClusterInformation:       TestAllClusterInfo,
 		}
 	}
 
@@ -108,6 +107,14 @@ func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 		FailoverVersionIncrement: TestFailoverVersionIncrement,
 		MasterClusterName:        TestCurrentClusterName,
 		CurrentClusterName:       TestCurrentClusterName,
-		ClusterInformation:       TestSingleDCClusterInfo,
 	}
+}
+
+// NewTestClusterMapConfig return an cluster metadata config
+func NewTestClusterMapConfig(enableGlobalNamespace bool) *ClusterMap {
+	if enableGlobalNamespace {
+		return &ClusterMap{ClusterInformation: TestAllClusterInfo}
+	}
+
+	return &ClusterMap{ClusterInformation: TestSingleDCClusterInfo}
 }
