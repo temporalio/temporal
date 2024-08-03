@@ -195,14 +195,14 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 
 // Verifies the nameInterceptor correctly transforms ScheduleID to WorkflowID and stores the transformation.
 func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
-	ni := s.createMockNameInterceptor(&mockErrorMapper{})
+	ni := s.createMockNameInterceptor(nil)
 
 	fieldName, err := ni.Name(searchattribute.ScheduleID, query.FieldNameFilter)
 	s.NoError(err)
 	s.Equal(searchattribute.WorkflowID, fieldName)
 
 	s.Len(ni.fieldTransformations, 1)
-	transformation, exists := ni.fieldTransformations[searchattribute.ScheduleID]
+	transformation, exists := ni.fieldTransformations[searchattribute.WorkflowID]
 	s.True(exists)
 	s.Equal(searchattribute.ScheduleID, transformation.originalField)
 	s.Equal(searchattribute.WorkflowID, transformation.newField)

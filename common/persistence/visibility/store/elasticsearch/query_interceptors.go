@@ -91,14 +91,17 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		if err != nil {
 			return "", err
 		}
+
+		_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
+		if !isCustom && fieldName == searchattribute.ScheduleID {
+			// scheduleId is a fake SA -- convert to workflowId
+			fieldName = searchattribute.WorkflowID
+		}
+
 		if mapper != nil {
 			fieldName, err = mapper.GetFieldName(fieldName, ni.namespace.String())
 			if err != nil {
-				if name != searchattribute.ScheduleID {
-					return "", err
-				}
-				// Not a custom SA, so convert to WorkflowId
-				fieldName = searchattribute.WorkflowID
+				return "", err
 			}
 		}
 	}
@@ -108,7 +111,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		if ni.fieldTransformations == nil {
 			ni.fieldTransformations = make(map[string]fieldTransformation)
 		}
-		ni.fieldTransformations[name] = fieldTransformation{
+		ni.fieldTransformations[fieldName] = fieldTransformation{
 			originalField: name,
 			newField:      fieldName,
 		}
