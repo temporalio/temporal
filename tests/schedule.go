@@ -33,7 +33,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -75,7 +74,6 @@ worker restart/long-poll activity failure:
 
 type (
 	ScheduleFunctionalSuite struct {
-		*require.Assertions
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
 		FunctionalTestBase
@@ -103,7 +101,6 @@ func (s *ScheduleFunctionalSuite) TearDownSuite() {
 func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 
-	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.dataConverter = newTestDataConverter()
@@ -1042,6 +1039,7 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"
 
+	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
