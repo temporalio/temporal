@@ -186,6 +186,28 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 	s.deleteAssignmentRule(ctx, tq, 0, nil, false)
 }
 
+func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
+	// setup
+	ctx := NewContext()
+	tq := "test-build-id-validation"
+
+	// get initial conflict token
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
+
+	// failure due to long build id
+	longStr := `_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_
+				_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_
+				_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_`
+	s.insertAssignmentRule(ctx, tq, longStr, 0, cT, false)
+	s.insertRedirectRule(ctx, tq, longStr, "foo", cT, false)
+	s.insertRedirectRule(ctx, tq, "foo", longStr, cT, false)
+
+	// Not testing failure due to non-UTF-8 build id, because it's hard to generate an invalid UTF-8 string that will be
+	// invalid on all platforms. I realize we pretty much only run functional tests on unix, but still, I don't think
+	// testing this is necessary since the length check is right next to the UTF-8 check, and the UTF-8 validator is
+	// tested separately.
+}
+
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
 	// setup
 	ctx := NewContext()
