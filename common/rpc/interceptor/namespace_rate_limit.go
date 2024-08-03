@@ -30,10 +30,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/headers"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 )
@@ -79,8 +78,7 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
-		md, _ := metadata.FromIncomingContext(ctx)
-		if err := ni.Allow(ns, info.FullMethod, headers.GRPCHeaderGetter{Metadata: md}); err != nil {
+		if err := ni.Allow(ns, info.FullMethod, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 			return nil, err
 		}
 	}

@@ -60,9 +60,9 @@ var (
 func GetValues(ctx context.Context, headerNames ...string) []string {
 	headerValues := make([]string, len(headerNames))
 
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		for i, headerName := range headerNames {
-			headerValues[i] = getSingleHeaderValue(md, headerName)
+	for i, headerName := range headerNames {
+		if values := metadata.ValueFromIncomingContext(ctx, headerName); len(values) > 0 {
+			headerValues[i] = values[0]
 		}
 	}
 
@@ -73,37 +73,21 @@ func GetValues(ctx context.Context, headerNames ...string) []string {
 // It copies all headers to outgoing context only if they are exist in incoming context
 // and doesn't exist in outgoing context already.
 func Propagate(ctx context.Context) context.Context {
-	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
-		var headersToAppend []string
-		mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
-		for _, headerName := range propagateHeaders {
-			if incomingValue := mdIncoming.Get(headerName); len(incomingValue) > 0 {
-				if mdOutgoingExist {
-					if outgoingValue := mdOutgoing.Get(headerName); len(outgoingValue) > 0 {
-						continue
-					}
-				}
-				headersToAppend = append(headersToAppend, headerName, incomingValue[0])
-			}
+	headersToAppend := make([]string, 0, len(propagateHeaders)*2)
+	mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
+	for _, headerName := range propagateHeaders {
+		if incomingValue := metadata.ValueFromIncomingContext(ctx, headerName); len(incomingValue) > 0 && len(mdOutgoing.Get(headerName)) == 0 {
+			headersToAppend = append(headersToAppend, headerName, incomingValue[0])
 		}
-		if headersToAppend != nil {
-			if mdOutgoingExist {
-				ctx = metadata.AppendToOutgoingContext(ctx, headersToAppend...)
-			} else {
-				ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(headersToAppend...))
-			}
+	}
+	if headersToAppend != nil {
+		if mdOutgoingExist {
+			ctx = metadata.AppendToOutgoingContext(ctx, headersToAppend...)
+		} else {
+			ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(headersToAppend...))
 		}
 	}
 	return ctx
-}
-
-func getSingleHeaderValue(md metadata.MD, headerName string) string {
-	values := md.Get(headerName)
-	if len(values) == 0 {
-		return ""
-	}
-
-	return values[0]
 }
 
 // HeaderGetter is an interface for getting a single header value from a case insensitive key.
@@ -113,11 +97,18 @@ type HeaderGetter interface {
 
 // Wrapper for gRPC metadata that exposes a helper to extract a single metadata value.
 type GRPCHeaderGetter struct {
-	Metadata metadata.MD
+	ctx context.Context
+}
+
+func NewGRPCHeaderGetter(ctx context.Context) GRPCHeaderGetter {
+	return GRPCHeaderGetter{ctx: ctx}
 }
 
 // Get a single value from the underlying gRPC metadata.
 // Returns an empty string if the metadata key is unset.
 func (h GRPCHeaderGetter) Get(key string) string {
-	return getSingleHeaderValue(h.Metadata, key)
+	if values := metadata.ValueFromIncomingContext(h.ctx, key); len(values) > 0 {
+		return values[0]
+	}
+	return ""
 }
