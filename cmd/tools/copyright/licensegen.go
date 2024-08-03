@@ -30,7 +30,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type (
@@ -195,5 +197,8 @@ func commentOutLines(str string) (string, error) {
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
-	return strings.Join(lines, ""), nil
+	licenseToOutput := strings.Join(lines, "")
+	licenseToOutput = strings.Replace(licenseToOutput, "// Copyright (c) 2020 Uber Technologies, Inc.\n//\n", "", 1)
+	licenseToOutput = strings.Replace(licenseToOutput, "2020", strconv.Itoa(time.Now().Year()), 1)
+	return licenseToOutput, nil
 }
