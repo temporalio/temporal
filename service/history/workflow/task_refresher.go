@@ -35,7 +35,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
@@ -47,19 +46,16 @@ type (
 	}
 
 	TaskRefresherImpl struct {
-		shard  shard.Context
-		logger log.Logger
+		shard shard.Context
 	}
 )
 
 func NewTaskRefresher(
 	shard shard.Context,
-	logger log.Logger,
 ) *TaskRefresherImpl {
 
 	return &TaskRefresherImpl{
-		shard:  shard,
-		logger: logger,
+		shard: shard,
 	}
 }
 

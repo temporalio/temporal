@@ -94,7 +94,7 @@ func (s *taskRefresherSuite) SetupTest() {
 		tests.RunID,
 	)
 
-	s.taskRefresher = NewTaskRefresher(s.mockShard, s.mockShard.GetLogger())
+	s.taskRefresher = NewTaskRefresher(s.mockShard)
 }
 
 func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {

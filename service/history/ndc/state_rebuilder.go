@@ -90,15 +90,12 @@ func NewStateRebuilder(
 ) *StateRebuilderImpl {
 
 	return &StateRebuilderImpl{
-		shard:             shard,
-		namespaceRegistry: shard.GetNamespaceRegistry(),
-		eventsCache:       shard.GetEventsCache(),
-		clusterMetadata:   shard.GetClusterMetadata(),
-		executionMgr:      shard.GetExecutionManager(),
-		taskRefresher: workflow.NewTaskRefresher(
-			shard,
-			logger,
-		),
+		shard:              shard,
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
+		eventsCache:        shard.GetEventsCache(),
+		clusterMetadata:    shard.GetClusterMetadata(),
+		executionMgr:       shard.GetExecutionManager(),
+		taskRefresher:      workflow.NewTaskRefresher(shard),
 		rebuiltHistorySize: 0,
 		logger:             logger,
 	}
