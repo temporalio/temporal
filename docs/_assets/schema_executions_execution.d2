@@ -1,0 +1,21 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+"executions [type 'executions']": {
+    shape: sql_table
+    shard_id: int { constraint: PK }
+    type: int { constraint: PK }
+    namespace_id: int { constraint: PK }
+    workflow_id: int { constraint: PK }
+    run_id: int { constraint: PK }
+    execution: blob
+    execution_state: blob
+    workflow_state: int
+    current_run_id: uuid { constraint: CondUpd }
+    range_id: bigint { constraint: CondUpd }
+    db_record_version: bigint { constraint: CondUpd }
+    next_event_id: bigint { constraint: CondUpd }
+    activity_map: map<bigint, blob>
+    timer_map: map<text, blob>
+    "(more fields ...)"
+}
