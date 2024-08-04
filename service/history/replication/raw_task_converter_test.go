@@ -540,31 +540,31 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId: s.namespaceID,
-			WorkflowId:  s.workflowID,
+			NamespaceId:                       s.namespaceID,
+			WorkflowId:                        s.workflowID,
+			TaskGenerationShardClockTimestamp: 123,
+			CloseVisibilityTaskId:             456,
+			CloseTransferTaskId:               789,
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId: s.runID,
+			RunId:  s.runID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		},
-	})
+	}).AnyTimes()
 	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enums.WORKFLOW_EXECUTION_STATUS_COMPLETED).AnyTimes()
 
 	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
+
+	sanitizedMutableState := s.mutableState.CloneToProto()
+	workflow.SanitizeMutableState(sanitizedMutableState)
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 		SourceTaskId: task.TaskID,
 		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
 			SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-				WorkflowState: &persistencespb.WorkflowMutableState{
-					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-						NamespaceId: s.namespaceID,
-						WorkflowId:  s.workflowID,
-					},
-					ExecutionState: &persistencespb.WorkflowExecutionState{
-						RunId: s.runID,
-					},
-				},
+				WorkflowState: sanitizedMutableState,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
@@ -988,6 +988,8 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 
 	result, err := convertSyncHSMReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
+	sanitizedRoot := common.CloneProto(root.InternalRepr())
+	workflow.SanitizeStateMachineNode(sanitizedRoot)
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
 		SourceTaskId: task.TaskID,
@@ -1003,7 +1005,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 						{EventId: 10, Version: 20},
 					},
 				},
-				StateMachineNode: root.InternalRepr(),
+				StateMachineNode: sanitizedRoot,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
