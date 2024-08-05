@@ -353,9 +353,9 @@ func (e *matchingEngineImpl) String() string {
 	return buf.String()
 }
 
-// Returns taskQueuePartitionManager for a task queue and whether or not it was created.
-// If not already cached, and create is true, tries to get new range from DB and create one.
-// This blocks (up to the context deadline) for the task queue to be initialized.
+// Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
+// to get new range from DB and create one. This blocks (up to the context deadline) for the
+// task queue to be initialized.
 //
 // Note that task queue kind (sticky vs normal) and normal name for sticky task queues is not used as
 // part of the task queue identity. That means that if getTaskQueuePartitionManager
@@ -425,9 +425,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		// These partitions could be managed by this matchingEngineImpl, but are most likely not.
 		// We skip checking and just make gRPC requests to force loading them all.
 
-		// We specifically use a background context because some callers of this function are
-		// returning (and defer cancel() before the go routines started by ForceLoadAllNonRootPartitions complete
-		newPM.ForceLoadAllNonRootPartitions(context.Background())
+		newPM.ForceLoadAllNonRootPartitions()
 	}
 	return newPM, true, nil
 }
@@ -1977,7 +1975,7 @@ func (e *matchingEngineImpl) pollTask(
 }
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded
-// partitions map), then does nothing.
+// partitions map), unloadPM.Stop(...) is still called.
 func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitionManager, unloadCause unloadCause) {
 	e.unloadTaskQueuePartitionByKey(unloadPM.Partition(), unloadPM, unloadCause)
 }

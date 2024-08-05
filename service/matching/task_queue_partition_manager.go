@@ -518,7 +518,7 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 }
 
 // ForceLoadAllNonRootPartitions spins off go routines which make RPC calls to all the
-func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions(ctx context.Context) {
+func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions() {
 	if !pm.partition.IsRoot() {
 		pm.logger.Info("ForceLoadAllNonRootPartitions called on non-root partition. Prevented circular keep alive (loading) of partitions.")
 		return
@@ -538,7 +538,7 @@ func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions(ctx conte
 	for partitionId := 1; partitionId < partitionTotal; partitionId++ {
 
 		go func() {
-			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
+			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(context.Background(), &matchingservice.ForceLoadTaskQueuePartitionRequest{
 				NamespaceId: namespaceId.String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     taskQueueName,

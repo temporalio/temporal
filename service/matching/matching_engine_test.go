@@ -170,6 +170,8 @@ func (s *matchingEngineSuite) SetupTest() {
 		Return(&matchingservice.UpdateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
@@ -374,8 +376,6 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	if _, ok := callContext.Deadline(); !ok {
 		s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 	}
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	namespaceId := uuid.New()
 	tl := "makeToast"
@@ -675,9 +675,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 	}
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	// add multiple workflow tasks, but matching should not keep polling new tasks
 	// upon getting namespace handover error when recording start for the first task
 	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
@@ -710,9 +707,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 		TaskQueue:              taskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 	}
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	// add multiple activity tasks, but matching should not keep polling new tasks
 	// upon getting namespace handover error when recording start for the first task
@@ -1380,10 +1374,6 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
@@ -1486,8 +1476,6 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	// Try with cancelled context
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -1546,9 +1534,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		engines[p] = e
 		e.Start()
 	}
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(12)
 
 	for j := 0; j < iterations; j++ {
 		for p := 0; p < engineCount; p++ {
@@ -1708,9 +1693,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		e.Start()
 	}
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(12)
-
 	for j := 0; j < iterations; j++ {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
@@ -1851,9 +1833,6 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 		TaskQueue:              taskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 	}
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 	s.NoError(err)
@@ -2061,9 +2040,6 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		{time.Nanosecond}, // test taskGC deleting due to time condition
 	}
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	for _, tc := range testCases {
 		for i := int64(0); i < taskCount; i++ {
 			scheduledEventID := i * 3
@@ -2134,8 +2110,6 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 func (s *matchingEngineSuite) TestGetVersioningData() {
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	// Ensure we can fetch without first needing to set anything
 	res, err := s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
@@ -2252,9 +2226,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
@@ -2268,9 +2239,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	userData := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
@@ -2298,9 +2266,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	userData := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
@@ -2326,9 +2291,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	userData := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
@@ -2388,9 +2350,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 		s.NoError(err)
 	}()
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
@@ -2442,9 +2401,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		s.NoError(err)
 	}()
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
@@ -2473,9 +2429,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
 		})
 	}()
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:   namespaceID.String(),
 		TaskQueue:     tq,
@@ -2494,9 +2447,6 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	err := s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
@@ -2536,9 +2486,6 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	go func() {
 		_, _, err := s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
@@ -2598,9 +2545,6 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	err := s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
 		TaskQueue:   tq,
@@ -2651,9 +2595,6 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	err = s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
 		TaskQueue:   tq,
@@ -2696,9 +2637,6 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.NoError(err)
 	p2, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.New(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.NoError(err)
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(6)
 
 	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p1, true, loadCauseUnspecified)
 	s.NoError(err)
@@ -2763,10 +2701,6 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWor
 	captureHandler, ok := s.matchingEngine.metricsHandler.(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := captureHandler.StartCapture()
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	prtn := newRootPartition(
 		uuid.New(),
 		"MetricTester",
@@ -2791,9 +2725,6 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 	captureHandler, ok := s.matchingEngine.metricsHandler.(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := captureHandler.StartCapture()
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	prtn := newRootPartition(
 		uuid.New(),
@@ -2846,9 +2777,6 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 	s.True(ok)
 	capture := captureHandler.StartCapture()
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	prtn := newRootPartition(
 		uuid.New(),
 		"MetricTester",
@@ -2883,9 +2811,6 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	captureHandler, ok := s.matchingEngine.metricsHandler.(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := captureHandler.StartCapture()
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	namespaceId := uuid.New()
 	versionSet := uuid.New()
@@ -2923,9 +2848,6 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	captureHandler, ok := s.matchingEngine.metricsHandler.(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := captureHandler.StartCapture()
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	namespaceId := uuid.New()
 	buildID := uuid.New()
@@ -3112,34 +3034,20 @@ func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCoun
 }
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
 }
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
 	s.taskManager.dbConditionalFailedError = true
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksNoDBErrors() {
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors() {
 	s.taskManager.dbConditionalFailedError = true
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
 }
 
@@ -3210,34 +3118,21 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
 func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(6)
-
 	s.resetBacklogCounter(2, 2, 2)
 }
 
 func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 	s.taskManager.dbConditionalFailedError = true
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-
 	s.resetBacklogCounter(2, 2, 2)
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(6)
 
 	s.resetBacklogCounter(10, 20, 2)
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 	s.taskManager.dbConditionalFailedError = true
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
 
 	s.resetBacklogCounter(10, 50, 5)
 }
@@ -3268,9 +3163,6 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
 
@@ -3279,16 +3171,10 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 		"UpdateState an atomic operation.")
 	s.taskManager.dbConditionalFailedError = true
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
@@ -3298,33 +3184,20 @@ func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
 		"UpdateState an atomic operation.")
 	s.taskManager.dbConditionalFailedError = true
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
 }
 
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
 	s.taskManager.dbConditionalFailedError = true
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-
 	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksNoDBErrors() {
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
@@ -3333,9 +3206,6 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksD
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
 	s.taskManager.dbConditionalFailedError = true
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
