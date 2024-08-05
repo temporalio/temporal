@@ -88,12 +88,13 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		if mapper != nil {
 			fieldName, err = mapper.GetFieldName(name, ni.namespace.String())
 			if err != nil {
-				if name == searchattribute.ScheduleID {
-					// scheduleId is a fake SA -- convert to workflowId
-					fieldName = searchattribute.WorkflowID
-				} else {
+				if name != searchattribute.ScheduleID {
 					return "", err
+
 				}
+
+				// scheduleId is a fake SA -- convert to workflowId
+				fieldName = searchattribute.WorkflowID
 			} else if name == searchattribute.ScheduleID && fieldName == searchattribute.ScheduleID {
 				_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
 				if !isCustom {
