@@ -91,7 +91,7 @@ func (m *SyncMap[K, V]) KeySet() []K {
 	m.Lock()
 	defer m.Unlock()
 	keys := make([]K, 0, len(m.contents))
-	for k, _ := range m.contents {
+	for k := range m.contents {
 		keys = append(keys, k)
 	}
 	return keys
