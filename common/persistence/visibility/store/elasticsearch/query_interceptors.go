@@ -25,6 +25,7 @@
 package elasticsearch
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -47,7 +48,6 @@ type (
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		seenNamespaceDivision          bool
-		fieldTransformations           map[string]fieldTransformation
 	}
 
 	valuesInterceptor struct {
@@ -84,37 +84,31 @@ func NewValuesInterceptor(
 	}
 }
 
+// TODO: this is invoked for non-ES validation code flow. Needs refactoring
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
-
-	_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
-	if !isCustom && fieldName == searchattribute.ScheduleID {
-		// scheduleId is a fake SA -- convert to workflowId
-		fieldName = searchattribute.WorkflowID
-	}
-
-	if searchattribute.IsMappable(fieldName) {
+	if searchattribute.IsMappable(name) {
 		mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
 		if err != nil {
 			return "", err
 		}
 
 		if mapper != nil {
-			fieldName, err = mapper.GetFieldName(fieldName, ni.namespace.String())
+			fieldName, err = mapper.GetFieldName(name, ni.namespace.String())
 			if err != nil {
-				return "", err
+				if name == searchattribute.ScheduleID {
+					// scheduleId is a fake SA -- convert to workflowId
+					fieldName = searchattribute.WorkflowID
+				} else {
+					return "", err
+				}
+			} else if name == searchattribute.ScheduleID && fieldName == searchattribute.ScheduleID {
+				_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
+				if !isCustom {
+					// scheduleId is a fake SA -- convert to workflowId
+					fieldName = searchattribute.WorkflowID
+				}
 			}
-		}
-	}
-
-	// Store the transformation if the field name has changed
-	if fieldName != name {
-		if ni.fieldTransformations == nil {
-			ni.fieldTransformations = make(map[string]fieldTransformation)
-		}
-		ni.fieldTransformations[fieldName] = fieldTransformation{
-			originalField: name,
-			newField:      fieldName,
 		}
 	}
 
@@ -148,28 +142,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	return fieldName, nil
 }
 
-func (vi *valuesInterceptor) Values(fieldName string, values ...interface{}) ([]interface{}, error) {
-	name := fieldName
-	if _, exists := vi.nameInterceptor.fieldTransformations[fieldName]; exists {
-		name = vi.nameInterceptor.fieldTransformations[fieldName].newField
-	}
-
-	fieldType, err := vi.searchAttributesTypeMap.GetType(name)
+func (vi *valuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
+	fieldType, err := vi.searchAttributesTypeMap.GetType(fieldName)
 	if err != nil {
-		return nil, query.NewConverterError("invalid search attribute: %s", fieldName)
-	}
-
-	if searchattribute.IsMappable(name) {
-		mapper, err := vi.searchAttributesMapperProvider.GetMapper(vi.namespace)
-		if err != nil {
-			return nil, err
-		}
-		if mapper != nil {
-			name, err = mapper.GetAlias(name, vi.namespace.String())
-			if err != nil {
-				return nil, err
-			}
-		}
+		return nil, query.NewConverterError("invalid search attribute: %s", name)
 	}
 
 	var result []interface{}
@@ -179,12 +155,8 @@ func (vi *valuesInterceptor) Values(fieldName string, values ...interface{}) ([]
 			return nil, err
 		}
 
-		// Check for field transformations
-		if transformation, exists := vi.nameInterceptor.fieldTransformations[fieldName]; exists {
-			value, err = vi.applyFieldTransformation(transformation, value)
-			if err != nil {
-				return nil, err
-			}
+		if name == searchattribute.ScheduleID && fieldName == searchattribute.WorkflowID {
+			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		value, err = validateValueType(name, value, fieldType)

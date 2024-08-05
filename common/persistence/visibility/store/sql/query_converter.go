@@ -63,12 +63,11 @@ type (
 
 	QueryConverter struct {
 		pluginQueryConverter
-		namespaceName        namespace.Name
-		namespaceID          namespace.ID
-		saTypeMap            searchattribute.NameTypeMap
-		saMapper             searchattribute.Mapper
-		queryString          string
-		fieldTransformations map[string]fieldTransformation
+		namespaceName namespace.Name
+		namespaceID   namespace.ID
+		saTypeMap     searchattribute.NameTypeMap
+		saMapper      searchattribute.Mapper
+		queryString   string
 
 		seenNamespaceDivision bool
 	}
@@ -387,7 +386,7 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 		return err
 	}
 
-	err = c.convertValueExpr(&expr.Right, saColNameExpr.alias, saColNameExpr.valueType)
+	err = c.convertValueExpr(&expr.Right, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
 	if err != nil {
 		return err
 	}
@@ -450,11 +449,11 @@ func (c *QueryConverter) convertRangeCond(exprRef *sqlparser.Expr) error {
 			saColNameExpr.valueType.String(),
 		)
 	}
-	err = c.convertValueExpr(&expr.From, saColNameExpr.alias, saColNameExpr.valueType)
+	err = c.convertValueExpr(&expr.From, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
 	if err != nil {
 		return err
 	}
-	err = c.convertValueExpr(&expr.To, saColNameExpr.alias, saColNameExpr.valueType)
+	err = c.convertValueExpr(&expr.To, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
 	if err != nil {
 		return err
 	}
@@ -472,13 +471,9 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
 	saFieldName := saAlias
-	if c.fieldTransformations == nil {
-		c.fieldTransformations = make(map[string]fieldTransformation)
-	}
-
-	if searchattribute.IsMappable(saFieldName) {
+	if searchattribute.IsMappable(saAlias) {
 		var err error
-		saFieldName, err = c.saMapper.GetFieldName(saFieldName, c.namespaceName.String())
+		saFieldName, err = c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
 		if err != nil {
 			if saAlias != searchattribute.ScheduleID {
 				return nil, query.NewConverterError(
@@ -489,13 +484,6 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 			}
 			// scheduleId is a fake SA -- convert to workflowId
 			saFieldName = searchattribute.WorkflowID
-		}
-	}
-
-	if saFieldName != saAlias {
-		c.fieldTransformations[saAlias] = fieldTransformation{
-			originalField: saAlias,
-			newField:      saFieldName,
 		}
 	}
 
@@ -527,22 +515,20 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 
 func (c *QueryConverter) convertValueExpr(
 	exprRef *sqlparser.Expr,
-	saName string,
+	saAlias string,
+	saFieldName string,
 	saType enumspb.IndexedValueType,
 ) error {
 	expr := *exprRef
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		value, err := c.parseSQLVal(e, saName, saType)
+		value, err := c.parseSQLVal(e, saAlias, saType)
 		if err != nil {
 			return err
 		}
 
-		if transformation, exists := c.fieldTransformations[saName]; exists {
-			value, err = c.applyFieldTransformation(transformation, value)
-			if err != nil {
-				return err
-			}
+		if saAlias == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
+			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		switch v := value.(type) {
@@ -560,7 +546,7 @@ func (c *QueryConverter) convertValueExpr(
 				"%s: unexpected value type %T for search attribute %s",
 				query.InvalidExpressionErrMessage,
 				v,
-				saName,
+				saAlias,
 			)
 		}
 		return nil
@@ -570,7 +556,7 @@ func (c *QueryConverter) convertValueExpr(
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
 		for i := range e {
-			err := c.convertValueExpr(&e[i], saName, saType)
+			err := c.convertValueExpr(&e[i], saAlias, saFieldName, saType)
 			if err != nil {
 				return err
 			}
