@@ -322,12 +322,6 @@ func HttpStatusTag(value int) Tag {
 	return &tagImpl{key: httpStatusTagName, value: strconv.Itoa(value)}
 }
 
-var resourceExhaustedCauseEmptyTag = &tagImpl{key: resourceExhaustedTag, value: ""}
-
-func ResourceExhaustedCauseEmptyTag() Tag {
-	return resourceExhaustedCauseEmptyTag
-}
-
 func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
 }

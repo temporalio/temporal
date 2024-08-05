@@ -405,7 +405,8 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 				err = consts.ErrResourceExhaustedAPSLimit
 			}
 			e.resourceExhaustedCount++
-			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(1)
+			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(
+				1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
 			return true, err
 		}
 
@@ -494,18 +495,6 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		}
 	}()
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	var resourceExhaustedCauseTag metrics.Tag
-	if errors.As(err, &resourceExhaustedErr) {
-		resourceExhaustedCauseTag = metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause)
-	} else {
-		resourceExhaustedCauseTag = metrics.ResourceExhaustedCauseEmptyTag()
-	}
-	metricsHandler := e.taggedMetricsHandler.WithTags(
-		metrics.ServiceErrorTypeTag(err),
-		resourceExhaustedCauseTag,
-	)
-
 	if len(e.dlqErrorPattern()) > 0 {
 		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
 		if mErr != nil {
@@ -517,7 +506,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 				tag.Error(err),
 				tag.ErrorType(err))
 			e.terminalFailureCause = err
-			metrics.TaskTerminalFailures.With(metricsHandler).Record(1)
+			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
 	}
@@ -532,19 +521,19 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 	// Unexpected errors handled below
 	e.unexpectedErrorAttempts++
-	metrics.TaskFailures.With(metricsHandler).Record(1)
+	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
 	e.logger.Warn("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.isUnexpectedNonRetryableError(err) {
 		// Terminal errors are likely due to data corruption.
 		// Drop the task by returning nil so that task will be marked as completed,
 		// or send it to the DLQ if that is enabled.
-		metrics.TaskCorruptionCounter.With(metricsHandler).Record(1)
+		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
 			e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
-			metrics.TaskTerminalFailures.With(metricsHandler).Record(1)
+			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
 		e.logger.Error("Dropping task due to terminal error", tag.Error(err), tag.ErrorType(err))
@@ -557,7 +546,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
-		metrics.TaskTerminalFailures.With(metricsHandler).Record(1)
+		metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
@@ -837,8 +826,16 @@ func (e *CircuitBreakerExecutable) Execute() error {
 	doneCb, err := e.cb.Allow()
 	if err != nil {
 		metrics.CircuitBreakerExecutableBlocked.With(e.metricsHandler).Record(1)
-		// Return a resource exhausted error to ensure that this task is retried less aggressively and does not go to the DLQ.
-		return fmt.Errorf("%w: %w", serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "circuit breaker rejection"), err)
+		// Return a resource exhausted error to ensure that this task is retried less aggressively
+		// and does not go to the DLQ.
+		return fmt.Errorf(
+			"%w: %w",
+			serviceerror.NewResourceExhausted(
+				enums.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				"circuit breaker rejection",
+			),
+			err,
+		)
 	}
 
 	defer func() {
