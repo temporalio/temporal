@@ -72,11 +72,6 @@ type (
 		seenNamespaceDivision bool
 	}
 
-	fieldTransformation struct {
-		originalField string
-		newField      string
-	}
-
 	queryParams struct {
 		queryString string
 		// List of search attributes to group by (field name, not db name).
@@ -690,16 +685,6 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 		)
 	}
 	return nil
-}
-
-func (c *QueryConverter) applyFieldTransformation(transformation fieldTransformation, value any) (any, error) {
-	switch {
-	case transformation.originalField == searchattribute.ScheduleID && transformation.newField == searchattribute.WorkflowID:
-		if strValue, ok := value.(string); ok {
-			return primitives.ScheduleWorkflowIDPrefix + strValue, nil
-		}
-	}
-	return value, nil
 }
 
 func escapeLikeValueForPrefixSearch(in string, escape byte) string {

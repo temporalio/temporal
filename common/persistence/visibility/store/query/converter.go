@@ -605,5 +605,5 @@ func convertColName(fnInterceptor FieldNameInterceptor, colNameExpr sqlparser.Ex
 		return "", "", err
 	}
 
-	return colNameStr, name, nil
+	return name, colNameStr, nil
 }
