@@ -558,7 +558,8 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 	s.NoError(err)
 
 	sanitizedMutableState := s.mutableState.CloneToProto()
-	workflow.SanitizeMutableState(sanitizedMutableState)
+	err = workflow.SanitizeMutableState(sanitizedMutableState)
+	s.NoError(err)
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 		SourceTaskId: task.TaskID,
