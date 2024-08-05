@@ -86,16 +86,17 @@ func NewValuesInterceptor(
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
+
+	_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
+	if !isCustom && fieldName == searchattribute.ScheduleID {
+		// scheduleId is a fake SA -- convert to workflowId
+		fieldName = searchattribute.WorkflowID
+	}
+
 	if searchattribute.IsMappable(fieldName) {
 		mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
 		if err != nil {
 			return "", err
-		}
-
-		_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
-		if !isCustom && fieldName == searchattribute.ScheduleID {
-			// scheduleId is a fake SA -- convert to workflowId
-			fieldName = searchattribute.WorkflowID
 		}
 
 		if mapper != nil {
