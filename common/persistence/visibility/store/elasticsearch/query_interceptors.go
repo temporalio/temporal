@@ -49,7 +49,6 @@ type (
 		namespace                      namespace.Name
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
-		nameInterceptor                *nameInterceptor
 	}
 )
 
@@ -75,7 +74,6 @@ func NewValuesInterceptor(
 		namespace:                      namespaceName,
 		searchAttributesTypeMap:        saTypeMap,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
-		nameInterceptor:                nameInterceptor,
 	}
 }
 
