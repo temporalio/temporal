@@ -1975,6 +1975,7 @@ func (e *matchingEngineImpl) pollTask(
 }
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded
+// partitions map), then does nothing.
 // partitions map), unloadPM.Stop(...) is still called.
 func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitionManager, unloadCause unloadCause) {
 	e.unloadTaskQueuePartitionByKey(unloadPM.Partition(), unloadPM, unloadCause)
