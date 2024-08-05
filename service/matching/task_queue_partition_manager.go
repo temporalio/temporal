@@ -538,7 +538,8 @@ func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions() {
 	for partitionId := 1; partitionId < partitionTotal; partitionId++ {
 
 		go func() {
-			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(context.Background(), &matchingservice.ForceLoadTaskQueuePartitionRequest{
+			ctx := pm.callerInfoContext(context.Background())
+			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
 				NamespaceId: namespaceId.String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     taskQueueName,

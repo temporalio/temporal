@@ -438,9 +438,6 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 }
 
 func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	prtn := newRootPartition(
 		uuid.New(),
 		"makeToast",
@@ -452,9 +449,6 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 
 	// try to unload a different tqm instance with the same taskqueue ID
 	s.matchingEngine.unloadTaskQueuePartition(tqm2, unloadCauseUnspecified)
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	got, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
@@ -758,9 +752,6 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 	workflowID := "workflow1"
 	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
-
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
 		var err error
@@ -862,9 +853,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(3)
 
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
@@ -1874,9 +1862,6 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	const taskCount = 1200
 	const rangeSize = 10
 	s.matchingEngine.config.RangeSize = rangeSize
-
-	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).MaxTimes(6)
 
 	// add taskCount tasks
 	for i := int64(0); i < taskCount; i++ {
