@@ -38,11 +38,6 @@ import (
 )
 
 type (
-	fieldTransformation struct {
-		originalField string
-		newField      string
-	}
-
 	nameInterceptor struct {
 		namespace                      namespace.Name
 		searchAttributesTypeMap        searchattribute.NameTypeMap
@@ -166,16 +161,6 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 		result = append(result, value)
 	}
 	return result, nil
-}
-
-func (vi *valuesInterceptor) applyFieldTransformation(transformation fieldTransformation, value any) (any, error) {
-	switch {
-	case transformation.originalField == searchattribute.ScheduleID && transformation.newField == searchattribute.WorkflowID:
-		if strValue, ok := value.(string); ok {
-			return primitives.ScheduleWorkflowIDPrefix + strValue, nil
-		}
-	}
-	return value, nil
 }
 
 func parseSystemSearchAttributeValues(name string, value any) (any, error) {
