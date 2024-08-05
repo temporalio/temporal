@@ -59,12 +59,10 @@ func (s *QueryInterceptorSuite) TearDownTest() {
 }
 
 func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
-	mockNameInterceptor := s.createMockNameInterceptor(nil)
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
 		searchattribute.NewTestMapperProvider(nil),
-		mockNameInterceptor,
 	)
 
 	cases := []struct {
@@ -99,12 +97,10 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 }
 
 func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
-	mockNameInterceptor := s.createMockNameInterceptor(nil)
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
 		searchattribute.NewTestMapperProvider(nil),
-		mockNameInterceptor,
 	)
 
 	cases := []struct {
@@ -145,12 +141,10 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 }
 
 func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
-	mockNameInterceptor := s.createMockNameInterceptor(nil)
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
 		searchattribute.NewTestMapperProvider(nil),
-		mockNameInterceptor,
 	)
 
 	cases := []struct {
@@ -204,13 +198,10 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 // Ensures the valuesInterceptor applies the ScheduleID to WorkflowID transformation,
 // including prepending the WorkflowIDPrefix.
 func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
-	mockNameInterceptor := s.createMockNameInterceptor(nil)
-
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
 		searchattribute.NewTestMapperProvider(nil),
-		mockNameInterceptor,
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.WorkflowID, "test-schedule-id")
@@ -221,8 +212,6 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 
 // Ensures the valuesInterceptor doesn't modify values when no transformation is needed.
 func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
-	mockNameInterceptor := s.createMockNameInterceptor(nil)
-
 	typeMap := searchattribute.TestNameTypeMap.Copy()
 	typeMap.AddCustomSearchAttribute(searchattribute.ScheduleID, enums.INDEXED_VALUE_TYPE_KEYWORD)
 
@@ -230,7 +219,6 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 		"test-namespace",
 		typeMap,
 		searchattribute.NewTestMapperProvider(nil),
-		mockNameInterceptor,
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.ScheduleID, "test-workflow-id")

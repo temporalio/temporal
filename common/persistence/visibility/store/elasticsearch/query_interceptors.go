@@ -68,7 +68,6 @@ func NewValuesInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
-	nameInterceptor *nameInterceptor,
 ) *valuesInterceptor {
 	return &valuesInterceptor{
 		namespace:                      namespaceName,
