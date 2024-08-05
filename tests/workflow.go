@@ -1103,7 +1103,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 
 		s.Run("workflow is running", func() {
 
-			s.Run("workflow id reuse policy use-existing: only send update", func() {
+			s.Run("workflow id conflict policy use-existing: only send update", func() {
 				tv := testvars.New(s.T())
 
 				_, err := s.client.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
@@ -1116,7 +1116,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 				s.NoError(err)
 			})
 
-			s.Run("workflow id reuse policy terminate-existing: terminate workflow first, then start and update", func() {
+			s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
 				tv := testvars.New(s.T())
 
 				initReq := startWorkflowReq(tv)
@@ -1140,7 +1140,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 				s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
 			})
 
-			s.Run("workflow id reuse policy fail: abort multi operation", func() {
+			s.Run("workflow id conflict policy fail: abort multi operation", func() {
 				tv := testvars.New(s.T())
 
 				_, err := s.client.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
