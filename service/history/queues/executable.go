@@ -400,17 +400,19 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhaustedErr) {
-		if resourceExhaustedErr.Cause != enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			if resourceExhaustedErr.Cause == enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT {
-				err = consts.ErrResourceExhaustedAPSLimit
-			}
+		switch resourceExhaustedErr.Cause {
+		case enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
+			err = consts.ErrResourceExhaustedBusyWorkflow
+		case enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
+			err = consts.ErrResourceExhaustedAPSLimit
 			e.resourceExhaustedCount++
-			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(
-				1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
-			return true, err
+		default:
+			e.resourceExhaustedCount++
 		}
 
-		err = consts.ErrResourceExhaustedBusyWorkflow
+		metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(
+			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
+		return true, err
 	}
 	e.resourceExhaustedCount = 0
 
@@ -428,11 +430,6 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 	if err == consts.ErrTaskRetry {
 		metrics.TaskStandbyRetryCounter.With(e.taggedMetricsHandler).Record(1)
-		return true, err
-	}
-
-	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-		metrics.TaskWorkflowBusyCounter.With(e.taggedMetricsHandler).Record(1)
 		return true, err
 	}
 
