@@ -46,9 +46,8 @@ type (
 	}
 
 	valuesInterceptor struct {
-		namespace                      namespace.Name
-		searchAttributesTypeMap        searchattribute.NameTypeMap
-		searchAttributesMapperProvider searchattribute.MapperProvider
+		namespace               namespace.Name
+		searchAttributesTypeMap searchattribute.NameTypeMap
 	}
 )
 
@@ -67,12 +66,10 @@ func NewNameInterceptor(
 func NewValuesInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
 ) *valuesInterceptor {
 	return &valuesInterceptor{
-		namespace:                      namespaceName,
-		searchAttributesTypeMap:        saTypeMap,
-		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		namespace:               namespaceName,
+		searchAttributesTypeMap: saTypeMap,
 	}
 }
 
