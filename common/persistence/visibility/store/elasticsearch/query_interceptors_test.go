@@ -183,7 +183,7 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 	}
 }
 
-// Verifies the nameInterceptor correctly transforms ScheduleID to WorkflowID and stores the transformation.
+// Verifies the nameInterceptor correctly transforms ScheduleID to WorkflowID
 func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 	ni := s.createMockNameInterceptor(nil)
 
