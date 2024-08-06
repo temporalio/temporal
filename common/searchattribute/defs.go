@@ -79,7 +79,7 @@ const (
 	// A user may specify a ScheduleID in a query even if a ScheduleId search attribute isn't defined for the namespace.
 	// In such a case, ScheduleId is effectively a fake search attribute. Of course, a user may optionally choose to
 	// define a custom ScheduleId search attribute, in which case the query using the ScheduleId would operate just like
-	// any other search attribute.
+	// any other custom search attribute.
 	ScheduleID = "ScheduleId"
 )
 
