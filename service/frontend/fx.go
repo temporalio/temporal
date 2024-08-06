@@ -493,9 +493,13 @@ func NamespaceCountLimitInterceptorProvider(
 func NamespaceValidatorInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *interceptor.NamespaceValidatorInterceptor {
 	return interceptor.NewNamespaceValidatorInterceptor(
 		namespaceRegistry,
+		logger,
+		metricsHandler,
 		serviceConfig.EnableTokenNamespaceEnforcement,
 		serviceConfig.MaxIDLengthLimit,
 	)
