@@ -510,19 +510,19 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 
 func (c *QueryConverter) convertValueExpr(
 	exprRef *sqlparser.Expr,
-	saAlias string,
+	name string,
 	saFieldName string,
 	saType enumspb.IndexedValueType,
 ) error {
 	expr := *exprRef
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		value, err := c.parseSQLVal(e, saAlias, saType)
+		value, err := c.parseSQLVal(e, name, saType)
 		if err != nil {
 			return err
 		}
 
-		if saAlias == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
+		if name == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
@@ -541,7 +541,7 @@ func (c *QueryConverter) convertValueExpr(
 				"%s: unexpected value type %T for search attribute %s",
 				query.InvalidExpressionErrMessage,
 				v,
-				saAlias,
+				name,
 			)
 		}
 		return nil
@@ -551,7 +551,7 @@ func (c *QueryConverter) convertValueExpr(
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
 		for i := range e {
-			err := c.convertValueExpr(&e[i], saAlias, saFieldName, saType)
+			err := c.convertValueExpr(&e[i], name, saFieldName, saType)
 			if err != nil {
 				return err
 			}
