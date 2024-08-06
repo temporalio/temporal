@@ -31,7 +31,7 @@ import (
 	"github.com/gocql/gocql"
 )
 
-var _ Batch = (*batch)(nil)
+var _ Batch_Deprecated = (*batch)(nil)
 
 type (
 	batch struct {
@@ -62,11 +62,11 @@ func (b *batch) Query(stmt string, args ...interface{}) {
 	b.gocqlBatch.Query(stmt, args...)
 }
 
-func (b *batch) WithContext(ctx context.Context) Batch {
+func (b *batch) WithContext(ctx context.Context) Batch_Deprecated {
 	return newBatch(b.session, b.gocqlBatch.WithContext(ctx))
 }
 
-func (b *batch) WithTimestamp(timestamp int64) Batch {
+func (b *batch) WithTimestamp(timestamp int64) Batch_Deprecated {
 	b.gocqlBatch.WithTimestamp(timestamp)
 	return newBatch(b.session, b.gocqlBatch)
 }
