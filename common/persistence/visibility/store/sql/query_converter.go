@@ -477,7 +477,7 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 					saAlias,
 				)
 			}
-			// scheduleId is a fake SA -- convert to workflowId
+			// ScheduleId is a fake SA -- convert to WorkflowId
 			saFieldName = searchattribute.WorkflowID
 		}
 	}
