@@ -400,7 +400,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhaustedErr) {
-		switch resourceExhaustedErr.Cause {
+		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
 			err = consts.ErrResourceExhaustedBusyWorkflow
 		case enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
