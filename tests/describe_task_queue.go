@@ -77,10 +77,9 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateBacklogInfoLegacyAPIM
 
 func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(partitions int, workflows int, isEnhancedMode bool) {
 	// Override the ReadPartitions and WritePartitions
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, partitions)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, partitions)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitions)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitions)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 
 	expectedBacklogCount := make(map[enumspb.TaskQueueType]int64)
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = 0
