@@ -37,9 +37,9 @@ type (
 	// Session is the interface for interacting with the database.
 	Session interface {
 		Query(string, ...interface{}) Query
-		NewBatch(BatchType) Batch_Deprecated
-		ExecuteBatch(Batch_Deprecated) error
-		MapExecuteBatchCAS(Batch_Deprecated, map[string]interface{}) (bool, Iter, error)
+		NewBatch(BatchType) *Batch
+		ExecuteBatch(*Batch) error
+		MapExecuteBatchCAS(*Batch, map[string]interface{}) (bool, Iter, error)
 		AwaitSchemaAgreement(ctx context.Context) error
 		Close()
 	}
@@ -58,13 +58,6 @@ type (
 		WithTimestamp(int64) Query
 		Consistency(Consistency) Query
 		Bind(...interface{}) Query
-	}
-
-	// Batch_Deprecated is the interface for batch operation.
-	Batch_Deprecated interface {
-		Query(string, ...interface{})
-		WithContext(context.Context) Batch_Deprecated
-		WithTimestamp(int64) Batch_Deprecated
 	}
 
 	// Iter is the interface for executing and iterating over all resulting rows.

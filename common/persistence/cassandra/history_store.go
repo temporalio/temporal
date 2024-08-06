@@ -312,7 +312,7 @@ func (h *HistoryStore) DeleteHistoryBranch(
 }
 
 func (h *HistoryStore) deleteBranchRangeNodes(
-	batch gocql.Batch_Deprecated,
+	batch *gocql.Batch,
 	treeID string,
 	branchID string,
 	beginNodeID int64,

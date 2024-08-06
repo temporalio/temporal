@@ -149,7 +149,7 @@ func (s *session) Query(
 
 func (s *session) NewBatch(
 	batchType BatchType,
-) Batch_Deprecated {
+) *Batch {
 	b := s.Value.Load().(*gocql.Session).NewBatch(mustConvertBatchType(batchType))
 	if b == nil {
 		return nil
@@ -161,7 +161,7 @@ func (s *session) NewBatch(
 }
 
 func (s *session) ExecuteBatch(
-	b Batch_Deprecated,
+	b *Batch,
 ) (retError error) {
 	defer func() { s.handleError(retError) }()
 
@@ -169,7 +169,7 @@ func (s *session) ExecuteBatch(
 }
 
 func (s *session) MapExecuteBatchCAS(
-	b Batch_Deprecated,
+	b *Batch,
 	previous map[string]interface{},
 ) (_ bool, _ Iter, retError error) {
 	defer func() { s.handleError(retError) }()
