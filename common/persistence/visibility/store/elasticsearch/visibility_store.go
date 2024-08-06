@@ -341,8 +341,8 @@ func (s *VisibilityStore) AddBulkRequestAndWait(
 	ackF := s.processor.Add(bulkRequest, visibilityTaskKey)
 
 	// processorAckTimeout is a maximum duration for bulk processor to commit the bulk and unblock the `ackF`.
-	// Default value is 30s and this timeout should never have happened,
-	// because Elasticsearch must process a bulk within 30s.
+	// Default value is 15s and this timeout should never have happened,
+	// because Elasticsearch must process a bulk within 15s.
 	// Parent context is not respected here because it has shorter timeout (3s),
 	// which might already expired here due to wait at Add method above.
 	ctx, cancel := context.WithTimeout(context.Background(), s.processorAckTimeout())

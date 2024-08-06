@@ -2279,7 +2279,7 @@ See DynamicRateLimitingParams comments for more details.`,
 	)
 	WorkerESProcessorAckTimeout = NewGlobalDurationSetting(
 		"worker.ESProcessorAckTimeout",
-		30*time.Second,
+		15*time.Second,
 		`WorkerESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
 Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 	)
