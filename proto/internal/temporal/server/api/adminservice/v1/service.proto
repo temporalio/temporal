@@ -175,4 +175,6 @@ service AdminService {
     rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {}
 
     rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {}
+
+    rpc SyncWorkflowState (SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {}
 }

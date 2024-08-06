@@ -2026,6 +2026,11 @@ func (adh *AdminHandler) ListQueues(
 	}, nil
 }
 
+func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminservice.SyncWorkflowStateRequest) (*adminservice.SyncWorkflowStateResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (adh *AdminHandler) getDLQWorkflowID(
 	key *commonspb.HistoryDLQKey,
 ) string {

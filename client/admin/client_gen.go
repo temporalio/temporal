@@ -412,3 +412,13 @@ func (c *clientImpl) ResendReplicationTasks(
 	defer cancel()
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
 }
+
+func (c *clientImpl) SyncWorkflowState(
+	ctx context.Context,
+	request *adminservice.SyncWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.SyncWorkflowStateResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SyncWorkflowState(ctx, request, opts...)
+}

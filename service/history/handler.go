@@ -2416,3 +2416,8 @@ func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *history
 		Output: bytes,
 	}, nil
 }
+
+func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (*historyservice.SyncWorkflowStateResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}

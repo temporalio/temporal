@@ -1281,6 +1281,26 @@ func (mr *MockHistoryServiceClientMockRecorder) SyncShardStatus(ctx, in interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncShardStatus", reflect.TypeOf((*MockHistoryServiceClient)(nil).SyncShardStatus), varargs...)
 }
 
+// SyncWorkflowState mocks base method.
+func (m *MockHistoryServiceClient) SyncWorkflowState(ctx context.Context, in *historyservice.SyncWorkflowStateRequest, opts ...grpc.CallOption) (*historyservice.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncWorkflowState", varargs...)
+	ret0, _ := ret[0].(*historyservice.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockHistoryServiceClientMockRecorder) SyncWorkflowState(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockHistoryServiceClient)(nil).SyncWorkflowState), varargs...)
+}
+
 // TerminateWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) TerminateWorkflowExecution(ctx context.Context, in *historyservice.TerminateWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -2433,6 +2453,21 @@ func (m *MockHistoryServiceServer) SyncShardStatus(arg0 context.Context, arg1 *h
 func (mr *MockHistoryServiceServerMockRecorder) SyncShardStatus(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncShardStatus", reflect.TypeOf((*MockHistoryServiceServer)(nil).SyncShardStatus), arg0, arg1)
+}
+
+// SyncWorkflowState mocks base method.
+func (m *MockHistoryServiceServer) SyncWorkflowState(arg0 context.Context, arg1 *historyservice.SyncWorkflowStateRequest) (*historyservice.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncWorkflowState", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockHistoryServiceServerMockRecorder) SyncWorkflowState(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockHistoryServiceServer)(nil).SyncWorkflowState), arg0, arg1)
 }
 
 // TerminateWorkflowExecution mocks base method.

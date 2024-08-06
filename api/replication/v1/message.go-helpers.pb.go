@@ -657,3 +657,77 @@ func (this *NewRunInfo) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type SyncWorkflowStateMutationAttributes to the protobuf v3 wire format
+func (val *SyncWorkflowStateMutationAttributes) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncWorkflowStateMutationAttributes from the protobuf v3 wire format
+func (val *SyncWorkflowStateMutationAttributes) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncWorkflowStateMutationAttributes) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncWorkflowStateMutationAttributes values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncWorkflowStateMutationAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncWorkflowStateMutationAttributes
+	switch t := that.(type) {
+	case *SyncWorkflowStateMutationAttributes:
+		that1 = t
+	case SyncWorkflowStateMutationAttributes:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SyncWorkflowStateSnapshotAttributes to the protobuf v3 wire format
+func (val *SyncWorkflowStateSnapshotAttributes) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncWorkflowStateSnapshotAttributes from the protobuf v3 wire format
+func (val *SyncWorkflowStateSnapshotAttributes) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncWorkflowStateSnapshotAttributes) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncWorkflowStateSnapshotAttributes values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncWorkflowStateSnapshotAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncWorkflowStateSnapshotAttributes
+	switch t := that.(type) {
+	case *SyncWorkflowStateSnapshotAttributes:
+		that1 = t
+	case SyncWorkflowStateSnapshotAttributes:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
