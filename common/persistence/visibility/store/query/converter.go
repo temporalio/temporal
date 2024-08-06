@@ -600,7 +600,7 @@ func convertColName(fnInterceptor FieldNameInterceptor, colNameExpr sqlparser.Ex
 
 	colNameStr := sqlparser.String(colName)
 	colNameStr = strings.ReplaceAll(colNameStr, "`", "")
-	name, err := fnInterceptor.Name(colNameStr, usage)
+	fieldName, err := fnInterceptor.Name(colNameStr, usage)
 	if err != nil {
 		return "", "", err
 	}
