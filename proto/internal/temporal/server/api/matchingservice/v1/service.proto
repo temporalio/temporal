@@ -129,6 +129,13 @@ service MatchingService {
 
     // Gets all task queue names mapped to a given build ID
     rpc GetBuildIdTaskQueueMapping (GetBuildIdTaskQueueMappingRequest) returns (GetBuildIdTaskQueueMappingResponse) {}
+    // Force loading a task queue partition. Used by matching node owning root partition.
+    // When root partition is loaded this is called for all child partitions.
+    // This addresses the posibility of unloaded child partitions having backlog,
+    // but not being forwarded/synced to the root partition to find the polling
+    // worker which triggered the root partition being loaded in the first place.
+    rpc ForceLoadTaskQueuePartition (ForceLoadTaskQueuePartitionRequest) returns (ForceLoadTaskQueuePartitionResponse) {}
+    
 
     // Force unloading a task queue. Used for testing only.
     rpc ForceUnloadTaskQueue (ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {}

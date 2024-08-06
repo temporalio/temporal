@@ -1287,6 +1287,80 @@ func (this *GetBuildIdTaskQueueMappingResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ForceLoadTaskQueuePartitionRequest to the protobuf v3 wire format
+func (val *ForceLoadTaskQueuePartitionRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ForceLoadTaskQueuePartitionRequest from the protobuf v3 wire format
+func (val *ForceLoadTaskQueuePartitionRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ForceLoadTaskQueuePartitionRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ForceLoadTaskQueuePartitionRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ForceLoadTaskQueuePartitionRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ForceLoadTaskQueuePartitionRequest
+	switch t := that.(type) {
+	case *ForceLoadTaskQueuePartitionRequest:
+		that1 = t
+	case ForceLoadTaskQueuePartitionRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ForceLoadTaskQueuePartitionResponse to the protobuf v3 wire format
+func (val *ForceLoadTaskQueuePartitionResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ForceLoadTaskQueuePartitionResponse from the protobuf v3 wire format
+func (val *ForceLoadTaskQueuePartitionResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ForceLoadTaskQueuePartitionResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ForceLoadTaskQueuePartitionResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ForceLoadTaskQueuePartitionResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ForceLoadTaskQueuePartitionResponse
+	switch t := that.(type) {
+	case *ForceLoadTaskQueuePartitionResponse:
+		that1 = t
+	case ForceLoadTaskQueuePartitionResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ForceUnloadTaskQueueRequest to the protobuf v3 wire format
 func (val *ForceUnloadTaskQueueRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

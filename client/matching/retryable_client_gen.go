@@ -170,6 +170,21 @@ func (c *retryableClient) DispatchNexusTask(
 	return resp, err
 }
 
+func (c *retryableClient) ForceLoadTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.ForceLoadTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
+	var resp *matchingservice.ForceLoadTaskQueuePartitionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ForceLoadTaskQueuePartition(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ForceUnloadTaskQueue(
 	ctx context.Context,
 	request *matchingservice.ForceUnloadTaskQueueRequest,
