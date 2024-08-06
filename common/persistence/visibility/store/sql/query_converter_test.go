@@ -623,6 +623,14 @@ func (s *queryConverterSuite) TestConvertColName() {
 				typeMap := originalSaTypeMap.Copy()
 				typeMap.AddCustomSearchAttribute(searchattribute.ScheduleID, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 				s.queryConverter.saTypeMap = typeMap
+				s.queryConverter.saMapper = newMapper(
+					func(alias, namespace string) (string, error) {
+						return alias, nil
+					},
+					func(fieldName, namespace string) (string, error) {
+						return searchattribute.ScheduleID, nil
+					},
+				)
 			},
 		},
 		{
