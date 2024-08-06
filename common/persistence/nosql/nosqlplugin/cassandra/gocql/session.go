@@ -165,7 +165,7 @@ func (s *session) ExecuteBatch(
 ) (retError error) {
 	defer func() { s.handleError(retError) }()
 
-	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.(*Batch).gocqlBatch)
+	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.gocqlBatch)
 }
 
 func (s *session) MapExecuteBatchCAS(
@@ -174,7 +174,7 @@ func (s *session) MapExecuteBatchCAS(
 ) (_ bool, _ Iter, retError error) {
 	defer func() { s.handleError(retError) }()
 
-	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.(*Batch).gocqlBatch, previous)
+	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.gocqlBatch, previous)
 	return applied, iter, err
 }
 
