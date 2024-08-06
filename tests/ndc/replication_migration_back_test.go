@@ -120,7 +120,7 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
-		dynamicconfig.NamespaceCacheRefreshInterval.Key():       tests.NamespaceCacheRefreshInterval,
+		dynamicconfig.NamespaceCacheRefreshInterval.Key():       dynamicconfig.NamespaceCacheRefreshInterval,
 	}
 	s.controller = gomock.NewController(s.T())
 	mockActiveStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
