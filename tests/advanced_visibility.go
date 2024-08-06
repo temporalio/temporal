@@ -2701,7 +2701,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		return listResponse.Schedules[0].ScheduleId == scheduleID
 	}, 30*time.Second, 1*time.Second)
 
-	listRequest.Query = fmt.Sprintf(`%s IN ("%s")`, searchattribute.ScheduleID, scheduleID)
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, scheduleID)
 	listResponse, err := s.client.ListSchedules(ctx, listRequest)
 	s.NoError(err)
 	s.Len(listResponse.Schedules, 1)
@@ -2735,7 +2735,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		return listResponse.Schedules[0].ScheduleId == customScheduleID
 	}, 30*time.Second, 1*time.Second)
 
-	listRequest.Query = fmt.Sprintf(`%s IN ("%s")`, searchattribute.ScheduleID, customSearchAttrValue)
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, customSearchAttrValue)
 	listResponse, err = s.client.ListSchedules(ctx, listRequest)
 	s.NoError(err)
 	s.Len(listResponse.Schedules, 1)
