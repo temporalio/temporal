@@ -32,9 +32,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/locks"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -1022,34 +1019,5 @@ func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
 }
 
 func (e *historyEngineImpl) ReplicationFetchWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
-	//TODO implement me
-	wfCtx, releaseFunc, err := getWorkflowExecutionContext(ctx, e.shardContext, e.stateMachineEnvironment.cache, definition.NewWorkflowKey(request.NamespaceId, request.Execution.WorkflowId, request.Execution.RunId), locks.PriorityLow)
-	defer releaseFunc(retErr)
-	if err != nil {
-		return nil, err
-	}
-	mu, err := wfCtx.LoadMutableState(ctx, e.shardContext)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = workflow.TransitionHistoryStalenessCheck(mu.GetExecutionInfo().TransitionHistory, request.VersionedTransition); err == nil {
-		// decide sync or mutation
-		tombstoneIncluded := false
-		tombstoneBatch := mu.GetExecutionInfo().SubStateMachineTombstoneBatches
-		for _, tombstone := range tombstoneBatch {
-			if workflow.CompareVersionedTransition(tombstone.VersionedTransition, request.VersionedTransition) < 0 { // tombstone is older than the request
-				tombstoneIncluded = true
-				break
-			}
-		}
-		if tombstoneIncluded {
-			// return mutation
-			mu.GetPendingActivityInfos()
-			mutation := &persistencepb.WorkflowMutableStateMutation{}
-		}
-	}
-	// return snapshot
-
-	panic("implement me")
+	return replicationapi.SyncWorkflowState(ctx, e.shardContext, request, e.workflowConsistencyChecker.GetWorkflowCache())
 }

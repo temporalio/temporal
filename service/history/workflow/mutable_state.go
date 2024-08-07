@@ -254,6 +254,7 @@ type (
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistencespb.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistencespb.SignalInfo
+		GetPendingSignalRequestedIds() []string
 		GetRequestCancelInfo(int64) (*persistencespb.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() time.Duration
