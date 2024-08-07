@@ -60,29 +60,29 @@ func (m *MockTaskRefresher) EXPECT() *MockTaskRefresherMockRecorder {
 }
 
 // PartialRefresh mocks base method.
-func (m *MockTaskRefresher) PartialRefresh(arg0 context.Context, arg1 MutableState, arg2 *v1.VersionedTransition) error {
+func (m *MockTaskRefresher) PartialRefresh(ctx context.Context, mutableState MutableState, minVersionedTransition *v1.VersionedTransition) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PartialRefresh", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "PartialRefresh", ctx, mutableState, minVersionedTransition)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PartialRefresh indicates an expected call of PartialRefresh.
-func (mr *MockTaskRefresherMockRecorder) PartialRefresh(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockTaskRefresherMockRecorder) PartialRefresh(ctx, mutableState, minVersionedTransition interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartialRefresh", reflect.TypeOf((*MockTaskRefresher)(nil).PartialRefresh), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartialRefresh", reflect.TypeOf((*MockTaskRefresher)(nil).PartialRefresh), ctx, mutableState, minVersionedTransition)
 }
 
 // Refresh mocks base method.
-func (m *MockTaskRefresher) Refresh(arg0 context.Context, arg1 MutableState) error {
+func (m *MockTaskRefresher) Refresh(ctx context.Context, mutableState MutableState) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Refresh", arg0, arg1)
+	ret := m.ctrl.Call(m, "Refresh", ctx, mutableState)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Refresh indicates an expected call of Refresh.
-func (mr *MockTaskRefresherMockRecorder) Refresh(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockTaskRefresherMockRecorder) Refresh(ctx, mutableState interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockTaskRefresher)(nil).Refresh), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockTaskRefresher)(nil).Refresh), ctx, mutableState)
 }
