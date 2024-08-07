@@ -31,7 +31,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +38,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
@@ -63,8 +63,7 @@ type RPCFactory struct {
 	frontendHTTPPort  int
 	frontendTLSConfig *tls.Config
 
-	initListener       sync.Once
-	grpcListener       net.Listener
+	grpcListener       func() net.Listener
 	tlsFactory         encryption.TLSConfigProvider
 	clientInterceptors []grpc.UnaryClientInterceptor
 	monitor            membership.Monitor
@@ -98,6 +97,7 @@ func NewFactory(
 		clientInterceptors: clientInterceptors,
 		monitor:            monitor,
 	}
+	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
 	return f
 }
@@ -162,19 +162,20 @@ func (d *RPCFactory) GetInternodeClientTlsConfig() (*tls.Config, error) {
 
 // GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
 func (d *RPCFactory) GetGRPCListener() net.Listener {
-	d.initListener.Do(func() {
-		hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
-		var err error
-		d.grpcListener, err = net.Listen("tcp", hostAddress)
+	return d.grpcListener()
+}
 
-		if err != nil {
-			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
-		}
+func (d *RPCFactory) createGRPCListener() net.Listener {
+	hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
+	var err error
+	grpcListener, err := net.Listen("tcp", hostAddress)
 
-		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
-	})
+	if err != nil || grpcListener == nil || grpcListener.Addr() == nil {
+		d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
+	}
 
-	return d.grpcListener
+	d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
+	return grpcListener
 }
 
 func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
@@ -289,16 +290,7 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	}
 
 	var address string
-	service, err := extractServiceFromURL(d.frontendHTTPURL)
-	if err != nil {
-		return nil, err
-	}
-	if service != "" {
-		// The URL instructs us to resolve via membership for frontend or internal-frontend.
-		r, err := d.monitor.GetResolver(primitives.ServiceName(service))
-		if err != nil {
-			return nil, err
-		}
+	if r := serviceResolverFromGRPCURL(d.frontendHTTPURL); r != nil {
 		client.Transport = &roundTripper{
 			resolver:   r,
 			underlying: transport,
@@ -346,13 +338,16 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rt.underlying.RoundTrip(req)
 }
 
-func extractServiceFromURL(ustr string) (primitives.ServiceName, error) {
-	if !strings.HasPrefix(ustr, membership.ResolverScheme+"://") {
-		return "", nil
-	}
+// serviceResolverFromGRPCURL returns a ServiceResolver if ustr corresponds to a
+// membership url, otherwise nil.
+func serviceResolverFromGRPCURL(ustr string) membership.ServiceResolver {
 	u, err := url.Parse(ustr)
 	if err != nil {
-		return "", nil
+		return nil
 	}
-	return primitives.ServiceName(u.Host), nil
+	res, err := membership.GetServiceResolverFromURL(u)
+	if err != nil {
+		return nil
+	}
+	return res
 }

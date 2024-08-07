@@ -66,6 +66,7 @@ func NewExecutableWorkflowStateTask(
 	task *replicationspb.SyncWorkflowStateTaskAttributes,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
+	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableWorkflowStateTask {
 	namespaceID := task.GetWorkflowState().ExecutionInfo.NamespaceId
 	workflowID := task.GetWorkflowState().ExecutionInfo.WorkflowId
@@ -82,6 +83,7 @@ func NewExecutableWorkflowStateTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			priority,
+			replicationTask,
 		),
 		req: &historyservice.ReplicateWorkflowStateRequest{
 			NamespaceId:   namespaceID,

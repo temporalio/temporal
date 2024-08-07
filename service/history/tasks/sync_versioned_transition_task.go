@@ -20,16 +20,56 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package tasks
 
 import (
-	"fmt"
+	"time"
 
-	"go.temporal.io/server/common/primitives"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 )
 
-const ResolverScheme = "membership"
+var _ Task = (*SyncVersionedTransitionTask)(nil)
 
-func MakeResolverURL(service primitives.ServiceName) string {
-	return fmt.Sprintf("%s://%s", ResolverScheme, string(service))
+type (
+	SyncVersionedTransitionTask struct {
+		definition.WorkflowKey
+		VisibilityTimestamp time.Time
+		TaskID              int64
+
+		FirstEventID int64
+		NextEventID  int64
+		NewRunID     string
+
+		VersionedTransition *persistencespb.VersionedTransition
+	}
+)
+
+func (a *SyncVersionedTransitionTask) GetKey() Key {
+	return NewImmediateKey(a.TaskID)
+}
+
+func (a *SyncVersionedTransitionTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+func (a *SyncVersionedTransitionTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+func (a *SyncVersionedTransitionTask) GetVisibilityTime() time.Time {
+	return a.VisibilityTimestamp
+}
+
+func (a *SyncVersionedTransitionTask) SetVisibilityTime(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
+}
+
+func (a *SyncVersionedTransitionTask) GetCategory() Category {
+	return CategoryReplication
+}
+
+func (a *SyncVersionedTransitionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION
 }

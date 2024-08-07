@@ -79,42 +79,6 @@ type (
 		directive   *taskqueuespb.TaskVersionDirective
 		forwardInfo *taskqueuespb.TaskForwardInfo
 	}
-
-	physicalTaskQueueManager interface {
-		Start()
-		Stop(unloadCause)
-		WaitUntilInitialized(context.Context) error
-		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
-		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
-		// from this task queue to pollers
-		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
-		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
-		MarkAlive()
-		// TrySyncMatch tries to match task to a local or remote poller. If not possible, returns false.
-		TrySyncMatch(ctx context.Context, task *internalTask) (bool, error)
-		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
-		SpoolTask(taskInfo *persistencespb.TaskInfo) error
-		ProcessSpooledTask(ctx context.Context, task *internalTask) error
-		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
-		// up the task, this method will return error. Task will not be persisted to db
-		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
-		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
-		// if dispatched to local poller then nil and nil is returned.
-		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// DispatchNexusTask dispatches a nexus task to a local or remote poller. If forwarded then result or
-		// error is returned, if dispatched to local poller then nil and nil is returned.
-		DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
-		UpdatePollerInfo(pollerIdentity, *pollMetadata)
-		GetAllPollerInfo() []*taskqueuepb.PollerInfo
-		HasPollerAfter(accessTime time.Time) bool
-		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
-		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		GetStats() *taskqueuepb.TaskQueueStats
-		UnloadFromPartitionManager(unloadCause)
-		String() string
-		QueueKey() *PhysicalTaskQueueKey
-	}
-
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
 	physicalTaskQueueManagerImpl struct {
 		status               int32

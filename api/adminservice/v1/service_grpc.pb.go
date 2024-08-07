@@ -80,6 +80,7 @@ const (
 	AdminService_CancelDLQJob_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/CancelDLQJob"
 	AdminService_AddTasks_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
 	AdminService_ListQueues_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
+	AdminService_DeepHealthCheck_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -165,6 +166,7 @@ type AdminServiceClient interface {
 	CancelDLQJob(ctx context.Context, in *CancelDLQJobRequest, opts ...grpc.CallOption) (*CancelDLQJobResponse, error)
 	AddTasks(ctx context.Context, in *AddTasksRequest, opts ...grpc.CallOption) (*AddTasksResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
+	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
 }
 
 type adminServiceClient struct {
@@ -539,6 +541,15 @@ func (c *adminServiceClient) ListQueues(ctx context.Context, in *ListQueuesReque
 	return out, nil
 }
 
+func (c *adminServiceClient) DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error) {
+	out := new(DeepHealthCheckResponse)
+	err := c.cc.Invoke(ctx, AdminService_DeepHealthCheck_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -622,6 +633,7 @@ type AdminServiceServer interface {
 	CancelDLQJob(context.Context, *CancelDLQJobRequest) (*CancelDLQJobResponse, error)
 	AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
+	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -742,6 +754,9 @@ func (UnimplementedAdminServiceServer) AddTasks(context.Context, *AddTasksReques
 }
 func (UnimplementedAdminServiceServer) ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListQueues not implemented")
+}
+func (UnimplementedAdminServiceServer) DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeepHealthCheck not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1448,6 +1463,24 @@ func _AdminService_ListQueues_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_DeepHealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeepHealthCheckRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).DeepHealthCheck(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_DeepHealthCheck_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).DeepHealthCheck(ctx, req.(*DeepHealthCheckRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1602,6 +1635,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListQueues",
 			Handler:    _AdminService_ListQueues_Handler,
+		},
+		{
+			MethodName: "DeepHealthCheck",
+			Handler:    _AdminService_DeepHealthCheck_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

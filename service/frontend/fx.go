@@ -36,6 +36,7 @@ import (
 
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -398,7 +399,8 @@ func RateLimitInterceptorProvider(
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{
-			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+			healthpb.Health_Check_FullMethodName:                     0, // exclude health check requests from rate limiting.
+			adminservice.AdminService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
 		},
 	)
 }

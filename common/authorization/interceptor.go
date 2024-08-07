@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 
 	"go.temporal.io/server/common/headers"
@@ -142,9 +141,8 @@ func (a *Interceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	tlsConnection := TLSInfoFromContext(ctx)
-	md, _ := metadata.FromIncomingContext(ctx)
 
-	authInfo := a.GetAuthInfo(tlsConnection, headers.GRPCHeaderGetter{Metadata: md}, func() string {
+	authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
 		if a.audienceGetter != nil {
 			return a.audienceGetter.Audience(ctx, req, info)
 		}

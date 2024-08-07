@@ -25,9 +25,20 @@ package callbacks_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
+
+	"go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/golang/mock/gomock"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -63,14 +74,19 @@ func (fakeEnv) Now() time.Time {
 var _ hsm.Environment = fakeEnv{}
 
 type mutableState struct {
-	completion nexus.OperationCompletion
+	completionNexus nexus.OperationCompletion
+	completionHsm   *historypb.HistoryEvent
 }
 
 func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
-	return ms.completion, nil
+	return ms.completionNexus, nil
 }
 
-func TestProcessInvocationTask_Outcomes(t *testing.T) {
+func (ms mutableState) GetCompletionEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
+	return ms.completionHsm, nil
+}
+
+func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 	cases := []struct {
 		name                  string
 		caller                callbacks.HTTPCaller
@@ -147,12 +163,12 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			counter.EXPECT().Record(int64(1),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome))
 			metricsHandler.EXPECT().Timer(callbacks.RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.NexusOutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome))
 
 			root := newRoot(t)
 			cb := callbacks.Callback{
@@ -179,7 +195,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				callbacks.TaskExecutorOptions{
 					NamespaceRegistry: namespaceRegistryMock,
 					MetricsHandler:    metricsHandler,
-					CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+					HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
 					Logger: log.NewNoopLogger(),
@@ -223,6 +239,159 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 	}
 }
 
+func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
+	cases := []struct {
+		name                  string
+		expectedError         error
+		expectedMetricOutcome codes.Code
+		assertOutcome         func(*testing.T, callbacks.Callback)
+	}{
+		{
+			name:                  "success",
+			expectedError:         nil,
+			expectedMetricOutcome: codes.OK,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
+			},
+		},
+		{
+			name:                  "retryable-error",
+			expectedError:         status.Error(codes.Unavailable, "fake error"),
+			expectedMetricOutcome: codes.Unavailable,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
+			},
+		},
+		{
+			name:                  "non-retryable-error",
+			expectedError:         status.Error(codes.NotFound, "fake error"),
+			expectedMetricOutcome: codes.NotFound,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
+			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
+				namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+					Namespace: &persistencespb.NamespaceDetail{
+						Info: &persistencespb.NamespaceInfo{
+							Id:   "namespace-id",
+							Name: "namespace-name",
+						},
+						Config: &persistencespb.NamespaceConfig{},
+					},
+				}),
+				nil,
+			)
+			metricsHandler := metrics.NewMockHandler(ctrl)
+			counter := metrics.NewMockCounterIface(ctrl)
+			timer := metrics.NewMockTimerIface(ctrl)
+			metricsHandler.EXPECT().Counter(callbacks.RequestCounter.Name()).Return(counter)
+			counter.EXPECT().Record(int64(1),
+				metrics.NamespaceTag("namespace-name"),
+				metrics.DestinationTag(""),
+				metrics.OutcomeTag(fmt.Sprintf("status:%d", tc.expectedMetricOutcome)))
+			metricsHandler.EXPECT().Timer(callbacks.RequestLatencyHistogram.Name()).Return(timer)
+			timer.EXPECT().Record(gomock.Any(),
+				metrics.NamespaceTag("namespace-name"),
+				metrics.DestinationTag(""),
+				metrics.OutcomeTag(fmt.Sprintf("status:%d", tc.expectedMetricOutcome)))
+
+			root := newRoot(t)
+			ref := &persistencespb.StateMachineRef{
+				Path: []*persistencespb.StateMachineKey{
+					{
+						Type: scheduler.WorkflowType,
+						Id:   "testId",
+					},
+				},
+			}
+			cb := callbacks.Callback{
+				CallbackInfo: &persistencespb.CallbackInfo{
+					Callback: &persistencespb.Callback{
+						Variant: &persistencespb.Callback_Hsm{
+							Hsm: &persistencespb.Callback_HSM{
+								NamespaceId: "nsid",
+								WorkflowId:  "wid",
+								RunId:       "rid",
+								Ref:         ref,
+								Method:      "test",
+							},
+						},
+					},
+					State: enumsspb.CALLBACK_STATE_SCHEDULED,
+				},
+			}
+			coll := callbacks.MachineCollection(root)
+			node, err := coll.Add("ID", cb)
+			require.NoError(t, err)
+			env := fakeEnv{node}
+
+			key := definition.NewWorkflowKey("namespace-id", "", "")
+			reg := hsm.NewRegistry()
+			historyClientMock := historyservicemock.NewMockHistoryServiceClient(ctrl)
+
+			historyClientMock.EXPECT().InvokeStateMachineMethod(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, in *historyservice.InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*historyservice.InvokeStateMachineMethodResponse, error) {
+				require.Equal(t, "nsid", in.NamespaceId)
+				require.Equal(t, "wid", in.WorkflowId)
+				require.Equal(t, "rid", in.RunId)
+				require.True(t, ref.Equal(in.Ref))
+				require.Equal(t, "test", in.MethodName)
+				event := &historypb.HistoryEvent{}
+				err = proto.Unmarshal(in.Input, event)
+				require.NoError(t, err)
+				require.Equal(t, int64(42), event.EventId)
+				require.Equal(t, enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, event.EventType)
+
+				return &historyservice.InvokeStateMachineMethodResponse{}, tc.expectedError
+			}).Times(1)
+			require.NoError(t, callbacks.RegisterExecutor(
+				reg,
+				callbacks.TaskExecutorOptions{
+					NamespaceRegistry: namespaceRegistryMock,
+					MetricsHandler:    metricsHandler,
+					HistoryClient:     historyClientMock,
+					Logger:            log.NewNoopLogger(),
+					Config: &callbacks.Config{
+						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+						RetryPolicy: func() backoff.RetryPolicy {
+							return backoff.NewExponentialRetryPolicy(time.Second)
+						},
+					},
+				},
+			))
+
+			err = reg.ExecuteImmediateTask(
+				context.Background(),
+				env,
+				hsm.Ref{
+					WorkflowKey: key,
+					StateMachineRef: &persistencespb.StateMachineRef{
+						Path: []*persistencespb.StateMachineKey{
+							{
+								Type: callbacks.StateMachineType,
+								Id:   "ID",
+							},
+						},
+					},
+				},
+				callbacks.InvocationTask{},
+			)
+
+			require.NoError(t, err)
+
+			cb, err = coll.Data("ID")
+			require.NoError(t, err)
+			tc.assertOutcome(t, cb)
+		})
+	}
+}
+
 func TestProcessBackoffTask(t *testing.T) {
 	root := newRoot(t)
 	cb := callbacks.Callback{
@@ -246,7 +415,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	require.NoError(t, callbacks.RegisterExecutor(
 		reg,
 		callbacks.TaskExecutorOptions{
-			CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+			HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 				return nil
 			},
 			Logger: log.NewNoopLogger(),
@@ -272,10 +441,15 @@ func TestProcessBackoffTask(t *testing.T) {
 }
 
 func newMutableState(t *testing.T) mutableState {
-	completion, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccesfulOptions{})
+	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccesfulOptions{})
 	require.NoError(t, err)
+	completionHsm := &historypb.HistoryEvent{
+		EventId:   42,
+		EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+	}
 	return mutableState{
-		completion: completion,
+		completionNexus: completionNexus,
+		completionHsm:   completionHsm,
 	}
 }
 

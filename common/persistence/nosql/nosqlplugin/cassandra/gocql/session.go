@@ -149,32 +149,32 @@ func (s *session) Query(
 
 func (s *session) NewBatch(
 	batchType BatchType,
-) Batch {
+) *Batch {
 	b := s.Value.Load().(*gocql.Session).NewBatch(mustConvertBatchType(batchType))
 	if b == nil {
 		return nil
 	}
-	return &batch{
+	return &Batch{
 		session:    s,
 		gocqlBatch: b,
 	}
 }
 
 func (s *session) ExecuteBatch(
-	b Batch,
+	b *Batch,
 ) (retError error) {
 	defer func() { s.handleError(retError) }()
 
-	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.(*batch).gocqlBatch)
+	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.gocqlBatch)
 }
 
 func (s *session) MapExecuteBatchCAS(
-	b Batch,
+	b *Batch,
 	previous map[string]interface{},
 ) (_ bool, _ Iter, retError error) {
 	defer func() { s.handleError(retError) }()
 
-	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.(*batch).gocqlBatch, previous)
+	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.gocqlBatch, previous)
 	return applied, iter, err
 }
 

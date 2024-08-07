@@ -103,6 +103,20 @@ func (c *metricClient) CloseShard(
 	return c.client.CloseShard(ctx, request, opts...)
 }
 
+func (c *metricClient) DeepHealthCheck(
+	ctx context.Context,
+	request *adminservice.DeepHealthCheckRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDeepHealthCheck")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeepHealthCheck(ctx, request, opts...)
+}
+
 func (c *metricClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,

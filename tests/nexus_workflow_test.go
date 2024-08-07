@@ -771,51 +771,49 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionErrors() {
 	})
 	s.NoError(err)
 
-	s.T().Run("ConfigDisabled", func(t *testing.T) {
-		dc := s.testCluster.host.dcClient
-
-		dc.OverrideValue(t, dynamicconfig.EnableNexus, false)
+	s.Run("ConfigDisabled", func() {
+		s.OverrideDynamicConfig(dynamicconfig.EnableNexus, false)
 		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
-		res, snap := s.sendNexusCompletionRequest(ctx, t, publicCallbackUrl, completion, "")
-		require.Equal(t, http.StatusNotFound, res.StatusCode)
-		require.Equal(t, 1, len(snap["nexus_completion_request_preprocess_errors"]))
+		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
+		s.Equal(http.StatusNotFound, res.StatusCode)
+		s.Equal(1, len(snap["nexus_completion_request_preprocess_errors"]))
 	})
 
-	s.T().Run("NamespaceNotFound", func(t *testing.T) {
+	s.Run("NamespaceNotFound", func() {
 		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path("namespace-doesnt-exist")
-		res, snap := s.sendNexusCompletionRequest(ctx, t, publicCallbackUrl, completion, "")
-		require.Equal(t, http.StatusNotFound, res.StatusCode)
-		require.Equal(t, 1, len(snap["nexus_completion_request_preprocess_errors"]))
+		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
+		s.Equal(http.StatusNotFound, res.StatusCode)
+		s.Equal(1, len(snap["nexus_completion_request_preprocess_errors"]))
 	})
 
-	s.T().Run("InvalidToken", func(t *testing.T) {
+	s.Run("InvalidToken", func() {
 		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
-		res, snap := s.sendNexusCompletionRequest(ctx, t, publicCallbackUrl, completion, "")
-		require.Equal(t, http.StatusBadRequest, res.StatusCode)
-		require.Equal(t, 0, len(snap["nexus_completion_request_preprocess_errors"]))
-		require.Equal(t, 1, len(snap["nexus_completion_requests"]))
-		require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_bad_request"})
+		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
+		s.Equal(http.StatusBadRequest, res.StatusCode)
+		s.Equal(0, len(snap["nexus_completion_request_preprocess_errors"]))
+		s.Equal(1, len(snap["nexus_completion_requests"]))
+		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "error_bad_request"})
 	})
 
-	s.T().Run("InvalidClientVersion", func(t *testing.T) {
+	s.Run("InvalidClientVersion", func() {
 		publicCallbackUrl := "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(s.namespace)
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 		req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
-		require.NoError(t, err)
+		s.NoError(err)
 		req.Header.Set("User-Agent", "Nexus-go-sdk/v99.0.0")
 
 		res, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
+		s.NoError(err)
 		_, err = io.ReadAll(res.Body)
-		require.NoError(t, err)
+		s.NoError(err)
 		defer res.Body.Close()
 
 		snap := capture.Snapshot()
-		require.Equal(t, http.StatusBadRequest, res.StatusCode)
-		require.Equal(t, 1, len(snap["nexus_completion_requests"]))
-		require.Subset(t, snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "unsupported_client"})
+		s.Equal(http.StatusBadRequest, res.StatusCode)
+		s.Equal(1, len(snap["nexus_completion_requests"]))
+		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.namespace, "outcome": "unsupported_client"})
 	})
 }
 
@@ -845,8 +843,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionAuthErrors() {
 
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionInternalAuth() {
 	// Set URL template with invalid host
-	s.testCluster.host.dcClient.OverrideValue(
-		s.T(),
+	s.OverrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,
 		"http://INTERNAL/namespaces/{{.NamespaceName}}/nexus/callback")
 

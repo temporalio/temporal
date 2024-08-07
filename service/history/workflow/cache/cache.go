@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -89,11 +90,11 @@ type (
 
 		onPut                     func(wfContext *workflow.Context)
 		onEvict                   func(wfContext *workflow.Context)
-		logger                    log.Logger
 		nonUserContextLockTimeout time.Duration
 	}
 	cacheItem struct {
 		wfContext workflow.Context
+		finalizer *finalizer.Finalizer
 	}
 
 	NewCacheFn func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache
@@ -164,10 +165,35 @@ func newCache(
 		TTL: ttl,
 		Pin: true,
 		OnPut: func(val any) {
-			// TODO: will be used in follow-up PR
+			//revive:disable-next-line:unchecked-type-assertion
+			item := val.(*cacheItem)
+			if item.finalizer == nil {
+				return // should only happen in unit tests
+			}
+			wfKey := item.wfContext.GetWorkflowKey()
+			err := item.finalizer.Register(wfKey.String(), func(ctx context.Context) error {
+				if err := item.wfContext.Lock(ctx, locks.PriorityHigh); err != nil {
+					return err
+				}
+				defer item.wfContext.Unlock()
+				item.wfContext.Clear()
+				return nil
+			})
+			if err != nil {
+				logger.Warn("cache failed to register callback in finalizer", tag.Error(err))
+			}
 		},
 		OnEvict: func(val any) {
-			// TODO: will be used in follow-up PR
+			//revive:disable-next-line:unchecked-type-assertion
+			item := val.(*cacheItem)
+			if item.finalizer == nil {
+				return // should only happen in unit tests
+			}
+			wfKey := item.wfContext.GetWorkflowKey()
+			err := item.finalizer.Deregister(wfKey.String())
+			if err != nil {
+				logger.Warn("cache failed to de-register callback in finalizer", tag.Error(err))
+			}
 		},
 	}
 
@@ -175,7 +201,6 @@ func newCache(
 
 	return &cacheImpl{
 		Cache:                     withMetrics,
-		logger:                    logger,
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }
@@ -195,6 +220,7 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.HistoryCacheGetOrCreateCurrentScope),
 		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
+		metrics.NamespaceIDTag(namespaceID.String()),
 	)
 	metrics.CacheRequests.With(handler).Record(1)
 	start := time.Now()
@@ -237,6 +263,7 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.HistoryCacheGetOrCreateScope),
 		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
+		metrics.NamespaceIDTag(namespaceID.String()),
 	)
 	metrics.CacheRequests.With(handler).Record(1)
 	start := time.Now()
@@ -266,7 +293,7 @@ func (c *cacheImpl) Put(
 	handler metrics.Handler,
 ) (workflow.Context, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	item := &cacheItem{wfContext: workflowCtx}
+	item := &cacheItem{wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
 	existing, err := c.PutIfNotExist(cacheKey, item)
 	if err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
@@ -297,7 +324,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			cacheKey.WorkflowKey,
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
-			shardContext.GetMetricsHandler(),
+			handler,
 		)
 
 		var err error
@@ -307,15 +334,15 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		}
 	}
 
-	// TODO This will create a closure on every request.
-	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext)
-
 	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
 		metrics.AcquireLockFailedCounter.With(handler).Record(1)
 		return nil, nil, err
 	}
+
+	// TODO This will create a closure on every request.
+	//  Consider revisiting this if it causes too much GC activity
+	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, handler, time.Now())
 
 	return workflowCtx, releaseFunc, nil
 }
@@ -357,11 +384,16 @@ func (c *cacheImpl) makeReleaseFunc(
 	shardContext shard.Context,
 	context workflow.Context,
 	forceClearContext bool,
+	handler metrics.Handler,
+	acquireTime time.Time,
 ) func(error) {
 
 	status := cacheNotReleased
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
+			defer func() {
+				metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
+			}()
 			if rec := recover(); rec != nil {
 				context.Clear()
 				context.Unlock()

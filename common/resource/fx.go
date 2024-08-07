@@ -364,7 +364,7 @@ func SdkClientFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
-	resolver membership.GRPCResolver,
+	resolver *membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
 	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
@@ -389,7 +389,7 @@ func RPCFactoryProvider(
 	svcName primitives.ServiceName,
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	resolver membership.GRPCResolver,
+	resolver *membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
 	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
@@ -424,13 +424,11 @@ func FrontendHTTPClientCacheProvider(
 func getFrontendConnectionDetails(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	resolver membership.GRPCResolver,
+	resolver *membership.GRPCResolver,
 ) (string, string, int, *tls.Config, error) {
 	// To simplify the static config, we switch default values based on whether the config
 	// defines an "internal-frontend" service. The default for TLS config can be overridden
-	// with publicClient.forceTLSConfig, and the default for hostPort can be overridden by
-	// explicitly setting hostPort to "membership://internal-frontend" or
-	// "membership://frontend".
+	// with publicClient.forceTLSConfig.
 	_, hasIFE := cfg.Services[string(primitives.InternalFrontendService)]
 
 	forceTLS := cfg.PublicClient.ForceTLSConfig
@@ -459,19 +457,18 @@ func getFrontendConnectionDetails(
 	frontendURL := cfg.PublicClient.HostPort
 	if frontendURL == "" {
 		if hasIFE {
-			frontendURL = membership.MakeResolverURL(primitives.InternalFrontendService)
+			frontendURL = resolver.MakeURL(primitives.InternalFrontendService)
 		} else {
-			frontendURL = membership.MakeResolverURL(primitives.FrontendService)
+			frontendURL = resolver.MakeURL(primitives.FrontendService)
 		}
 	}
 	frontendHTTPURL := cfg.PublicClient.HTTPHostPort
 	if frontendHTTPURL == "" {
 		if hasIFE {
-			frontendHTTPURL = membership.MakeResolverURL(primitives.InternalFrontendService)
+			frontendHTTPURL = resolver.MakeURL(primitives.InternalFrontendService)
 		} else {
-			frontendHTTPURL = membership.MakeResolverURL(primitives.FrontendService)
+			frontendHTTPURL = resolver.MakeURL(primitives.FrontendService)
 		}
-
 	}
 
 	var frontendHTTPPort int

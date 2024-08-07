@@ -80,8 +80,8 @@ var (
 		"AddTasks":                  {},
 		"ListQueues":                {},
 		"ListTasks":                 {},
-		// NamespaceId is in the completion token for this request.
-		"CompleteNexusOperation": {},
+		"CompleteNexusOperation":    {}, // NamespaceId is in the completion token for this request.
+		"DeepHealthCheck":           {},
 	}
 )
 

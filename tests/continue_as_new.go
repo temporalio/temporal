@@ -170,10 +170,10 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 	)
 }
 
-func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
-	id := "functional-continue-as-new-workflow-timeout-test"
-	wt := "functional-continue-as-new-workflow-timeout-test-type"
-	tl := "functional-continue-as-new-workflow-timeout-test-taskqueue"
+func (s *FunctionalSuite) TestContinueAsNewRun_RunTimeout() {
+	id := "functional-continue-as-new-workflow-run-timeout-test"
+	wt := "functional-continue-as-new-workflow-run-timeout-test-type"
+	tl := "functional-continue-as-new-workflow-run-timeout-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -270,6 +270,94 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowExecutionTimedOut`, historyEvents)
+}
+
+func (s *FunctionalSuite) TestContinueAsNewRun_ExecutionTimeout() {
+	id := "functional-continue-as-new-workflow-execution-timeout-test"
+	wt := "functional-continue-as-new-workflow-execution-timeout-test-type"
+	tl := "functional-continue-as-new-workflow-execution-timeout-test-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.New(),
+		Namespace:                s.namespace,
+		WorkflowId:               id,
+		WorkflowType:             workflowType,
+		TaskQueue:                taskQueue,
+		Input:                    nil,
+		WorkflowExecutionTimeout: durationpb.New(3 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		Identity:                 identity,
+	}
+
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+				ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType:        workflowType,
+					TaskQueue:           taskQueue,
+					WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+				},
+			},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Client:              s.client,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	testCompleted := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-testCompleted:
+				return
+			default:
+				// process the workflow task and continue as new
+				_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+
+				// rely on WorkflowIdReuseMinimalInterval to prevent tight loop of continue as new
+			}
+		}
+	}()
+
+	s.Eventually(
+		func() bool {
+			descResp, err := s.client.DescribeWorkflowExecution(
+				NewContext(),
+				&workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: s.namespace,
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: id,
+					},
+				},
+			)
+			s.NoError(err)
+			return descResp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT &&
+				descResp.GetWorkflowExecutionInfo().Execution.GetRunId() != we.RunId // validate that workflow did continue as new
+		},
+		time.Second*10,
+		time.Millisecond*50,
+	)
+
+	close(testCompleted)
 }
 
 func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {

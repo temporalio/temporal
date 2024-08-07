@@ -41,6 +41,7 @@ var (
 		"SyncWorkflowStateTask": 7,
 		"TaskQueueUserData":     8,
 		"SyncHsmTask":           9,
+		"BackfillHistoryTask":   10,
 	}
 )
 
