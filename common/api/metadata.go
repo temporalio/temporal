@@ -175,11 +175,19 @@ func GetMethodMetadata(fullApiName string) MethodMetadata {
 	}
 }
 
-// BaseName returns just the method name from a fullly qualified name.
+// MethodName returns just the method name from a fully qualified name.
 func MethodName(fullApiName string) string {
 	index := strings.LastIndex(fullApiName, "/")
 	if index > -1 {
 		return fullApiName[index+1:]
 	}
 	return fullApiName
+}
+
+func ServiceName(fullApiName string) string {
+	index := strings.LastIndex(fullApiName, "/")
+	if index > -1 {
+		return fullApiName[:index+1]
+	}
+	return ""
 }

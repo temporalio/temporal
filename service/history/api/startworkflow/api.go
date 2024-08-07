@@ -376,12 +376,9 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	workflowID := s.request.StartRequest.WorkflowId
 
 	currentWorkflowStartTime := time.Time{}
-	if s.shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(s.namespace.Name().String()) {
-		var err error
-		currentWorkflowStartTime, err = s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
-		if err != nil {
-			return nil, err
-		}
+	if s.shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(s.namespace.Name().String()) &&
+		currentWorkflowConditionFailed.StartTime != nil {
+		currentWorkflowStartTime = *currentWorkflowConditionFailed.StartTime
 	}
 
 	workflowKey := definition.NewWorkflowKey(
@@ -516,32 +513,6 @@ func (s *Starter) respondToRetriedRequest(
 	}
 
 	return s.generateResponse(runID, mutableStateInfo.workflowTask, events)
-}
-
-func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (_ time.Time, retErr error) {
-	var workflowStartTime time.Time
-
-	// We technically never want to create a new execution but in practice this should not happen.
-	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
-		ctx,
-		s.shardContext,
-		s.namespace.ID(),
-		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
-		locks.PriorityHigh,
-	)
-	if err != nil {
-		return workflowStartTime, err
-	}
-
-	defer func() { releaseFn(retErr) }()
-
-	mutableState, err := workflowContext.LoadMutableState(ctx, s.shardContext)
-	if err != nil {
-		return workflowStartTime, err
-	}
-
-	workflowStartTime = mutableState.GetExecutionInfo().GetStartTime().AsTime()
-	return workflowStartTime, nil
 }
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the

@@ -27,8 +27,8 @@ package temporal
 import (
 	"fmt"
 	"net/http"
+	"slices"
 
-	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/client"

@@ -326,7 +326,9 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 func newTestMocks(t *testing.T) *testMocks {
 	ctrl := gomock.NewController(t)
 	testConfig := NewEndpointRegistryConfig(dynamicconfig.NewNoopCollection())
-	testConfig.refreshEnabled = dynamicconfig.GetBoolPropertyFn(true)
+	testConfig.refreshEnabled = func(func(bool)) (bool, func()) {
+		return true, func() {}
+	}
 	return &testMocks{
 		config:         testConfig,
 		matchingClient: matchingservicemock.NewMockMatchingServiceClient(ctrl),

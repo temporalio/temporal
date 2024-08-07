@@ -174,13 +174,19 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotFoun
 	s.False(handlerCalled)
 }
 
+type nexusRequest struct{}
+
+func (*nexusRequest) GetNamespace() string {
+	return "test-namespace"
+}
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamespace() {
+
 	testCases := []struct {
 		state            enumspb.NamespaceState
 		replicationState enumspb.ReplicationState
 		expectedErr      error
 		method           string
-		req              interface{}
+		req              any
 	}{
 		// StartWorkflowExecution
 		{
@@ -213,76 +219,94 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
 			expectedErr: nil,
 			method:      api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &workflowservice.SignalWithStartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &workflowservice.SignalWithStartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &workflowservice.SignalWithStartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		// DeleteNamespace
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
 			expectedErr: nil,
 			method:      api.OperatorServicePrefix + "DeleteNamespace",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
 			expectedErr: nil,
 			method:      api.OperatorServicePrefix + "DeleteNamespace",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
 			expectedErr: nil,
 			method:      api.OperatorServicePrefix + "DeleteNamespace",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
 		},
-		// DescribeMutableState
+		// AdminService APIs
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
 			expectedErr: nil,
 			method:      api.AdminServicePrefix + "DescribeMutableState",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &adminservice.DescribeMutableStateRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
 			expectedErr: nil,
 			method:      api.AdminServicePrefix + "DescribeMutableState",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &adminservice.DescribeMutableStateRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
 			expectedErr: nil,
 			method:      api.AdminServicePrefix + "DescribeMutableState",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &adminservice.DescribeMutableStateRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DeleteWorkflowExecution",
+			req:         &adminservice.DeleteWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DeleteWorkflowExecution",
+			req:         &adminservice.DeleteWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DeleteWorkflowExecution",
+			req:         &adminservice.DeleteWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		// DispatchNexusTask
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
 			expectedErr: nil,
 			method:      api.NexusServicePrefix + "DispatchNexusTask",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &nexusRequest{},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      api.NexusServicePrefix + "DispatchNexusTask",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &nexusRequest{},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      api.NexusServicePrefix + "DispatchNexusTask",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			req:         &nexusRequest{},
 		},
 
 		// =====================================================================
@@ -368,8 +392,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 		},
 	}
 
-	for i, testCase := range testCases {
-		s.T().Run(fmt.Sprintf("test-case-%v", i), func(t *testing.T) {
+	for _, testCase := range testCases {
+		s.T().Run(fmt.Sprintf("%s-%s", testCase.method, testCase.state.String()), func(t *testing.T) {
 			_, isDescribeNamespace := testCase.req.(*workflowservice.DescribeNamespaceRequest)
 			_, isRegisterNamespace := testCase.req.(*workflowservice.RegisterNamespaceRequest)
 			if !isDescribeNamespace && !isRegisterNamespace {

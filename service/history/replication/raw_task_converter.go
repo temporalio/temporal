@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -56,6 +57,7 @@ type (
 	SourceTaskConverterImpl struct {
 		historyEngine  shard.Engine
 		namespaceCache namespace.Registry
+		serializer     serialization.Serializer
 		config         *configs.Config
 	}
 	SourceTaskConverter interface {
@@ -65,17 +67,20 @@ type (
 		historyEngine shard.Engine,
 		shardContext shard.Context,
 		clientClusterName string, // Some task converter may use the client cluster name.
+		serializer serialization.Serializer,
 	) SourceTaskConverter
 )
 
 func NewSourceTaskConverter(
 	historyEngine shard.Engine,
 	namespaceCache namespace.Registry,
+	serializer serialization.Serializer,
 	config *configs.Config,
 ) *SourceTaskConverterImpl {
 	return &SourceTaskConverterImpl{
 		historyEngine:  historyEngine,
 		namespaceCache: namespaceCache,
+		serializer:     serializer,
 		config:         config,
 	}
 }
@@ -102,6 +107,13 @@ func (c *SourceTaskConverterImpl) Convert(
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
 	if err != nil {
 		return nil, err
+	}
+	if replicationTask != nil {
+		rawTaskInfo, err := c.serializer.ParseReplicationTaskInfo(task)
+		if err != nil {
+			return nil, err
+		}
+		replicationTask.RawTaskInfo = rawTaskInfo
 	}
 	return replicationTask, nil
 }
@@ -253,6 +265,78 @@ func convertSyncHSMReplicationTask(
 	)
 }
 
+func convertSyncVersionedTransitionTask(
+	ctx context.Context,
+	shardContext shard.Context,
+	taskInfo *tasks.SyncVersionedTransitionTask,
+	shardID int32,
+	workflowCache wcache.Cache,
+	eventBlobCache persistence.XDCCache,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+) (*replicationspb.ReplicationTask, error) {
+	return generateStateReplicationTask(
+		ctx,
+		shardContext,
+		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+		workflowCache,
+		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
+			currentVersionHistory, currentEvents, newEvents, _, err := getVersionHistoryAndEventsWithNewRun(
+				ctx,
+				shardContext,
+				shardID,
+				definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+				taskInfo.VersionedTransition.NamespaceFailoverVersion,
+				taskInfo.FirstEventID,
+				taskInfo.NextEventID,
+				taskInfo.NewRunID,
+				workflowCache,
+				eventBlobCache,
+				executionManager,
+				logger,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+
+			// 1. task versioned transition not on current transition history
+			if workflow.TransitionHistoryStalenessCheck(transitionHistory, taskInfo.VersionedTransition) != nil {
+				if len(currentEvents) == 0 && len(taskInfo.NewRunID) == 0 {
+					return nil, nil
+				}
+				return &replicationspb.ReplicationTask{
+					TaskType:     enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK,
+					SourceTaskId: taskInfo.TaskID,
+					Attributes: &replicationspb.ReplicationTask_BackfillHistoryTaskAttributes{
+						BackfillHistoryTaskAttributes: &replicationspb.BackfillHistoryTaskAttributes{
+							NamespaceId:         taskInfo.NamespaceID,
+							WorkflowId:          taskInfo.WorkflowID,
+							RunId:               taskInfo.RunID,
+							EventVersionHistory: currentVersionHistory,
+							EventBatches:        currentEvents,
+							NewRunInfo: &replicationspb.NewRunInfo{
+								RunId:      taskInfo.NewRunID,
+								EventBatch: newEvents,
+							},
+						},
+					},
+					VersionedTransition: taskInfo.VersionedTransition,
+					VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
+				}, nil
+			}
+
+			// TODO: we need to handle the following cases:
+			// 2. SyncVersionedTransitionTask
+			// 3. VerifyVersionedTransitionTask
+
+			return nil, nil
+		},
+	)
+
+}
+
 func convertHistoryReplicationTask(
 	ctx context.Context,
 	shardContext shard.Context,
@@ -264,7 +348,7 @@ func convertHistoryReplicationTask(
 	logger log.Logger,
 	config *configs.Config,
 ) (*replicationspb.ReplicationTask, error) {
-	currentVersionHistory, currentEvents, currentBaseWorkflowInfo, err := getVersionHistoryAndEvents(
+	currentVersionHistory, currentEvents, newEvents, currentBaseWorkflowInfo, err := getVersionHistoryAndEventsWithNewRun(
 		ctx,
 		shardContext,
 		shardID,
@@ -272,6 +356,7 @@ func convertHistoryReplicationTask(
 		taskInfo.Version,
 		taskInfo.FirstEventID,
 		taskInfo.NextEventID,
+		taskInfo.NewRunID,
 		workflowCache,
 		eventBlobCache,
 		executionManager,
@@ -293,34 +378,6 @@ func convertHistoryReplicationTask(
 			return nil, serviceerror.NewInternal("replicatorQueueProcessor encountered more than 1 NDC raw event batch")
 		}
 		events = currentEvents[0]
-	}
-
-	var newEvents *commonpb.DataBlob
-	if len(taskInfo.NewRunID) != 0 {
-		newVersionHistory, newEventBlob, _, err := getVersionHistoryAndEvents(
-			ctx,
-			shardContext,
-			shardID,
-			definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.NewRunID),
-			taskInfo.Version,
-			common.FirstEventID,
-			// when generating the replication task,
-			// we validated that new run contains only 1 replication task (event batch)
-			common.FirstEventID+1,
-			workflowCache,
-			eventBlobCache,
-			executionManager,
-			logger,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if len(newEventBlob) != 1 {
-			return nil, serviceerror.NewInternal("replicatorQueueProcessor encountered more than 1 NDC raw event batch for new run")
-		}
-		if newVersionHistory != nil {
-			newEvents = newEventBlob[0]
-		}
 	}
 
 	return &replicationspb.ReplicationTask{
@@ -418,6 +475,70 @@ func getVersionHistoryAndEvents(
 		return nil, nil, nil, convertGetHistoryError(workflowKey, logger, err)
 	}
 	return versionHistory, eventBatches, baseWorkflowInfo, nil
+}
+
+func getVersionHistoryAndEventsWithNewRun(
+	ctx context.Context,
+	shardContext shard.Context,
+	shardID int32,
+	workflowKey definition.WorkflowKey,
+	eventVersion int64,
+	firstEventID int64,
+	nextEventID int64,
+	newRunID string,
+	workflowCache wcache.Cache,
+	eventBlobCache persistence.XDCCache,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
+	versionHistory, eventBatches, baseWorkflowInfo, err := getVersionHistoryAndEvents(
+		ctx,
+		shardContext,
+		shardID,
+		definition.NewWorkflowKey(workflowKey.NamespaceID, workflowKey.WorkflowID, workflowKey.RunID),
+		eventVersion,
+		firstEventID,
+		nextEventID,
+		workflowCache,
+		eventBlobCache,
+		executionManager,
+		logger,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	if versionHistory == nil {
+		return nil, nil, nil, nil, nil
+	}
+
+	var newEvents *commonpb.DataBlob
+	if len(newRunID) != 0 {
+		newVersionHistory, newEventBlob, _, err := getVersionHistoryAndEvents(
+			ctx,
+			shardContext,
+			shardID,
+			definition.NewWorkflowKey(workflowKey.NamespaceID, workflowKey.WorkflowID, newRunID),
+			eventVersion,
+			common.FirstEventID,
+			// when generating the replication task,
+			// we validated that new run contains only 1 replication task (event batch)
+			common.FirstEventID+1,
+			workflowCache,
+			eventBlobCache,
+			executionManager,
+			logger,
+		)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		if len(newEventBlob) != 1 {
+			return nil, nil, nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encountered more than 1 NDC raw event batch for new run")
+		}
+		if newVersionHistory != nil {
+			newEvents = newEventBlob[0]
+		}
+	}
+	return versionHistory, eventBatches, newEvents, baseWorkflowInfo, nil
 }
 
 func getBranchToken(

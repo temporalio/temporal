@@ -2024,7 +2024,7 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 
 // Responsible for emitting and updating loaded_task_queue_family_count, loaded_task_queue_count and
 // loaded_task_queue_partition_count metrics
-func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitionManagerImpl, delta int) {
+func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartitionManager, delta int) {
 	// each metric shall be accessed based on the mentioned parameters
 	taskQueueFamilyParameters := taskQueueCounterKey{
 		namespaceID: pm.Partition().NamespaceId(),
@@ -2060,20 +2060,22 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm *taskQueuePartitio
 		}
 	}
 
+	nsName := pm.Namespace().Name().String()
+
 	e.metricsHandler.Gauge(metrics.LoadedTaskQueueFamilyGauge.Name()).Record(
 		float64(loadedTaskQueueFamilyCounter),
-		metrics.NamespaceTag(pm.ns.Name().String()),
+		metrics.NamespaceTag(nsName),
 	)
 
 	metrics.LoadedTaskQueueGauge.With(e.metricsHandler).Record(
 		float64(loadedTaskQueueCounter),
-		metrics.NamespaceTag(pm.ns.Name().String()),
+		metrics.NamespaceTag(nsName),
 		metrics.TaskQueueTypeTag(taskQueueParameters.taskType),
 	)
 
 	taggedHandler := metrics.GetPerTaskQueuePartitionScope(
 		e.metricsHandler,
-		pm.ns.Name().String(),
+		nsName,
 		pm.Partition(),
 		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 		false,

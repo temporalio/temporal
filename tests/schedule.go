@@ -33,7 +33,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -75,7 +74,6 @@ worker restart/long-poll activity failure:
 
 type (
 	ScheduleFunctionalSuite struct {
-		*require.Assertions
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
 		FunctionalTestBase
@@ -103,7 +101,6 @@ func (s *ScheduleFunctionalSuite) TearDownSuite() {
 func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 
-	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.dataConverter = newTestDataConverter()
@@ -630,10 +627,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsm() {
 	wid := "sched-test-experimental-hsm-wf"
 	wt := "sched-test-experimental-hsm-wt"
 
-	s.testCluster.host.dcClient.OverrideValue(
-		s.T(),
-		schedulerhsm.UseExperimentalHsmScheduler,
-		true)
+	s.OverrideDynamicConfig(schedulerhsm.UseExperimentalHsmScheduler, true)
 
 	type myData struct {
 		Stuff  string
@@ -786,6 +780,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
 
+	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
@@ -896,8 +891,7 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	wt := "sched-test-list-before-run-wt"
 
 	// disable per-ns worker so that the schedule workflow never runs
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 
@@ -958,7 +952,6 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	})
 	s.NoError(err)
 
-	dc.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 }
@@ -972,8 +965,8 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	// waiting one minute) we have to cause the whole worker to be stopped and started. The
 	// sleeps are needed because the refresh is asynchronous, and there's no way to get access
 	// to the actual rate limiter object to refresh it directly.
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.OverrideDynamicConfig(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
@@ -1035,7 +1028,7 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	}
 
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.SchedulerNamespaceStartWorkflowRPS)
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
@@ -1047,6 +1040,7 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"
 
+	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
