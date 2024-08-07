@@ -27,9 +27,9 @@ package hsm
 type RemoteMethod interface {
 	// Name of the remote method. Must be unique per state machine.
 	Name() string
-	// SerializeOutput serializes output of the invocation (of type O) to a byte array that is suitable for transport.
+	// SerializeOutput serializes output of the invocation to a byte array that is suitable for transport.
 	SerializeOutput(output any) ([]byte, error)
-	// DeserializeInput deserializes input from bytes into type I that is then passed to the handler.
+	// DeserializeInput deserializes input from bytes that is then passed to the handler.
 	DeserializeInput(data []byte) (any, error)
 }
 
