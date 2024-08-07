@@ -224,12 +224,13 @@ func TestEventTimeSource_Update(t *testing.T) {
 	ev2.AssertFiredOnce("Timer should fire after deadline")
 }
 
-func TestEventTimeSource_NewTimer(t *testing.T) {
+func TestEventTimeSource_NewTimerWithChannelAndReset(t *testing.T) {
 	t.Parallel()
 
 	source := clock.NewEventTimeSource()
 
-	ch, _ := source.NewTimer(time.Second)
+	ch, timer := source.NewTimer(time.Second)
+	expectedFireTime := source.Now().Add(time.Second)
 
 	select {
 	case <-ch:
@@ -239,8 +240,24 @@ func TestEventTimeSource_NewTimer(t *testing.T) {
 
 	source.Advance(2 * time.Second)
 
+	// Since the timer duration was 1s, it should send the time at which the timer fired (which was 1s ago) on the channel
 	select {
-	case <-ch:
+	case result := <-ch:
+		assert.Equal(t, expectedFireTime, result)
+	default:
+		t.Error("should have fired")
+	}
+
+	// Reset the timer so that it fires in 1 second
+	timer.Reset(time.Second)
+	expectedFireTime = source.Now().Add(time.Second)
+
+	source.Advance(2 * time.Second)
+
+	// Check that the timer send the time at which it fired on the channel
+	select {
+	case result := <-ch:
+		assert.Equal(t, expectedFireTime, result)
 	default:
 		t.Error("should have fired")
 	}
