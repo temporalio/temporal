@@ -77,7 +77,7 @@ func TrimStateMachineTimers(
 	mutableState MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
-	if minVersionedTransition == nil {
+	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) == 0 {
 		// Reset all the state machine timers, we'll recreate them all.
 		mutableState.GetExecutionInfo().StateMachineTimers = nil
 		return nil
