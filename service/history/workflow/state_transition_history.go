@@ -26,8 +26,20 @@ import (
 	"fmt"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
+)
+
+var (
+	// EmptyVersionedTransition is the zero value for VersionedTransition.
+	// It's not a valid versioned transition for a workflow, and should only
+	// be used for representing the absence of a versioned transition.
+	// EmptyVersionedTransition is also considered less than any non-empty versioned transition.
+	EmptyVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: common.EmptyVersion,
+		TransitionCount:          0,
+	}
 )
 
 // UpdatedTransitionHistory takes a slice of transition history and returns a new slice that includes the max state
@@ -111,8 +123,7 @@ func TransitionHistoryStalenessCheck(
 // A VersionedTransition is considered less than another
 // if its NamespaceFailoverVersion is less than the other's.
 // Or if the NamespaceFailoverVersion is the same, then the TransitionCount is compared.
-// Nil is considered the same as empty versioned transition with both fields set to 0,
-// thus smaller than any non-nil versioned transition.
+// Nil is considered the same as EmptyVersionedTransition, thus smaller than any non-empty versioned transition.
 func CompareVersionedTransition(
 	a, b *persistencespb.VersionedTransition,
 ) int {

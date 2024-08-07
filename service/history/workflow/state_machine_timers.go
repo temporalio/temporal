@@ -104,7 +104,8 @@ func TrimStateMachineTimers(
 				node.InternalRepr().LastUpdateVersionedTransition,
 				minVersionedTransition,
 			) >= 0 {
-				// node recently updated, trim the task and regenerate timers tasks for it
+				// node recently updated, trim the task.
+				// A complementary step is then required to regenerate timer tasks for it.
 				continue
 			}
 
