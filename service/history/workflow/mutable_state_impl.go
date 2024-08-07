@@ -463,37 +463,20 @@ func NewSanitizedMutableState(
 	lastFirstEventTxnID int64,
 	lastWriteVersion int64,
 ) (*MutableStateImpl, error) {
+	// TODO:  The source cluster will perform the sanitization starting from 1.25 release.
+	// Remove the sanitization here in 1.26 release.
+	if err := SanitizeMutableState(mutableStateRecord); err != nil {
+		return nil, err
+	}
+
 	mutableState, err := NewMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
 	if err != nil {
 		return nil, err
 	}
 
-	// sanitize data
-	// Some values stored in mutable state are cluster or shard specific.
-	// E.g task status (if task is created or not), taskID (derived from shard rangeID), txnID (derived from shard rangeID), etc.
-	// Those fields should not be replicated across clusters and should be sanitized.
-	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
 	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
-	mutableState.executionInfo.CloseVisibilityTaskId = common.EmptyVersion
-	mutableState.executionInfo.CloseTransferTaskId = common.EmptyVersion
-	// TODO: after adding cluster to clock info, no need to reset clock here
-	mutableState.executionInfo.ParentClock = nil
-	for _, childExecutionInfo := range mutableState.pendingChildExecutionInfoIDs {
-		childExecutionInfo.Clock = nil
-	}
-	// Timer tasks are generated locally, do not sync them.
-	mutableState.executionInfo.StateMachineTimers = nil
-	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 0
-	if err := mutableState.HSM().Walk(func(node *hsm.Node) error {
-		// Node TransitionCount is cluster local information used for detecting staleness.
-		// Reset it to 1 since we are creating a new mutable state.
-		node.InternalRepr().TransitionCount = 1
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
 	mutableState.currentVersion = lastWriteVersion
+
 	return mutableState, nil
 }
 
