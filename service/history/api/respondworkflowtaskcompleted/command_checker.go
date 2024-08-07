@@ -782,6 +782,14 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
+	if len(attributes.GetCronSchedule()) > 0 && attributes.GetWorkflowStartDelay() != nil {
+		return failedCause, fmt.Errorf("CronSchedule and WorkflowStartDelay may not be used together on StartChildWorkflowExecutionCommand. WorkflowId=%s WorkflowType=%s Namespace=%s", wfID, wfType, ns)
+	}
+
+	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowStartDelay()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowStartDelay on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
+	}
+
 	if err := backoff.ValidateSchedule(attributes.GetCronSchedule()); err != nil {
 		return failedCause, fmt.Errorf("invalid CronSchedule on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
