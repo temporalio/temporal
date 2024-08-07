@@ -174,7 +174,10 @@ func (t *fakeTimer) Reset(d time.Duration) bool {
 		t.done = false
 		t.index = len(t.timeSource.timers)
 		t.timeSource.timers = append(t.timeSource.timers, t)
-		t.callback = func() { t.c <- t.deadline }
+		// Only reset the callback if this timer was created via NewTimer
+		if t.c != nil {
+			t.callback = func() { t.c <- t.deadline }
+		}
 	}
 	t.timeSource.fireTimers()
 	return wasActive
