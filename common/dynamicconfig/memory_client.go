@@ -22,66 +22,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package clock_test
+package dynamicconfig
 
 import (
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/assert"
-
-	"go.temporal.io/server/common/clock"
+	"sync"
 )
 
-func TestNewRealClock_Now(t *testing.T) {
-	t.Parallel()
-
-	source := clock.NewRealTimeSource()
-	location := source.Now().Location()
-	assert.Equal(t, "UTC", location.String())
+type MemoryClient struct {
+	lock      sync.RWMutex
+	overrides map[Key]any
 }
 
-func TestNewRealClock_Since(t *testing.T) {
-	t.Parallel()
-
-	source := clock.NewRealTimeSource()
-	start := source.Now()
-	assert.Eventually(
-		t,
-		func() bool {
-			return source.Since(start) >= 5*time.Millisecond
-		},
-		time.Second,
-		time.Millisecond,
-	)
+func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+	if v, ok := d.overrides[name]; ok {
+		if value, ok := v.([]ConstrainedValue); ok {
+			return value
+		}
+		return []ConstrainedValue{{Value: v}}
+	}
+	return nil
 }
 
-func TestNewRealClock_AfterFunc(t *testing.T) {
-	t.Parallel()
-
-	source := clock.NewRealTimeSource()
-	ch := make(chan struct{})
-	timer := source.AfterFunc(0, func() {
-		close(ch)
-	})
-
-	<-ch
-	assert.False(t, timer.Stop())
+func (d *MemoryClient) OverrideValue(setting GenericSetting, value any) {
+	d.OverrideValueByKey(setting.Key(), value)
 }
 
-func TestNewRealClock_NewTimer(t *testing.T) {
-	t.Parallel()
-
-	source := clock.NewRealTimeSource()
-	ch, timer := source.NewTimer(0)
-	<-ch
-	assert.False(t, timer.Stop())
+func (d *MemoryClient) OverrideValueByKey(name Key, value any) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	d.overrides[name] = value
 }
 
-func TestNewRealClock_NewTimer_Stop(t *testing.T) {
-	t.Parallel()
+func (d *MemoryClient) RemoveOverride(setting GenericSetting) {
+	d.RemoveOverrideByKey(setting.Key())
+}
 
-	source := clock.NewRealTimeSource()
-	_, timer := source.NewTimer(time.Second)
-	assert.True(t, timer.Stop())
+func (d *MemoryClient) RemoveOverrideByKey(name Key) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	delete(d.overrides, name)
+}
+
+// NewMemoryClient - returns a memory based dynamic config client
+func NewMemoryClient() *MemoryClient {
+	return &MemoryClient{
+		overrides: make(map[Key]any),
+	}
 }

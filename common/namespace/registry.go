@@ -32,9 +32,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/exp/maps"
-
 	"go.temporal.io/api/serviceerror"
+	expmaps "golang.org/x/exp/maps"
+
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -506,7 +506,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	r.cacheNameToID = newCacheNameToID
 	stateChanged = append(stateChanged, r.stateChangedDuringReadthrough...)
 	r.stateChangedDuringReadthrough = nil
-	stateChangeCallbacks = maps.Values(r.stateChangeCallbacks)
+	stateChangeCallbacks = expmaps.Values(r.stateChangeCallbacks)
 	r.cacheLock.Unlock()
 
 	// call state change callbacks

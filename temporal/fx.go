@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 
 	"github.com/pborman/uuid"
@@ -41,7 +42,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-	"golang.org/x/exp/maps"
+	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -888,7 +889,7 @@ var TraceExportModule = fx.Options(
 		// config-defined exporters override env-defined exporters with the same type
 		maps.Copy(exportersByType, exportersByTypeFromEnv)
 
-		exporters := maps.Values(exportersByType)
+		exporters := expmaps.Values(exportersByType)
 		lc.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),
