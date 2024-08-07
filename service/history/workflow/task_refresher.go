@@ -43,14 +43,22 @@ import (
 
 type (
 	TaskRefresher interface {
+		// Refresh refreshes all tasks needed for the state machine to make progress or
+		// those have side effects.
 		Refresh(
-			context.Context,
-			MutableState,
+			ctx context.Context,
+			mutableState MutableState,
 		) error
+		// PartialRefresh refresh tasks for all sub state machines that have been updated
+		// since the given minVersionedTransition (inclusive).
+		// If a sub state machine's lastUpdateVersionedTransition is not available,
+		// it will be treated the same as lastUpdateVersionedTransition equals to EmptyVersionedTransition.
+		// The provided minVersionedTransition should NOT be nil, and if equals to EmptyVersionedTransition,
+		// the behavior is equivalent to Refresh().
 		PartialRefresh(
-			context.Context,
-			MutableState,
-			*persistencespb.VersionedTransition,
+			ctx context.Context,
+			mutableState MutableState,
+			minVersionedTransition *persistencespb.VersionedTransition,
 		) error
 	}
 
@@ -91,12 +99,8 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	mutableState MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
-	if minVersionedTransition == nil {
-		minVersionedTransition = EmptyVersionedTransition
-	}
-
-	if !minVersionedTransition.Equal(EmptyVersionedTransition) {
-		// Perform a sanity check to make sure that the given minVersionedTransition
+	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) != 0 {
+		// Perform a sanity check to make sure that the minVersionedTransition, if provided,
 		// is on the current branch of transition history.
 		if err := TransitionHistoryStalenessCheck(
 			mutableState.GetExecutionInfo().TransitionHistory,
