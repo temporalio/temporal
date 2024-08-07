@@ -780,10 +780,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmLastCompletionAndError() {
 	wid := "sched-test-last-wf"
 	wt := "sched-test-last-wt"
 
-	s.testCluster.host.dcClient.OverrideValue(
-		s.T(),
-		schedulerhsm.UseExperimentalHsmScheduler,
-		true)
+	s.OverrideDynamicConfig(schedulerhsm.UseExperimentalHsmScheduler, true)
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
