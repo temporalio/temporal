@@ -313,8 +313,7 @@ func subscribe[T any](
 	init := matchAndConvert(c, key, def, cdef, convert, prec)
 
 	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
-	// current value and skip the subscription.  The cancellation func returned is a no-op and
-	// can be called or ignored.
+	// current value and skip the subscription.  The cancellation func returned is also nil.
 	if callback == nil {
 		return init, nil
 	}
