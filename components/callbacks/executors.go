@@ -109,7 +109,7 @@ func (e taskExecutor) executeInvocationTask(
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination()),
 	)
 	defer cancel()
 
@@ -160,9 +160,6 @@ func (e taskExecutor) loadInvocationArgs(
 				return err
 			}
 			invokable = hsmInvokable
-			if err != nil {
-				return err
-			}
 		default:
 			return queues.NewUnprocessableTaskError(
 				fmt.Sprintf("unprocessable callback variant: %v", variant),

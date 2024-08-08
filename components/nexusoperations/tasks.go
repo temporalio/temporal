@@ -39,7 +39,7 @@ const (
 )
 
 type TimeoutTask struct {
-	Deadline time.Time
+	deadline time.Time
 }
 
 var _ hsm.Task = TimeoutTask{}
@@ -48,8 +48,12 @@ func (TimeoutTask) Type() string {
 	return TaskTypeTimeout
 }
 
-func (t TimeoutTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindTimer{Deadline: t.Deadline}
+func (t TimeoutTask) Deadline() time.Time {
+	return t.deadline
+}
+
+func (TimeoutTask) Destination() string {
+	return ""
 }
 
 func (TimeoutTask) Concurrent() bool {
@@ -75,11 +79,8 @@ func (t TimeoutTask) Validate(node *hsm.Node) error {
 
 type TimeoutTaskSerializer struct{}
 
-func (TimeoutTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return TimeoutTask{Deadline: kind.Deadline}, nil
-	}
-	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
+func (TimeoutTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return TimeoutTask{deadline: attrs.Deadline}, nil
 }
 
 func (TimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
@@ -96,8 +97,12 @@ func (InvocationTask) Type() string {
 	return TaskTypeInvocation
 }
 
-func (t InvocationTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.EndpointName}
+func (InvocationTask) Deadline() time.Time {
+	return hsm.Immediate
+}
+
+func (t InvocationTask) Destination() string {
+	return t.EndpointName
 }
 
 func (InvocationTask) Concurrent() bool {
@@ -106,11 +111,8 @@ func (InvocationTask) Concurrent() bool {
 
 type InvocationTaskSerializer struct{}
 
-func (InvocationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return InvocationTask{EndpointName: kind.Destination}, nil
-	}
-	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
+func (InvocationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return InvocationTask{EndpointName: attrs.Destination}, nil
 }
 
 func (InvocationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
@@ -118,7 +120,7 @@ func (InvocationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type BackoffTask struct {
-	Deadline time.Time
+	deadline time.Time
 }
 
 var _ hsm.Task = BackoffTask{}
@@ -127,8 +129,12 @@ func (BackoffTask) Type() string {
 	return TaskTypeBackoff
 }
 
-func (t BackoffTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindTimer{Deadline: t.Deadline}
+func (t BackoffTask) Deadline() time.Time {
+	return t.deadline
+}
+
+func (t BackoffTask) Destination() string {
+	return ""
 }
 
 func (BackoffTask) Concurrent() bool {
@@ -137,11 +143,8 @@ func (BackoffTask) Concurrent() bool {
 
 type BackoffTaskSerializer struct{}
 
-func (BackoffTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return BackoffTask{Deadline: kind.Deadline}, nil
-	}
-	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
+func (BackoffTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return BackoffTask{deadline: attrs.Deadline}, nil
 }
 
 func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
@@ -158,8 +161,12 @@ func (CancelationTask) Type() string {
 	return TaskTypeCancelation
 }
 
-func (t CancelationTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.EndpointName}
+func (CancelationTask) Deadline() time.Time {
+	return hsm.Immediate
+}
+
+func (t CancelationTask) Destination() string {
+	return t.EndpointName
 }
 
 func (CancelationTask) Concurrent() bool {
@@ -168,11 +175,8 @@ func (CancelationTask) Concurrent() bool {
 
 type CancelationTaskSerializer struct{}
 
-func (CancelationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return CancelationTask{EndpointName: kind.Destination}, nil
-	}
-	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
+func (CancelationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return CancelationTask{EndpointName: attrs.Destination}, nil
 }
 
 func (CancelationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
@@ -180,7 +184,7 @@ func (CancelationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type CancelationBackoffTask struct {
-	Deadline time.Time
+	deadline time.Time
 }
 
 var _ hsm.Task = CancelationBackoffTask{}
@@ -189,8 +193,12 @@ func (CancelationBackoffTask) Type() string {
 	return TaskTypeCancelationBackoff
 }
 
-func (t CancelationBackoffTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindTimer{Deadline: t.Deadline}
+func (t CancelationBackoffTask) Deadline() time.Time {
+	return t.deadline
+}
+
+func (CancelationBackoffTask) Destination() string {
+	return ""
 }
 
 func (CancelationBackoffTask) Concurrent() bool {
@@ -199,11 +207,8 @@ func (CancelationBackoffTask) Concurrent() bool {
 
 type CancelationBackoffTaskSerializer struct{}
 
-func (CancelationBackoffTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return CancelationBackoffTask{Deadline: kind.Deadline}, nil
-	}
-	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
+func (CancelationBackoffTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return CancelationBackoffTask{deadline: attrs.Deadline}, nil
 }
 
 func (CancelationBackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {

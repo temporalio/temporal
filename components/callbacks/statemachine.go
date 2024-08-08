@@ -94,21 +94,22 @@ func (c Callback) recordAttempt(ts time.Time) {
 func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch c.CallbackInfo.State {
 	case enumsspb.CALLBACK_STATE_BACKING_OFF:
-		return []hsm.Task{BackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
+		return []hsm.Task{BackoffTask{deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.CALLBACK_STATE_SCHEDULED:
-		var baseURL string
+		var destination string
 		switch v := c.Callback.GetVariant().(type) {
 		case *persistencespb.Callback_Nexus_:
 			u, err := url.Parse(c.Callback.GetNexus().Url)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse URL: %v: %w", &c, err)
 			}
-			baseURL = u.Scheme + "://" + u.Host
+			destination = u.Scheme + "://" + u.Host
+		case *persistencespb.Callback_Hsm:
 		default:
 			return nil, fmt.Errorf("unsupported callback variant %v", v) // nolint:goerr113
 		}
 
-		return []hsm.Task{InvocationTask{Destination: baseURL}}, nil
+		return []hsm.Task{InvocationTask{destination: destination}}, nil
 	}
 	return nil, nil
 }
