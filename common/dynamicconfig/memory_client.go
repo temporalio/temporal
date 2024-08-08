@@ -22,62 +22,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package gocql
+package dynamicconfig
 
 import (
-	"context"
-	"fmt"
-
-	"github.com/gocql/gocql"
+	"sync"
 )
 
-type (
-	Batch struct {
-		session *session
+type MemoryClient struct {
+	lock      sync.RWMutex
+	overrides map[Key]any
+}
 
-		gocqlBatch *gocql.Batch
+func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+	if v, ok := d.overrides[name]; ok {
+		if value, ok := v.([]ConstrainedValue); ok {
+			return value
+		}
+		return []ConstrainedValue{{Value: v}}
 	}
-)
-
-// Definition of all BatchTypes
-const (
-	LoggedBatch BatchType = iota
-	UnloggedBatch
-	CounterBatch
-)
-
-func newBatch(
-	session *session,
-	gocqlBatch *gocql.Batch,
-) *Batch {
-	return &Batch{
-		session:    session,
-		gocqlBatch: gocqlBatch,
-	}
+	return nil
 }
 
-func (b *Batch) Query(stmt string, args ...interface{}) {
-	b.gocqlBatch.Query(stmt, args...)
+func (d *MemoryClient) OverrideValue(setting GenericSetting, value any) {
+	d.OverrideValueByKey(setting.Key(), value)
 }
 
-func (b *Batch) WithContext(ctx context.Context) *Batch {
-	return newBatch(b.session, b.gocqlBatch.WithContext(ctx))
+func (d *MemoryClient) OverrideValueByKey(name Key, value any) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	d.overrides[name] = value
 }
 
-func (b *Batch) WithTimestamp(timestamp int64) *Batch {
-	b.gocqlBatch.WithTimestamp(timestamp)
-	return newBatch(b.session, b.gocqlBatch)
+func (d *MemoryClient) RemoveOverride(setting GenericSetting) {
+	d.RemoveOverrideByKey(setting.Key())
 }
 
-func mustConvertBatchType(batchType BatchType) gocql.BatchType {
-	switch batchType {
-	case LoggedBatch:
-		return gocql.LoggedBatch
-	case UnloggedBatch:
-		return gocql.UnloggedBatch
-	case CounterBatch:
-		return gocql.CounterBatch
-	default:
-		panic(fmt.Sprintf("Unknown gocql BatchType: %v", batchType))
+func (d *MemoryClient) RemoveOverrideByKey(name Key) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	delete(d.overrides, name)
+}
+
+// NewMemoryClient - returns a memory based dynamic config client
+func NewMemoryClient() *MemoryClient {
+	return &MemoryClient{
+		overrides: make(map[Key]any),
 	}
 }

@@ -351,7 +351,7 @@ func (r *HistoryImporterImpl) commit(
 
 	if !mutableStateSpec.ExistsInDB {
 		// refresh tasks to be generated
-		if err := r.taskRefresher.RefreshTasks(
+		if err := r.taskRefresher.Refresh(
 			ctx,
 			memNDCWorkflow.GetMutableState(),
 		); err != nil {
@@ -442,7 +442,7 @@ func (r *HistoryImporterImpl) commit(
 	dbNDCWorkflow.GetContext().Clear()
 	// imported events is the new current branch, update write to DB
 	// refresh tasks to be generated
-	if err := r.taskRefresher.RefreshTasks(
+	if err := r.taskRefresher.Refresh(
 		ctx,
 		memNDCWorkflow.GetMutableState(),
 	); err != nil {

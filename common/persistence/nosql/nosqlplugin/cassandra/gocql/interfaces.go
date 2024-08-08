@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination interfaces_mock.go
-
 package gocql
 
 import (
@@ -39,9 +37,9 @@ type (
 	// Session is the interface for interacting with the database.
 	Session interface {
 		Query(string, ...interface{}) Query
-		NewBatch(BatchType) Batch
-		ExecuteBatch(Batch) error
-		MapExecuteBatchCAS(Batch, map[string]interface{}) (bool, Iter, error)
+		NewBatch(BatchType) *Batch
+		ExecuteBatch(*Batch) error
+		MapExecuteBatchCAS(*Batch, map[string]interface{}) (bool, Iter, error)
 		AwaitSchemaAgreement(ctx context.Context) error
 		Close()
 	}
@@ -60,13 +58,6 @@ type (
 		WithTimestamp(int64) Query
 		Consistency(Consistency) Query
 		Bind(...interface{}) Query
-	}
-
-	// Batch is the interface for batch operation.
-	Batch interface {
-		Query(string, ...interface{})
-		WithContext(context.Context) Batch
-		WithTimestamp(int64) Batch
 	}
 
 	// Iter is the interface for executing and iterating over all resulting rows.

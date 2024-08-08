@@ -142,19 +142,17 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 		},
 	}
 
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.FrontendCallbackURLMaxLength, 50)
-	dc.OverrideValue(s.T(), dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
-	dc.OverrideValue(s.T(), dynamicconfig.MaxCallbacksPerWorkflow, 2)
-	dc.OverrideValue(s.T(), callbacks.AllowedAddresses, []any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}})
-	defer dc.RemoveOverride(dynamicconfig.EnableNexus)
-	defer dc.RemoveOverride(dynamicconfig.FrontendCallbackURLMaxLength)
-	defer dc.RemoveOverride(dynamicconfig.MaxCallbacksPerWorkflow)
-	defer dc.RemoveOverride(callbacks.AllowedAddresses)
+	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
+	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
+	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
+	s.OverrideDynamicConfig(
+		callbacks.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
+	)
 
 	for _, tc := range cases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			dc.OverrideValue(s.T(), dynamicconfig.EnableNexus, tc.allow)
+			s.OverrideDynamicConfig(dynamicconfig.EnableNexus, tc.allow)
 			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
 			for _, url := range tc.urls {
 				cbs = append(cbs, &commonpb.Callback{
@@ -187,11 +185,11 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 }
 
 func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.EnableNexus, true)
-	dc.OverrideValue(s.T(), callbacks.AllowedAddresses, []any{map[string]any{"Pattern": "*", "AllowInsecure": true}})
-	defer dc.RemoveOverride(dynamicconfig.EnableNexus)
-	defer dc.RemoveOverride(callbacks.AllowedAddresses)
+	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
+	s.OverrideDynamicConfig(
+		callbacks.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	)
 
 	cases := []struct {
 		name       string
