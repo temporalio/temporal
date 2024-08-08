@@ -27,8 +27,6 @@ package searchattribute
 import (
 	"fmt"
 
-	"golang.org/x/exp/maps"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
@@ -117,14 +115,4 @@ func (m NameTypeMap) IsDefined(name string) bool {
 		return true
 	}
 	return false
-}
-
-func (m NameTypeMap) Copy() NameTypeMap {
-	return NameTypeMap{
-		customSearchAttributes: maps.Clone(m.customSearchAttributes),
-	}
-}
-
-func (m NameTypeMap) AddCustomSearchAttribute(name string, value enumspb.IndexedValueType) {
-	m.customSearchAttributes[name] = value
 }

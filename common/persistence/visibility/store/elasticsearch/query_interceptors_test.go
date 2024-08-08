@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -208,12 +207,9 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 
 // Ensures the valuesInterceptor doesn't modify values when no transformation is needed.
 func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
-	typeMap := searchattribute.TestNameTypeMap.Copy()
-	typeMap.AddCustomSearchAttribute(searchattribute.ScheduleID, enums.INDEXED_VALUE_TYPE_KEYWORD)
-
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		typeMap,
+		searchattribute.TestNameTypeMapWithScheduleId,
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.ScheduleID, "test-workflow-id")
