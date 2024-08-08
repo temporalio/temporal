@@ -64,7 +64,7 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT := 25m
+TEST_TIMEOUT ?= 25m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -386,8 +386,10 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(SINGLE_TEST_ARGS) $(TEST_TAG_FLAG) \
+		 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
+		 $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
