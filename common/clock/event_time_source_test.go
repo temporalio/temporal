@@ -254,7 +254,7 @@ func TestEventTimeSource_NewTimerWithChannelAndReset(t *testing.T) {
 
 	source.Advance(2 * time.Second)
 
-	// Check that the timer send the time at which it fired on the channel
+	// Check that the timer sends the time at which it fired on the channel
 	select {
 	case result := <-ch:
 		assert.Equal(t, expectedFireTime, result)
