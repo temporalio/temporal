@@ -348,7 +348,7 @@ func convertSyncVersionedTransitionTask(
 						WorkflowId:          taskInfo.WorkflowID,
 						RunId:               taskInfo.RunID,
 						NewRunId:            taskInfo.NewRunID,
-						EventVersionHistory: mutableState.GetExecutionInfo().VersionHistories.Histories[versionHistoryIndex].GetItems(),
+						EventVersionHistory: mutableState.GetExecutionInfo().VersionHistories.Histories[versionHistoryIndex].Items,
 						NextEventId:         taskInfo.NextEventID,
 					},
 				},

@@ -475,7 +475,8 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 	err := task.Execute()
 	s.IsType(&serviceerrors.RetryReplication{}, err)
-	re := err.(*serviceerrors.RetryReplication)
+	re, ok := err.(*serviceerrors.RetryReplication)
+	s.True(ok)
 
 	s.Equal(int64(8), re.StartEventId)
 	s.Equal(int64(1), re.StartEventVersion)

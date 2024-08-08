@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
+	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/workflow"
@@ -156,8 +157,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		)
 	}
 	// case 3: state transition is not on non-current branch, but no event to verify
-	if e.taskAttr.NextEventId <= 1 {
-		return nil
+	if e.taskAttr.NextEventId == common2.EmptyEventID {
+		return e.verifyNewRunExist(ctx)
 	}
 
 	_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(ms.GetExecutionInfo().VersionHistories, &historyspb.VersionHistoryItem{
@@ -208,11 +209,13 @@ func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Context, runId string) (_ workflow.MutableState, retError error) {
-	println(runId)
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
 	)
+	if err != nil {
+		return nil, err
+	}
 	wfContext, release, err := e.WorkflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		shardContext,
