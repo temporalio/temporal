@@ -176,7 +176,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	}
 
 	// Reset workflow execution
-	_, err = s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp, err := s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -202,6 +202,16 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 
 	s.NotNil(firstActivityCompletionEvent)
 	s.True(workflowComplete)
+
+	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      resetResp.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	s.Equal(we.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
