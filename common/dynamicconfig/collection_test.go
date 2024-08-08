@@ -626,5 +626,5 @@ func (s *subscriptionSuite) TestSubscriptionWithDefault() {
 	// test nil callback
 	v, cancel := setting.Subscribe(s.cln)(nil)
 	s.Equal(100, v)
-	cancel() // this is no-op, but can only test that it's callable.
+	s.Nil(cancel)
 }

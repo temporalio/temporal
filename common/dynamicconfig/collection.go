@@ -316,7 +316,7 @@ func subscribe[T any](
 	// current value and skip the subscription.  The cancellation func returned is a no-op and
 	// can be called or ignored.
 	if callback == nil {
-		return init, func() {}
+		return init, nil
 	}
 
 	c.subscriptionIdx++
