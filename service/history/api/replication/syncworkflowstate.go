@@ -175,7 +175,7 @@ func getNewRunInfo(ctx context.Context, shardContext shard.Context, workflowCach
 	}, nil
 }
 
-func getMutableState(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, workflowCache wcache.Cache) (workflow.MutableState, error) {
+func getMutableState(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, workflowCache wcache.Cache) (_ workflow.MutableState, retError error) {
 	wfCtx, releaseFunc, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		shardContext,
@@ -183,10 +183,10 @@ func getMutableState(ctx context.Context, shardContext shard.Context, namespaceI
 		execution,
 		locks.PriorityLow,
 	)
+	defer releaseFunc(retError)
 	if err != nil {
 		return nil, err
 	}
-	defer releaseFunc(nil)
 	return wfCtx.LoadMutableState(ctx, shardContext)
 }
 

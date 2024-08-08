@@ -1018,6 +1018,6 @@ func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
 	return e.stateMachineEnvironment
 }
 
-func (e *historyEngineImpl) ReplicationFetchWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
+func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
 	return replicationapi.SyncWorkflowState(ctx, e.shardContext, request, e.workflowConsistencyChecker.GetWorkflowCache())
 }
