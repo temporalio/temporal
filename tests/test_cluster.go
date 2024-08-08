@@ -543,7 +543,7 @@ func (tc *TestCluster) GetHost() *temporalImpl {
 }
 
 func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) {
-	tc.host.dcClient.OverrideValue(t, key, value)
+	tc.host.OverrideDCValue(t, key, value)
 }
 
 var errCannotAddCACertToPool = errors.New("failed adding CA to pool")

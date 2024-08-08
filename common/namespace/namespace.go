@@ -26,16 +26,15 @@ package namespace
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
-
-	"golang.org/x/exp/maps"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"

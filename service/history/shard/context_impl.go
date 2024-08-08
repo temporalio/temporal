@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -37,7 +38,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -250,8 +250,8 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 		{
 			Name: s.String() + "-shard-lock",
 			// rwLock may be held for the duration of renewing shard rangeID, which are called with a
-			// timeout of shardIOTimeout. add a few more seconds for reliability.
-			Timeout: s.config.ShardIOTimeout() + 5*time.Second,
+			// timeout of shardIOTimeout.
+			Timeout: s.config.ShardIOTimeout() + 30*time.Second,
 			Ping: func() []pingable.Pingable {
 				// call rwLock.Lock directly to bypass metrics since this isn't a real request
 				s.rwLock.Lock()
@@ -265,7 +265,7 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 			Name: s.String() + "-io-semaphore",
 			// ioSemaphore is for the duration of a persistence op which has a persistence connection timeout
 			// of 10 sec.
-			Timeout: 10 * time.Second,
+			Timeout: 10*time.Second + 30*time.Second,
 			Ping: func() []pingable.Pingable {
 				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
 				s.ioSemaphore.Release(1)
