@@ -30,11 +30,13 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -106,6 +108,10 @@ const (
 var (
 	errKeyNotPresent        = errors.New("key not present")
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
+
+	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
+	durationType  = reflect.TypeOf(time.Duration(0))
+	stringType    = reflect.TypeOf("")
 )
 
 // NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
@@ -471,8 +477,10 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 		out := def
 		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result: &out,
-			// If we want more than one hook in the future, combine them with mapstructure.OrComposeDecodeHookFunc
-			DecodeHook: mapstructureHookDuration,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructureHookDuration,
+				mapstructureHookProtoEnum,
+			),
 		})
 		if err != nil {
 			return out, err
@@ -485,8 +493,24 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 // Parses string into time.Duration. mapstructure has an implementation of this already but it
 // calls time.ParseDuration and we want to use our own method.
 func mapstructureHookDuration(f, t reflect.Type, data any) (any, error) {
-	if t != reflect.TypeOf(time.Duration(0)) {
+	if t != durationType {
 		return data, nil
 	}
 	return convertDuration(data)
+}
+
+// Parses proto enum values from strings.
+func mapstructureHookProtoEnum(f, t reflect.Type, data any) (any, error) {
+	if f != stringType || !t.Implements(protoEnumType) {
+		return data, nil
+	}
+	vals := reflect.New(t).Interface().(protoreflect.Enum).Descriptor().Values()
+	str := strings.ToLower(data.(string)) // we checked f above so this can't fail
+	for i := 0; i < vals.Len(); i++ {
+		val := vals.Get(i)
+		if str == strings.ToLower(string(val.Name())) {
+			return val.Number(), nil
+		}
+	}
+	return nil, fmt.Errorf("name %q not found in enum %s", data, t.Name())
 }
