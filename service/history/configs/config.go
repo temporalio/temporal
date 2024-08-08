@@ -661,7 +661,7 @@ func NewConfig(
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
 
-		BreakdownMetricsByTaskQueue: dynamicconfig.BreakdownMetricsByTaskQueue.Get(dc),
+		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 	}
 
 	return cfg

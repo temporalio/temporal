@@ -294,7 +294,8 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsEmpty() {
 		gomock.Any(),
 		gomock.Any(),
 	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	t.matcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
+	_, e := t.matcher.Poll(ctx, &pollMetadata{})
+	t.ErrorAs(e, &errNoTasks)
 	cancel()
 }
 

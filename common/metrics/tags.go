@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/locks"
-
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
 )
@@ -190,7 +189,7 @@ func UnsafeTaskQueueTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: taskQueue, value: sanitizer.Value(value)}
+	return &tagImpl{key: taskQueue, value: value}
 }
 
 func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {

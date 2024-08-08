@@ -355,12 +355,12 @@ func (db *taskQueueDB) emitBacklogGauges() {
 	if db.backlogMgr.pqMgr.ShouldEmitGauges() {
 		approximateBacklogCount := db.getApproximateBacklogCount()
 		backlogHeadAge := db.backlogMgr.taskReader.getBacklogHeadAge()
-		db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
-		db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogAgeSeconds.Name()).Record(backlogHeadAge.Seconds())
+		metrics.ApproximateBacklogCount.With(db.backlogMgr.metricsHandler).Record(float64(approximateBacklogCount))
+		metrics.ApproximateBacklogAgeSeconds.With(db.backlogMgr.metricsHandler).Record(backlogHeadAge.Seconds())
 
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
-		maxReadLevel := db.backlogMgr.db.GetMaxReadLevel()
-		db.backlogMgr.metricsHandler.Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(maxReadLevel - db.ackLevel))
+		maxReadLevel := db.GetMaxReadLevel()
+		metrics.TaskLagPerTaskQueueGauge.With(db.backlogMgr.metricsHandler).Record(float64(maxReadLevel - db.ackLevel))
 	}
 }

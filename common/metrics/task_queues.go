@@ -48,12 +48,8 @@ func GetPerTaskQueueFamilyScope(
 		metricTaskQueueName = taskQueueFamily.Name()
 	}
 
-	allTags := []Tag{NamespaceTag(namespaceName), UnsafeTaskQueueTag(metricTaskQueueName)}
-	if tags != nil {
-		allTags = append(allTags, tags...)
-	}
-
-	return handler.WithTags(allTags...)
+	tags = append(tags, NamespaceTag(namespaceName), UnsafeTaskQueueTag(metricTaskQueueName))
+	return handler.WithTags(tags...)
 }
 
 func GetPerTaskQueueScope(

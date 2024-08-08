@@ -1093,26 +1093,26 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		defaultNumTaskQueuePartitions,
 		`MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue`,
 	)
-	BreakdownMetricsByTaskQueue = NewTaskQueueBoolSetting(
-		"breakdownMetricsByTaskQueue",
+	MetricsBreakdownByTaskQueue = NewTaskQueueBoolSetting(
+		"metrics.breakdownByTaskQueue",
 		true,
-		`BreakdownMetricsByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should 
+		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should 
 contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your 
 observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
 	)
-	MatchingBreakdownMetricsByPartition = NewTaskQueueBoolSetting(
-		"matching.breakdownMetricsByPartition",
+	MetricsBreakdownByPartition = NewTaskQueueBoolSetting(
+		"metrics.breakdownByPartition",
 		true,
-		`MatchingBreakdownMetricsByPartition determines if the 'partition' tag in Matching metrics should 
+		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should 
 contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky 
 queues will be "__sticky__". Disable this option if the partition cardinality is too high for your 
 observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
 	)
-	MatchingBreakdownMetricsByBuildID = NewTaskQueueBoolSetting(
-		"matching.breakdownMetricsByBuildID",
+	MEtricsBreakdownByBuildID = NewTaskQueueBoolSetting(
+		"metrics.breakdownByBuildID",
 		true,
-		`MatchingBreakdownMetricsByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
-contain the actual Build ID or a generic "__versioned__"" value. Regardless of this config, the tag value for unversioned 
+		`MEtricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
+contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned 
 queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your 
 observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age 
 for VERSIONED queues.`,

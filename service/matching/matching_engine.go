@@ -935,8 +935,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 		for _, taskQueueType := range req.TaskQueueTypes {
-			for i := 0; i < tqConfig.NumWritePartitions(); i++ {
+			for i := 0; i < numPartitions; i++ {
 				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: request.GetNamespaceId(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -2004,19 +2005,20 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 	}
 
 	e.gaugeMetrics.lock.Lock()
-	defer e.gaugeMetrics.lock.Unlock()
 	e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters] += delta
 	loadedPhysicalTaskQueueCounter := e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters]
+	e.gaugeMetrics.lock.Unlock()
 
 	pm := pqm.partitionMgr
-	metrics.GetPerTaskQueuePartitionScope(
-		e.metricsHandler,
-		pm.ns.Name().String(),
-		pm.Partition(),
-		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
-		false,
-		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
-	).Gauge(metrics.LoadedPhysicalTaskQueueGauge.Name()).Record(
+	metrics.LoadedPhysicalTaskQueueGauge.With(
+		metrics.GetPerTaskQueuePartitionScope(
+			e.metricsHandler,
+			pm.ns.Name().String(),
+			pm.Partition(),
+			// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
+			false,
+			false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
+		)).Record(
 		float64(loadedPhysicalTaskQueueCounter),
 		metrics.VersionedTag(versioned),
 	)
@@ -2043,7 +2045,6 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 
 	rootPartition := pm.Partition().IsRoot()
 	e.gaugeMetrics.lock.Lock()
-	defer e.gaugeMetrics.lock.Unlock()
 
 	loadedTaskQueueFamilyCounter, loadedTaskQueueCounter, loadedTaskQueuePartitionCounter :=
 		e.gaugeMetrics.loadedTaskQueueFamilyCount[taskQueueFamilyParameters], e.gaugeMetrics.loadedTaskQueueCount[taskQueueParameters],
@@ -2059,6 +2060,7 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 			e.gaugeMetrics.loadedTaskQueueFamilyCount[taskQueueFamilyParameters] = loadedTaskQueueFamilyCounter
 		}
 	}
+	e.gaugeMetrics.lock.Unlock()
 
 	nsName := pm.Namespace().Name().String()
 
