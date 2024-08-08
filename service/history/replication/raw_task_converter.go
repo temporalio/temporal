@@ -205,13 +205,17 @@ func convertWorkflowStateReplicationTask(
 			if state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 				return nil, nil
 			}
+			workflowMutableState := mutableState.CloneToProto()
+			if err := workflow.SanitizeMutableState(workflowMutableState); err != nil {
+				return nil, err
+			}
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 				SourceTaskId: taskInfo.TaskID,
 				Priority:     taskInfo.Priority,
 				Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
 					SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-						WorkflowState: mutableState.CloneToProto(),
+						WorkflowState: workflowMutableState,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -247,6 +251,9 @@ func convertSyncHSMReplicationTask(
 				return nil, err
 			}
 
+			stateMachineNode := common.CloneProto(mutableState.HSM().InternalRepr())
+			workflow.SanitizeStateMachineNode(stateMachineNode)
+
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
 				SourceTaskId: taskInfo.TaskID,
@@ -256,7 +263,7 @@ func convertSyncHSMReplicationTask(
 						WorkflowId:       taskInfo.WorkflowID,
 						RunId:            taskInfo.RunID,
 						VersionHistory:   versionhistory.CopyVersionHistory(currentVersionHistory),
-						StateMachineNode: common.CloneProto(mutableState.HSM().InternalRepr()),
+						StateMachineNode: stateMachineNode,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
