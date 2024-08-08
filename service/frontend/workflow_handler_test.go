@@ -2746,7 +2746,6 @@ func (s *workflowHandlerSuite) TestExecuteMultiOperation() {
 	ctx := context.Background()
 	config := s.newConfig()
 	config.EnableExecuteMultiOperation = func(string) bool { return true }
-	config.EnableUpdateWorkflowExecution = func(string) bool { return true }
 	wh := s.getWorkflowHandler(config)
 
 	s.mockResource.NamespaceCache.EXPECT().
