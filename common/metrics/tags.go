@@ -196,6 +196,7 @@ func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
 }
 
+// Consider passing the value of "metrics.breakdownByBuildID" dynamic config to this function.
 func WorkerBuildIdTag(buildId string, buildIdBreakdown bool) Tag {
 	if buildId == "" {
 		buildId = "__unversioned__"

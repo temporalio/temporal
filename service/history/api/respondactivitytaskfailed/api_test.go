@@ -464,11 +464,11 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.Mo
 func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *shard.MockContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
 	tags := []metrics.Tag{
-		metrics.NamespaceTag(uc.namespaceName.String()),
-		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
+		metrics.NamespaceTag(uc.namespaceName.String()),
+		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 	}
 
 	timer.EXPECT().Record(
