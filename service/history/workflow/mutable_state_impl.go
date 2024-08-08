@@ -466,9 +466,13 @@ func NewSanitizedMutableState(
 	lastFirstEventTxnID int64,
 	lastWriteVersion int64,
 ) (*MutableStateImpl, error) {
-	// TODO:  The source cluster will perform the sanitization starting from 1.25 release.
-	// Remove the sanitization here in 1.26 release.
+	// Although new versions of temporal server will perform state sanitization,
+	// we have to keep the sanitization logic here as well for backward compatibility in case
+	// source cluster is running an old version and doesn't do the sanitization.
 	if err := SanitizeMutableState(mutableStateRecord); err != nil {
+		return nil, err
+	}
+	if err := common.DiscardUnknownProto(mutableStateRecord); err != nil {
 		return nil, err
 	}
 
