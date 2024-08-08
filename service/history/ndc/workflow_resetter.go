@@ -238,7 +238,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	//currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
 
 	return nil
 }
