@@ -311,14 +311,14 @@ func subscribe[T any](
 	// get one value immediately (note that subscriptionLock is held here so we can't race with
 	// an update)
 	init := matchAndConvert(c, key, def, cdef, convert, prec)
-	
+
 	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
 	// current value and skip the subscription.  The cancellation func returned is a no-op and
 	// can be called or ignored.
-	if reflect.ValueOf(callback).IsNil() {
+	if callback == nil {
 		return init, func() {}
 	}
-	
+
 	c.subscriptionIdx++
 	id := c.subscriptionIdx
 
