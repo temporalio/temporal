@@ -37,13 +37,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-type CanGetHSMCallbackArg interface {
-	GetHSMCallbackArg(ctx context.Context) (*persistencespb.HSMCallbackArg, error)
+type CanGetHSMCompletionCallbackArg interface {
+	GetHSMCompletionCallbackArg(ctx context.Context) (*persistencespb.HSMCompletionCallbackArg, error)
 }
 
 type hsmInvocation struct {
 	hsm         *persistencespb.Callback_HSM
-	callbackArg *persistencespb.HSMCallbackArg
+	callbackArg *persistencespb.HSMCompletionCallbackArg
 }
 
 func isRetryableRpcResponse(err error) bool {

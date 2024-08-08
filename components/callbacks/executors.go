@@ -148,14 +148,14 @@ func (e taskExecutor) loadInvocationArgs(
 				return err
 			}
 		case *persistencespb.Callback_Hsm:
-			target, err := hsm.MachineData[CanGetHSMCallbackArg](node.Parent)
+			target, err := hsm.MachineData[CanGetHSMCompletionCallbackArg](node.Parent)
 			if err != nil {
 				return err
 			}
 			// variant struct is immutable and ok to reference without copying
 			hsmInvokable := hsmInvocation{}
 			hsmInvokable.hsm = variant.Hsm
-			hsmInvokable.callbackArg, err = target.GetHSMCallbackArg(ctx)
+			hsmInvokable.callbackArg, err = target.GetHSMCompletionCallbackArg(ctx)
 			if err != nil {
 				return err
 			}

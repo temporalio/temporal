@@ -42,7 +42,7 @@ func (p ProcessWorkflowCompletionEvent) SerializeOutput(_ any) ([]byte, error) {
 }
 
 func (p ProcessWorkflowCompletionEvent) DeserializeInput(data []byte) (any, error) {
-	output := &persistencepb.HSMCallbackArg{}
+	output := &persistencepb.HSMCompletionCallbackArg{}
 	if err := proto.Unmarshal(data, output); err != nil {
 		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}

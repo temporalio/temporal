@@ -545,7 +545,7 @@ message Callback {
     }
 }
 
-message HSMCallbackArg {
+message HSMCompletionCallbackArg {
     // namespace ID of the workflow that just completed.
     string namespace_id = 1;
     // ID of the workflow that just completed.

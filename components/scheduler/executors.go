@@ -597,7 +597,7 @@ func (e taskExecutor) cancelWorkflow(
 	}
 }
 
-func getWorkflowResult(input *persistencepb.HSMCallbackArg) (*commonpb.Payloads, *failure.Failure, error) {
+func getWorkflowResult(input *persistencepb.HSMCompletionCallbackArg) (*commonpb.Payloads, *failure.Failure, error) {
 	switch input.LastEvent.EventType { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		if attrs := input.LastEvent.GetWorkflowExecutionCompletedEventAttributes(); attrs == nil {
@@ -645,7 +645,7 @@ func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hs
 		TaskID:          0,
 	}
 
-	castInput := input.(*persistencepb.HSMCallbackArg) //nolint:revive
+	castInput := input.(*persistencepb.HSMCompletionCallbackArg) //nolint:revive
 	return nil, env.Access(ctx, newRef, hsm.AccessWrite, func(node *hsm.Node) error {
 		s, err := hsm.MachineData[*Scheduler](node)
 		if err != nil {

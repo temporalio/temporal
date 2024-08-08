@@ -658,35 +658,35 @@ func (this *Callback) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type HSMCallbackArg to the protobuf v3 wire format
-func (val *HSMCallbackArg) Marshal() ([]byte, error) {
+// Marshal an object of type HSMCompletionCallbackArg to the protobuf v3 wire format
+func (val *HSMCompletionCallbackArg) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type HSMCallbackArg from the protobuf v3 wire format
-func (val *HSMCallbackArg) Unmarshal(buf []byte) error {
+// Unmarshal an object of type HSMCompletionCallbackArg from the protobuf v3 wire format
+func (val *HSMCompletionCallbackArg) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *HSMCallbackArg) Size() int {
+func (val *HSMCompletionCallbackArg) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two HSMCallbackArg values are equivalent by recursively
+// Equal returns whether two HSMCompletionCallbackArg values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *HSMCallbackArg) Equal(that interface{}) bool {
+func (this *HSMCompletionCallbackArg) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *HSMCallbackArg
+	var that1 *HSMCompletionCallbackArg
 	switch t := that.(type) {
-	case *HSMCallbackArg:
+	case *HSMCompletionCallbackArg:
 		that1 = t
-	case HSMCallbackArg:
+	case HSMCompletionCallbackArg:
 		that1 = &t
 	default:
 		return false

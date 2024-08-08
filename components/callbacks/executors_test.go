@@ -75,14 +75,14 @@ var _ hsm.Environment = fakeEnv{}
 
 type mutableState struct {
 	completionNexus nexus.OperationCompletion
-	completionHsm   *persistencespb.HSMCallbackArg
+	completionHsm   *persistencespb.HSMCompletionCallbackArg
 }
 
 func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
 	return ms.completionNexus, nil
 }
 
-func (ms mutableState) GetHSMCallbackArg(ctx context.Context) (*persistencespb.HSMCallbackArg, error) {
+func (ms mutableState) GetHSMCompletionCallbackArg(ctx context.Context) (*persistencespb.HSMCompletionCallbackArg, error) {
 	return ms.completionHsm, nil
 }
 
@@ -342,7 +342,7 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 				require.Equal(t, "rid", in.RunId)
 				require.True(t, ref.Equal(in.Ref))
 				require.Equal(t, "test", in.MethodName)
-				arg := &persistencespb.HSMCallbackArg{}
+				arg := &persistencespb.HSMCompletionCallbackArg{}
 				err = proto.Unmarshal(in.Input, arg)
 				require.NoError(t, err)
 				require.Equal(t, "mynsid", arg.NamespaceId)
@@ -446,7 +446,7 @@ func TestProcessBackoffTask(t *testing.T) {
 func newMutableState(t *testing.T) mutableState {
 	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccesfulOptions{})
 	require.NoError(t, err)
-	hsmCallbackArg := &persistencespb.HSMCallbackArg{
+	hsmCallbackArg := &persistencespb.HSMCompletionCallbackArg{
 		NamespaceId: "mynsid",
 		WorkflowId:  "mywid",
 		RunId:       "myrid",
