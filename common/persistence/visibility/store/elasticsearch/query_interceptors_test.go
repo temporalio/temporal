@@ -203,6 +203,15 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 	s.NoError(err)
 	s.Len(values, 1)
 	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
+
+	values, err = vi.Values(searchattribute.ScheduleID,
+		searchattribute.WorkflowID,
+		"test-schedule-id-1",
+		"test-schedule-id-2")
+	s.NoError(err)
+	s.Len(values, 2)
+	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-1", values[0])
+	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-2", values[1])
 }
 
 // Ensures the valuesInterceptor doesn't modify values when no transformation is needed.
@@ -216,6 +225,15 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	s.NoError(err)
 	s.Len(values, 1)
 	s.Equal("test-workflow-id", values[0])
+
+	values, err = vi.Values(searchattribute.ScheduleID,
+		searchattribute.ScheduleID,
+		"test-workflow-id-1",
+		"test-workflow-id-2")
+	s.NoError(err)
+	s.Len(values, 2)
+	s.Equal("test-workflow-id-1", values[0])
+	s.Equal("test-workflow-id-2", values[1])
 }
 
 func (s *QueryInterceptorSuite) createMockNameInterceptor(mapper searchattribute.Mapper) *nameInterceptor {
