@@ -916,8 +916,8 @@ The API is under active development.`,
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
 		true,
-		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
-asynchronous workflow execution update that waits on the "Accepted" lifecycle stage.`,
+		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the UpdateWorkflowExecution API
+to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
