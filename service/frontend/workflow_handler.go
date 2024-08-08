@@ -251,11 +251,8 @@ func (wh *WorkflowHandler) Start() {
 				ns.ActiveClusterName() != wh.clusterMetadata.GetCurrentClusterName() {
 				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
 				if ok {
-					for _, key := range pollers.KeySet() {
-						cancel, exist := pollers.Pop(key)
-						if exist {
-							cancel()
-						}
+					for _, cancelFn := range pollers.PopAll() {
+						cancelFn.Value()
 					}
 				}
 			}
@@ -4793,8 +4790,11 @@ func (wh *WorkflowHandler) registerOutstandingPollContext(
 ) context.Context {
 
 	if pollerID != "" {
+		nsPollers, ok := wh.outstandingPollers.Get(namespaceID)
+		if !ok {
+			nsPollers, _ = wh.outstandingPollers.GetOrSet(namespaceID, collection.NewSyncMap[string, context.CancelFunc]())
+		}
 		childCtx, cancel := context.WithCancel(ctx)
-		nsPollers, _ := wh.outstandingPollers.GetOrSet(namespaceID, collection.NewSyncMap[string, context.CancelFunc]())
 		nsPollers.Set(pollerID, cancel)
 		return childCtx
 	}
@@ -4807,7 +4807,9 @@ func (wh *WorkflowHandler) unregisterOutstandingPollContext(
 ) {
 	nsPollers, ok := wh.outstandingPollers.Get(namespaceID)
 	if ok {
-		nsPollers.Delete(pollerID)
+		if cancel, exist := nsPollers.Pop(pollerID); exist {
+			cancel()
+		}
 	}
 }
 
