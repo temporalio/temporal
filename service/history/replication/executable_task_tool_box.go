@@ -27,6 +27,7 @@ package replication
 import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/replication/eventhandler"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -60,5 +61,7 @@ type (
 		EventSerializer          serialization.Serializer
 		DLQWriter                DLQWriter
 		HistoryEventsHandler     eventhandler.HistoryEventsHandler
+		WorkflowCache            wcache.Cache
+		RemoteHistoryFetcher     eventhandler.HistoryPaginatedFetcher
 	}
 )
