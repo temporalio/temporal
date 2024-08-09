@@ -30,20 +30,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/historyservicemock/v1"
-	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/golang/mock/gomock"
-	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -57,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 type fakeEnv struct {
@@ -75,14 +75,14 @@ var _ hsm.Environment = fakeEnv{}
 
 type mutableState struct {
 	completionNexus nexus.OperationCompletion
-	completionHsm   *historypb.HistoryEvent
+	completionHsm   *persistencespb.HSMCompletionCallbackArg
 }
 
 func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
 	return ms.completionNexus, nil
 }
 
-func (ms mutableState) GetCompletionEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
+func (ms mutableState) GetHSMCompletionCallbackArg(ctx context.Context) (*persistencespb.HSMCompletionCallbackArg, error) {
 	return ms.completionHsm, nil
 }
 
@@ -342,11 +342,14 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 				require.Equal(t, "rid", in.RunId)
 				require.True(t, ref.Equal(in.Ref))
 				require.Equal(t, "test", in.MethodName)
-				event := &historypb.HistoryEvent{}
-				err = proto.Unmarshal(in.Input, event)
+				arg := &persistencespb.HSMCompletionCallbackArg{}
+				err = proto.Unmarshal(in.Input, arg)
 				require.NoError(t, err)
-				require.Equal(t, int64(42), event.EventId)
-				require.Equal(t, enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, event.EventType)
+				require.Equal(t, "mynsid", arg.NamespaceId)
+				require.Equal(t, "mywid", arg.WorkflowId)
+				require.Equal(t, "myrid", arg.RunId)
+				require.Equal(t, int64(42), arg.LastEvent.EventId)
+				require.Equal(t, enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, arg.LastEvent.EventType)
 
 				return &historyservice.InvokeStateMachineMethodResponse{}, tc.expectedError
 			}).Times(1)
@@ -443,13 +446,18 @@ func TestProcessBackoffTask(t *testing.T) {
 func newMutableState(t *testing.T) mutableState {
 	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccesfulOptions{})
 	require.NoError(t, err)
-	completionHsm := &historypb.HistoryEvent{
-		EventId:   42,
-		EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+	hsmCallbackArg := &persistencespb.HSMCompletionCallbackArg{
+		NamespaceId: "mynsid",
+		WorkflowId:  "mywid",
+		RunId:       "myrid",
+		LastEvent: &historypb.HistoryEvent{
+			EventId:   42,
+			EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		},
 	}
 	return mutableState{
 		completionNexus: completionNexus,
-		completionHsm:   completionHsm,
+		completionHsm:   hsmCallbackArg,
 	}
 }
 
