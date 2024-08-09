@@ -209,6 +209,9 @@ func convertWorkflowStateReplicationTask(
 			if err := workflow.SanitizeMutableState(workflowMutableState); err != nil {
 				return nil, err
 			}
+			if err := common.DiscardUnknownProto(workflowMutableState); err != nil {
+				return nil, err
+			}
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 				SourceTaskId: taskInfo.TaskID,
@@ -253,6 +256,9 @@ func convertSyncHSMReplicationTask(
 
 			stateMachineNode := common.CloneProto(mutableState.HSM().InternalRepr())
 			workflow.SanitizeStateMachineNode(stateMachineNode)
+			if err := common.DiscardUnknownProto(stateMachineNode); err != nil {
+				return nil, err
+			}
 
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
