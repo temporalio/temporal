@@ -152,10 +152,11 @@ type (
 		// Retry policy for fetching user data from root partition. Should retry forever.
 		GetUserDataRetryPolicy backoff.RetryPolicy
 
-		loadCause                   loadCause
 		BreakdownMetricsByTaskQueue func() bool
 		BreakdownMetricsByPartition func() bool
 		BreakdownMetricsByBuildID   func() bool
+
+		loadCause loadCause
 	}
 
 	loadCause   int
