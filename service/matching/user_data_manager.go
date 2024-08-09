@@ -309,7 +309,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// one. But if the remote is broken and returns success immediately, we might end up
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
-		if elapsed < minWaitTime {
+		if elapsed < m.config.GetUserDataMinWaitTime {
 			util.InterruptibleSleep(ctx, minWaitTime-elapsed)
 			// Don't let this get near our call timeout, otherwise we can't tell the difference
 			// between a fast reply and a timeout.
