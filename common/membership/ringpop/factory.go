@@ -123,10 +123,7 @@ func (factory *factory) getMonitor() *monitor {
 			factory.Logger.Fatal("Failed to get current cluster ID", tag.Error(err))
 		}
 
-		appName := "temporal"
-		if currentClusterMetadata.UseClusterIdMembership {
-			appName = fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
-		}
+		appName := fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
 		rp, err := ringpop.New(appName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))
 		if err != nil {
 			factory.Logger.Fatal("Failed to get new ringpop", tag.Error(err))

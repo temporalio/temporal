@@ -144,27 +144,25 @@ type (
 	}
 )
 
-var (
-	TopLevelModule = fx.Options(
-		fx.Provide(
-			NewServerFxImpl,
-			ServerOptionsProvider,
-			resource.ArchivalMetadataProvider,
-			TaskCategoryRegistryProvider,
-			PersistenceFactoryProvider,
-			HistoryServiceProvider,
-			MatchingServiceProvider,
-			FrontendServiceProvider,
-			InternalFrontendServiceProvider,
-			WorkerServiceProvider,
-			ApplyClusterMetadataConfigProvider,
-		),
-		dynamicconfig.Module,
-		pprof.Module,
-		TraceExportModule,
-		FxLogAdapter,
-		fx.Invoke(ServerLifetimeHooks),
-	)
+var TopLevelModule = fx.Options(
+	fx.Provide(
+		NewServerFxImpl,
+		ServerOptionsProvider,
+		resource.ArchivalMetadataProvider,
+		TaskCategoryRegistryProvider,
+		PersistenceFactoryProvider,
+		HistoryServiceProvider,
+		MatchingServiceProvider,
+		FrontendServiceProvider,
+		InternalFrontendServiceProvider,
+		WorkerServiceProvider,
+		ApplyClusterMetadataConfigProvider,
+	),
+	dynamicconfig.Module,
+	pprof.Module,
+	TraceExportModule,
+	FxLogAdapter,
+	fx.Invoke(ServerLifetimeHooks),
 )
 
 func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (*ServerFx, error) {
@@ -728,7 +726,6 @@ func initCurrentClusterMetadataRecord(
 				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
 				IsGlobalNamespaceEnabled: svc.ClusterMetadata.EnableGlobalNamespace,
 				IsConnectionEnabled:      currentClusterInfo.Enabled,
-				UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
 				IndexSearchAttributes:    initialIndexSearchAttributes,
 				Tags:                     svc.ClusterMetadata.Tags,
 			},
