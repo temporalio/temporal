@@ -26,6 +26,8 @@ package collection
 
 import (
 	"sync"
+
+	"golang.org/x/exp/maps"
 )
 
 // SyncMap implements a simple mutex-wrapped map. We've had bugs where we took the wrong lock
@@ -104,5 +106,6 @@ func (m *SyncMap[K, V]) PopAll() []KeyValuePair[K, V] {
 			Value: v,
 		})
 	}
+	maps.Clear(m.contents)
 	return result
 }
