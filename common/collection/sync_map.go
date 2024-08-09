@@ -35,14 +35,8 @@ type SyncMap[K comparable, V any] struct {
 	contents map[K]V
 }
 
-type KeyValuePair[K, V any] struct {
-	Key   K
-	Value V
-}
-
 func NewSyncMap[K comparable, V any]() SyncMap[K, V] {
 	return SyncMap[K, V]{
-		RWMutex:  sync.RWMutex{},
 		contents: make(map[K]V),
 	}
 }
@@ -94,16 +88,10 @@ func (m *SyncMap[K, V]) Pop(key K) (value V, ok bool) {
 	return value, ok
 }
 
-func (m *SyncMap[K, V]) PopAll() []KeyValuePair[K, V] {
+func (m *SyncMap[K, V]) PopAll() map[K]V {
 	m.Lock()
 	defer m.Unlock()
-	var result []KeyValuePair[K, V]
-	for k, v := range m.contents {
-		result = append(result, KeyValuePair[K, V]{
-			Key:   k,
-			Value: v,
-		})
-		delete(m.contents, k)
-	}
-	return result
+	contents := m.contents
+	m.contents = make(map[K]V)
+	return contents
 }

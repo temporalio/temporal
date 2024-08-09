@@ -252,7 +252,7 @@ func (wh *WorkflowHandler) Start() {
 				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
 				if ok {
 					for _, cancelFn := range pollers.PopAll() {
-						cancelFn.Value()
+						cancelFn()
 					}
 				}
 			}
