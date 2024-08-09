@@ -254,7 +254,7 @@ func validateTaskGeneration(
 	if tgClock != 0 && taskID != 0 && taskID < tgClock {
 
 		currentClock := shardContext.CurrentVectorClock().Clock
-		if tgClock >= currentClock {
+		if tgClock > currentClock {
 			if err := workflowContext.RefreshTasks(ctx, shardContext); err != nil {
 				return err
 			}
