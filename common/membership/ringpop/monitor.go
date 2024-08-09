@@ -374,7 +374,7 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 		}
 
 		// Stop iterating once we have either 500 unique ip:port combos or there is no more results.
-		if nextPageToken == nil || len(set) >= 500 {
+		if resp.NextPageToken == nil || len(set) >= 500 {
 			bootstrapHostPorts := make([]string, 0, len(set))
 			for k := range set {
 				bootstrapHostPorts = append(bootstrapHostPorts, k)
@@ -383,6 +383,9 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 			rpo.logger.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(bootstrapHostPorts, ",")))
 			return bootstrapHostPorts, nil
 		}
+
+		// Update pagination token for next request
+		nextPageToken = resp.NextPageToken
 	}
 }
 
