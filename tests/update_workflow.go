@@ -4691,9 +4691,6 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_WorkerSkipp
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_LastWorkflowTask_HasUpdateMessage() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
-	}
 	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 

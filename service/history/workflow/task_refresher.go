@@ -85,8 +85,11 @@ func (r *TaskRefresherImpl) Refresh(
 	ctx context.Context,
 	mutableState MutableState,
 ) error {
-	// Invalidate all tasks generated for this mutable state before the refresh.
-	mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
+	if r.shard.GetConfig().EnableNexus() {
+		// Invalidate all tasks generated for this mutable state before the refresh.
+		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
+	}
+
 	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition)
 }
 

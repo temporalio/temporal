@@ -248,7 +248,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
 		return nil, NewConverterError("%s: 'group by' clause supports only a single field", NotSupportedErrMessage)
 	}
 	for _, groupByExpr := range sel.GroupBy {
-		colName, err := convertColName(c.fnInterceptor, groupByExpr, FieldNameGroupBy)
+		_, colName, err := convertColName(c.fnInterceptor, groupByExpr, FieldNameGroupBy)
 		if err != nil {
 			return nil, wrapConverterError("unable to convert 'group by' column name", err)
 		}
@@ -256,7 +256,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
 	}
 
 	for _, orderByExpr := range sel.OrderBy {
-		colName, err := convertColName(c.fnInterceptor, orderByExpr.Expr, FieldNameSorter)
+		_, colName, err := convertColName(c.fnInterceptor, orderByExpr.Expr, FieldNameSorter)
 		if err != nil {
 			return nil, wrapConverterError("unable to convert 'order by' column name", err)
 		}
@@ -378,7 +378,7 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 		return nil, NewConverterError("%v is not a range condition", sqlparser.String(expr))
 	}
 
-	colName, err := convertColName(r.fnInterceptor, rangeCond.Left, FieldNameFilter)
+	alias, colName, err := convertColName(r.fnInterceptor, rangeCond.Left, FieldNameFilter)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
 	}
@@ -392,7 +392,7 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 		return nil, err
 	}
 
-	values, err := r.fvInterceptor.Values(colName, fromValue, toValue)
+	values, err := r.fvInterceptor.Values(alias, colName, fromValue, toValue)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert values of 'between' expression", err)
 	}
@@ -420,7 +420,7 @@ func (i *isConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 		return nil, NewConverterError("%v is not an 'is' expression", sqlparser.String(expr))
 	}
 
-	colName, err := convertColName(i.fnInterceptor, isExpr.Expr, FieldNameFilter)
+	_, colName, err := convertColName(i.fnInterceptor, isExpr.Expr, FieldNameFilter)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert left part of 'is' expression", err)
 	}
@@ -444,7 +444,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		return nil, NewConverterError("%v is not a comparison expression", sqlparser.String(expr))
 	}
 
-	colName, err := convertColName(c.fnInterceptor, comparisonExpr.Left, FieldNameFilter)
+	alias, colName, err := convertColName(c.fnInterceptor, comparisonExpr.Left, FieldNameFilter)
 	if err != nil {
 		return nil, wrapConverterError(
 			fmt.Sprintf("unable to convert left side of %q", sqlparser.String(expr)),
@@ -466,7 +466,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		colValues = []interface{}{colValue}
 	}
 
-	colValues, err = c.fvInterceptor.Values(colName, colValues...)
+	colValues, err = c.fvInterceptor.Values(alias, colName, colValues...)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert values of comparison expression", err)
 	}
@@ -592,13 +592,18 @@ func ParseSqlValue(sqlValue string) (interface{}, error) {
 	return nil, NewConverterError("%s: unable to parse %s", InvalidExpressionErrMessage, sqlValue)
 }
 
-func convertColName(fnInterceptor FieldNameInterceptor, colNameExpr sqlparser.Expr, usage FieldNameUsage) (string, error) {
+func convertColName(fnInterceptor FieldNameInterceptor, colNameExpr sqlparser.Expr, usage FieldNameUsage) (alias string, fieldName string, err error) {
 	colName, isColName := colNameExpr.(*sqlparser.ColName)
 	if !isColName {
-		return "", NewConverterError("%s: must be a column name but was %T", InvalidExpressionErrMessage, colNameExpr)
+		return "", "", NewConverterError("%s: must be a column name but was %T", InvalidExpressionErrMessage, colNameExpr)
 	}
 
 	colNameStr := sqlparser.String(colName)
 	colNameStr = strings.ReplaceAll(colNameStr, "`", "")
-	return fnInterceptor.Name(colNameStr, usage)
+	fieldName, err = fnInterceptor.Name(colNameStr, usage)
+	if err != nil {
+		return "", "", err
+	}
+
+	return colNameStr, fieldName, nil
 }

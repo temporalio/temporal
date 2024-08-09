@@ -599,6 +599,12 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 		if err := wh.prepareUpdateWorkflowRequest(updateReq); err != nil {
 			return nil, "", err
 		}
+		if updateReq.FirstExecutionRunId != "" {
+			return nil, "", errMultiOpUpdateFirstExecutionRunId
+		}
+		if updateReq.WorkflowExecution.RunId != "" {
+			return nil, "", errMultiOpUpdateExecutionRunId
+		}
 
 		workflowId = updateReq.WorkflowExecution.WorkflowId
 		opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
@@ -628,7 +634,8 @@ func convertToMultiOperationResponse(
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
 				Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
 					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
-						RunId: startResp.RunId,
+						RunId:   startResp.RunId,
+						Started: startResp.Started,
 					},
 				},
 			}
@@ -4533,7 +4540,9 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 					),
 				)
 			}
-
+		case *commonpb.Callback_Internal_:
+			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
+			continue
 		default:
 			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
 		}

@@ -50,7 +50,7 @@ func (t *testNameInterceptor) Name(name string, usage FieldNameUsage) (string, e
 	return name + "1", nil
 }
 
-func (t *testValuesInterceptor) Values(name string, values ...interface{}) ([]interface{}, error) {
+func (t *testValuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
 	if name == "error" {
 		return nil, errors.New("interceptor error")
 	}
