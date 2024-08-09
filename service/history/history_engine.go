@@ -32,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -1017,4 +1016,8 @@ func (e *historyEngineImpl) ListTasks(
 // StateMachineEnvironment implements shard.Engine.
 func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
 	return e.stateMachineEnvironment
+}
+
+func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
+	return replicationapi.SyncWorkflowState(ctx, e.shardContext, request, e.workflowConsistencyChecker.GetWorkflowCache())
 }

@@ -213,3 +213,12 @@ message NewRunInfo {
     string run_id = 1;
     temporal.api.common.v1.DataBlob event_batch = 2;
 }
+
+message SyncWorkflowStateMutationAttributes {
+    temporal.server.api.persistence.v1.VersionedTransition inclusive_start_versioned_transition = 1;
+    temporal.server.api.persistence.v1.WorkflowMutableStateMutation state_mutation = 2;
+}
+
+message SyncWorkflowStateSnapshotAttributes {
+    temporal.server.api.persistence.v1.WorkflowMutableState state = 1;
+}

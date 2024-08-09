@@ -168,6 +168,10 @@ func (n *Node) Dirty() bool {
 	return false
 }
 
+func (n *Node) GetStateMachineNode() *persistencespb.StateMachineNode {
+	return n.persistence
+}
+
 type TransitionOutputWithCount struct {
 	TransitionOutput
 	TransitionCount int64
@@ -228,6 +232,17 @@ func (n *Node) Walk(fn func(*Node) error) error {
 	}
 
 	return nil
+}
+
+func (n *Node) GetChildNodes() []*Node {
+	var nodes []*Node
+	for childType := range n.persistence.Children {
+		childNodes := NewCollection[any](n, childType).List()
+		for _, child := range childNodes {
+			nodes = append(nodes, child)
+		}
+	}
+	return nodes
 }
 
 // Child recursively gets a child for the given path.

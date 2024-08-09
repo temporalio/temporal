@@ -935,6 +935,21 @@ func (c *retryableClient) SyncShardStatus(
 	return resp, err
 }
 
+func (c *retryableClient) SyncWorkflowState(
+	ctx context.Context,
+	request *historyservice.SyncWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.SyncWorkflowStateResponse, error) {
+	var resp *historyservice.SyncWorkflowStateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.SyncWorkflowState(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.TerminateWorkflowExecutionRequest,

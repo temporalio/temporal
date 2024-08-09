@@ -1781,6 +1781,10 @@ func (ms *MutableStateImpl) GetPendingSignalExternalInfos() map[int64]*persisten
 	return ms.pendingSignalInfoIDs
 }
 
+func (ms *MutableStateImpl) GetPendingSignalRequestedIds() []string {
+	return convert.StringSetToSlice(ms.pendingSignalRequestedIDs)
+}
+
 func (ms *MutableStateImpl) HadOrHasWorkflowTask() bool {
 	return ms.workflowTaskManager.HadOrHasWorkflowTask()
 }

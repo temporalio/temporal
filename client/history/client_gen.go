@@ -1108,6 +1108,26 @@ func (c *clientImpl) SyncShardStatus(
 	return response, nil
 }
 
+func (c *clientImpl) SyncWorkflowState(
+	ctx context.Context,
+	request *historyservice.SyncWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.SyncWorkflowStateResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
+	var response *historyservice.SyncWorkflowStateResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.SyncWorkflowState(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.TerminateWorkflowExecutionRequest,
