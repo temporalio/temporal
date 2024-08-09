@@ -599,6 +599,12 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 		if err := wh.prepareUpdateWorkflowRequest(updateReq); err != nil {
 			return nil, "", err
 		}
+		if updateReq.FirstExecutionRunId != "" {
+			return nil, "", errMultiOpUpdateFirstExecutionRunId
+		}
+		if updateReq.WorkflowExecution.RunId != "" {
+			return nil, "", errMultiOpUpdateExecutionRunId
+		}
 
 		workflowId = updateReq.WorkflowExecution.WorkflowId
 		opReq = &historyservice.ExecuteMultiOperationRequest_Operation{

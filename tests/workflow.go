@@ -779,6 +779,7 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 		}
 		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().AsTime().Add(backoff)
 		s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
+		s.Equal(we.RunId, dweResponse.WorkflowExecutionInfo.GetFirstRunId())
 	}
 
 	// Check run id links

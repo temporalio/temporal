@@ -39,10 +39,6 @@ frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
   - value: true
-frontend.enableUpdateWorkflowExecution:
-  - value: true
-frontend.enableUpdateWorkflowExecutionAsyncAccepted:
-  - value: true
 system.enableNexus:
   - value: true
 component.nexusoperations.callback.endpoint.template:
