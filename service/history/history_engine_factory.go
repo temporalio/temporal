@@ -83,6 +83,7 @@ func (f *historyEngineFactory) CreateEngine(
 		wfCache = f.NewCacheFn(shard.GetConfig(), shard.GetLogger(), shard.GetMetricsHandler())
 	}
 
+	replicationProgressCache := replication.NewProgressCache(shard.GetConfig(), shard.GetLogger(), shard.GetMetricsHandler())
 	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, wfCache)
 	return NewEngineWithShardContext(
 		shard,
@@ -93,6 +94,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.Config,
 		f.RawMatchingClient,
 		wfCache,
+		replicationProgressCache,
 		f.EventSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,

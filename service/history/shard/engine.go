@@ -131,6 +131,7 @@ type (
 		ConvertReplicationTask(
 			ctx context.Context,
 			task tasks.Task,
+			clusterID int32,
 		) (*replicationspb.ReplicationTask, error)
 		GetReplicationTasksIter(
 			ctx context.Context,

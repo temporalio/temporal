@@ -56,6 +56,7 @@ message ReplicationTask {
         TaskQueueUserDataAttributes task_queue_user_data_attributes = 11;
         SyncHSMAttributes sync_hsm_attributes = 14;
         BackfillHistoryTaskAttributes backfill_history_task_attributes = 16;
+        SyncVersionedTransitionTaskAttributes sync_versioned_transition_task_attributes = 18;
     }
     // All attributes should be deprecated and replaced by this field.
     // The task_type + data provide more flexibility in future use cases.
@@ -212,4 +213,8 @@ message BackfillHistoryTaskAttributes {
 message NewRunInfo {
     string run_id = 1;
     temporal.api.common.v1.DataBlob event_batch = 2;
+}
+
+message SyncVersionedTransitionTaskAttributes {
+    // TODO
 }

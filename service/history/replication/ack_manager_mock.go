@@ -77,6 +77,21 @@ func (mr *MockAckManagerMockRecorder) ConvertTask(ctx, task interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertTask", reflect.TypeOf((*MockAckManager)(nil).ConvertTask), ctx, task)
 }
 
+// ConvertTaskByCluster mocks base method.
+func (m *MockAckManager) ConvertTaskByCluster(ctx context.Context, task tasks.Task, clusterID int32) (*repication.ReplicationTask, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConvertTaskByCluster", ctx, task, clusterID)
+	ret0, _ := ret[0].(*repication.ReplicationTask)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConvertTaskByCluster indicates an expected call of ConvertTaskByCluster.
+func (mr *MockAckManagerMockRecorder) ConvertTaskByCluster(ctx, task, clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertTaskByCluster", reflect.TypeOf((*MockAckManager)(nil).ConvertTaskByCluster), ctx, task, clusterID)
+}
+
 // GetMaxTaskInfo mocks base method.
 func (m *MockAckManager) GetMaxTaskInfo() (int64, time.Time) {
 	m.ctrl.T.Helper()
