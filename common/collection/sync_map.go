@@ -31,12 +31,13 @@ import (
 // SyncMap implements a simple mutex-wrapped map. We've had bugs where we took the wrong lock
 // when reimplementing this pattern, so it's worth having a single canonical implementation.
 type SyncMap[K comparable, V any] struct {
-	sync.RWMutex
+	*sync.RWMutex
 	contents map[K]V
 }
 
 func NewSyncMap[K comparable, V any]() SyncMap[K, V] {
 	return SyncMap[K, V]{
+		RWMutex:  &sync.RWMutex{},
 		contents: make(map[K]V),
 	}
 }
