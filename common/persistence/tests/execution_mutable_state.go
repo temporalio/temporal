@@ -1771,6 +1771,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 		WorkflowID:  s.WorkflowID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.EqualError(err, "workflow not found")
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
@@ -1817,6 +1818,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 		WorkflowID:  s.WorkflowID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.EqualError(err, "workflow not found")
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
