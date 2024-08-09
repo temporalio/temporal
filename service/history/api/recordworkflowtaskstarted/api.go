@@ -90,23 +90,24 @@ func Invoke(
 			}
 
 			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
-			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
-
-			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-			// some extreme cassandra failure cases.
-			if workflowTask == nil && scheduledEventID >= mutableState.GetNextEventID() {
-				metrics.StaleMutableStateCounter.With(metricsScope).Record(1)
-				// Reload workflow execution history
-				// ErrStaleState will trigger updateWorkflow function to reload the mutable state
-				return nil, consts.ErrStaleState
+			if workflowTask == nil {
+				// This can happen if (one of):
+				//  - WFT is already completed as a result of another call (safe to drop this WFT),
+				//  - Speculative WFT is lost (ScheduleToStart timeout for speculative WFT will recreate it).
+				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
-			// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
-			// task is not outstanding than it is most probably a duplicate and complete the task.
-			if workflowTask == nil {
-				// Looks like WorkflowTask already completed as a result of another call.
-				// It is OK to drop the task at this point.
-				return nil, serviceerror.NewNotFound("Workflow task not found.")
+			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
+
+			// Check to see if mutable cache is stale in some extreme cassandra failure cases.
+			// For speculative and transient WFT scheduledEventID is always ahead of NextEventID.
+			// Because there is a clock check above the stack, this should never happen.
+			transientWFT := workflowTask.Attempt > 1
+			if workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && !transientWFT &&
+				scheduledEventID >= mutableState.GetNextEventID() {
+
+				metrics.StaleMutableStateCounter.With(metricsScope).Record(1)
+				return nil, consts.ErrStaleState
 			}
 
 			workflowKey = mutableState.GetWorkflowKey()
