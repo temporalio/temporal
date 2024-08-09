@@ -425,11 +425,12 @@ func newPrometheusScope(
 	sanitizeOptions tally.SanitizeOptions,
 	clientConfig *ClientConfig,
 ) tally.Scope {
+	throttledLogger := log.NewThrottledLogger(logger, func() float64 { return 2 })
 	reporter, err := config.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
 			OnError: func(err error) {
-				logger.Warn("error in prometheus reporter", tag.Error(err))
+				throttledLogger.Warn("error in prometheus reporter", tag.Error(err))
 			},
 		},
 	)
