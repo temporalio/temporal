@@ -185,7 +185,7 @@ type stateMachineEnvironment struct {
 func (e *stateMachineEnvironment) loadAndValidateMutableStateNoReload(
 	ctx context.Context,
 	wfCtx workflow.Context,
-	validate func(ms workflow.MutableState, potentialStaleState bool) error,
+	validate func(workflowContext workflow.Context, ms workflow.MutableState, potentialStaleState bool) error,
 	potentialStaleState bool,
 ) (workflow.MutableState, error) {
 	mutableState, err := wfCtx.LoadMutableState(ctx, e.shardContext)
@@ -193,7 +193,7 @@ func (e *stateMachineEnvironment) loadAndValidateMutableStateNoReload(
 		return nil, err
 	}
 
-	return mutableState, validate(mutableState, potentialStaleState)
+	return mutableState, validate(wfCtx, mutableState, potentialStaleState)
 }
 
 // loadAndValidateMutableState loads mutable state and validates it.
@@ -202,7 +202,7 @@ func (e *stateMachineEnvironment) loadAndValidateMutableStateNoReload(
 func (e *stateMachineEnvironment) loadAndValidateMutableState(
 	ctx context.Context,
 	wfCtx workflow.Context,
-	validate func(ms workflow.MutableState, potentialStaleState bool) error,
+	validate func(workflowContext workflow.Context, ms workflow.MutableState, potentialStaleState bool) error,
 ) (workflow.MutableState, error) {
 	mutableState, err := e.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate, true)
 	if err == nil {
@@ -219,8 +219,14 @@ func (e *stateMachineEnvironment) loadAndValidateMutableState(
 }
 
 // validateStateMachineRef compares the ref and associated state machine's version and transition count to detect staleness.
-func (e *stateMachineEnvironment) validateStateMachineRef(ms workflow.MutableState, ref hsm.Ref, potentialStaleState bool) error {
-	if err := validateTaskGeneration(ms, ref.TaskID); err != nil {
+func (e *stateMachineEnvironment) validateStateMachineRef(
+	ctx context.Context,
+	workflowContext workflow.Context,
+	ms workflow.MutableState,
+	ref hsm.Ref,
+	potentialStaleState bool,
+) error {
+	if err := validateTaskGeneration(ctx, e.shardContext, workflowContext, ms, ref.TaskID); err != nil {
 		return err
 	}
 
@@ -327,7 +333,7 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 func (e *stateMachineEnvironment) getValidatedMutableState(
 	ctx context.Context,
 	key definition.WorkflowKey,
-	validate func(ms workflow.MutableState, potentialStaleState bool) error,
+	validate func(workflowContext workflow.Context, ms workflow.MutableState, potentialStaleState bool) error,
 ) (workflow.Context, wcache.ReleaseCacheFunc, workflow.MutableState, error) {
 	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, locks.PriorityLow)
 	if err != nil {
@@ -360,11 +366,11 @@ func (e *stateMachineEnvironment) validateNotZombieWorkflow(
 
 func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
 	wfCtx, release, ms, err := e.getValidatedMutableState(
-		ctx, ref.WorkflowKey, func(ms workflow.MutableState, potentialStaleState bool) error {
+		ctx, ref.WorkflowKey, func(workflowContext workflow.Context, ms workflow.MutableState, potentialStaleState bool) error {
 			if err := e.validateNotZombieWorkflow(ms, accessType); err != nil {
 				return err
 			}
-			return e.validateStateMachineRef(ms, ref, potentialStaleState)
+			return e.validateStateMachineRef(ctx, workflowContext, ms, ref, potentialStaleState)
 		},
 	)
 	if err != nil {

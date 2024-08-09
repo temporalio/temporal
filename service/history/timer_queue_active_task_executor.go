@@ -739,6 +739,8 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 	}
 
 	processedTimers, err := t.executeStateMachineTimers(
+		ctx,
+		wfCtx,
 		ms,
 		func(node *hsm.Node, task hsm.Task) error {
 			return t.shardContext.StateMachineRegistry().ExecuteTimerTask(t, node, task)

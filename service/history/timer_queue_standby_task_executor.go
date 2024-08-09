@@ -517,6 +517,8 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 		mutableState workflow.MutableState,
 	) (any, error) {
 		processedTimers, err := t.executeStateMachineTimers(
+			ctx,
+			wfContext,
 			mutableState,
 			func(node *hsm.Node, task hsm.Task) error {
 				if task.Concurrent() {
