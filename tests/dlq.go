@@ -272,7 +272,6 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 				"tdbg",
 				"--" + tdbg.FlagYes,
 				"dlq",
-				"--" + tdbg.FlagDLQVersion, "v2",
 				"read",
 				"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 				"--" + tdbg.FlagCluster, sourceCluster,
@@ -525,7 +524,6 @@ func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 		"tdbg",
 		"--" + tdbg.FlagYes,
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"purge",
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageIDToDelete, 10),
@@ -569,7 +567,6 @@ func (s *DLQSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageI
 		"tdbg",
 		"--" + tdbg.FlagYes,
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"merge",
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageID, 10),
@@ -595,7 +592,6 @@ func (s *DLQSuite) readDLQTasks(ctx context.Context) []tdbgtest.DLQMessage[*pers
 		"tdbg",
 		"--" + tdbg.FlagYes,
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"read",
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagOutputFilename, file.Name(),
@@ -610,7 +606,6 @@ func (s *DLQSuite) describeJob(ctx context.Context, token string) *adminservice.
 	args := []string{
 		"tdbg",
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"job",
 		"describe",
 		"--" + tdbg.FlagJobToken, token,
@@ -630,7 +625,6 @@ func (s *DLQSuite) cancelJob(ctx context.Context, token string) *adminservice.Ca
 	args := []string{
 		"tdbg",
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"job",
 		"cancel",
 		"--" + tdbg.FlagJobToken, token,
@@ -651,7 +645,6 @@ func (s *DLQSuite) listQueues(ctx context.Context) []*adminservice.ListQueuesRes
 	args := []string{
 		"tdbg",
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"list",
 		"--" + tdbg.FlagPrintJSON,
 	}
