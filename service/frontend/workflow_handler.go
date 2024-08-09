@@ -634,7 +634,8 @@ func convertToMultiOperationResponse(
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
 				Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
 					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
-						RunId: startResp.RunId,
+						RunId:   startResp.RunId,
+						Started: startResp.Started,
 					},
 				},
 			}
