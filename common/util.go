@@ -41,6 +41,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protopath"
+	"google.golang.org/protobuf/reflect/protorange"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -699,4 +702,15 @@ func ValidateUTF8String(fieldName string, strValue string) error {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%s %v is not a valid UTF-8 string", fieldName, strValue))
 	}
 	return nil
+}
+
+// DiscardUnknownProto discards unknown fields in a proto message.
+func DiscardUnknownProto(m proto.Message) error {
+	return protorange.Range(m.ProtoReflect(), func(values protopath.Values) error {
+		m, ok := values.Index(-1).Value.Interface().(protoreflect.Message)
+		if ok && len(m.GetUnknown()) > 0 {
+			m.SetUnknown(nil)
+		}
+		return nil
+	})
 }
