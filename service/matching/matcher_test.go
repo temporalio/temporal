@@ -77,7 +77,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.BacklogNegligibleAge = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
-	cfg.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Millisecond)
+	cfg.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
 	f, err := tqid.NewTaskQueueFamily("", "tl0")
 	t.Assert().NoError(err)
@@ -286,23 +286,45 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	cancel()
 }
 
+func (t *MatcherTestSuite) TestForwardingWhenBacklogIsEmpty() {
+	// poll forwarding attempt happens when there is no backlog
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	t.client.EXPECT().PollWorkflowTaskQueue(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
+	_, e := t.matcher.Poll(ctx, &pollMetadata{})
+	t.ErrorAs(e, &errNoTasks)
+	cancel()
+}
+
 func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	intruptC := make(chan struct{})
+	// forwarding will be triggered after t.cfg.MaxWaitForPollerBeforeFwd() so steps in this test should finish sooner.
+	maxWait := t.cfg.MaxWaitForPollerBeforeFwd() / 2
 
-	// poll forwarding attempt happens when there is no backlog
+	// poll forwarding attempt happens when there is no backlog.
+	// important to make this empty poll to set the last poll timestamp to a recent time
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
 	go t.matcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
-	time.Sleep(time.Millisecond)
+	t.Eventually(
+		func() bool {
+			return t.matcher.timeSinceLastPoll() < time.Second
+		}, maxWait, time.Millisecond)
 	cancel()
 
 	// old task is not forwarded (forwarded client is not called)
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(time.Millisecond)
+	t.Eventually(
+		func() bool {
+			return t.matcher.getBacklogAge() > 0
+		}, maxWait, time.Millisecond)
 
-	// poll both tasks
+	// poll the task
 	task, _ := t.matcher.Poll(ctx, &pollMetadata{})
 	t.NotNil(task)
 	cancel()
@@ -312,7 +334,10 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(time.Millisecond)
+	t.Eventually(
+		func() bool {
+			return t.matcher.getBacklogAge() > 0
+		}, maxWait, time.Millisecond)
 	cancel()
 }
 

@@ -325,7 +325,6 @@ func (tr *taskReader) addSingleTaskToBuffer(
 
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	tr.emitTaskLagMetric(ackLevel)
 	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
 }
 
@@ -339,13 +338,6 @@ func (tr *taskReader) throttledLogger() log.ThrottledLogger {
 
 func (tr *taskReader) taggedMetricsHandler() metrics.Handler {
 	return tr.backlogMgr.metricsHandler
-}
-
-func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
-	// note: this metric is only an estimation for the lag.
-	// taskID in DB may not be continuous, especially when task list ownership changes.
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
-	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(maxReadLevel - ackLevel))
 }
 
 func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {

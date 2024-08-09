@@ -52,7 +52,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 
 	p, err := PartitionFromProto(proto, nsid, taskType)
 	a.NoError(err)
-	a.Equal(nsid, p.NamespaceId().String())
+	a.Equal(nsid, p.NamespaceId())
 	a.Equal(taskType, p.TaskType())
 	a.Equal(kind, p.Kind())
 	a.Equal(normalName, p.TaskQueue().Name())
@@ -65,7 +65,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 	proto.NormalName = ""
 	p, err = PartitionFromProto(proto, nsid, taskType)
 	a.NoError(err)
-	a.Equal(nsid, p.NamespaceId().String())
+	a.Equal(nsid, p.NamespaceId())
 	a.Equal(taskType, p.TaskType())
 	a.Equal(kind, p.Kind())
 	a.Equal("", p.TaskQueue().Name())
@@ -94,7 +94,7 @@ func TestFromProtoPartition_Normal(t *testing.T) {
 
 	p, err := PartitionFromProto(proto, nsid, taskType)
 	a.NoError(err)
-	a.Equal(nsid, p.NamespaceId().String())
+	a.Equal(nsid, p.NamespaceId())
 	a.Equal(taskType, p.TaskType())
 	a.Equal(kind, p.Kind())
 	a.Equal(tqname, p.TaskQueue().Name())
@@ -111,7 +111,7 @@ func TestFromProtoPartition_Normal(t *testing.T) {
 	proto.NormalName = ""
 	p, err = PartitionFromProto(proto, nsid, taskType)
 	a.NoError(err)
-	a.Equal(nsid, p.NamespaceId().String())
+	a.Equal(nsid, p.NamespaceId())
 	a.Equal(tqname, p.TaskQueue().Name())
 	a.Equal(taskType, p.TaskType())
 	a.Equal(kind, p.Kind())

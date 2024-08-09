@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/workflow"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -140,14 +141,14 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 	if err == nil && !activityStartedTime.IsZero() {
-		metrics.ActivityE2ELatency.With(shard.GetMetricsHandler()).Record(
-			time.Since(activityStartedTime),
-			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
-			metrics.NamespaceTag(namespace.String()),
-			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
-			metrics.TaskQueueTag(taskQueue),
-		)
+		metrics.ActivityE2ELatency.With(
+			workflow.GetPerTaskQueueFamilyScope(
+				shard.GetMetricsHandler(), namespace, taskQueue, shard.GetConfig(),
+				metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
+				metrics.WorkflowTypeTag(workflowTypeName),
+				metrics.ActivityTypeTag(token.ActivityType),
+			),
+		).Record(time.Since(activityStartedTime))
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err
 }

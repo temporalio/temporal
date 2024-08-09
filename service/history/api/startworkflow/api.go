@@ -147,12 +147,12 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	if request.RequestEagerExecution {
-		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(
-			1,
-			metrics.NamespaceTag(s.namespace.Name().String()),
-			metrics.TaskQueueTag(request.TaskQueue.Name),
-			metrics.WorkflowTypeTag(request.WorkflowType.Name),
-		)
+		metrics.WorkflowEagerExecutionCounter.With(
+			workflow.GetPerTaskQueueFamilyScope(
+				metricsHandler, s.namespace.Name(), request.TaskQueue.Name, s.shardContext.GetConfig(),
+				metrics.WorkflowTypeTag(request.WorkflowType.Name),
+			),
+		).Record(1)
 
 		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
 		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
@@ -169,13 +169,13 @@ func (s *Starter) prepare(ctx context.Context) error {
 
 func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
 	metricsHandler := s.shardContext.GetMetricsHandler()
-	metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).Record(
-		1,
-		metrics.NamespaceTag(s.namespace.Name().String()),
-		metrics.TaskQueueTag(s.request.StartRequest.TaskQueue.Name),
-		metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
-		metrics.ReasonTag(metrics.ReasonString(reason)),
-	)
+	metrics.WorkflowEagerExecutionDeniedCounter.With(
+		workflow.GetPerTaskQueueFamilyScope(
+			metricsHandler, s.namespace.Name(), s.request.StartRequest.TaskQueue.Name, s.shardContext.GetConfig(),
+			metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
+			metrics.ReasonTag(metrics.ReasonString(reason)),
+		),
+	).Record(1)
 }
 
 func (s *Starter) requestEagerStart() bool {
