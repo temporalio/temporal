@@ -324,7 +324,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			cacheKey.WorkflowKey,
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
-			handler,
+			shardContext.GetMetricsHandler(),
 		)
 
 		var err error
