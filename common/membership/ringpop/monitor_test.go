@@ -30,14 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/exp/maps"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	expmaps "golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 type RpoSuite struct {
@@ -208,7 +207,7 @@ func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []
 	})
 	newHosts := util.MapSlice(new, func(addr string) *hostInfo { return newHostInfo(addr, nil) })
 	newMembers, event := resolver.compareMembers(newHosts)
-	s.ElementsMatch(new, maps.Keys(newMembers))
+	s.ElementsMatch(new, expmaps.Keys(newMembers))
 	s.Equal(expectedDiff != nil, event != nil)
 	if event != nil {
 		s.ElementsMatch(expectedDiff, eventToString(event))

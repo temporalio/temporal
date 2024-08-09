@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/searchattribute"
@@ -65,7 +64,6 @@ import (
 type VersioningIntegSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
-	*require.Assertions
 	FunctionalTestBase
 	sdkClient sdkclient.Client
 }
@@ -126,9 +124,6 @@ func (s *VersioningIntegSuite) TearDownSuite() {
 
 func (s *VersioningIntegSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -456,9 +451,8 @@ func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
 	// ensure at least two hops
 	const partCount = 1 + partitionTreeDegree + partitionTreeDegree*partitionTreeDegree
 
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, partCount)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, partCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partCount)
 
 	for _, buildId := range []string{"foo", "foo-v2", "foo-v3"} {
 		s.addNewDefaultBuildId(ctx, tq, buildId)
@@ -497,7 +491,6 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 }
 
 func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
-	dc := s.testCluster.host.dcClient
 	for _, forceForward := range []bool{false, true} {
 		for _, forceAsync := range []bool{false, true} {
 			name := "NoForward"
@@ -513,18 +506,18 @@ func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 
 			s.Run(name, func() {
 				if forceForward {
-					dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-					dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-					dc.OverrideValue(s.T(), dynamicconfig.TestMatchingLBForceReadPartition, 5)
-					dc.OverrideValue(s.T(), dynamicconfig.TestMatchingLBForceWritePartition, 11)
+					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
+					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
 				} else {
-					dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-					dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 				}
 				if forceAsync {
-					dc.OverrideValue(s.T(), dynamicconfig.TestMatchingDisableSyncMatch, true)
+					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
 				} else {
-					dc.OverrideValue(s.T(), dynamicconfig.TestMatchingDisableSyncMatch, false)
+					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
 				}
 
 				subtest()
@@ -2161,8 +2154,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	// Reduce user data long poll time for faster propagation of the versioning data. This is needed because of the
 	// exponential minWaitTime logic in userDataManagerImpl that gets triggered because rules change very fast in
 	// this test.
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingGetUserDataLongPollTimeout, 2*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingGetUserDataLongPollTimeout, 2*time.Second)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1.0")
@@ -2438,8 +2430,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityEager() {
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.EnableActivityEagerExecution, true)
+	s.OverrideDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
@@ -2511,9 +2502,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tq := s.randomizeStr(s.T().Name())
 	crosstq := s.randomizeStr(s.T().Name())
@@ -2856,9 +2846,8 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tq := s.randomizeStr(s.T().Name())
 	crosstq := s.randomizeStr(s.T().Name())
@@ -4267,9 +4256,8 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	// force one partition since DescribeTaskQueue only goes to the root
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
@@ -4334,9 +4322,8 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 }
 
 func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
@@ -4934,10 +4921,11 @@ func (s *VersioningIntegSuite) waitForPropagation(
 	condition func(data *persistencespb.VersioningData) bool,
 ) {
 	if partitionCount <= 0 {
-		v, ok := s.testCluster.host.dcClient.getRawValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
-		s.True(ok, "versioning tests require setting explicit number of partitions")
-		partitionCount, ok = v.(int)
+		v := s.testCluster.host.dcClient.GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
+		s.NotEmpty(v, "versioning tests require setting explicit number of partitions")
+		count, ok := v[0].Value.(int)
 		s.True(ok, "partition count is not an int")
+		partitionCount = count
 	}
 
 	type partAndType struct {

@@ -27,7 +27,7 @@ package queues
 import (
 	"fmt"
 
-	"golang.org/x/exp/maps"
+	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -293,7 +293,7 @@ func ToPersistenceNamespaceIDPredicate(
 		PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
 		Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 			NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-				NamespaceIds: maps.Keys(namespaceIDPredicate.NamespaceIDs),
+				NamespaceIds: expmaps.Keys(namespaceIDPredicate.NamespaceIDs),
 			},
 		},
 	}
@@ -312,7 +312,7 @@ func ToPersistenceTaskTypePredicate(
 		PredicateType: enumsspb.PREDICATE_TYPE_TASK_TYPE,
 		Attributes: &persistencespb.Predicate_TaskTypePredicateAttributes{
 			TaskTypePredicateAttributes: &persistencespb.TaskTypePredicateAttributes{
-				TaskTypes: maps.Keys(taskTypePredicate.Types),
+				TaskTypes: expmaps.Keys(taskTypePredicate.Types),
 			},
 		},
 	}
@@ -331,7 +331,7 @@ func ToPersistenceDestinationPredicate(
 		PredicateType: enumsspb.PREDICATE_TYPE_DESTINATION,
 		Attributes: &persistencespb.Predicate_DestinationPredicateAttributes{
 			DestinationPredicateAttributes: &persistencespb.DestinationPredicateAttributes{
-				Destinations: maps.Keys(taskDestinationPredicate.Destinations),
+				Destinations: expmaps.Keys(taskDestinationPredicate.Destinations),
 			},
 		},
 	}
@@ -350,7 +350,7 @@ func ToPersistenceOutboundTaskGroupPredicate(
 		PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK_GROUP,
 		Attributes: &persistencespb.Predicate_OutboundTaskGroupPredicateAttributes{
 			OutboundTaskGroupPredicateAttributes: &persistencespb.OutboundTaskGroupPredicateAttributes{
-				Groups: maps.Keys(pred.Groups),
+				Groups: expmaps.Keys(pred.Groups),
 			},
 		},
 	}

@@ -902,10 +902,8 @@ used when the first cache layer has a miss. Requires server restart for change t
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",
-		false,
-		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is 'false' until the
-feature gets more time in production.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
 	)
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
@@ -917,10 +915,9 @@ The API is under active development.`,
 
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
-		false,
-		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
-asynchronous workflow execution update that waits on the "Accepted"
-lifecycle stage. Default value is 'false'.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the UpdateWorkflowExecution API
+to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
