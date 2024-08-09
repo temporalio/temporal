@@ -314,6 +314,16 @@ func subscribe[T any](
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
 
+	// get one value immediately (note that subscriptionLock is held here so we can't race with
+	// an update)
+	init := matchAndConvert(c, key, def, cdef, convert, prec)
+
+	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
+	// current value and skip the subscription.  The cancellation func returned is also nil.
+	if callback == nil {
+		return init, nil
+	}
+
 	c.subscriptionIdx++
 	id := c.subscriptionIdx
 
@@ -321,9 +331,6 @@ func subscribe[T any](
 		c.subscriptions[key] = make(map[int]any)
 	}
 
-	// get and return one value immediately (note that subscriptionLock is held here so we
-	// can't race with an update)
-	init := matchAndConvert(c, key, def, cdef, convert, prec)
 	c.subscriptions[key][id] = &subscription[T]{
 		prec: prec,
 		f:    callback,
