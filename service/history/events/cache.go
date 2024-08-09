@@ -132,7 +132,7 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 }
 
 func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope), metrics.NamespaceTag(key.NamespaceID.String()))
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
