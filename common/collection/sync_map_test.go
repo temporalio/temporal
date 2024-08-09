@@ -158,8 +158,8 @@ func TestMap_PopAll(t *testing.T) {
 	values = m.PopAll()
 	assert.Equal(t, 3, len(values))
 	sum := 0
-	for _, pair := range values {
-		sum += pair.Value
+	for _, v := range values {
+		sum += v
 	}
 	assert.Equal(t, 6, sum)
 }
