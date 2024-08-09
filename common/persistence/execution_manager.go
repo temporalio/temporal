@@ -397,6 +397,13 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
 	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
+
+	var notFound *serviceerror.NotFound
+	if errors.As(respErr, &notFound) {
+		// strip persistence-specific error message
+		respErr = serviceerror.NewNotFound(fmt.Sprintf(
+			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID))
+	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
 		return nil, respErr
@@ -769,7 +776,7 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	var notFound *serviceerror.NotFound
 	if errors.As(respErr, &notFound) {
 		// strip persistence-specific error message
-		respErr = serviceerror.NewNotFound("current workflow execution not found")
+		respErr = serviceerror.NewNotFound(fmt.Sprintf("workflow not found for ID: %v", request.WorkflowID))
 	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API

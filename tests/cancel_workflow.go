@@ -73,7 +73,7 @@ func (s *FunctionalSuite) TestExternalRequestCancelWorkflowExecution() {
 		},
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
-	s.EqualError(err, "current workflow execution not found")
+	s.EqualError(err, "workflow not found for ID: "+id)
 
 	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
