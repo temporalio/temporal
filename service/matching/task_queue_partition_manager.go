@@ -366,7 +366,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		request.VersionDirective,
-		request.GetForwardInfo(),
+		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
+		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
+		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
+		// more important to allow the parent partition to make a fresh versioning decision in case the child partition
+		// did not have up-to-date User Data when selected a dispatch build ID.
+		nil,
 		request.GetQueryRequest().GetExecution().GetRunId(),
 	)
 	if err != nil {
@@ -389,7 +394,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
-		request.GetForwardInfo(),
+		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
+		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
+		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
+		// more important to allow the parent partition to make a fresh versioning decision in case the child partition
+		// did not have up-to-date User Data when selected a dispatch build ID.
+		nil,
 		"",
 	)
 	if err != nil {

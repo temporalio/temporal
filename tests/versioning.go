@@ -1769,11 +1769,14 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 		// to v11.
 		w1.Stop()
 	} else {
-		// Don't stop the old worker. In this case, w1 will still have some pollers blocked on
-		// the normal queue which could pick up tasks that we want to go to v11. (We don't
-		// interrupt long polls.) To ensure those polls don't interfere, wait for them to
-		// expire.
-		time.Sleep(longPollTime)
+		// Don't stop the old worker.
+		if !newVersioning {
+			//In this case, w1 will still have some pollers blocked on
+			// the normal queue which could pick up tasks that we want to go to v11. (We don't
+			// interrupt long polls.) To ensure those polls don't interfere, wait for them to
+			// expire.
+			time.Sleep(longPollTime)
+		}
 	}
 
 	// unblock the workflow
@@ -2898,11 +2901,15 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	s.Error(run.Get(ctx, &out))
 }
 
-func (s *VersioningIntegSuite) TestDispatchQuery() {
-	s.testWithMatchingBehavior(s.dispatchQuery)
+func (s *VersioningIntegSuite) TestDispatchQueryOld() {
+	s.testWithMatchingBehavior(func() { s.dispatchQuery(false) })
 }
 
-func (s *VersioningIntegSuite) dispatchQuery() {
+func (s *VersioningIntegSuite) TestDispatchQuery() {
+	s.testWithMatchingBehavior(func() { s.dispatchQuery(true) })
+}
+
+func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
@@ -2936,8 +2943,13 @@ func (s *VersioningIntegSuite) dispatchQuery() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.addNewDefaultBuildId(ctx, tq, v1)
-	s.waitForVersionSetPropagation(ctx, tq, v1)
+	if newVersioning {
+		rule := s.addAssignmentRule(ctx, tq, v1)
+		s.waitForAssignmentRulePropagation(ctx, tq, rule)
+	} else {
+		s.addNewDefaultBuildId(ctx, tq, v1)
+		s.waitForVersionSetPropagation(ctx, tq, v1)
+	}
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                          v1,
@@ -2953,11 +2965,18 @@ func (s *VersioningIntegSuite) dispatchQuery() {
 	// wait for it to start on v1
 	s.waitForChan(ctx, started)
 
-	// now register v1.1 as compatible
-	// now register v11 as newer compatible with v1 AND v2 as a new default
-	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
-	s.addNewDefaultBuildId(ctx, tq, v2)
-	s.waitForVersionSetPropagation(ctx, tq, v2)
+	if newVersioning {
+		rule := s.addAssignmentRule(ctx, tq, v2)
+		s.waitForAssignmentRulePropagation(ctx, tq, rule)
+		rrule := s.addRedirectRule(ctx, tq, v1, v11)
+		s.waitForRedirectRulePropagation(ctx, tq, rrule)
+	} else {
+		// now register v1.1 as compatible
+		// now register v11 as newer compatible with v1 AND v2 as a new default
+		s.addCompatibleBuildId(ctx, tq, v11, v1, false)
+		s.addNewDefaultBuildId(ctx, tq, v2)
+		s.waitForVersionSetPropagation(ctx, tq, v2)
+	}
 	// add another 100ms to make sure it got to sticky queues also
 	time.Sleep(100 * time.Millisecond)
 
@@ -2979,8 +2998,10 @@ func (s *VersioningIntegSuite) dispatchQuery() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	// wait for w1 long polls to all time out
-	time.Sleep(longPollTime)
+	if !newVersioning {
+		// wait for w1 long polls to all time out
+		time.Sleep(longPollTime)
+	}
 
 	// query
 	val, err := s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
@@ -3158,8 +3179,10 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	s.NoError(w2xTq.Start())
 	defer w2xTq.Stop()
 
-	// wait for w1 long polls to all time out
-	time.Sleep(longPollTime)
+	if !newVersioning {
+		// wait for w1 long polls to all time out
+		time.Sleep(longPollTime)
+	}
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v1
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
@@ -3286,8 +3309,10 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	// wait for w1 long polls to all time out
-	time.Sleep(longPollTime)
+	if !newVersioning {
+		// wait for w1 long polls to all time out
+		time.Sleep(longPollTime)
+	}
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
