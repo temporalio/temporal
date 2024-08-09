@@ -769,7 +769,7 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	var notFound *serviceerror.NotFound
 	if errors.As(respErr, &notFound) {
 		// strip persistence-specific error message
-		respErr = serviceerror.NewNotFound("workflow not found")
+		respErr = serviceerror.NewNotFound("current workflow execution not found")
 	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
