@@ -20,20 +20,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package hsm
+package scheduler
 
-// RemoteMethod can be defined for each state machine to handle external request, like RPCs, but as part of the HSM
-// framework. See RemoteExecutor for how to define the handler for remote methods.
-type RemoteMethod interface {
-	// Name of the remote method. Must be unique per state machine.
-	Name() string
-	// SerializeOutput serializes output of the invocation to a byte array that is suitable for transport.
-	SerializeOutput(output any) ([]byte, error)
-	// DeserializeInput deserializes input from bytes that is then passed to the handler.
-	DeserializeInput(data []byte) (any, error)
+import (
+	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/proto"
+
+	persistencepb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
+)
+
+type ProcessWorkflowCompletionEvent struct{}
+
+func (p ProcessWorkflowCompletionEvent) Name() string {
+	return "scheduler.process_workflow_completion_event"
 }
 
-type remoteMethodDefinition struct {
-	method   RemoteMethod
-	executor RemoteExecutor
+func (p ProcessWorkflowCompletionEvent) SerializeOutput(_ any) ([]byte, error) {
+	// ProcessWorkflowCompletionEvent outputs void and therefore does nothing for serialization.
+	return nil, nil
+}
+
+func (p ProcessWorkflowCompletionEvent) DeserializeInput(data []byte) (any, error) {
+	output := &persistencepb.HSMCompletionCallbackArg{}
+	if err := proto.Unmarshal(data, output); err != nil {
+		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return output, nil
 }

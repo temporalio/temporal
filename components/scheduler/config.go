@@ -38,17 +38,20 @@ const (
 )
 
 type Tweakables struct {
-	DefaultCatchupWindow  time.Duration // Default for catchup window
-	MinCatchupWindow      time.Duration // Minimum for catchup window
-	MaxBufferSize         int           // MaxBufferSize limits the number of buffered starts and backfills
-	BackfillsPerIteration int           // How many backfilled actions to take per iteration (implies rate limit since min sleep is 1s)
+	DefaultCatchupWindow              time.Duration // Default for catchup window
+	MinCatchupWindow                  time.Duration // Minimum for catchup window
+	MaxBufferSize                     int           // MaxBufferSize limits the number of buffered starts and backfills
+	BackfillsPerIteration             int           // How many backfilled actions to take per iteration (implies rate limit since min sleep is 1s)
+	CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
+
 }
 
 var DefaultTweakables = Tweakables{
-	DefaultCatchupWindow:  365 * 24 * time.Hour,
-	MinCatchupWindow:      10 * time.Second,
-	MaxBufferSize:         1000,
-	BackfillsPerIteration: 10,
+	DefaultCatchupWindow:              365 * 24 * time.Hour,
+	MinCatchupWindow:                  10 * time.Second,
+	MaxBufferSize:                     1000,
+	BackfillsPerIteration:             10,
+	CanceledTerminatedCountAsFailures: false,
 }
 
 var CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting[Tweakables](

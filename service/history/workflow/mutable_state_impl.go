@@ -44,12 +44,10 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/api/taskqueue/v1"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -76,6 +74,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -590,6 +589,21 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		}, nil
 	}
 	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
+}
+
+// GetHSMCallbackArg converts a workflow completion event into a [persistencepb.HSMCallbackArg].
+func (ms *MutableStateImpl) GetHSMCompletionCallbackArg(ctx context.Context) (*persistencespb.HSMCompletionCallbackArg, error) {
+	workflowKey := ms.GetWorkflowKey()
+	ce, err := ms.GetCompletionEvent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &persistencespb.HSMCompletionCallbackArg{
+		NamespaceId: workflowKey.NamespaceID,
+		WorkflowId:  workflowKey.WorkflowID,
+		RunId:       workflowKey.RunID,
+		LastEvent:   ce,
+	}, nil
 }
 
 func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
@@ -2182,6 +2196,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 					Url:    variant.Nexus.GetUrl(),
 					Header: variant.Nexus.GetHeader(),
 				},
+			}
+		case *commonpb.Callback_Internal_:
+			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
+			if err != nil {
+				return err
 			}
 		}
 		machine := callbacks.NewCallback(startEvent.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
