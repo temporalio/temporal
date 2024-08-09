@@ -67,7 +67,7 @@ type Registry struct {
 	immediateExecutors map[string]any
 	// The actual value is TimerExecutor[T].
 	timerExecutors  map[string]any
-	remoteExecutors map[string]any
+	remoteExecutors map[string]remoteMethodDefinition
 	events          map[enumspb.EventType]EventDefinition
 }
 
@@ -78,6 +78,7 @@ func NewRegistry() *Registry {
 		tasks:              make(map[string]TaskSerializer),
 		immediateExecutors: make(map[string]any),
 		timerExecutors:     make(map[string]any),
+		remoteExecutors:    make(map[string]remoteMethodDefinition),
 		events:             make(map[enumspb.EventType]EventDefinition),
 	}
 }
@@ -145,8 +146,7 @@ func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T
 
 // RegisterRemoteMethod registers an [RemoteExecutor] for the given remote method definition.
 // Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
-func RegisterRemoteMethod[I any, O any, R RemoteMethod[I, O]](r *Registry, executor RemoteExecutor[I, O]) error {
-	var method R
+func RegisterRemoteMethod(r *Registry, method RemoteMethod, executor RemoteExecutor) error {
 	methodName := method.Name()
 	if existing, ok := r.remoteExecutors[methodName]; ok {
 		return fmt.Errorf(
@@ -157,7 +157,7 @@ func RegisterRemoteMethod[I any, O any, R RemoteMethod[I, O]](r *Registry, execu
 		)
 	}
 
-	r.remoteExecutors[methodName] = remoteMethodDefinition[I, O]{
+	r.remoteExecutors[methodName] = remoteMethodDefinition{
 		method:   method,
 		executor: executor,
 	}
@@ -246,20 +246,19 @@ func (r *Registry) ExecuteRemoteMethod(
 	if !ok {
 		return nil, fmt.Errorf("executor for remote method %v: %w", methodName, ErrNotRegistered)
 	}
-	untypedDefn := defn.(untypedRemoteMethodDefinition) //nolint:revive
 
-	input, err := untypedDefn.DeserializeUntyped(serializedInput)
+	input, err := defn.method.DeserializeInput(serializedInput)
 	if err != nil {
 		return nil, fmt.Errorf("executor for remote method %v failed to deserialize input: %w", methodName, err)
 	}
 
-	output, err := untypedDefn.InvokeUntyped(ctx, env, ref, input)
+	output, err := defn.executor(ctx, env, ref, input)
 
 	if err != nil {
 		return nil, err
 	}
 
-	serializedOutput, err := untypedDefn.SerializeUntyped(output)
+	serializedOutput, err := defn.method.SerializeOutput(output)
 	if err != nil {
 		return nil, fmt.Errorf("executor for remote method %v failed to serialize output: %w", methodName, err)
 	}

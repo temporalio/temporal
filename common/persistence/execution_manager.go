@@ -26,6 +26,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -396,6 +397,13 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
 	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
+
+	var notFound *serviceerror.NotFound
+	if errors.As(respErr, &notFound) {
+		// strip persistence-specific error message
+		respErr = serviceerror.NewNotFound(fmt.Sprintf(
+			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID))
+	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
 		return nil, respErr
@@ -764,6 +772,12 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
 	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
+
+	var notFound *serviceerror.NotFound
+	if errors.As(respErr, &notFound) {
+		// strip persistence-specific error message
+		respErr = serviceerror.NewNotFound(fmt.Sprintf("workflow not found for ID: %v", request.WorkflowID))
+	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
 		return nil, respErr

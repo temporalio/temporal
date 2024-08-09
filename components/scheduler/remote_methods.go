@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,35 +20,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package primitives
+package scheduler
 
 import (
-	"time"
+	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/proto"
 
-	"go.temporal.io/server/common/debug"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
-const (
-	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
-	DefaultTransactionSizeLimit = 4 * 1024 * 1024
-)
+type ProcessWorkflowCompletionEvent struct{}
 
-const (
-	// DefaultWorkflowTaskTimeout sets the Default Workflow Task timeout for a Workflow
-	DefaultWorkflowTaskTimeout = 10 * time.Second * debug.TimeoutMultiplier
-)
+func (p ProcessWorkflowCompletionEvent) Name() string {
+	return "scheduler.process_workflow_completion_event"
+}
 
-const (
-	// GetHistoryMaxPageSize is the max page size for get history
-	GetHistoryMaxPageSize = 256
-	// ReadDLQMessagesPageSize is the max page size for read DLQ messages
-	ReadDLQMessagesPageSize = 1000
-)
+func (p ProcessWorkflowCompletionEvent) SerializeOutput(_ any) ([]byte, error) {
+	// ProcessWorkflowCompletionEvent outputs void and therefore does nothing for serialization.
+	return nil, nil
+}
 
-const (
-	DefaultHistoryMaxAutoResetPoints = 20
-)
-
-const (
-	ScheduleWorkflowIDPrefix = "temporal-sys-scheduler:"
-)
+func (p ProcessWorkflowCompletionEvent) DeserializeInput(data []byte) (any, error) {
+	output := &persistencepb.HSMCompletionCallbackArg{}
+	if err := proto.Unmarshal(data, output); err != nil {
+		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return output, nil
+}
