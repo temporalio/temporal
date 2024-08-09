@@ -68,6 +68,8 @@ type (
 
 		IsDirty() bool
 
+		RefreshTasks(ctx context.Context, shardContext shard.Context) error
+
 		ReapplyEvents(
 			ctx context.Context,
 			shardContext shard.Context,
@@ -891,6 +893,27 @@ func (c *ContextImpl) ReapplyEvents(
 	)
 
 	return err
+}
+
+func (c *ContextImpl) RefreshTasks(
+	ctx context.Context,
+	shardContext shard.Context,
+) error {
+	mutableState, err := c.LoadMutableState(ctx, shardContext)
+	if err != nil {
+		return err
+	}
+
+	if err := NewTaskRefresher(shardContext).Refresh(ctx, mutableState); err != nil {
+		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
+		// and we are operating on a closed workflow.
+		return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, TransactionPolicyPassive)
+	}
+	return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
 
 // TODO: remove `fallbackMutableState` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)

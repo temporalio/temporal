@@ -78,10 +78,7 @@ func NewHistoryImporter(
 		shardContext:   shardContext,
 		namespaceCache: shardContext.GetNamespaceRegistry(),
 		workflowCache:  workflowCache,
-		taskRefresher: workflow.NewTaskRefresher(
-			shardContext,
-			logger,
-		),
+		taskRefresher:  workflow.NewTaskRefresher(shardContext),
 		transactionMgr: NewTransactionManager(shardContext, workflowCache, nil, logger, true),
 		logger:         logger,
 

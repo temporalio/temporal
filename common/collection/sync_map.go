@@ -24,7 +24,9 @@
 
 package collection
 
-import "sync"
+import (
+	"sync"
+)
 
 // SyncMap implements a simple mutex-wrapped map. We've had bugs where we took the wrong lock
 // when reimplementing this pattern, so it's worth having a single canonical implementation.
@@ -47,6 +49,24 @@ func (m *SyncMap[K, V]) Get(key K) (value V, ok bool) {
 	return
 }
 
+func (m *SyncMap[K, V]) GetOrSet(key K, value V) (v V, exist bool) {
+	m.RLock()
+	currentValue, ok := m.contents[key]
+	m.RUnlock()
+	if ok {
+		return currentValue, ok
+	}
+
+	m.Lock()
+	defer m.Unlock()
+	currentValue, ok = m.contents[key]
+	if ok {
+		return currentValue, ok
+	}
+	m.contents[key] = value
+	return value, false
+}
+
 func (m *SyncMap[K, V]) Set(key K, value V) {
 	m.Lock()
 	defer m.Unlock()
@@ -67,4 +87,12 @@ func (m *SyncMap[K, V]) Pop(key K) (value V, ok bool) {
 		delete(m.contents, key)
 	}
 	return value, ok
+}
+
+func (m *SyncMap[K, V]) PopAll() map[K]V {
+	m.Lock()
+	defer m.Unlock()
+	contents := m.contents
+	m.contents = make(map[K]V)
+	return contents
 }
