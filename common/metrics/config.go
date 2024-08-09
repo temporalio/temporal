@@ -109,6 +109,9 @@ type (
 		// HTTP handler path "/metrics".
 		HandlerPath string `yaml:"handlerPath"`
 
+		// LoggerRPS sets the RPS of the logger provided to prometheus. Default of 0 means no limit.
+		LoggerRPS float64 `yaml:"loggerRPS"`
+
 		// Configs below are kept for backwards compatibility with previously exposed tally prometheus.Configuration.
 
 		// Deprecated. ListenNetwork if specified will be used instead of using tcp network.
@@ -297,6 +300,10 @@ func NewScope(logger log.Logger, c *Config) tally.Scope {
 			return nil
 		}
 
+		if c.Prometheus.LoggerRPS > 0 {
+			logger = log.NewThrottledLogger(logger, func() float64 { return c.Prometheus.LoggerRPS })
+		}
+
 		return newPrometheusScope(
 			logger,
 			convertPrometheusConfigToTally(&c.ClientConfig, c.Prometheus),
@@ -425,12 +432,11 @@ func newPrometheusScope(
 	sanitizeOptions tally.SanitizeOptions,
 	clientConfig *ClientConfig,
 ) tally.Scope {
-	throttledLogger := log.NewThrottledLogger(logger, func() float64 { return 2 })
 	reporter, err := config.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
 			OnError: func(err error) {
-				throttledLogger.Warn("error in prometheus reporter", tag.Error(err))
+				logger.Warn("error in prometheus reporter", tag.Error(err))
 			},
 		},
 	)
