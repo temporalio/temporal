@@ -514,6 +514,7 @@ func (s *queryConverterSuite) TestConvertIsExpr() {
 
 func (s *queryConverterSuite) TestConvertColName() {
 	originalSaTypeMap := s.queryConverter.saTypeMap
+	originalSaMapper := s.queryConverter.saMapper
 	var tests = []testCase{
 		{
 			name:     "invalid: column name expression",
@@ -659,7 +660,8 @@ func (s *queryConverterSuite) TestConvertColName() {
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			// Reset saTypeMap to original state
+			// Reset to original state
+			s.queryConverter.saMapper = originalSaMapper
 			s.queryConverter.saTypeMap = originalSaTypeMap
 
 			// reset internal state of seenNamespaceDivision
