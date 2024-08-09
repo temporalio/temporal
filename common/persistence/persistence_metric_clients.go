@@ -26,6 +26,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -338,7 +339,13 @@ func (p *executionPersistenceClient) GetCurrentExecution(
 		p.healthSignals.Record(request.ShardID, caller, time.Since(startTime), retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetCurrentExecutionScope, caller, time.Since(startTime), retErr)
 	}()
-	return p.persistence.GetCurrentExecution(ctx, request)
+	execution, retErr := p.persistence.GetCurrentExecution(ctx, request)
+	var notFound *serviceerror.NotFound
+	if errors.As(retErr, &notFound) {
+		// strip persistence-specific error message
+		retErr = serviceerror.NewNotFound("workflow not found")
+	}
+	return execution, retErr
 }
 
 func (p *executionPersistenceClient) ListConcreteExecutions(
