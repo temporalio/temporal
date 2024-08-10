@@ -597,11 +597,9 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 	}
-	metrics.ActivityEagerExecutionCounter.With(handler.metricsHandler).Record(
-		1,
-		metrics.NamespaceTag(string(handler.mutableState.GetNamespaceEntry().Name())),
-		metrics.TaskQueueTag(ai.TaskQueue),
-	)
+	metrics.ActivityEagerExecutionCounter.With(
+		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
+	).Record(1)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
 		resp.ActivityTasks = append(resp.ActivityTasks, activityTask)

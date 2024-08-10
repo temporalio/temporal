@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -171,15 +172,16 @@ func Invoke(
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
-			taskQueue := workflowTask.TaskQueue
-			metrics.TaskScheduleToStartLatency.With(metrics.GetPerTaskQueueScope(
-				metricsScope,
-				namespaceName.String(),
-				taskQueue.GetName(),
-				taskQueue.GetKind(),
-			)).Record(workflowScheduleToStartLatency,
-				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-			)
+			tqPartition := tqid.UnsafePartitionFromProto(workflowTask.TaskQueue, req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			metrics.TaskScheduleToStartLatency.With(
+				metrics.GetPerTaskQueuePartitionScope(
+					metricsScope,
+					namespaceName.String(),
+					tqPartition,
+					config.BreakdownMetricsByTaskQueue(namespaceName.String(), tqPartition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+					false, // we don't want breakdown by normal partition, only sticky vs normal breakdown.
+				),
+			).Record(workflowScheduleToStartLatency)
 
 			resp, err = CreateRecordWorkflowTaskStartedResponse(
 				ctx,
