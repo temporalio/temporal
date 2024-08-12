@@ -4,6 +4,47 @@ on:
 permissions:
   contents: read
 jobs:
+  lint-golangci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: lint code
+        run: |
+          make GOLANGCI_LINT_FIX=false GOLANGCI_LINT_BASE_REV=HEAD~ lint-code
+
+      - name: check-is-dirty
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Detected uncommitted changes."
+            git status
+            git diff
+            exit 1
+          fi
+
+  lint-assertions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: check-assertions-disabled
+        run: |
+          make check-assertions-disabled
+
   lint-actions:
     runs-on: ubuntu-latest
     steps:
@@ -65,6 +106,8 @@ jobs:
       - lint-api
       - lint-protos
       - lint-actions
+      - lint-golangci
+      - lint-assertions
     runs-on: ubuntu-latest
     if: always()
     env:

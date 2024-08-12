@@ -255,6 +255,7 @@ update-go-api:
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f temporal-server
+	@rm -f temporal-server-dev
 	@rm -f temporal-server-debug
 	@rm -f temporal-cassandra-tool
 	@rm -f tdbg
@@ -278,7 +279,11 @@ temporal-sql-tool: $(ALL_SRC)
 
 temporal-server-debug: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server-debug with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG),TEMPORAL_DEBUG -o temporal-server-debug ./cmd/server
+	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG),with_assertions,TEMPORAL_DEBUG -o temporal-server-debug ./cmd/server
+
+temporal-server-dev: $(ALL_SRC)
+	@printf $(COLOR) "Build temporal-server-dev with assertions, with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG),with_assertions -o temporal-server-dev ./cmd/server
 
 ##### Checks #####
 copyright-check:
@@ -334,32 +339,32 @@ clean-test-results:
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
-	@go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
+	@go test $(TEST_TAG_FLAG) -tags with_assertions -exec="true" -count=0 $(TEST_DIRS)
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	@go test $(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
+	@go test $(UNIT_TEST_DIRS) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	@go test $(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
+	@go test $(INTEGRATION_TEST_DIRS) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-test: clean-test-results
 	@printf $(COLOR) "Run functional tests..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 test: unit-test integration-test functional-test
@@ -373,12 +378,12 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(UNIT_TEST_DIRS) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) -coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(INTEGRATION_TEST_DIRS) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 # This should use the same build flags as functional-test-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
@@ -387,17 +392,17 @@ pre-build-functional-test-coverage: prepare-coverage-test
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_XDC_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_NDC_ROOT) -tags with_assertions -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE):
@@ -508,39 +513,39 @@ stop-dependencies-cdc:
 
 start: start-sqlite
 
-start-cass-es: temporal-server
-	./temporal-server --env development-cass-es --allow-no-auth start
+start-cass-es: temporal-server-dev
+	./temporal-server-dev --env development-cass-es --allow-no-auth start
 
-start-cass-es-custom: temporal-server
-	./temporal-server --env development-cass-es-custom --allow-no-auth start
+start-cass-es-custom: temporal-server-dev
+	./temporal-server-dev --env development-cass-es-custom --allow-no-auth start
 
-start-es-fi: temporal-server
-	./temporal-server --env development-cass-es-fi --allow-no-auth start
+start-es-fi: temporal-server-dev
+	./temporal-server-dev --env development-cass-es-fi --allow-no-auth start
 
 start-mysql: start-mysql8
 
-start-mysql8: temporal-server
-	./temporal-server --env development-mysql8 --allow-no-auth start
+start-mysql8: temporal-server-dev
+	./temporal-server-dev --env development-mysql8 --allow-no-auth start
 
-start-mysql-es: temporal-server
-	./temporal-server --env development-mysql-es --allow-no-auth start
+start-mysql-es: temporal-server-dev
+	./temporal-server-dev --env development-mysql-es --allow-no-auth start
 
 start-postgres: start-postgres12
 
-start-postgres12: temporal-server
-	./temporal-server --env development-postgres12 --allow-no-auth start
+start-postgres12: temporal-server-dev
+	./temporal-server-dev --env development-postgres12 --allow-no-auth start
 
-start-sqlite: temporal-server
-	./temporal-server --env development-sqlite --allow-no-auth start
+start-sqlite: temporal-server-dev
+	./temporal-server-dev --env development-sqlite --allow-no-auth start
 
-start-xdc-cluster-a: temporal-server
-	./temporal-server --env development-cluster-a --allow-no-auth start
+start-xdc-cluster-a: temporal-server-dev
+	./temporal-server-dev --env development-cluster-a --allow-no-auth start
 
-start-xdc-cluster-b: temporal-server
-	./temporal-server --env development-cluster-b --allow-no-auth start
+start-xdc-cluster-b: temporal-server-dev
+	./temporal-server-dev --env development-cluster-b --allow-no-auth start
 
-start-xdc-cluster-c: temporal-server
-	./temporal-server --env development-cluster-c --allow-no-auth start
+start-xdc-cluster-c: temporal-server-dev
+	./temporal-server-dev --env development-cluster-c --allow-no-auth start
 
 ##### Grafana #####
 update-dashboards:
@@ -551,6 +556,9 @@ update-dashboards:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+
+check-assertions-disabled: temporal-server
+	@sh $(ROOT)/develop/check-assertions-disabled.sh ./temporal-server
 
 update-dependencies:
 	@printf $(COLOR) "Update dependencies..."

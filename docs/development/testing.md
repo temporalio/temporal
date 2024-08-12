@@ -27,3 +27,9 @@ func TestFoo(t *testing.T) {
     }
 }
 ```
+
+### assertions
+
+The `go.temporal.io/server/common/assert` package provides in-code assertions that are disabled
+by default. It is recommended to enable them during development/testing to catch any potential 
+issues early. To enable them, use the `-tags=with_assertions` build tag.
