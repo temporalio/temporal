@@ -370,61 +370,64 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	partition tqid.Partition,
 	create bool,
 	loadCause loadCause,
-) (taskQueuePartitionManager, error) {
-	pm, err := e.getTaskQueuePartitionManagerNoWait(partition, create, loadCause)
-	if err != nil || pm == nil {
-		return nil, err
-	}
-	if err = pm.WaitUntilInitialized(ctx); err != nil {
-		e.unloadTaskQueuePartition(pm, unloadCauseInitError)
-		return nil, err
-	}
-	return pm, nil
-}
+) (retPM taskQueuePartitionManager, retCreated bool, retErr error) {
+	defer func() {
+		if retErr != nil || retPM == nil {
+			return
+		}
 
-// Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
-// to get new range from DB and create one. This does not block for the task queue to be initialized.
-func (e *matchingEngineImpl) getTaskQueuePartitionManagerNoWait(
-	partition tqid.Partition,
-	create bool,
-	loadCause loadCause,
-) (taskQueuePartitionManager, error) {
+		if retErr = retPM.WaitUntilInitialized(ctx); retErr != nil {
+			e.unloadTaskQueuePartition(retPM, unloadCauseInitError)
+		}
+	}()
+
 	key := partition.Key()
 	e.partitionsLock.RLock()
 	pm, ok := e.partitions[key]
 	e.partitionsLock.RUnlock()
-	if !ok {
-		if !create {
-			return nil, nil
-		}
-
-		// If it gets here, write lock and check again in case a task queue is created between the two locks
-		e.partitionsLock.Lock()
-		pm, ok = e.partitions[key]
-		if !ok {
-			namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
-			if err != nil {
-				e.partitionsLock.Unlock()
-				return nil, err
-			}
-			nsName := namespaceEntry.Name()
-			tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
-			tqConfig.loadCause = loadCause
-			userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, partition, tqConfig, e.logger, e.namespaceRegistry)
-			pm, err = newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, userDataManager)
-			if err != nil {
-				e.partitionsLock.Unlock()
-				return nil, err
-			}
-			e.partitions[key] = pm
-		}
-		e.partitionsLock.Unlock()
-
-		if !ok {
-			pm.Start()
-		}
+	if ok {
+		return pm, false, nil
 	}
-	return pm, nil
+
+	if !create {
+		return nil, false, nil
+	}
+
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
+	if err != nil {
+		return nil, false, err
+	}
+	nsName := namespaceEntry.Name()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
+	tqConfig.loadCause = loadCause
+	userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, partition, tqConfig, e.logger, e.namespaceRegistry)
+	newPM, err := newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, userDataManager)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// If it gets here, write lock and check again in case a task queue is created between the two locks
+	e.partitionsLock.Lock()
+	pm, ok = e.partitions[key]
+	if ok {
+		e.partitionsLock.Unlock()
+		return pm, false, nil
+	}
+
+	e.partitions[key] = newPM
+	e.partitionsLock.Unlock()
+
+	newPM.Start()
+	if newPM.Partition().IsRoot() {
+		// Whenever a root partition is loaded we need to force all other partitions to load.
+		// If there is a backlog of tasks on any child partitions force loading will ensure that they
+		// can forward their tasks the poller which caused the root partition to be loaded.
+		// These partitions could be managed by this matchingEngineImpl, but are most likely not.
+		// We skip checking and just make gRPC requests to force loading them all.
+
+		newPM.ForceLoadAllNonRootPartitions()
+	}
+	return newPM, true, nil
 }
 
 // For use in tests
@@ -446,7 +449,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	pm, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
 	} else if sticky && !stickyWorkerAvailable(pm) {
@@ -487,7 +490,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	if err != nil {
 		return "", false, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
 	if err != nil {
 		return "", false, err
 	}
@@ -819,7 +822,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	}
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	pm, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
 	} else if sticky && !stickyWorkerAvailable(pm) {
@@ -1028,7 +1031,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseDescribe)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseDescribe)
 	if err != nil {
 		return nil, err
 	}
@@ -1054,7 +1057,7 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	if request.GetVersions() == nil {
 		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build ID as a member of the BuildIds list")
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true, loadCauseDescribe)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true, loadCauseDescribe)
 	if err != nil {
 		return nil, err
 	}
@@ -1145,7 +1148,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
+	tqMgr, _, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1312,7 +1315,7 @@ func (e *matchingEngineImpl) getUserDataClone(
 	rootPartition tqid.Partition,
 	loadCause loadCause,
 ) (*persistencespb.TaskQueueUserData, error) {
-	rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true, loadCause)
+	rootPartitionMgr, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true, loadCause)
 	if err != nil {
 		return nil, err
 	}
@@ -1341,7 +1344,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueue.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, taskQueue.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1432,7 +1435,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherRead)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherRead)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
@@ -1456,7 +1459,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUserData)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUserData)
 	if err != nil {
 		return nil, err
 	}
@@ -1520,7 +1523,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseUserData)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseUserData)
 	if err != nil {
 		return nil, err
 	}
@@ -1585,6 +1588,19 @@ func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
 	return &matchingservice.GetBuildIdTaskQueueMappingResponse{TaskQueues: taskQueues}, nil
 }
 
+func (e *matchingEngineImpl) ForceLoadTaskQueuePartition(
+	ctx context.Context,
+	req *matchingservice.ForceLoadTaskQueuePartitionRequest,
+) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), req.GetNamespaceId())
+	// Leverage getTaskQueuePartitionManager to check and then create the partition
+	_, wasUnloaded, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseForce)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: wasUnloaded}, nil
+}
+
 func (e *matchingEngineImpl) ForceUnloadTaskQueue(
 	ctx context.Context,
 	req *matchingservice.ForceUnloadTaskQueueRequest,
@@ -1593,6 +1609,7 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueue(
 	if err != nil {
 		return nil, err
 	}
+
 	wasLoaded := e.unloadTaskQueuePartitionByKey(p, nil, unloadCauseForce)
 	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
 }
@@ -1648,7 +1665,7 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseNexusTask)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseNexusTask)
 	if err != nil {
 		return nil, err
 	}
@@ -1941,7 +1958,7 @@ func (e *matchingEngineImpl) pollTask(
 	partition tqid.Partition,
 	pollMetadata *pollMetadata,
 ) (*internalTask, bool, error) {
-	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCausePoll)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCausePoll)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1962,6 +1979,7 @@ func (e *matchingEngineImpl) pollTask(
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded
 // partitions map), then does nothing.
+// partitions map), unloadPM.Stop(...) is still called.
 func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitionManager, unloadCause unloadCause) {
 	e.unloadTaskQueuePartitionByKey(unloadPM.Partition(), unloadPM, unloadCause)
 }
