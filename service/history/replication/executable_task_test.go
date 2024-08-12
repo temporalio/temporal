@@ -76,6 +76,11 @@ type (
 		sourceCluster           string
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 		config                  *configs.Config
+		namespaceId             string
+		workflowId              string
+		runId                   string
+		taskId                  int64
+		mockExecutionManager    *persistence.MockExecutionManager
 
 		task *ExecutableTaskImpl
 	}
@@ -110,6 +115,12 @@ func (s *executableTaskSuite) SetupTest() {
 
 	creationTime := time.Unix(0, rand.Int63())
 	receivedTime := creationTime.Add(time.Duration(rand.Int63()))
+	s.namespaceId = uuid.NewString()
+	s.workflowId = uuid.NewString()
+	s.runId = uuid.NewString()
+	s.taskId = rand.Int63()
+	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
+
 	s.task = NewExecutableTask(
 		ProcessToolBox{
 			Config:                  s.config,
@@ -121,15 +132,22 @@ func (s *executableTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-			DLQWriter:               NoopDLQWriter{},
+			DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		},
-		rand.Int63(),
+		s.taskId,
 		"metrics-tag",
 		creationTime,
 		receivedTime,
 		s.sourceCluster,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
-		&replicationspb.ReplicationTask{},
+		&replicationspb.ReplicationTask{
+			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId: s.namespaceId,
+				WorkflowId:  s.workflowId,
+				RunId:       s.runId,
+				TaskId:      s.taskId,
+			},
+		},
 	)
 }
 
@@ -771,4 +789,43 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.Nil(err)
 	s.False(toProcess)
+}
+
+func (s *executableTaskSuite) TestMarkPoisonPill() {
+	shardID := rand.Int31()
+	shardContext := shard.NewMockContext(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.namespaceId),
+		s.workflowId,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.task.sourceClusterName,
+		TaskInfo:          s.task.replicationTask.RawTaskInfo,
+	}).Return(nil)
+
+	err := s.task.MarkPoisonPill()
+	s.NoError(err)
+}
+
+func (s *executableTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
+	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
+	shardID := rand.Int31()
+	shardContext := shard.NewMockContext(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.namespaceId),
+		s.workflowId,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.task.sourceClusterName,
+		TaskInfo:          s.task.replicationTask.RawTaskInfo,
+	}).Return(serviceerror.NewInternal("failed"))
+
+	err := s.task.MarkPoisonPill()
+	s.Error(err)
+	err = s.task.MarkPoisonPill()
+	s.NoError(err)
 }

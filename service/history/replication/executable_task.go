@@ -105,6 +105,7 @@ type (
 			remainingAttempt int,
 		) (bool, error)
 		ReplicationTask() *replicationspb.ReplicationTask
+		MarkPoisonPill() error
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -119,9 +120,10 @@ type (
 		replicationTask   *replicationspb.ReplicationTask
 
 		// mutable data
-		taskState int32
-		attempt   int32
-		namespace atomic.Value
+		taskState              int32
+		attempt                int32
+		namespace              atomic.Value
+		markPoisonPillAttempts int
 	}
 )
 
@@ -136,16 +138,17 @@ func NewExecutableTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
-		ProcessToolBox:    processToolBox,
-		taskID:            taskID,
-		metricsTag:        metricsTag,
-		taskCreationTime:  taskCreationTime,
-		taskReceivedTime:  taskReceivedTime,
-		sourceClusterName: sourceClusterName,
-		taskPriority:      priority,
-		replicationTask:   replicationTask,
-		taskState:         taskStatePending,
-		attempt:           1,
+		ProcessToolBox:         processToolBox,
+		taskID:                 taskID,
+		metricsTag:             metricsTag,
+		taskCreationTime:       taskCreationTime,
+		taskReceivedTime:       taskReceivedTime,
+		sourceClusterName:      sourceClusterName,
+		taskPriority:           priority,
+		replicationTask:        replicationTask,
+		taskState:              taskStatePending,
+		attempt:                1,
+		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -508,6 +511,43 @@ FilterLoop:
 		}
 	}
 	return namespaceEntry.Name().String(), shouldProcessTask, nil
+}
+
+func (e *ExecutableTaskImpl) MarkPoisonPill() error {
+	taskInfo := e.ReplicationTask().GetRawTaskInfo()
+
+	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
+		e.Logger.Error("MarkPoisonPill reached max attempts",
+			tag.SourceCluster(e.SourceClusterName()),
+			tag.ReplicationTask(taskInfo),
+		)
+		return nil
+	}
+	e.markPoisonPillAttempts++
+
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
+		e.replicationTask.RawTaskInfo.WorkflowId,
+	)
+	if err != nil {
+		return err
+	}
+
+	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+	e.Logger.Error("enqueue sync versioned transition replication task to DLQ",
+		tag.ShardID(shardContext.GetShardID()),
+		tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
+		tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
+		tag.WorkflowRunID(e.replicationTask.RawTaskInfo.NamespaceId),
+		tag.TaskID(e.taskID),
+		tag.SourceCluster(e.SourceClusterName()),
+		tag.ReplicationTask(taskInfo),
+	)
+
+	ctx, cancel := newTaskContext(e.replicationTask.RawTaskInfo.NamespaceId, e.Config.ReplicationTaskApplyTimeout())
+	defer cancel()
+
+	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
 }
 
 func newTaskContext(
