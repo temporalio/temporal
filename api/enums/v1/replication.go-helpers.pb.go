@@ -31,17 +31,18 @@ import (
 
 var (
 	ReplicationTaskType_shorthandValue = map[string]int32{
-		"Unspecified":           0,
-		"NamespaceTask":         1,
-		"HistoryTask":           2,
-		"SyncShardStatusTask":   3,
-		"SyncActivityTask":      4,
-		"HistoryMetadataTask":   5,
-		"HistoryV2Task":         6,
-		"SyncWorkflowStateTask": 7,
-		"TaskQueueUserData":     8,
-		"SyncHsmTask":           9,
-		"BackfillHistoryTask":   10,
+		"Unspecified":                   0,
+		"NamespaceTask":                 1,
+		"HistoryTask":                   2,
+		"SyncShardStatusTask":           3,
+		"SyncActivityTask":              4,
+		"HistoryMetadataTask":           5,
+		"HistoryV2Task":                 6,
+		"SyncWorkflowStateTask":         7,
+		"TaskQueueUserData":             8,
+		"SyncHsmTask":                   9,
+		"BackfillHistoryTask":           10,
+		"VerifyVersionedTransitionTask": 11,
 	}
 )
 

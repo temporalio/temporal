@@ -528,6 +528,8 @@ const (
 	SyncHSMTaskScope = "SyncHSMTask"
 	// BackfillHistoryEventsTaskScope is the scope used by backfill history events replication processing
 	BackfillHistoryEventsTaskScope = "BackfillHistoryEventsTask"
+	// VerifyVersionedTransitionTaskScope is the scope used by verify versioned transition task processing
+	VerifyVersionedTransitionTaskScope = "VerifyVersionedTransitionTask"
 	// SyncWatermarkScope is the scope used by closed workflow task replication processing
 	SyncWatermarkScope = "SyncWatermark"
 	// NoopTaskScope is the scope used by noop task
