@@ -27,6 +27,8 @@ package workflow
 import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/history/configs"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -100,12 +102,11 @@ func emitWorkflowCompletionStats(
 	namespaceState string,
 	taskQueue string,
 	status enumspb.WorkflowExecutionStatus,
+	config *configs.Config,
 ) {
-	handler := metricsHandler.WithTags(
+	handler := GetPerTaskQueueFamilyScope(metricsHandler, namespace, taskQueue, config,
 		metrics.OperationTag(metrics.WorkflowCompletionStatsScope),
-		metrics.NamespaceTag(namespace.String()),
 		metrics.NamespaceStateTag(namespaceState),
-		metrics.TaskQueueTag(taskQueue),
 	)
 
 	switch status {
@@ -122,4 +123,19 @@ func emitWorkflowCompletionStats(
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		metrics.WorkflowContinuedAsNewCount.With(handler).Record(1)
 	}
+}
+
+func GetPerTaskQueueFamilyScope(
+	handler metrics.Handler,
+	namespaceName namespace.Name,
+	taskQueueFamily string,
+	config *configs.Config,
+	tags ...metrics.Tag,
+) metrics.Handler {
+	return metrics.GetPerTaskQueueFamilyScope(handler,
+		namespaceName.String(),
+		tqid.UnsafeTaskQueueFamily(namespaceName.String(), taskQueueFamily),
+		config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		tags...,
+	)
 }

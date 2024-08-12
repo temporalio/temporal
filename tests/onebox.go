@@ -204,8 +204,6 @@ var (
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
 		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
 		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
-		dynamicconfig.FrontendEnableUpdateWorkflowExecution.Key():               true,
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key():  true,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
 		dynamicconfig.ValidateUTF8SampleRPCRequest.Key():                        1.0,
 		dynamicconfig.ValidateUTF8SampleRPCResponse.Key():                       1.0,

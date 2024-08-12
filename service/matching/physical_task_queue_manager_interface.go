@@ -70,5 +70,8 @@ type (
 		UnloadFromPartitionManager(unloadCause)
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
+		// ShouldEmitGauges determines whether the gauge metrics should be emitted or not for this particular physical
+		// queue based on dynamic configs.
+		ShouldEmitGauges() bool
 	}
 )

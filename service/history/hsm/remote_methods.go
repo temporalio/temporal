@@ -22,38 +22,18 @@
 
 package hsm
 
-import "context"
-
 // RemoteMethod can be defined for each state machine to handle external request, like RPCs, but as part of the HSM
 // framework. See RemoteExecutor for how to define the handler for remote methods.
-type RemoteMethod[I any, O any] interface {
+type RemoteMethod interface {
 	// Name of the remote method. Must be unique per state machine.
 	Name() string
-	// SerializeOutput serializes output of the invocation (of type O) to a byte array that is suitable for transport.
-	SerializeOutput(output O) ([]byte, error)
-	// DeserializeInput deserializes input from bytes into type I that is then passed to the handler.
-	DeserializeInput(data []byte) (I, error)
+	// SerializeOutput serializes output of the invocation to a byte array that is suitable for transport.
+	SerializeOutput(output any) ([]byte, error)
+	// DeserializeInput deserializes input from bytes that is then passed to the handler.
+	DeserializeInput(data []byte) (any, error)
 }
 
-type remoteMethodDefinition[I any, O any] struct {
-	method   RemoteMethod[I, O]
-	executor RemoteExecutor[I, O]
-}
-
-type untypedRemoteMethodDefinition interface {
-	InvokeUntyped(ctx context.Context, env Environment, ref Ref, input any) (any, error)
-	SerializeUntyped(output any) ([]byte, error)
-	DeserializeUntyped(data []byte) (any, error)
-}
-
-func (r *remoteMethodDefinition[I, O]) InvokeUntyped(ctx context.Context, env Environment, ref Ref, input any) (any, error) {
-	return r.executor(ctx, env, ref, input.(I))
-}
-
-func (r *remoteMethodDefinition[I, O]) SerializeUntyped(output any) ([]byte, error) {
-	return r.method.SerializeOutput(output.(O))
-}
-
-func (r *remoteMethodDefinition[I, O]) DeserializeUntyped(data []byte) (any, error) {
-	return r.method.DeserializeInput(data)
+type remoteMethodDefinition struct {
+	method   RemoteMethod
+	executor RemoteExecutor
 }

@@ -779,6 +779,7 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 		}
 		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().AsTime().Add(backoff)
 		s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
+		s.Equal(we.RunId, dweResponse.WorkflowExecutionInfo.GetFirstRunId())
 	}
 
 	// Check run id links
@@ -1097,8 +1098,9 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		s.Run("workflow is not running", func() {
 			tv := testvars.New(s.T())
 
-			_, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
+			resp, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
 			s.NoError(err)
+			s.True(resp.Responses[0].GetStartWorkflow().Started)
 		})
 
 		s.Run("workflow is running", func() {
@@ -1111,9 +1113,9 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
+				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
 				s.NoError(err)
+				s.False(resp.Responses[0].GetStartWorkflow().Started)
 			})
 
 			s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
@@ -1126,16 +1128,15 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
+				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
 				s.NoError(err)
+				s.True(resp.Responses[0].GetStartWorkflow().Started)
 
 				descResp, err := s.client.DescribeWorkflowExecution(NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.namespace,
 						Execution: &commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: initWF.RunId},
 					})
-
 				s.NoError(err)
 				s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
 			})
@@ -1149,7 +1150,6 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
 				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
 				s.NotNil(err)
 				s.Equal(err.Error(), "MultiOperation could not be executed.")
 				errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
