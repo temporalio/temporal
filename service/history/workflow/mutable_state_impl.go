@@ -44,12 +44,10 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/api/taskqueue/v1"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -76,6 +74,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -309,13 +308,16 @@ func NewMutableState(
 
 		LastCompletedWorkflowTaskStartedEventId: common.EmptyEventID,
 
-		StartTime:                         timestamppb.New(startTime),
-		VersionHistories:                  versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
-		ExecutionStats:                    &persistencespb.ExecutionStats{HistorySize: 0},
-		SubStateMachinesByType:            make(map[string]*persistencespb.StateMachineMap),
-		TaskGenerationShardClockTimestamp: shard.CurrentVectorClock().GetClock(),
+		StartTime:              timestamppb.New(startTime),
+		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
+		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
+		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),
+	}
+	if s.config.EnableNexus() {
+		s.executionInfo.TaskGenerationShardClockTimestamp = shard.CurrentVectorClock().GetClock()
 	}
 	s.approximateSize += s.executionInfo.Size()
+
 	s.executionState = &persistencespb.WorkflowExecutionState{
 		RunId: runID,
 
@@ -463,37 +465,24 @@ func NewSanitizedMutableState(
 	lastFirstEventTxnID int64,
 	lastWriteVersion int64,
 ) (*MutableStateImpl, error) {
+	// Although new versions of temporal server will perform state sanitization,
+	// we have to keep the sanitization logic here as well for backward compatibility in case
+	// source cluster is running an old version and doesn't do the sanitization.
+	if err := SanitizeMutableState(mutableStateRecord); err != nil {
+		return nil, err
+	}
+	if err := common.DiscardUnknownProto(mutableStateRecord); err != nil {
+		return nil, err
+	}
+
 	mutableState, err := NewMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
 	if err != nil {
 		return nil, err
 	}
 
-	// sanitize data
-	// Some values stored in mutable state are cluster or shard specific.
-	// E.g task status (if task is created or not), taskID (derived from shard rangeID), txnID (derived from shard rangeID), etc.
-	// Those fields should not be replicated across clusters and should be sanitized.
-	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
 	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
-	mutableState.executionInfo.CloseVisibilityTaskId = common.EmptyVersion
-	mutableState.executionInfo.CloseTransferTaskId = common.EmptyVersion
-	// TODO: after adding cluster to clock info, no need to reset clock here
-	mutableState.executionInfo.ParentClock = nil
-	for _, childExecutionInfo := range mutableState.pendingChildExecutionInfoIDs {
-		childExecutionInfo.Clock = nil
-	}
-	// Timer tasks are generated locally, do not sync them.
-	mutableState.executionInfo.StateMachineTimers = nil
-	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 0
-	if err := mutableState.HSM().Walk(func(node *hsm.Node) error {
-		// Node TransitionCount is cluster local information used for detecting staleness.
-		// Reset it to 1 since we are creating a new mutable state.
-		node.InternalRepr().TransitionCount = 1
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
 	mutableState.currentVersion = lastWriteVersion
+
 	return mutableState, nil
 }
 
@@ -604,6 +593,21 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		}, nil
 	}
 	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
+}
+
+// GetHSMCallbackArg converts a workflow completion event into a [persistencepb.HSMCallbackArg].
+func (ms *MutableStateImpl) GetHSMCompletionCallbackArg(ctx context.Context) (*persistencespb.HSMCompletionCallbackArg, error) {
+	workflowKey := ms.GetWorkflowKey()
+	ce, err := ms.GetCompletionEvent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &persistencespb.HSMCompletionCallbackArg{
+		NamespaceId: workflowKey.NamespaceID,
+		WorkflowId:  workflowKey.WorkflowID,
+		RunId:       workflowKey.RunID,
+		LastEvent:   ce,
+	}, nil
 }
 
 func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
@@ -2196,6 +2200,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 					Url:    variant.Nexus.GetUrl(),
 					Header: variant.Nexus.GetHeader(),
 				},
+			}
+		case *commonpb.Callback_Internal_:
+			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
+			if err != nil {
+				return err
 			}
 		}
 		machine := callbacks.NewCallback(startEvent.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
@@ -6131,5 +6140,5 @@ func (ms *MutableStateImpl) RefreshExpirationTimeoutTask(ctx context.Context) er
 		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
 
-	return RefreshTasksForWorkflowStart(ctx, ms, ms.taskGenerator)
+	return RefreshTasksForWorkflowStart(ctx, ms, ms.taskGenerator, EmptyVersionedTransition)
 }

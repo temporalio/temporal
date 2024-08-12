@@ -205,6 +205,8 @@ func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
 }
 
 func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
+	ctx context.Context,
+	workflowContext workflow.Context,
 	ms workflow.MutableState,
 	deadline time.Time,
 	timer *persistencespb.StateMachineTaskInfo,
@@ -226,7 +228,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 		WorkflowKey:     ms.GetWorkflowKey(),
 		StateMachineRef: timer.Ref,
 	}
-	if err := t.validateStateMachineRef(ms, ref, false); err != nil {
+	if err := t.validateStateMachineRef(ctx, workflowContext, ms, ref, false); err != nil {
 		return err
 	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())
@@ -243,6 +245,8 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 // executeStateMachineTimers gets the state machine timers, processed the expired timers,
 // and return a slice of unprocessed timers.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
+	ctx context.Context,
+	workflowContext workflow.Context,
 	ms workflow.MutableState,
 	execute func(node *hsm.Node, task hsm.Task) error,
 ) (int, error) {
@@ -264,7 +268,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 		}
 
 		for _, timer := range group.Infos {
-			err := t.executeSingleStateMachineTimer(ms, group.Deadline.AsTime(), timer, execute)
+			err := t.executeSingleStateMachineTimer(ctx, workflowContext, ms, group.Deadline.AsTime(), timer, execute)
 			if err != nil {
 				if !errors.As(err, new(*serviceerror.NotFound)) {
 					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(

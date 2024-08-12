@@ -210,6 +210,20 @@ func (mr *MockContextMockRecorder) ReapplyEvents(ctx, shardContext, eventBatches
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockContext)(nil).ReapplyEvents), ctx, shardContext, eventBatches)
 }
 
+// RefreshTasks mocks base method.
+func (m *MockContext) RefreshTasks(ctx context.Context, shardContext shard.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshTasks", ctx, shardContext)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshTasks indicates an expected call of RefreshTasks.
+func (mr *MockContextMockRecorder) RefreshTasks(ctx, shardContext interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockContext)(nil).RefreshTasks), ctx, shardContext)
+}
+
 // SetWorkflowExecution mocks base method.
 func (m *MockContext) SetWorkflowExecution(ctx context.Context, shardContext shard.Context) error {
 	m.ctrl.T.Helper()

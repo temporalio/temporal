@@ -1947,6 +1947,21 @@ func (mr *MockMutableStateMockRecorder) GetFirstRunID(ctx interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFirstRunID", reflect.TypeOf((*MockMutableState)(nil).GetFirstRunID), ctx)
 }
 
+// GetHSMCompletionCallbackArg mocks base method.
+func (m *MockMutableState) GetHSMCompletionCallbackArg(ctx context.Context) (*v112.HSMCompletionCallbackArg, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHSMCompletionCallbackArg", ctx)
+	ret0, _ := ret[0].(*v112.HSMCompletionCallbackArg)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHSMCompletionCallbackArg indicates an expected call of GetHSMCompletionCallbackArg.
+func (mr *MockMutableStateMockRecorder) GetHSMCompletionCallbackArg(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHSMCompletionCallbackArg", reflect.TypeOf((*MockMutableState)(nil).GetHSMCompletionCallbackArg), ctx)
+}
+
 // GetHistorySize mocks base method.
 func (m *MockMutableState) GetHistorySize() int64 {
 	m.ctrl.T.Helper()

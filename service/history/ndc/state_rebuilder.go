@@ -90,15 +90,12 @@ func NewStateRebuilder(
 ) *StateRebuilderImpl {
 
 	return &StateRebuilderImpl{
-		shard:             shard,
-		namespaceRegistry: shard.GetNamespaceRegistry(),
-		eventsCache:       shard.GetEventsCache(),
-		clusterMetadata:   shard.GetClusterMetadata(),
-		executionMgr:      shard.GetExecutionManager(),
-		taskRefresher: workflow.NewTaskRefresher(
-			shard,
-			logger,
-		),
+		shard:              shard,
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
+		eventsCache:        shard.GetEventsCache(),
+		clusterMetadata:    shard.GetClusterMetadata(),
+		executionMgr:       shard.GetExecutionManager(),
+		taskRefresher:      workflow.NewTaskRefresher(shard),
 		rebuiltHistorySize: 0,
 		logger:             logger,
 	}
@@ -196,7 +193,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
 	// from the base run. However, RefreshTasks always resets that field and
 	// force regenerates the execution timeout timer task.
-	if err := r.taskRefresher.RefreshTasks(ctx, rebuiltMutableState); err != nil {
+	if err := r.taskRefresher.Refresh(ctx, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
 

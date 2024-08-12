@@ -82,10 +82,6 @@ type (
 
 func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 	faultyAdminClient := &fakeAdminClient{err: errors.New("did not expect client to be used")}
-	// v2 by default
-	if tc.version == "" {
-		tc.version = "v2"
-	}
 	p := dlqTestParams{
 		dlqVersion:            tc.version,
 		dlqType:               strconv.Itoa(tasks.CategoryTransfer.ID()),

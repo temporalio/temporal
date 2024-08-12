@@ -132,8 +132,7 @@ func TestHistoryReplicationSignalsAndUpdatesTestSuite(t *testing.T) {
 
 func (s *hrsuTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():                            true,
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
+		dynamicconfig.EnableReplicationStream.Key(): true,
 	}
 	s.logger = log.NewNoopLogger()
 	s.setupSuite(

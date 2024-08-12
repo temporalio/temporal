@@ -93,7 +93,7 @@ type (
 	identityCtxKey string
 
 	taskQueueCounterKey struct {
-		namespaceID   namespace.ID
+		namespaceID   string
 		taskType      enumspb.TaskQueueType
 		partitionType enumspb.TaskQueueKind
 		versioned     string // one of these values: "unversioned", "versionSet", "buildId"
@@ -393,7 +393,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, false, nil
 	}
 
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
 	if err != nil {
 		return nil, false, err
 	}
@@ -861,10 +861,10 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		}
 	case <-ctx.Done():
 		// task timed out. log (optionally) and return the timeout error
-		ns, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
+		ns, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
 		if err != nil {
 			e.logger.Error("Failed to get the namespace by ID",
-				tag.WorkflowNamespaceID(partition.NamespaceId().String()),
+				tag.WorkflowNamespaceID(partition.NamespaceId()),
 				tag.Error(err))
 		} else {
 			sampleRate := e.config.QueryWorkflowTaskTimeoutLogRate(ns.Name().String(), partition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -921,6 +921,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	req := request.GetDescRequest()
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
+		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if err != nil {
 			return nil, err
 		}
@@ -937,8 +938,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 		for _, taskQueueType := range req.TaskQueueTypes {
-			for i := 0; i < e.config.NumTaskqueueWritePartitions(req.Namespace, req.TaskQueue.Name, taskQueueType); i++ {
+			for i := 0; i < numPartitions; i++ {
 				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: request.GetNamespaceId(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -1001,8 +1003,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						e.reachabilityCache,
 						request.GetNamespaceId(),
 						req.GetNamespace(),
-						req.GetTaskQueue().GetName(),
+						rootPartition.TaskQueue().Family(),
 						e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+						tqConfig,
 					),
 					e.metricsHandler,
 					e.logger,
@@ -1994,9 +1997,6 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 	foundTQM, ok := e.partitions[key]
 	if !ok || (unloadPM != nil && foundTQM != unloadPM) {
 		e.partitionsLock.Unlock()
-		if unloadPM != nil {
-			unloadPM.Stop(unloadCause)
-		}
 		return false
 	}
 	delete(e.partitions, key)
@@ -2006,35 +2006,38 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 }
 
 // Responsible for emitting and updating loaded_physical_task_queue_count metric
-func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueManagerImpl, delta int) {
-
+func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueueManagerImpl, delta int) {
 	// calculating versioned to be one of: “unversioned” or "buildId” or “versionSet”
 	versioned := "unversioned"
-	if buildID := pm.queue.BuildId(); buildID != "" {
+	if buildID := pqm.queue.BuildId(); buildID != "" {
 		versioned = "buildId"
-	} else if versionSet := pm.queue.VersionSet(); versionSet != "" {
+	} else if versionSet := pqm.queue.VersionSet(); versionSet != "" {
 		versioned = "versionSet"
 	}
 
 	physicalTaskQueueParameters := taskQueueCounterKey{
-		namespaceID:   pm.partitionMgr.Partition().NamespaceId(),
-		taskType:      pm.partitionMgr.Partition().TaskType(),
-		partitionType: pm.partitionMgr.Partition().Kind(),
+		namespaceID:   pqm.partitionMgr.Partition().NamespaceId(),
+		taskType:      pqm.partitionMgr.Partition().TaskType(),
+		partitionType: pqm.partitionMgr.Partition().Kind(),
 		versioned:     versioned,
 	}
 
 	e.gaugeMetrics.lock.Lock()
-	defer e.gaugeMetrics.lock.Unlock()
 	e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters] += delta
 	loadedPhysicalTaskQueueCounter := e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters]
+	e.gaugeMetrics.lock.Unlock()
 
-	pmImpl := pm.partitionMgr
-
-	e.metricsHandler.Gauge(metrics.LoadedPhysicalTaskQueueGauge.Name()).Record(
+	pm := pqm.partitionMgr
+	metrics.LoadedPhysicalTaskQueueGauge.With(
+		metrics.GetPerTaskQueuePartitionScope(
+			e.metricsHandler,
+			pm.ns.Name().String(),
+			pm.Partition(),
+			// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
+			false,
+			false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
+		)).Record(
 		float64(loadedPhysicalTaskQueueCounter),
-		metrics.NamespaceTag(pmImpl.ns.Name().String()),
-		metrics.TaskTypeTag(physicalTaskQueueParameters.taskType.String()),
-		metrics.PartitionTypeTag(physicalTaskQueueParameters.partitionType.String()),
 		metrics.VersionedTag(versioned),
 	)
 }
@@ -2042,7 +2045,6 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueM
 // Responsible for emitting and updating loaded_task_queue_family_count, loaded_task_queue_count and
 // loaded_task_queue_partition_count metrics
 func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartitionManager, delta int) {
-
 	// each metric shall be accessed based on the mentioned parameters
 	taskQueueFamilyParameters := taskQueueCounterKey{
 		namespaceID: pm.Partition().NamespaceId(),
@@ -2061,7 +2063,6 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 
 	rootPartition := pm.Partition().IsRoot()
 	e.gaugeMetrics.lock.Lock()
-	defer e.gaugeMetrics.lock.Unlock()
 
 	loadedTaskQueueFamilyCounter, loadedTaskQueueCounter, loadedTaskQueuePartitionCounter :=
 		e.gaugeMetrics.loadedTaskQueueFamilyCount[taskQueueFamilyParameters], e.gaugeMetrics.loadedTaskQueueCount[taskQueueParameters],
@@ -2077,24 +2078,30 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 			e.gaugeMetrics.loadedTaskQueueFamilyCount[taskQueueFamilyParameters] = loadedTaskQueueFamilyCounter
 		}
 	}
+	e.gaugeMetrics.lock.Unlock()
+
+	nsName := pm.Namespace().Name().String()
 
 	e.metricsHandler.Gauge(metrics.LoadedTaskQueueFamilyGauge.Name()).Record(
 		float64(loadedTaskQueueFamilyCounter),
-		metrics.NamespaceTag(pm.Namespace().Name().String()),
+		metrics.NamespaceTag(nsName),
 	)
 
 	metrics.LoadedTaskQueueGauge.With(e.metricsHandler).Record(
 		float64(loadedTaskQueueCounter),
-		metrics.NamespaceTag(pm.Namespace().Name().String()),
-		metrics.TaskTypeTag(taskQueueParameters.taskType.String()),
+		metrics.NamespaceTag(nsName),
+		metrics.TaskQueueTypeTag(taskQueueParameters.taskType),
 	)
 
-	metrics.LoadedTaskQueuePartitionGauge.With(e.metricsHandler).Record(
-		float64(loadedTaskQueuePartitionCounter),
-		metrics.NamespaceTag(pm.Namespace().Name().String()),
-		metrics.TaskTypeTag(taskQueueParameters.taskType.String()),
-		metrics.PartitionTypeTag(taskQueuePartitionParameters.partitionType.String()),
+	taggedHandler := metrics.GetPerTaskQueuePartitionScope(
+		e.metricsHandler,
+		nsName,
+		pm.Partition(),
+		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
+		false,
+		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 	)
+	metrics.LoadedTaskQueuePartitionGauge.With(taggedHandler).Record(float64(loadedTaskQueuePartitionCounter))
 }
 
 // Populate the workflow task response based on context and scheduled/started events.

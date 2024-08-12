@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"testing"
@@ -1771,6 +1772,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 		WorkflowID:  s.WorkflowID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.EqualError(err, "workflow not found for ID: "+s.WorkflowID)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
@@ -1817,6 +1819,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 		WorkflowID:  s.WorkflowID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.EqualError(err, "workflow not found for ID: "+s.WorkflowID)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
@@ -1917,6 +1920,7 @@ func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 		RunID:       runID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.EqualError(err, fmt.Sprintf("workflow execution not found for workflow ID %q and run ID %q", workflowID, runID))
 }
 
 func (s *ExecutionMutableStateSuite) AssertHEEqualWithDB(branchToken []byte, events ...[]*p.WorkflowEvents) {
