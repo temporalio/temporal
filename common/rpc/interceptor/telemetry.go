@@ -404,6 +404,17 @@ func isUserCaused(statusCode codes.Code) bool {
 		codes.Unauthenticated,
 		codes.NotFound:
 		return true
+	case codes.OK,
+		codes.Canceled,
+		codes.Unknown,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Unimplemented,
+		codes.Internal,
+		codes.Unavailable,
+		codes.DataLoss:
+		return false
 	}
 
 	return false
