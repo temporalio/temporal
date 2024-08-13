@@ -28,6 +28,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +44,8 @@ import (
 )
 
 const (
+	debugModeEnvVar = "TEMPORAL_OTEL_DEBUG"
+
 	// the following defaults were taken from the grpc docs as of grpc v1.46.
 	// they are not available programmatically
 
@@ -417,4 +420,8 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 		)
 	}
 	return obj.Spec.Decode(e.Spec)
+}
+
+func debugMode() bool {
+	return os.Getenv(debugModeEnvVar) == "true"
 }
