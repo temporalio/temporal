@@ -34,7 +34,7 @@ import (
 )
 
 type (
-	// UpdateStore represents the update package's requirements for reading updates from the store.
+	// UpdateStore represents the update package's requirements for reading Updates from the store.
 	UpdateStore interface {
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
@@ -51,7 +51,7 @@ type (
 	EventStore interface {
 		effect.Controller
 
-		// AddWorkflowExecutionUpdateAcceptedEvent writes an update accepted
+		// AddWorkflowExecutionUpdateAcceptedEvent writes an Update accepted
 		// event. The data may not be durable when this function returns.
 		AddWorkflowExecutionUpdateAcceptedEvent(
 			updateID string,
@@ -60,7 +60,7 @@ type (
 			acceptedRequest *updatepb.Request,
 		) (*historypb.HistoryEvent, error)
 
-		// AddWorkflowExecutionUpdateCompletedEvent writes an update completed
+		// AddWorkflowExecutionUpdateCompletedEvent writes an Update completed
 		// event. The data may not be durable when this function returns.
 		AddWorkflowExecutionUpdateCompletedEvent(
 			acceptedEventID int64,
