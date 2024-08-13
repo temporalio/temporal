@@ -26,10 +26,17 @@
 
 package assert
 
-// That asserts a condition is true, or panics if not.
-// See package documentation for more details.
-var That = that
+import (
+	"fmt"
+)
 
-// Fail represents a failed assertion and panics.
+var WithAssertions = true
+
+// DPanic asserts a condition is true, or panics if not.
+// In development/testing, it will panic. In production, it will not do anything.
 // See package documentation for more details.
-var Fail = fail
+func DPanic(cond bool, format string, args ...any) {
+	if !cond {
+		panic(fmt.Sprintf(format, args...))
+	}
+}

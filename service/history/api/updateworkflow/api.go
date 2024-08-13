@@ -26,6 +26,7 @@ package updateworkflow
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -42,7 +43,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/assert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -203,7 +203,7 @@ func (u *Updater) ApplyRequest(
 		// This means that a normal WFT was created despite a speculative WFT having been requested. It implies that
 		// there were buffered events. But because there was no pending WFT, there can't be buffered events. Therefore
 		// this should never happen.
-		assert.Fail("workflow task type for update is not speculative: %v", newWorkflowTask.Type)
+		u.shardCtx.GetLogger().DPanic(fmt.Sprintf("workflow task type for update is not speculative: %v", newWorkflowTask.Type))
 		return nil, consts.ErrWorkflowTaskStateInconsistent
 	}
 

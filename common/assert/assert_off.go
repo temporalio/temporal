@@ -26,16 +26,11 @@
 
 package assert
 
-// That asserts a condition is true, or panics if not.
-// It is disabled by default and needs to be enabled via Go build tag.
-// See package documentation for more details.
-func That(cond bool, msgf string, args ...any) {
-	// empty so that the Go compiler can inline and ultimately remove this function call alltogther
-}
+var WithAssertions = false
 
-// Fail represents a failed assertion and panics.
-// It is disabled by default and needs to be enabled via Go build tag.
+// DPanic asserts a condition is true, or panics if not.
+// In development/testing, it will panic. In production, it will not do anything.
 // See package documentation for more details.
-func Fail(msgf string, args ...any) {
+func DPanic(cond bool, msgf string, args ...any) {
 	// empty so that the Go compiler can inline and ultimately remove this function call alltogther
 }

@@ -29,8 +29,7 @@
 // Assertions should only be enabled during development and testing; not in production.
 //
 // Example:
-// assert.That(object.state == "ready", "object is not ready: %v", object.state)
-// assert.Fail("object %v should not be in state %v", object.state)
+// assert.DPanic(object.state == "ready", "object is not ready: %v", object.state)
 //
 // Best practices:
 // - use assertions to check for programming errors and internal invariants
