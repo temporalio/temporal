@@ -438,11 +438,9 @@ func recordMetric(metricsHandler metrics.Handler, err error, statusCode codes.Co
 		return
 	}
 
-	if isUserCaused(statusCode) {
-		return
+	if !isUserCaused(statusCode) {
+		metrics.ServiceFailures.With(metricsHandler).Record(1)
 	}
-
-	metrics.ServiceFailures.With(metricsHandler).Record(1)
 }
 
 func (ti *TelemetryInterceptor) getWorkflowTags(
