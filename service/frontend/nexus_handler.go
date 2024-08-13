@@ -190,6 +190,7 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 				c.metricsHandlerForInterceptors,
 				[]tag.Tag{tag.Operation(c.method), tag.WorkflowNamespace(c.namespaceName)},
 				retErr,
+				c.namespace.Name(),
 			)
 		}
 	})

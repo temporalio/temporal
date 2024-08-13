@@ -34,19 +34,19 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
@@ -57,6 +57,7 @@ type (
 		serializer        common.TaskTokenSerializer
 		metricsHandler    metrics.Handler
 		logger            log.Logger
+		logAllErrors      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 	ExecutionGetter interface {
 		GetExecution() *commonpb.WorkflowExecution
@@ -126,12 +127,14 @@ func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	logAllErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
 		serializer:        common.NewProtoTaskTokenSerializer(),
 		metricsHandler:    metricsHandler,
 		logger:            logger,
+		logAllErrors:      logAllErrors,
 	}
 }
 
@@ -186,7 +189,9 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	methodName := api.MethodName(info.FullMethod)
-	metricsHandler, logTags := ti.unaryMetricsHandlerLogTags(req, info.FullMethod, methodName)
+	nsName := MustGetNamespaceName(ti.namespaceRegistry, req)
+
+	metricsHandler, logTags := ti.unaryMetricsHandlerLogTags(req, info.FullMethod, methodName, nsName)
 
 	ctx = AddTelemetryContext(ctx, metricsHandler)
 	metrics.ServiceRequests.With(metricsHandler).Record(1)
@@ -199,7 +204,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	resp, err := handler(ctx, req)
 
 	if err != nil {
-		ti.HandleError(req, metricsHandler, logTags, err)
+		ti.HandleError(req, metricsHandler, logTags, err, nsName)
 	} else {
 		// emit action metrics only after successful calls
 		ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
@@ -237,7 +242,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 
 	err := handler(service, serverStream)
 	if err != nil {
-		ti.HandleError(nil, metricsHandler, logTags, err)
+		ti.HandleError(nil, metricsHandler, logTags, err, "")
 		return err
 	}
 	return nil
@@ -334,14 +339,12 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	}
 }
 
-func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(
-	req interface{},
+func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(req interface{},
 	fullMethod string,
 	methodName string,
-) (metrics.Handler, []tag.Tag) {
+	nsName namespace.Name) (metrics.Handler, []tag.Tag) {
 	overridedMethodName := ti.unaryOverrideOperationTag(fullMethod, methodName, req)
 
-	nsName := MustGetNamespaceName(ti.namespaceRegistry, req)
 	if nsName == "" {
 		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
 			[]tag.Tag{tag.Operation(overridedMethodName)}
@@ -361,21 +364,57 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	), []tag.Tag{tag.Operation(overridedMethodName)}
 }
 
-func (ti *TelemetryInterceptor) HandleError(
-	req interface{},
+func (ti *TelemetryInterceptor) HandleError(req interface{},
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
 	err error,
-) {
-
+	nsName namespace.Name) {
 	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		return
 	}
 
+	statusCode := serviceerror.ToStatus(err).Code()
+	logAllErrors := nsName != "" && ti.logAllErrors(nsName.String())
+	if !logAllErrors && isUserCaused(statusCode) {
+		return
+	}
+
+	if statusCode == codes.Internal || statusCode == codes.Unknown || logAllErrors {
+		errorHash := common.ErrorHash(err)
+		logTags = append(logTags, tag.NewStringTag("hash", errorHash))
+	}
+
+	logTags = append(logTags, tag.NewStringTag("grpc_code", statusCode.String()))
+	logTags = append(logTags, ti.getWorkflowTags(req)...)
+
+	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
+
+	recordMetric(metricsHandler, err, statusCode)
+}
+
+func isUserCaused(statusCode codes.Code) bool {
+	switch statusCode {
+	case codes.InvalidArgument,
+		codes.AlreadyExists,
+		codes.FailedPrecondition,
+		codes.OutOfRange,
+		codes.PermissionDenied,
+		codes.Unauthenticated,
+		codes.NotFound:
+		return true
+	default:
+		return false
+	}
+}
+
+func recordMetric(metricsHandler metrics.Handler, err error, statusCode codes.Code) {
 	switch err := err.(type) {
-	// we emit service_error_with_type metrics, no need to emit specific metric for these known error types.
+	case *serviceerror.ResourceExhausted:
+		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
+		return
 	case *serviceerror.AlreadyExists,
 		*serviceerror.CancellationAlreadyRequested,
 		*serviceerror.FailedPrecondition,
@@ -396,43 +435,14 @@ func (ti *TelemetryInterceptor) HandleError(
 		*serviceerrors.ShardOwnershipLost,
 		*serviceerrors.TaskAlreadyStarted,
 		*serviceerrors.RetryReplication:
-		// no-op
-
-	// specific metric for resource exhausted error with throttle reason
-	case *serviceerror.ResourceExhausted:
-		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
-			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
-	// Any other errors are treated as ServiceFailures against SLA unless constructed with the standard
-	// `status.Error` (or Errorf) constructors, in which case the status code is checked below.
-	// Including below known errors and any other unknown errors.
-	//  *serviceerror.DataLoss,
-	//  *serviceerror.Internal
-	//	*serviceerror.Unavailable:
-	default:
-		// Also skip emitting ServiceFailures for non serviceerrors returned from handlers for certain error
-		// codes.
-
-		if st, ok := status.FromError(err); ok {
-			switch st.Code() {
-			case codes.InvalidArgument,
-				codes.AlreadyExists,
-				codes.FailedPrecondition,
-				codes.OutOfRange,
-				codes.PermissionDenied,
-				codes.Unauthenticated,
-				codes.NotFound:
-				return
-			case codes.Internal,
-				codes.Unknown:
-				errorHash := common.ErrorHash(err)
-				logTags = append(logTags, tag.NewStringTag("hash", errorHash))
-			}
-		}
-
-		metrics.ServiceFailures.With(metricsHandler).Record(1)
-		logTags = append(logTags, ti.getWorkflowTags(req)...)
-		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
+		return
 	}
+
+	if isUserCaused(statusCode) {
+		return
+	}
+
+	metrics.ServiceFailures.With(metricsHandler).Record(1)
 }
 
 func (ti *TelemetryInterceptor) getWorkflowTags(

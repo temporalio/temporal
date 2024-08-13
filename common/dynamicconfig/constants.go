@@ -2486,4 +2486,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
+
+	LogAllErrors = NewNamespaceBoolSetting(
+		"system.logAllErrors",
+		false,
+		`When set to true, logs all error types for the namespace, not just unexpected ones.`,
+	)
 )
