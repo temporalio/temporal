@@ -478,16 +478,38 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 	return &p.InternalCreateWorkflowExecutionResponse{}, nil
 }
 
+// GetWorkflowExecution gets the workflow execution data from the cassandra DB.
+// If the request contains a runID it loads and returns the execution identified by that run ID.
+// If the request does not contain a runID, it first looks up the current run ID and then loads the corresponding execution object.
 func (d *MutableStateStore) GetWorkflowExecution(
 	ctx context.Context,
 	request *p.GetWorkflowExecutionRequest,
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
+	runID := request.RunID
+	if runID == "" {
+		// get current runid using the permanentRunID record.
+		query := d.Session.Query(templateGetCurrentExecutionQuery,
+			request.ShardID,
+			rowTypeExecution,
+			request.NamespaceID,
+			request.WorkflowID,
+			permanentRunID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+		).WithContext(ctx)
+
+		result := make(map[string]interface{})
+		if err := query.MapScan(result); err != nil {
+			return nil, gocql.ConvertError("GetWorkflowExecution", err)
+		}
+		runID = gocql.UUIDToString(result["current_run_id"])
+	}
 	query := d.Session.Query(templateGetWorkflowExecutionQuery,
 		request.ShardID,
 		rowTypeExecution,
 		request.NamespaceID,
 		request.WorkflowID,
-		request.RunID,
+		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 	).WithContext(ctx)
