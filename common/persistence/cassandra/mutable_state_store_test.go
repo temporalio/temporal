@@ -28,7 +28,7 @@ import (
 	"context"
 	"testing"
 
-	cassandra_gocql "github.com/gocql/gocql"
+	cassandragocql "github.com/gocql/gocql"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/persistence"
@@ -96,7 +96,7 @@ func (s *mutableStateStoreSuite) TestGetWorkflowExecution_WithoutRunID() {
 	mockCurrentRunIDQuery.EXPECT().WithContext(gomock.Any()).Return(mockCurrentRunIDQuery).AnyTimes()
 	mockCurrentRunIDQuery.EXPECT().MapScan(gomock.Any()).Do(
 		func(res map[string]interface{}) error {
-			res["current_run_id"] = cassandra_gocql.MustRandomUUID()
+			res["current_run_id"] = cassandragocql.MustRandomUUID()
 			return nil
 		})
 	// mock get current execution query (to get current run ID)
@@ -122,7 +122,7 @@ func (s *mutableStateStoreSuite) TestGetWorkflowExecution_CurrentRunIDNotFound()
 	// current run ID query. Return not found in MapScan.
 	mockCurrentRunIDQuery := gocql.NewMockQuery(s.controller)
 	mockCurrentRunIDQuery.EXPECT().WithContext(gomock.Any()).Return(mockCurrentRunIDQuery).AnyTimes()
-	mockCurrentRunIDQuery.EXPECT().MapScan(gomock.Any()).Return(cassandra_gocql.ErrNotFound).Times(1)
+	mockCurrentRunIDQuery.EXPECT().MapScan(gomock.Any()).Return(cassandragocql.ErrNotFound).Times(1)
 
 	// mock get current execution query (to get current run ID)
 	s.mockSession.EXPECT().Query(templateGetCurrentExecutionQuery, gomock.Any()).Return(mockCurrentRunIDQuery).Times(1)
@@ -151,7 +151,7 @@ func setTestExecutionStoreData(res map[string]interface{}) {
 	res["request_cancel_map_encoding"] = "ENCODING_TYPE_PROTO3"
 	res["signal_map"] = map[int64][]byte{}
 	res["signal_map_encoding"] = "ENCODING_TYPE_PROTO3"
-	res["signal_requested"] = []cassandra_gocql.UUID{}
+	res["signal_requested"] = []cassandragocql.UUID{}
 	res["buffered_events_list"] = []map[string]interface{}{}
 	res["checksum"] = []byte{}
 	res["checksum_encoding"] = "ENCODING_TYPE_PROTO3"
