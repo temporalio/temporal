@@ -4,7 +4,7 @@ log:
 
 persistence:
     numHistoryShards: {{ default "4" (env "NUM_HISTORY_SHARDS") }}
-    
+
     defaultStore: default
     visibilityStore: visibility
 

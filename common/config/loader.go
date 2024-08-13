@@ -105,13 +105,13 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 
 		tpl, err := template.New("config").Funcs(templateFuncs).Parse(string(data))
 		if err != nil {
-			return err
+			return fmt.Errorf("template parsing error: %w", err)
 		}
 
 		var rendered bytes.Buffer
 		err = tpl.Execute(&rendered, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("template execution error: %w", err)
 		}
 
 		err = yaml.Unmarshal(rendered.Bytes(), config)
