@@ -404,9 +404,9 @@ func isUserCaused(statusCode codes.Code) bool {
 		codes.Unauthenticated,
 		codes.NotFound:
 		return true
-	default:
-		return false
 	}
+
+	return false
 }
 
 func recordMetric(metricsHandler metrics.Handler, err error, statusCode codes.Code) {
