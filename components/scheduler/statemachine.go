@@ -57,6 +57,11 @@ func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *Tweakables) *Sch
 			HsmState: enumsspb.SCHEDULER_STATE_WAITING,
 		},
 	}
+	s.ensureFields(tweakables)
+	return s
+}
+
+func (s *Scheduler) ensureFields(tweakables *Tweakables) {
 	if s.Args.Schedule == nil {
 		s.Args.Schedule = &schedpb.Schedule{}
 	}
@@ -82,7 +87,6 @@ func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *Tweakables) *Sch
 	if s.Args.State == nil {
 		s.Args.State = &schedspb.InternalState{}
 	}
-	return s
 }
 
 func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {

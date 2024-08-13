@@ -86,7 +86,10 @@ type (
 
 func (e errFollow) Error() string { return string(e) }
 
-var ErrSchedulerConflict = errors.New("concurrent scheduler task execution detected, unable to update scheduler state")
+var (
+	ErrSchedulerConflict = errors.New("concurrent scheduler task execution detected, unable to update scheduler state")
+	errUpdateConflict    = errors.New("conflicting concurrent update")
+)
 
 func RegisterExecutor(
 	registry *hsm.Registry,
@@ -101,8 +104,19 @@ func RegisterExecutor(
 	if err := hsm.RegisterImmediateExecutor(registry, exec.executeSchedulerRunTask); err != nil {
 		return err
 	}
-
-	return hsm.RegisterRemoteMethod(registry, ProcessWorkflowCompletionEvent{}, exec.processWorkflowCompletionEvent)
+	if err := hsm.RegisterRemoteMethod(registry, ProcessWorkflowCompletionEvent{}, exec.processWorkflowCompletionEvent); err != nil {
+		return err
+	}
+	if err := hsm.RegisterRemoteMethod(registry, Describe{}, exec.describe); err != nil {
+		return err
+	}
+	if err := hsm.RegisterRemoteMethod(registry, ListMatchingTimes{}, exec.listMatchingTimes); err != nil {
+		return err
+	}
+	if err := hsm.RegisterRemoteMethod(registry, PatchSchedule{}, exec.patchSchedule); err != nil {
+		return err
+	}
+	return hsm.RegisterRemoteMethod(registry, UpdateSchedule{}, exec.updateSchedule)
 }
 
 func (e taskExecutor) executeSchedulerWaitTask(
@@ -142,6 +156,20 @@ func removeFromList(l, toRemove []*commonpb.WorkflowExecution) []*commonpb.Workf
 	}
 
 	return result
+}
+
+func (e taskExecutor) tryCompileSpec(s *Scheduler) error {
+	if s.cspec == nil {
+		cspec, err := e.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
+		if err != nil {
+			if e.Logger != nil {
+				e.Logger.Error("Invalid schedule", tag.Error(err))
+			}
+			return err
+		}
+		s.cspec = cspec
+	}
+	return nil
 }
 
 func (e taskExecutor) executeSchedulerRunTask(
@@ -189,16 +217,9 @@ func (e taskExecutor) executeSchedulerRunTask(
 	// Update in case namespace was renamed since creation
 	s.Args.State.Namespace = ns.Name().String()
 	tweakables := e.Config.Tweakables(s.Args.State.Namespace)
-
-	if s.cspec == nil {
-		cspec, err := e.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
-		if err != nil {
-			if e.Logger != nil {
-				e.Logger.Error("Invalid schedule", tag.Error(err))
-			}
-			return err
-		}
-		s.cspec = cspec
+	err = e.tryCompileSpec(&s)
+	if err != nil {
+		return err
 	}
 
 	if s.Args.State.LastProcessedTime == nil {
@@ -229,6 +250,21 @@ func (e taskExecutor) executeSchedulerRunTask(
 
 	s.Args.State.LastProcessedTime = timestamppb.New(lastAction)
 	s.NextInvocationTime = timestamppb.New(nextWakeup)
+
+	// handle signals after processing time range that just elapsed
+	scheduleChanged := e.processSignals(&s, &tweakables)
+	if scheduleChanged {
+		// need to calculate sleep again
+		nextWakeup, _ = e.processTimeRange(
+			&s,
+			&tweakables,
+			s.Args.State.LastProcessedTime.AsTime(),
+			t2,
+			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+			false,
+			nil,
+		)
+	}
 
 	// process backfills if we have any too
 	e.processBackfills(&s, &tweakables)
@@ -261,6 +297,10 @@ func (e taskExecutor) executeSchedulerRunTask(
 
 		// Remove any workflows that had completed in the meantime
 		removeFromList(s.Args.Info.RunningWorkflows, workflowListDiff(sPtr.Args.Info.RunningWorkflows, prevRunningWorkflows))
+		// Copy over any signals that may have arrived. Any signals/updates that were in the state would have been processed.
+		s.PatchSignals = sPtr.PatchSignals[len(s.PatchSignals):]
+		s.UpdateSignals = sPtr.UpdateSignals[len(s.UpdateSignals):]
+
 		// Copy outside scheduler, which has been updated, to the state machine
 		*sPtr = s
 		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
@@ -597,6 +637,81 @@ func (e taskExecutor) cancelWorkflow(
 	}
 }
 
+func (e taskExecutor) processSignals(s *Scheduler, tweakables *Tweakables) bool {
+	scheduleChanged := false
+	for i := 0; i < len(s.PatchSignals); i++ {
+		e.processPatch(s, s.PatchSignals[i], tweakables)
+	}
+	for i := 0; i < len(s.UpdateSignals); i++ {
+		e.processUpdate(s, s.UpdateSignals[i], tweakables)
+		scheduleChanged = true
+	}
+	return scheduleChanged
+}
+
+func (e taskExecutor) processPatch(s *Scheduler, pendingPatch *schedpb.SchedulePatch, tweakables *Tweakables) {
+	e.Logger.Debug("Schedule patch")
+
+	if trigger := pendingPatch.TriggerImmediately; trigger != nil {
+		now := time.Now()
+		e.bufferWorkflowStart(s, tweakables, now, now, trigger.OverlapPolicy, true)
+	}
+
+	for _, bfr := range pendingPatch.BackfillRequest {
+		startTime := timestamp.TimeValue(bfr.GetStartTime()).Add(-1 * time.Millisecond)
+		bfr.StartTime = timestamppb.New(startTime)
+
+		// Add to ongoing backfills to process incrementally
+		if len(s.Args.State.OngoingBackfills) >= tweakables.MaxBufferSize {
+			e.Logger.Warn("Buffer overrun for backfill requests")
+			e.MetricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(1)
+			s.Args.Info.BufferDropped += 1
+			continue
+		}
+		s.Args.State.OngoingBackfills = append(s.Args.State.OngoingBackfills, common.CloneProto(bfr))
+	}
+
+	if pendingPatch.Pause != "" {
+		s.Args.Schedule.State.Paused = true
+		s.Args.Schedule.State.Notes = pendingPatch.Pause
+		s.Args.State.ConflictToken++
+	}
+	if pendingPatch.Unpause != "" {
+		s.Args.Schedule.State.Paused = false
+		s.Args.Schedule.State.Notes = pendingPatch.Unpause
+		s.Args.State.ConflictToken++
+	}
+}
+
+func checkConflict(s *Scheduler, token int64) error {
+	if token == 0 || token == s.Args.State.ConflictToken {
+		return nil
+	}
+	return errUpdateConflict
+}
+
+func (e taskExecutor) processUpdate(s *Scheduler, pendingUpdate *schedspb.FullUpdateRequest, tweakables *Tweakables) {
+	if err := checkConflict(s, pendingUpdate.ConflictToken); err != nil {
+		e.Logger.Warn("Update conflicted with concurrent change")
+		return
+	}
+
+	e.Logger.Debug("Schedule update")
+
+	s.Args.Schedule.Spec = pendingUpdate.Schedule.GetSpec()
+	s.Args.Schedule.Action = pendingUpdate.Schedule.GetAction()
+	s.Args.Schedule.Policies = pendingUpdate.Schedule.GetPolicies()
+	s.Args.Schedule.State = pendingUpdate.Schedule.GetState()
+	// don't touch Info
+
+	s.ensureFields(tweakables)
+	// TODO(Tianyu): Original scheduler code does not propagate failure here. Instead, other parts of the code will generate and propagate error when they see no compiled spec.
+	_ = e.tryCompileSpec(s)
+
+	s.Args.Info.UpdateTime = timestamppb.Now()
+	s.Args.State.ConflictToken++
+}
+
 func getWorkflowResult(input *persistencepb.HSMCompletionCallbackArg) (*commonpb.Payloads, *failure.Failure, error) {
 	switch input.LastEvent.EventType { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
@@ -632,7 +747,7 @@ func (e taskExecutor) logPauseOnError(s *Scheduler, lastEventType enumspb.EventT
 
 func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hsm.Environment, ref hsm.Ref, input any) (any, error) {
 	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
-	// This is a workaround and should be
+	// This is a workaround and should be removed after relevant changes are made in the HSM framework
 	smRef := common.CloneProto(ref.StateMachineRef)
 	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
 	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
@@ -701,5 +816,134 @@ func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hs
 		e.Logger.Debug("started workflow finished", tag.WorkflowID(castInput.WorkflowId), tag.NewStringTag("status", castInput.LastEvent.EventType.String()),
 			tag.NewBoolTag("pause-after-failure", pauseOnFailure))
 		return nil
+	})
+}
+
+// Returns up to `n` future action times.
+//
+// After workflow version `AccurateFutureActionTimes`, No more than the
+// schedule's `RemainingActions` will be returned. Future action times that
+// precede the schedule's UpdateTime are not included.
+func getFutureActionTimes(s *Scheduler, n int) []*timestamppb.Timestamp {
+	// Note that `s` may be a `scheduler` created outside of a workflow context, used to
+	// compute list info at creation time or in a query. In that case inWorkflowContext will
+	// be false, and this function and anything it calls should not use s.ctx.
+
+	base := timestamp.TimeValue(s.Args.State.LastProcessedTime)
+
+	// Pure version not using workflow context
+	next := func(t time.Time) time.Time {
+		return s.cspec.GetNextTime(s.jitterSeed(), t).Next
+	}
+
+	if s.Args.Schedule.State.LimitedActions {
+		n = min(int(s.Args.Schedule.State.RemainingActions), n)
+	}
+
+	if s.cspec == nil {
+		return nil
+	}
+	out := make([]*timestamppb.Timestamp, 0, n)
+	t1 := base
+	for len(out) < n {
+		t1 = next(t1)
+		if t1.IsZero() {
+			break
+		}
+
+		if s.Args.Info.UpdateTime.AsTime().After(t1) {
+			// Skip action times whose nominal times are prior to the schedule's update time
+			continue
+		}
+
+		out = append(out, timestamppb.New(t1))
+	}
+	return out
+}
+
+func (e taskExecutor) describe(ctx context.Context, env hsm.Environment, ref hsm.Ref, _ any) (any, error) {
+	result := &schedspb.DescribeResponse{}
+	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		tweakables := e.Config.Tweakables(s.Args.State.Namespace)
+		// this is a query handler, don't modify s.Info directly
+		infoCopy := common.CloneProto(s.Args.Info)
+		infoCopy.FutureActionTimes = getFutureActionTimes(s, tweakables.FutureActionCount)
+		infoCopy.BufferSize = int64(len(s.Args.State.BufferedStarts))
+		result.Schedule = s.Args.Schedule
+		result.Info = infoCopy
+		result.ConflictToken = s.Args.State.ConflictToken
+
+		return nil
+	})
+	return result, err
+}
+
+func (e taskExecutor) listMatchingTimes(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
+	castReq := req.(*workflowservice.ListScheduleMatchingTimesRequest)
+	if castReq == nil || castReq.StartTime == nil || castReq.EndTime == nil {
+		return nil, errors.New("missing or invalid query")
+	}
+	result := &workflowservice.ListScheduleMatchingTimesResponse{}
+	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		if s.cspec == nil {
+			return fmt.Errorf("invalid schedule: %s", s.Args.Info.InvalidScheduleError)
+		}
+
+		var out []*timestamppb.Timestamp
+		t1 := timestamp.TimeValue(castReq.StartTime)
+		for i := 0; i < MaxListMatchingTimesCount; i++ {
+			// don't need to call GetNextTime in SideEffect because this is just a query
+			t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
+			if t1.IsZero() || t1.After(timestamp.TimeValue(castReq.EndTime)) {
+				break
+			}
+			out = append(out, timestamppb.New(t1))
+		}
+		result.StartTime = out
+		return nil
+	})
+
+	return result, err
+}
+
+func (e taskExecutor) patchSchedule(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
+	castReq := req.(*schedpb.SchedulePatch)
+	return nil, env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		s.PatchSignals = append(s.PatchSignals, castReq)
+		// TODO(Tianyu): Will this return an error if there is a conflict?
+		// TODO(Tianyu): How to cancel a potentially scheduled task?
+		// Attempt to immediately trigger the scheduler
+		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
+			return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
+		})
+	})
+}
+
+func (e taskExecutor) updateSchedule(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
+	castReq := req.(*schedspb.FullUpdateRequest)
+	return nil, env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		s.UpdateSignals = append(s.UpdateSignals, castReq)
+		// TODO(Tianyu): Will this return an error if there is a conflict?
+		// TODO(Tianyu): How to cancel a potentially scheduled task?
+		// Attempt to immediately trigger the scheduler
+		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
+			return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
+		})
 	})
 }

@@ -35,6 +35,9 @@ var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceBoolSetting(
 
 const (
 	RecentActionCount = 10
+	// Maximum number of times to list per ListMatchingTimes query. (This is used only in a
+	// query so it can be changed without breaking history.)
+	MaxListMatchingTimesCount = 1000
 )
 
 type Tweakables struct {
@@ -43,6 +46,7 @@ type Tweakables struct {
 	MaxBufferSize                     int           // MaxBufferSize limits the number of buffered starts and backfills
 	BackfillsPerIteration             int           // How many backfilled actions to take per iteration (implies rate limit since min sleep is 1s)
 	CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
+	FutureActionCount                 int           // The number of future action times to include in Describe.
 
 }
 
@@ -52,6 +56,7 @@ var DefaultTweakables = Tweakables{
 	MaxBufferSize:                     1000,
 	BackfillsPerIteration:             10,
 	CanceledTerminatedCountAsFailures: false,
+	FutureActionCount:                 10,
 }
 
 var CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting[Tweakables](
