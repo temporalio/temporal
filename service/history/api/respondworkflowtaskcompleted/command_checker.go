@@ -808,9 +808,13 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
-	attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration()))
+	if attributes.GetWorkflowRunTimeout() != nil {
+		attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration()))
+	}
 
-	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(targetNamespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn))
+	if attributes.GetWorkflowTaskTimeout() != nil {
+		attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(targetNamespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn))
+	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }

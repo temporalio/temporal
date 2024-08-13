@@ -267,6 +267,55 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(common.MaxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
 }
 
+func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes() {
+	const expectedFailedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES
+
+	namespaceID := namespace.ID("aaa-bbb")
+	namespace := namespace.Name("tests.Namespace")
+	var attributes *commandpb.StartChildWorkflowExecutionCommandAttributes
+	var parentInfo *persistencespb.WorkflowExecutionInfo
+
+	fc, err := s.validator.validateStartChildExecutionAttributes(namespaceID, namespaceID, namespace, attributes, parentInfo, nil)
+	s.EqualError(err, "StartChildWorkflowExecutionCommandAttributes is not set on StartChildWorkflowExecutionCommand.")
+	s.Equal(expectedFailedCause, fc)
+
+	attributes = &commandpb.StartChildWorkflowExecutionCommandAttributes{}
+	parentInfo = &persistencespb.WorkflowExecutionInfo{}
+	fc, err = s.validator.validateStartChildExecutionAttributes(namespaceID, namespaceID, namespace, attributes, parentInfo, nil)
+	s.ErrorContains(err, "Required field WorkflowId is not set on StartChildWorkflowExecutionCommand.")
+	s.Equal(expectedFailedCause, fc)
+
+	attributes.WorkflowId = "workflowId"
+	fc, err = s.validator.validateStartChildExecutionAttributes(namespaceID, namespaceID, namespace, attributes, parentInfo, nil)
+	s.ErrorContains(err, "Required field WorkflowType is not set on StartChildWorkflowExecutionCommand.")
+	s.Equal(expectedFailedCause, fc)
+
+	attributes.WorkflowType = &commonpb.WorkflowType{
+		Name: "workflowType",
+	}
+	fc, err = s.validator.validateStartChildExecutionAttributes(namespaceID, namespaceID, namespace, attributes, parentInfo, nil)
+	s.ErrorContains(err, "invalid TaskQueue on StartChildWorkflowExecutionCommand")
+	s.Equal(expectedFailedCause, fc)
+
+	attributes.TaskQueue = &taskqueuepb.TaskQueue{
+		Name: "task-queue",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	fc, err = s.validator.validateStartChildExecutionAttributes(namespaceID, namespaceID, namespace, attributes, parentInfo, nil)
+	s.Equal(nil, err)
+
+	// valid WorkflowStartDelay
+	attributes.CronSchedule = "0 0 * * *"
+	attributes.WorkflowStartDelay = durationpb.New(10 * time.Second)
+	fc, err = s.validator.validateStartChildExecutionAttributes(namespaceID, namespaceID, namespace, attributes, parentInfo, nil)
+	s.ErrorContains(err, "CronSchedule and WorkflowStartDelay may not be used together on StartChildWorkflowExecutionCommand")
+	s.Equal(expectedFailedCause, fc)
+
+	attributes.CronSchedule = ""
+	fc, err = s.validator.validateStartChildExecutionAttributes(namespaceID, namespaceID, namespace, attributes, parentInfo, nil)
+	s.Equal(nil, err)
+}
+
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
 	namespace := namespace.Name("tests.Namespace")
 	var attributes *commandpb.ModifyWorkflowPropertiesCommandAttributes
