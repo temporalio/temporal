@@ -25,8 +25,6 @@
 package interceptor
 
 import (
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -36,6 +34,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
