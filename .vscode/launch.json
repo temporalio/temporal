@@ -59,7 +59,7 @@
 			"cwd": "${workspaceFolder}",
 			"args": [
 				"--env",
-				"development-postgres",
+				"development-postgres12",
 				"start",
 			]
 		},
