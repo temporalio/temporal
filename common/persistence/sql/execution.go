@@ -230,6 +230,19 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	workflowID := request.WorkflowID
+
+	// Fetch runID if not available.
+	if request.RunID == "" {
+		res, err := m.GetCurrentExecution(ctx, &p.GetCurrentExecutionRequest{
+			ShardID:     request.ShardID,
+			NamespaceID: request.NamespaceID,
+			WorkflowID:  request.WorkflowID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		request.RunID = res.RunID
+	}
 	runID := primitives.MustParseUUID(request.RunID)
 	executionsRow, err := m.Db.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     request.ShardID,
