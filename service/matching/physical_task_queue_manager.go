@@ -194,6 +194,10 @@ func (s *taskTracker) rate() float32 {
 	elapsedTime := min(currentTime.Sub(s.bucketStartTime)+s.totalIntervalSize,
 		currentTime.Sub(s.startTime))
 
+	if elapsedTime <= 0 {
+		return 0
+	}
+
 	// rate per second
 	return float32(totalTasks) / float32(elapsedTime.Seconds())
 }
@@ -364,8 +368,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.namespace = c.partitionMgr.ns.Name()
 		task.backlogCountHint = c.backlogMgr.BacklogCountHint
 
-		if task.redirectInfo == nil && (!task.isStarted() || !task.started.hasEmptyResponse()) {
-			// only track the original polls, not forwarded ones.
+		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
+			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
 			c.tasksDispatchedInIntervals.incrementTaskCount()
 		}
 		return task, nil

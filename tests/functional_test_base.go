@@ -441,3 +441,51 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) {
 	s.testCluster.host.overrideDynamicConfigByKey(s.T(), setting.Key(), value)
 }
+
+func (s *FunctionalTestBase) testWithMatchingBehavior(subtest func()) {
+	for _, forcePollForward := range []bool{false, true} {
+		for _, forceTaskForward := range []bool{false, true} {
+			for _, forceAsync := range []bool{false, true} {
+				name := "NoTaskForward"
+				if forceTaskForward {
+					// force two levels of forwarding
+					name = "ForceTaskForward"
+				}
+				if forcePollForward {
+					name += "ForcePollForward"
+				} else {
+					name += "NoPollForward"
+				}
+				if forceAsync {
+					name += "ForceAsync"
+				} else {
+					name += "AllowSync"
+				}
+
+				s.Run(
+					name, func() {
+						if forceTaskForward {
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+							s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
+						} else {
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+						}
+						if forcePollForward {
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+							s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
+						} else {
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+						}
+						if forceAsync {
+							s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
+						} else {
+							s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
+						}
+
+						subtest()
+					},
+				)
+			}
+		}
+	}
+}
