@@ -837,7 +837,11 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		if len(tasksByCategory) > 0 {
 			proc, ok := e.queueProcessors[category]
 			if !ok {
-				e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
+				// On shard reload it sends fake tasks to wake up the queue processors. Only log if there are "real"
+				// tasks that can't be processed.
+				if _, ok := tasksByCategory[0].(*tasks.FakeTask); !ok {
+					e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
+				}
 				continue
 			}
 			proc.NotifyNewTasks(tasksByCategory)
