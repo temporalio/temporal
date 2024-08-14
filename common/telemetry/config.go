@@ -29,6 +29,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -423,5 +424,9 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 }
 
 func debugMode() bool {
-	return strings.ToLower(os.Getenv(debugModeEnvVar)) == "true"
+	isDebug, err := strconv.ParseBool(os.Getenv(debugModeEnvVar))
+	if err != nil {
+		return false
+	}
+	return isDebug
 }
