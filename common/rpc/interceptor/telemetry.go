@@ -57,7 +57,7 @@ type (
 		serializer        common.TaskTokenSerializer
 		metricsHandler    metrics.Handler
 		logger            log.Logger
-		logAllErrors      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		logAllReqErrors   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 	ExecutionGetter interface {
 		GetExecution() *commonpb.WorkflowExecution
@@ -127,14 +127,14 @@ func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	logAllErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	logAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
 		serializer:        common.NewProtoTaskTokenSerializer(),
 		metricsHandler:    metricsHandler,
 		logger:            logger,
-		logAllErrors:      logAllErrors,
+		logAllReqErrors:   logAllReqErrors,
 	}
 }
 
@@ -376,7 +376,7 @@ func (ti *TelemetryInterceptor) HandleError(req interface{},
 	}
 
 	statusCode := serviceerror.ToStatus(err).Code()
-	logAllErrors := nsName != "" && ti.logAllErrors(nsName.String())
+	logAllErrors := nsName != "" && ti.logAllReqErrors(nsName.String())
 	if !logAllErrors && isUserCaused(statusCode) {
 		return
 	}

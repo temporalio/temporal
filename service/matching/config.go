@@ -111,7 +111,7 @@ type (
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
 
-		LogAllErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	forwarderConfig struct {
@@ -256,7 +256,7 @@ func NewConfig(
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
 
-		LogAllErrors: dynamicconfig.LogAllErrors.Get(dc),
+		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 }
 

@@ -202,7 +202,7 @@ type Config struct {
 	// Health check
 	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
-	LogAllErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -316,7 +316,7 @@ func NewConfig(
 
 		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
 
-		LogAllErrors: dynamicconfig.LogAllErrors.Get(dc),
+		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 }
 

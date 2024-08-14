@@ -5342,7 +5342,7 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetMetricsHandler(),
 		s.mockShard.Resource.Logger,
-		s.config.LogAllErrors)
+		s.config.LogAllReqErrors)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
@@ -5379,7 +5379,7 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetMetricsHandler(),
 		s.mockShard.Resource.Logger,
-		s.config.LogAllErrors)
+		s.config.LogAllReqErrors)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		firstWorkflowTaskBackoff := time.Second
 		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{

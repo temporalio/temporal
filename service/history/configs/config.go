@@ -364,7 +364,7 @@ type Config struct {
 
 	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
-	LogAllErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -665,7 +665,7 @@ func NewConfig(
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 
-		LogAllErrors: dynamicconfig.LogAllErrors.Get(dc),
+		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 
 	return cfg
