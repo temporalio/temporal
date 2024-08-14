@@ -423,5 +423,5 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 }
 
 func debugMode() bool {
-	return os.Getenv(debugModeEnvVar) == "true"
+	return strings.ToLower(os.Getenv(debugModeEnvVar)) == "true"
 }
