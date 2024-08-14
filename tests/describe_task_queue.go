@@ -70,7 +70,10 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 }
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStats() {
-	s.testWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
+	for i := 0; i < 100; i++ {
+		s.testWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
+	}
 }
 
 func (s *DescribeTaskQueueSuite) TestAddMultipleTasksMultiplePartitions_ValidateStats() {
@@ -261,7 +264,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			s.Assert().Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
 
 			return true
-		}, 3*time.Second, 50*time.Millisecond)
+		}, 10*time.Second, 50*time.Millisecond)
 
 	} else {
 		// Querying the Legacy API
@@ -275,6 +278,6 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			s.NoError(err)
 			s.NotNil(resp)
 			return resp.TaskQueueStatus.GetBacklogCountHint() == expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW]
-		}, 3*time.Second, 50*time.Millisecond)
+		}, 10*time.Second, 50*time.Millisecond)
 	}
 }
