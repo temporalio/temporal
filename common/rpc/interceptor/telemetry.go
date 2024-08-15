@@ -369,13 +369,14 @@ func (ti *TelemetryInterceptor) HandleError(req interface{},
 	logTags []tag.Tag,
 	err error,
 	nsName namespace.Name) {
-	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
-
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		return
 	}
 
 	statusCode := serviceerror.ToStatus(err).Code()
+
+	recordMetric(metricsHandler, err, statusCode)
+
 	logAllErrors := nsName != "" && ti.logAllReqErrors(nsName.String())
 	if !logAllErrors && isUserCaused(statusCode) {
 		return
@@ -390,8 +391,6 @@ func (ti *TelemetryInterceptor) HandleError(req interface{},
 	logTags = append(logTags, ti.getWorkflowTags(req)...)
 
 	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
-
-	recordMetric(metricsHandler, err, statusCode)
 }
 
 func isUserCaused(statusCode codes.Code) bool {
@@ -421,6 +420,8 @@ func isUserCaused(statusCode codes.Code) bool {
 }
 
 func recordMetric(metricsHandler metrics.Handler, err error, statusCode codes.Code) {
+	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+
 	switch err := err.(type) {
 	case *serviceerror.ResourceExhausted:
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
