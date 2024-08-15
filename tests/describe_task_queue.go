@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -103,8 +104,8 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
-	tl := s.randomizeStr("backlog-counter-task-queue")
-	tq := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	tqName := s.randomizeStr("backlog-counter-task-queue")
+	tq := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	identity := "worker-multiple-tasks"
 	for i := 0; i < workflows; i++ {
 		id := uuid.New()
@@ -131,7 +132,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = false
 
-	s.validateDescribeTaskQueue(tl, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
+	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
@@ -156,7 +157,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 							ActivityId:            "activity1",
 							ActivityType:          &commonpb.ActivityType{Name: "activity_type1"},
-							TaskQueue:             &taskqueuepb.TaskQueue{Name: tl},
+							TaskQueue:             tq,
 							StartToCloseTimeout:   durationpb.New(time.Minute),
 							RequestEagerExecution: false,
 						},
@@ -176,7 +177,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
-	s.validateDescribeTaskQueue(tl, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
+	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
@@ -198,7 +199,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 
-	s.validateDescribeTaskQueue(tl, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
+	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 }
 
 func (s *DescribeTaskQueueSuite) isBacklogHeadCreateTimeCorrect(actualBacklogAge time.Duration, expectEmptyBacklog bool) bool {
@@ -228,7 +229,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 	var err error
 
 	if isEnhancedMode {
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			resp, err = s.client.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 				Namespace:              s.namespace,
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -241,30 +242,25 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			})
 			s.NoError(err)
 			s.NotNil(resp)
-			s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+			s.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
 			versionInfo := resp.GetVersionsInfo()[""]
-			s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+			s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 			types := versionInfo.GetTypesInfo()
-			s.Assert().Equal(len(types), len(expectedBacklogCount))
+			s.Equal(len(types), len(expectedBacklogCount))
 
 			wfStats := types[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Stats
 			actStats := types[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].Stats
 
-			// Waiting until the counts are as expected, then all other metrics must be consistent
-			if wfStats.ApproximateBacklogCount != expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] ||
-				actStats.ApproximateBacklogCount != expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] {
-				return false
-			}
-
-			s.Assert().Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] == 0, wfStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
-			s.Assert().Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] == 0, actStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
-			s.Assert().Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksAddRate > 0)
-			s.Assert().Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksAddRate > 0)
-			s.Assert().Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
-			s.Assert().Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
-
-			return true
-		}, 10*time.Second, 50*time.Millisecond)
+			a := assert.New(t)
+			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.ApproximateBacklogCount)
+			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.ApproximateBacklogCount)
+			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] == 0, wfStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
+			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] == 0, actStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
+			a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksAddRate > 0)
+			a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksAddRate > 0)
+			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
+			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
+		}, 6*time.Second, 100*time.Millisecond)
 
 	} else {
 		// Querying the Legacy API
@@ -278,6 +274,6 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			s.NoError(err)
 			s.NotNil(resp)
 			return resp.TaskQueueStatus.GetBacklogCountHint() == expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW]
-		}, 10*time.Second, 50*time.Millisecond)
+		}, 6*time.Second, 100*time.Millisecond)
 	}
 }
