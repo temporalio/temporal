@@ -369,15 +369,15 @@ func (ti *TelemetryInterceptor) HandleError(req interface{},
 	logTags []tag.Tag,
 	err error,
 	nsName namespace.Name) {
-	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-		return
-	}
-
 	statusCode := serviceerror.ToStatus(err).Code()
 
 	recordMetric(metricsHandler, err, statusCode)
 
 	logAllErrors := nsName != "" && ti.logAllReqErrors(nsName.String())
+	if !logAllErrors && (common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err)) {
+		return
+	}
+
 	if !logAllErrors && isUserCaused(statusCode) {
 		return
 	}
