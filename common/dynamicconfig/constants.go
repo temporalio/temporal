@@ -2490,6 +2490,6 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	LogAllReqErrors = NewNamespaceBoolSetting(
 		"system.logAllReqErrors",
 		false,
-		`When set to true, logs all error types for the namespace, not just unexpected ones.`,
+		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
 )
