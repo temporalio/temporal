@@ -182,7 +182,7 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
-	configuration *configs.Config,
+	serviceConfig *configs.Config,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
