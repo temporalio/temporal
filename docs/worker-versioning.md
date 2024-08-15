@@ -324,8 +324,8 @@ you can easily migrate to the new API.
 You don't need to change your worker code or Task Queue name. Only for your next 
 deployment, add an Assignment rule instead of a Version Set (incompatible Build ID). 
 The assignment rule can generally be done using the `insert-assignment-rule` command, 
-however, `commit-build-id` provides an idempotent replacement to the now-deprecated 
-`promote-set` operation. 
+however, `commit-build-id` provides an idempotent replacement to both (now-deprecated) 
+`promote-set` and `add-new-default` operations. 
 
 The Version Sets added previously will be present and be used for the old Workflow
 executions. They will be cleaned up automatically once all their workflows pass their retention time.
