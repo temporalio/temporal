@@ -51,7 +51,7 @@ var _ p.ExecutionStore = (*sqlExecutionStore)(nil)
 func NewSQLExecutionStore(
 	db sqlplugin.DB,
 	logger log.Logger,
-) (p.ExecutionStore, error) {
+) (*sqlExecutionStore, error) {
 
 	return &sqlExecutionStore{
 		SqlStore: NewSqlStore(db, logger),
@@ -230,7 +230,6 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	workflowID := request.WorkflowID
-
 	// Fetch runID if not available.
 	if request.RunID == "" {
 		res, err := m.GetCurrentExecution(ctx, &p.GetCurrentExecutionRequest{
@@ -243,6 +242,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		}
 		request.RunID = res.RunID
 	}
+
 	runID := primitives.MustParseUUID(request.RunID)
 	executionsRow, err := m.Db.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     request.ShardID,
