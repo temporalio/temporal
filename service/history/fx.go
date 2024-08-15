@@ -188,7 +188,7 @@ func TelemetryInterceptorProvider(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
-		configuration.LogAllReqErrors,
+		serviceConfig.LogAllReqErrors,
 	)
 }
 
