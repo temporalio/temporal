@@ -382,7 +382,9 @@ func (ti *TelemetryInterceptor) HandleError(req interface{},
 		return
 	}
 
-	if statusCode == codes.Internal || statusCode == codes.Unknown || logAllErrors {
+	// We mask these two error types in MaskInternalErrorDetailsInterceptor, so we need the hash to find the actual
+	// error message.
+	if statusCode == codes.Internal || statusCode == codes.Unknown {
 		errorHash := common.ErrorHash(err)
 		logTags = append(logTags, tag.NewStringTag("hash", errorHash))
 	}
