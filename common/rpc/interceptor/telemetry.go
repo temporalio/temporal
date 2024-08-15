@@ -364,15 +364,25 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	), []tag.Tag{tag.Operation(overridedMethodName)}
 }
 
-func (ti *TelemetryInterceptor) HandleError(req interface{},
+func (ti *TelemetryInterceptor) HandleError(
+	req interface{},
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
 	err error,
 	nsName namespace.Name) {
 	statusCode := serviceerror.ToStatus(err).Code()
 
-	recordMetric(metricsHandler, err, statusCode)
+	recordMetrics(metricsHandler, err, statusCode)
 
+	ti.logErrors(req, nsName, err, statusCode, logTags)
+}
+
+func (ti *TelemetryInterceptor) logErrors(
+	req interface{},
+	nsName namespace.Name,
+	err error,
+	statusCode codes.Code,
+	logTags []tag.Tag) {
 	logAllErrors := nsName != "" && ti.logAllReqErrors(nsName.String())
 	if !logAllErrors && (common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err)) {
 		return
@@ -421,7 +431,7 @@ func isUserCaused(statusCode codes.Code) bool {
 	return false
 }
 
-func recordMetric(metricsHandler metrics.Handler, err error, statusCode codes.Code) {
+func recordMetrics(metricsHandler metrics.Handler, err error, statusCode codes.Code) {
 	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 
 	switch err := err.(type) {
