@@ -30,8 +30,8 @@ import (
 )
 
 const (
-	TaskTypeSchedulerWait    = "scheduler.SchedulerWait"
-	TaskTypeSchedulerExecute = "scheduler.SchedulerExecute"
+	TaskTypeSchedulerWait     = "scheduler.SchedulerWait"
+	TaskTypeSchedulerActivate = "scheduler.SchedulerActivate"
 )
 
 type SchedulerWaitTask struct {
@@ -67,10 +67,8 @@ type SchedulerActivateTask struct {
 	Destination string
 }
 
-var _ hsm.Task = SchedulerActivateTask{}
-
 func (SchedulerActivateTask) Type() string {
-	return TaskTypeSchedulerExecute
+	return TaskTypeSchedulerActivate
 }
 
 func (t SchedulerActivateTask) Kind() hsm.TaskKind {
@@ -98,5 +96,5 @@ func RegisterTaskSerializers(reg *hsm.Registry) error {
 	if err := reg.RegisterTaskSerializer(TaskTypeSchedulerWait, ScheduleWaitTaskSerializer{}); err != nil {
 		return err
 	}
-	return reg.RegisterTaskSerializer(TaskTypeSchedulerExecute, ScheduleExecuteTaskSerializer{})
+	return reg.RegisterTaskSerializer(TaskTypeSchedulerActivate, ScheduleExecuteTaskSerializer{})
 }

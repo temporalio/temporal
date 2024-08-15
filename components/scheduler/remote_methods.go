@@ -104,7 +104,7 @@ func (p PatchSchedule) DeserializeInput(data []byte) (any, error) {
 	return input, nil
 }
 
-func (u UpdateSchedule) Name() string { return "scheduler.patch_schedule" }
+func (u UpdateSchedule) Name() string { return "scheduler.update_schedule" }
 
 func (u UpdateSchedule) SerializeOutput(_ any) ([]byte, error) {
 	return nil, nil

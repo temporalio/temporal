@@ -3607,9 +3607,6 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 	}
 
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
-	if wh.config.UseExperimentalHsmScheduler(request.Namespace) {
-		return nil, fmt.Errorf("deletion of HSM-based schedulers is not yet supported") // nolint:goerr113
-	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {

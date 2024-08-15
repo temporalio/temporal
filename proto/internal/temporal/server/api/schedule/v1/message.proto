@@ -153,6 +153,4 @@ message HsmSchedulerState {
     StartScheduleArgs args = 1;
     temporal.server.api.enums.v1.SchedulerState hsm_state = 2;
     google.protobuf.Timestamp next_invocation_time = 3;
-    repeated temporal.api.schedule.v1.SchedulePatch patch_signals = 4;
-    repeated FullUpdateRequest update_signals = 5;
 }
