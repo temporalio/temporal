@@ -110,6 +110,8 @@ type (
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
+
+		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	forwarderConfig struct {
@@ -254,6 +256,8 @@ func NewConfig(
 		VisibilityEnableManualPagination:  dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
+
+		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 }
 

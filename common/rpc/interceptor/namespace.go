@@ -45,7 +45,7 @@ type (
 )
 
 // MustGetNamespaceName returns request namespace name
-// or EmptyName if there's error when retriving namespace name,
+// or EmptyName if there's error when retrieving namespace name,
 // e.g. unable to find namespace
 func MustGetNamespaceName(
 	namespaceRegistry namespace.Registry,

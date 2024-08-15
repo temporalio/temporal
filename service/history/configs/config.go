@@ -363,6 +363,8 @@ type Config struct {
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
 
 	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+
+	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -662,6 +664,8 @@ func NewConfig(
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
+
+		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 
 	return cfg
