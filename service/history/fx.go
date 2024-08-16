@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
@@ -93,6 +94,7 @@ var Module = fx.Options(
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
+	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
@@ -300,4 +302,12 @@ func EventNotifierProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func ReplicationProgressCacheProvider(
+	serviceConfig *configs.Config,
+	logger log.Logger,
+	handler metrics.Handler,
+) replication.ProgressCache {
+	return replication.NewProgressCache(serviceConfig, logger, handler)
 }

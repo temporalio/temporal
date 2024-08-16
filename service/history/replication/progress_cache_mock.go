@@ -32,11 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/api/common/v1"
-	v10 "go.temporal.io/server/api/history/v1"
-	v11 "go.temporal.io/server/api/persistence/v1"
-	namespace "go.temporal.io/server/common/namespace"
-	shard "go.temporal.io/server/service/history/shard"
+	v1 "go.temporal.io/server/api/history/v1"
+	v10 "go.temporal.io/server/api/persistence/v1"
 )
 
 // MockProgressCache is a mock of ProgressCache interface.
@@ -63,30 +60,29 @@ func (m *MockProgressCache) EXPECT() *MockProgressCacheMockRecorder {
 }
 
 // Get mocks base method.
-func (m *MockProgressCache) Get(shardContext shard.Context, namespaceID namespace.ID, execution *v1.WorkflowExecution, clusterID int32, eventVersionHistory *v10.VersionHistory) (*ReplicationProgress, bool) {
+func (m *MockProgressCache) Get(runID string, targetClusterID int32) *ReplicationProgress {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", shardContext, namespaceID, execution, clusterID, eventVersionHistory)
+	ret := m.ctrl.Call(m, "Get", runID, targetClusterID)
 	ret0, _ := ret[0].(*ReplicationProgress)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
+	return ret0
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockProgressCacheMockRecorder) Get(shardContext, namespaceID, execution, clusterID, eventVersionHistory interface{}) *gomock.Call {
+func (mr *MockProgressCacheMockRecorder) Get(runID, targetClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockProgressCache)(nil).Get), shardContext, namespaceID, execution, clusterID, eventVersionHistory)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockProgressCache)(nil).Get), runID, targetClusterID)
 }
 
-// Put mocks base method.
-func (m *MockProgressCache) Put(shardContext shard.Context, namespaceID namespace.ID, execution *v1.WorkflowExecution, clusterID int32, eventVersionHistory *v10.VersionHistory, versionedTransition *v11.VersionedTransition) error {
+// Update mocks base method.
+func (m *MockProgressCache) Update(runID string, targetClusterID int32, versionedTransitions []*v10.VersionedTransition, eventVersionHistoryItems []*v1.VersionHistoryItem) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Put", shardContext, namespaceID, execution, clusterID, eventVersionHistory, versionedTransition)
+	ret := m.ctrl.Call(m, "Update", runID, targetClusterID, versionedTransitions, eventVersionHistoryItems)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Put indicates an expected call of Put.
-func (mr *MockProgressCacheMockRecorder) Put(shardContext, namespaceID, execution, clusterID, eventVersionHistory, versionedTransition interface{}) *gomock.Call {
+// Update indicates an expected call of Update.
+func (mr *MockProgressCacheMockRecorder) Update(runID, targetClusterID, versionedTransitions, eventVersionHistoryItems interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockProgressCache)(nil).Put), shardContext, namespaceID, execution, clusterID, eventVersionHistory, versionedTransition)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockProgressCache)(nil).Update), runID, targetClusterID, versionedTransitions, eventVersionHistoryItems)
 }

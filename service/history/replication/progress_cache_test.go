@@ -33,11 +33,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	commonpb "go.temporal.io/api/common/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -46,6 +46,7 @@ type (
 	progressCacheSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller *gomock.Controller
 		mockShard  *shard.ContextTest
@@ -55,7 +56,6 @@ type (
 		namespaceID   string
 		workflowID    string
 		runID         string
-		clusterID     int32
 	}
 )
 
@@ -98,7 +98,7 @@ func (s *progressCacheSuite) SetupTest() {
 	s.namespaceID = tests.NamespaceID.String()
 	s.workflowID = uuid.New()
 	s.runID = uuid.New()
-	s.clusterID = rand.Int31()
+
 }
 
 func (s *progressCacheSuite) TearDownTest() {
@@ -107,76 +107,80 @@ func (s *progressCacheSuite) TearDownTest() {
 }
 
 func (s *progressCacheSuite) TestProgressCache() {
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: s.workflowID,
-		RunId:      s.runID,
-	}
-
+	targetClusterID := rand.Int31()
 	firstEventID := int64(999)
-	versionedTransition := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80}
-	versionHistory := &historyspb.VersionHistory{
-		BranchToken: []byte{1, 2, 3},
-		Items: []*historyspb.VersionHistoryItem{
-			{
-				EventId: firstEventID,
-				Version: versionedTransition.NamespaceFailoverVersion,
-			},
-		},
+	versionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 80,
+		TransitionCount:          10,
+	}
+	versionedTransitions := []*persistencespb.VersionedTransition{versionedTransition}
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(firstEventID, versionedTransition.NamespaceFailoverVersion),
+	}
+	expected := &ReplicationProgress{
+		versionedTransitions:       [][]*persistencespb.VersionedTransition{versionedTransitions},
+		eventVersionHistoryItems:   [][]*historyspb.VersionHistoryItem{versionHistoryItems},
+		lastVersionTransitionIndex: 0,
 	}
 
-	// Get: cluster not exist
-	cachedProgress, cacheHit := s.progressCache.Get(
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		execution,
-		s.clusterID,
-		versionHistory,
-	)
-	s.False(cacheHit)
+	// get non-existing progress
+	cachedProgress := s.progressCache.Get(s.runID, targetClusterID)
 	s.Nil(cachedProgress)
 
-	// Put
-	err := s.progressCache.Put(
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		execution,
-		s.clusterID,
-		versionHistory,
-		versionedTransition,
-	)
-	s.NoError(err)
+	err := s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
+	s.Nil(err)
 
-	// Get exist
-	cachedProgress, cacheHit = s.progressCache.Get(
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		execution,
-		s.clusterID,
-		versionHistory,
-	)
-	s.True(cacheHit)
-	s.Equal(cachedProgress, &ReplicationProgress{
-		versionedTransition:      versionedTransition,
-		eventVersionHistoryItems: versionHistory.GetItems(),
-	})
+	// get existing progress
+	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
+	s.DeepEqual(expected, cachedProgress)
 
-	// Get: branch not exist
-	versionHistory2 := &historyspb.VersionHistory{
-		BranchToken: []byte{4, 5, 6},
-		Items: []*historyspb.VersionHistoryItem{
-			{
-				EventId: firstEventID + 1,
-				Version: versionedTransition.NamespaceFailoverVersion + 1,
-			},
+	// update existing versioned transition and version history
+	versionedTransitions2 := []*persistencespb.VersionedTransition{
+		{
+			NamespaceFailoverVersion: 80,
+			TransitionCount:          20,
 		},
 	}
-	cachedProgress, cacheHit = s.progressCache.Get(
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		execution,
-		s.clusterID,
-		versionHistory2,
-	)
-	s.False(cacheHit)
-	s.Nil(cachedProgress)
+	versionHistoryItems2 := []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion),
+	}
+	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions2, versionHistoryItems2)
+	s.Nil(err)
+
+	expected2 := &ReplicationProgress{
+		versionedTransitions:       [][]*persistencespb.VersionedTransition{versionedTransitions2},
+		eventVersionHistoryItems:   [][]*historyspb.VersionHistoryItem{versionHistoryItems2},
+		lastVersionTransitionIndex: 0,
+	}
+	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
+	s.DeepEqual(expected2, cachedProgress)
+
+	// add new versioned transition and version history
+	versionedTransitions3 := []*persistencespb.VersionedTransition{
+		{
+			NamespaceFailoverVersion: 90,
+			TransitionCount:          15,
+		},
+	}
+	versionHistoryItems3 := []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(firstEventID, versionedTransition.NamespaceFailoverVersion),
+		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion+1),
+	}
+	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions3, versionHistoryItems3)
+	s.Nil(err)
+
+	expected3 := &ReplicationProgress{
+		versionedTransitions:       [][]*persistencespb.VersionedTransition{versionedTransitions2, versionedTransitions3},
+		eventVersionHistoryItems:   [][]*historyspb.VersionHistoryItem{versionHistoryItems2, versionHistoryItems3},
+		lastVersionTransitionIndex: 1,
+	}
+	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
+	s.DeepEqual(expected3, cachedProgress)
+
+	// noop update: versioned transition and version history are already included in the existing progress
+	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
+	s.Nil(err)
+
+	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
+	s.DeepEqual(expected3, cachedProgress)
 }

@@ -70,7 +70,7 @@ type (
 		ConvertTaskByCluster(
 			ctx context.Context,
 			task tasks.Task,
-			clusterID int32,
+			targetClusterID int32,
 		) (*replicationspb.ReplicationTask, error)
 		GetReplicationTasksIter(
 			ctx context.Context,
@@ -469,7 +469,7 @@ func (p *ackMgrImpl) ConvertTask(
 func (p *ackMgrImpl) ConvertTaskByCluster(
 	ctx context.Context,
 	task tasks.Task,
-	clusterID int32,
+	targetClusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
 	switch task := task.(type) {
 	case *tasks.SyncVersionedTransitionTask:
@@ -481,7 +481,7 @@ func (p *ackMgrImpl) ConvertTaskByCluster(
 			p.workflowCache,
 			p.eventBlobCache,
 			p.replicationProgressCache,
-			clusterID,
+			targetClusterID,
 			p.executionMgr,
 			p.logger,
 		)

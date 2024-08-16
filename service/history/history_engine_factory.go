@@ -55,6 +55,7 @@ type (
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
+		ReplicationProgressCache        replication.ProgressCache
 		NewCacheFn                      wcache.NewCacheFn
 		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
@@ -83,7 +84,6 @@ func (f *historyEngineFactory) CreateEngine(
 		wfCache = f.NewCacheFn(shard.GetConfig(), shard.GetLogger(), shard.GetMetricsHandler())
 	}
 
-	replicationProgressCache := replication.NewProgressCache(shard.GetConfig(), shard.GetLogger(), shard.GetMetricsHandler())
 	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, wfCache)
 	return NewEngineWithShardContext(
 		shard,
@@ -94,7 +94,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.Config,
 		f.RawMatchingClient,
 		wfCache,
-		replicationProgressCache,
+		f.ReplicationProgressCache,
 		f.EventSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,

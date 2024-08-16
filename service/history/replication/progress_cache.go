@@ -28,37 +28,29 @@ package replication
 
 import (
 	"sync"
+	"unsafe"
 
-	commonpb "go.temporal.io/api/common/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
 	ProgressCache interface {
 		Get(
-			shardContext shard.Context,
-			namespaceID namespace.ID,
-			execution *commonpb.WorkflowExecution,
-			clusterID int32,
-			eventVersionHistory *historyspb.VersionHistory,
-		) (*ReplicationProgress, bool)
-		Put(
-			shardContext shard.Context,
-			namespaceID namespace.ID,
-			execution *commonpb.WorkflowExecution,
-			clusterID int32,
-			eventVersionHistory *historyspb.VersionHistory,
-			versionedTransition *persistencespb.VersionedTransition,
+			runID string,
+			targetClusterID int32,
+		) *ReplicationProgress
+		Update(
+			runID string,
+			targetClusterID int32,
+			versionedTransitions []*persistencespb.VersionedTransition,
+			eventVersionHistoryItems []*historyspb.VersionHistoryItem,
 		) error
 	}
 
@@ -68,19 +60,14 @@ type (
 	}
 
 	ReplicationProgress struct {
-		versionedTransition      *persistencespb.VersionedTransition
-		eventVersionHistoryItems []*historyspb.VersionHistoryItem
-	}
-
-	cacheItem struct {
-		versionedTransition *persistencespb.VersionedTransition
-		eventVersionHistory map[string][]*historyspb.VersionHistoryItem
+		versionedTransitions       [][]*persistencespb.VersionedTransition
+		eventVersionHistoryItems   [][]*historyspb.VersionHistoryItem
+		lastVersionTransitionIndex int
 	}
 
 	Key struct {
-		WorkflowKey definition.WorkflowKey
-		ShardUUID   string
-		ClusterID   int32
+		RunID           string
+		TargetClusterID int32
 	}
 )
 
@@ -99,75 +86,134 @@ func NewProgressCache(
 }
 
 func (c *progressCacheImpl) Get(
-	shardContext shard.Context,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-	clusterID int32,
-	eventVersionHistory *historyspb.VersionHistory,
-) (*ReplicationProgress, bool) {
-	cacheKey := makeCacheKey(shardContext, namespaceID, execution, clusterID)
+	runID string,
+	targetClusterID int32,
+) *ReplicationProgress {
+	cacheKey := makeCacheKey(runID, targetClusterID)
 	c.cacheLock.RLock()
 	defer c.cacheLock.RUnlock()
 
-	item, cacheHit := c.cache.Get(cacheKey).(*cacheItem)
-	if cacheHit {
-		historyItems, cacheHit := item.eventVersionHistory[makeMapKey(eventVersionHistory)]
-		if cacheHit {
-			return &ReplicationProgress{
-				versionedTransition:      item.versionedTransition,
-				eventVersionHistoryItems: historyItems,
-			}, true
-		}
+	progress, ok := c.cache.Get(cacheKey).(*ReplicationProgress)
+	if !ok {
+		return nil
 	}
-	return nil, false
+	return progress
 }
 
-func (c *progressCacheImpl) Put(
-	shardContext shard.Context,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-	clusterID int32,
-	eventVersionHistory *historyspb.VersionHistory,
-	versionedTransition *persistencespb.VersionedTransition,
+func (c *progressCacheImpl) updateStates(
+	item *ReplicationProgress,
+	versionedTransitions []*persistencespb.VersionedTransition,
+) bool {
+	if len(versionedTransitions) == 0 {
+		return false
+	}
+
+	if item.versionedTransitions == nil {
+		item.versionedTransitions = [][]*persistencespb.VersionedTransition{
+			workflow.CopyVersionedTransitions(versionedTransitions),
+		}
+		item.lastVersionTransitionIndex = 0
+		return true
+	}
+
+	for idx, transitions := range item.versionedTransitions {
+		if workflow.TransitionHistoryStalenessCheck(versionedTransitions, transitions[len(transitions)-1]) == nil {
+			item.versionedTransitions[idx] = workflow.CopyVersionedTransitions(versionedTransitions)
+			return true
+		}
+		if workflow.TransitionHistoryStalenessCheck(transitions, versionedTransitions[len(versionedTransitions)-1]) == nil {
+			// incoming versioned transitions are already included in the current versioned transitions
+			return false
+		}
+	}
+	item.lastVersionTransitionIndex = len(item.versionedTransitions)
+	item.versionedTransitions = append(item.versionedTransitions, workflow.CopyVersionedTransitions(versionedTransitions))
+	return true
+}
+
+func (c *progressCacheImpl) updateEvents(
+	item *ReplicationProgress,
+	eventVersionHistoryItems []*historyspb.VersionHistoryItem,
+) (bool, error) {
+	if len(eventVersionHistoryItems) == 0 {
+		return false, nil
+	}
+
+	if item.eventVersionHistoryItems == nil {
+		item.eventVersionHistoryItems = [][]*historyspb.VersionHistoryItem{
+			versionhistory.CopyVersionHistoryItems(eventVersionHistoryItems),
+		}
+		return true, nil
+	}
+
+	for idx, historyItems := range item.eventVersionHistoryItems {
+		lcaItem, err := versionhistory.FindLCAVersionHistoryItemFromItemSlice(historyItems, eventVersionHistoryItems)
+		if err != nil {
+			return false, err
+		}
+		if versionhistory.IsEqualVersionHistoryItem(eventVersionHistoryItems[len(eventVersionHistoryItems)-1], lcaItem) {
+			// incoming version history is already included in the current version histories
+			return false, nil
+		}
+		if versionhistory.IsEqualVersionHistoryItem(historyItems[len(historyItems)-1], lcaItem) {
+			// incoming version history can be appended to the current version histories
+			item.eventVersionHistoryItems[idx] = versionhistory.CopyVersionHistoryItems(eventVersionHistoryItems)
+			return true, nil
+		}
+	}
+
+	item.eventVersionHistoryItems = append(item.eventVersionHistoryItems, versionhistory.CopyVersionHistoryItems(eventVersionHistoryItems))
+	return true, nil
+}
+
+func (c *progressCacheImpl) Update(
+	runID string,
+	targetClusterID int32,
+	versionedTransitions []*persistencespb.VersionedTransition,
+	eventVersionHistoryItems []*historyspb.VersionHistoryItem,
 ) error {
-	cacheKey := makeCacheKey(shardContext, namespaceID, execution, clusterID)
+	cacheKey := makeCacheKey(runID, targetClusterID)
 	c.cacheLock.Lock()
 	defer c.cacheLock.Unlock()
 
-	mapKey := makeMapKey(eventVersionHistory)
-	item, cacheHit := c.cache.Get(cacheKey).(*cacheItem)
-	if !cacheHit {
-		item = &cacheItem{
-			versionedTransition: versionedTransition,
-			eventVersionHistory: map[string][]*historyspb.VersionHistoryItem{
-				mapKey: versionhistory.CopyVersionHistory(eventVersionHistory).GetItems(),
-			},
-		}
-		c.cache.Put(cacheKey, item)
-		return nil
+	item, ok := c.cache.Get(cacheKey).(*ReplicationProgress)
+	if !ok {
+		item = &ReplicationProgress{}
 	}
 
-	if workflow.CompareVersionedTransition(versionedTransition, item.versionedTransition) < 0 {
-		return nil
+	stateDirty := c.updateStates(item, versionedTransitions)
+	eventDirty, err := c.updateEvents(item, eventVersionHistoryItems)
+	if err != nil {
+		return err
 	}
-	item.versionedTransition = versionedTransition
-	item.eventVersionHistory[mapKey] = versionhistory.CopyVersionHistory(eventVersionHistory).GetItems()
+
+	if stateDirty || eventDirty {
+		c.cache.Put(cacheKey, item)
+	}
 	return nil
 }
 
-func makeCacheKey(
-	shardContext shard.Context,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-	clusterID int32,
-) Key {
-	return Key{
-		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
-		ShardUUID:   shardContext.GetOwner(),
-		ClusterID:   clusterID,
+func (c *ReplicationProgress) CacheSize() int {
+	size := int(unsafe.Sizeof(c.lastVersionTransitionIndex))
+	for _, transitions := range c.versionedTransitions {
+		for _, versionedTransition := range transitions {
+			size += versionedTransition.Size()
+		}
 	}
+	for _, items := range c.eventVersionHistoryItems {
+		for _, item := range items {
+			size += item.Size()
+		}
+	}
+	return size
 }
 
-func makeMapKey(eventVersionHistory *historyspb.VersionHistory) string {
-	return string(eventVersionHistory.GetBranchToken())
+func makeCacheKey(
+	runID string,
+	targetClusterID int32,
+) Key {
+	return Key{
+		RunID:           runID,
+		TargetClusterID: targetClusterID,
+	}
 }

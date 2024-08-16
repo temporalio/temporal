@@ -1064,7 +1064,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
 func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill() {
 	ctx := context.Background()
 	shardID := int32(12)
-	clusterID := int32(3)
+	targetClusterID := int32(3)
 	firstEventID := int64(999)
 	nextEventID := int64(1911)
 	version := int64(288)
@@ -1086,14 +1086,15 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		},
 	}
 
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{
+			EventId: nextEventID - 1,
+			Version: version,
+		},
+	}
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte("branch token"),
-		Items: []*historyspb.VersionHistoryItem{
-			{
-				EventId: nextEventID - 1,
-				Version: version,
-			},
-		},
+		Items:       versionHistoryItems,
 	}
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -1125,7 +1126,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories:  versionHistories,
 		TransitionHistory: transitionHistory,
-	}).Times(3)
+	}).Times(2)
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   versionHistory.BranchToken,
 		MinEventID:    firstEventID,
@@ -1186,17 +1187,17 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		NextPageToken:     nil,
 	}, nil)
 	s.progressCache.EXPECT().Get(
-		s.shardContext,
-		namespace.ID(s.namespaceID),
-		&commonpb.WorkflowExecution{
-			WorkflowId: s.workflowID,
-			RunId:      s.runID,
-		},
-		clusterID,
-		versionHistory,
-	).Return(nil, false)
+		s.runID,
+		targetClusterID,
+	).Return(nil)
+	s.progressCache.EXPECT().Update(
+		s.runID,
+		targetClusterID,
+		nil,
+		versionHistoryItems,
+	).Return(nil)
 
-	result, err := convertSyncVersionedTransitionTask(ctx, s.shardContext, task, shardID, s.workflowCache, nil, s.progressCache, clusterID, s.executionManager, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, s.shardContext, task, shardID, s.workflowCache, nil, s.progressCache, targetClusterID, s.executionManager, s.logger)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK,

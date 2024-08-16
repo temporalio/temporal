@@ -61,7 +61,7 @@ type (
 		config         *configs.Config
 	}
 	SourceTaskConverter interface {
-		Convert(task tasks.Task, clusterID int32) (*replicationspb.ReplicationTask, error)
+		Convert(task tasks.Task, targetClusterID int32) (*replicationspb.ReplicationTask, error)
 	}
 	SourceTaskConverterProvider func(
 		historyEngine shard.Engine,
@@ -87,7 +87,7 @@ func NewSourceTaskConverter(
 
 func (c *SourceTaskConverterImpl) Convert(
 	task tasks.Task,
-	clusterID int32,
+	targetClusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
 
 	var ctx context.Context
@@ -105,7 +105,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	}
 	ctx, cancel = newTaskContext(nsName, c.config.ReplicationTaskApplyTimeout())
 	defer cancel()
-	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task, clusterID)
+	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task, targetClusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func convertSyncVersionedTransitionTask(
 	workflowCache wcache.Cache,
 	eventBlobCache persistence.XDCCache,
 	replicationCache ProgressCache,
-	clusterID int32,
+	targetClusterID int32,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) (*replicationspb.ReplicationTask, error) {
@@ -284,7 +284,7 @@ func convertSyncVersionedTransitionTask(
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			currentVersionHistory, currentEvents, newEvents, _, err := getVersionHistoryAndEventsWithNewRun(
+			taskVersionHistoryItems, taskEvents, taskNewEvents, _, err := getVersionHistoryAndEventsWithNewRun(
 				ctx,
 				shardContext,
 				shardID,
@@ -302,101 +302,58 @@ func convertSyncVersionedTransitionTask(
 				return nil, err
 			}
 
-			versionHistory, err := getBranch(mutableState, taskInfo.FirstEventID, taskInfo.VersionedTransition.NamespaceFailoverVersion)
-			if err != nil {
-				return nil, err
-			}
+			currentTransitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+			cachedProgress := replicationCache.Get(taskInfo.RunID, targetClusterID)
 
-			transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-			execution := &commonpb.WorkflowExecution{
-				WorkflowId: taskInfo.WorkflowID,
-				RunId:      taskInfo.RunID,
-			}
-			cachedProgress, cacheHit := replicationCache.Get(
-				shardContext,
-				namespace.ID(taskInfo.NamespaceID),
-				execution,
-				clusterID,
-				versionHistory,
-			)
-
-			// if task versioned transition not on current transition history
-			if workflow.TransitionHistoryStalenessCheck(transitionHistory, taskInfo.VersionedTransition) != nil {
-				if len(currentEvents) == 0 && len(taskInfo.NewRunID) == 0 {
+			// 1. task versioned transition not on current transition history
+			if workflow.TransitionHistoryStalenessCheck(currentTransitionHistory, taskInfo.VersionedTransition) != nil {
+				// 1.1 task has no events and no new run
+				if len(taskEvents) == 0 && len(taskInfo.NewRunID) == 0 {
 					return nil, nil
 				}
 
-				// if cached versioned transition on current transition history
-				if cacheHit && workflow.CompareVersionedTransition(cachedProgress.versionedTransition, taskInfo.VersionedTransition) >= 0 {
-					return nil, nil // TODO: return VerifyVersionedTransitionTask
+				// 1.2 progress cache hit
+				if cachedProgress != nil {
+					return nil, nil // TODO: return VerifyVersionedTransitionTask(taskInfo)
 				}
 
-				return generateBackfillHistoryTask(taskInfo, currentVersionHistory, currentEvents, newEvents)
-			}
-
-			// on current transition history
-
-			if !cacheHit {
-				// progress cache miss
-				// mutation is from the versioned transition from the task to the current versioned transition
-				// Event start from the first eventID in the task.
-				return generateSyncVersionedTransitionTask(
-					shardContext,
+				// 1.3 progress cache miss
+				return generateBackfillHistoryTask(
 					taskInfo,
 					replicationCache,
-					clusterID,
-					execution,
-					versionHistory, // TODO: update this
+					taskInfo.RunID,
+					targetClusterID,
+					taskVersionHistoryItems,
+					taskEvents,
+					taskNewEvents,
 				)
 			}
 
-			// progress cache hit
-
-			// if cached versioned transition on current transition history
-			if workflow.TransitionHistoryStalenessCheck(transitionHistory, cachedProgress.versionedTransition) == nil {
-				if workflow.CompareVersionedTransition(cachedProgress.versionedTransition, taskInfo.VersionedTransition) >= 0 {
-					return nil, nil // TODO: return VerifyVersionedTransitionTask
-				}
-
-				// mutation is from the cached versioned transition progress to the
-				// current versioned transition
-				// Event start from the cached event progress.
-				// TODO: return SyncVersionedTransitionTask with SyncStateMutationAttributes
-				return generateSyncVersionedTransitionTask(
-					shardContext,
-					taskInfo,
-					replicationCache,
-					clusterID,
-					execution,
-					versionHistory, // TODO: update this
-				)
-			}
-
-			// last synced a state on a different branch
-			// likely diverged.
-			// Event start from LCA
-			// TODO: return SyncVersionedTransitionTask with SyncStateSnapshotAttributes
-			return generateSyncVersionedTransitionTask(
-				shardContext,
-				taskInfo,
-				replicationCache,
-				clusterID,
-				execution,
-				versionHistory, // TODO: update this
-			)
+			// TODO: we need to handle the following cases:
+			// 2. SyncVersionedTransitionTask
+			// 3. VerifyVersionedTransitionTask
+			return nil, nil
 		},
 	)
 }
 
 func generateBackfillHistoryTask(
 	taskInfo *tasks.SyncVersionedTransitionTask,
+	replicationCache ProgressCache,
+	runID string,
+	targetClusterID int32,
 	currentVersionHistory []*historyspb.VersionHistoryItem,
 	currentEvents []*commonpb.DataBlob,
 	newEvents *commonpb.DataBlob,
 ) (*replicationspb.ReplicationTask, error) {
+	err := replicationCache.Update(runID, targetClusterID, nil, currentVersionHistory)
+	if err != nil {
+		return nil, err
+	}
 	return &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK,
 		SourceTaskId: taskInfo.TaskID,
+		Priority:     taskInfo.Priority,
 		Attributes: &replicationspb.ReplicationTask_BackfillHistoryTaskAttributes{
 			BackfillHistoryTaskAttributes: &replicationspb.BackfillHistoryTaskAttributes{
 				NamespaceId:         taskInfo.NamespaceID,
@@ -408,40 +365,6 @@ func generateBackfillHistoryTask(
 					RunId:      taskInfo.NewRunID,
 					EventBatch: newEvents,
 				},
-			},
-		},
-		VersionedTransition: taskInfo.VersionedTransition,
-		VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
-	}, nil
-}
-
-func generateSyncVersionedTransitionTask(
-	shardContext shard.Context,
-	taskInfo *tasks.SyncVersionedTransitionTask,
-	replicationCache ProgressCache,
-	clusterID int32,
-	execution *commonpb.WorkflowExecution,
-	versionHistory *historyspb.VersionHistory,
-) (*replicationspb.ReplicationTask, error) {
-	// TODO: get events to be synced
-
-	err := replicationCache.Put(
-		shardContext,
-		namespace.ID(taskInfo.NamespaceID),
-		execution,
-		clusterID,
-		versionHistory,
-		taskInfo.VersionedTransition,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &replicationspb.ReplicationTask{
-		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK,
-		SourceTaskId: taskInfo.TaskID,
-		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
-			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
-				// TODO: SyncStateMutationAttributes or SyncStateSnapshotAttributes
 			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,
