@@ -680,6 +680,14 @@ message RefreshWorkflowTasksRequest {
 message RefreshWorkflowTasksResponse {
 }
 
+message UnblockWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.server.api.adminservice.v1.UnblockWorkflowExecutionRequest request = 2;
+}
+
+message UnblockWorkflowExecutionResponse {
+}
+
 message GenerateLastHistoryReplicationTasksRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;

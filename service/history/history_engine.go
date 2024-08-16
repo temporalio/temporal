@@ -93,6 +93,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/unblockworkflowexecution"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
@@ -944,6 +945,23 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	return refreshworkflow.Invoke(
 		ctx,
 		definition.NewWorkflowKey(namespaceUUID.String(), execution.WorkflowId, execution.RunId),
+		e.shardContext,
+		e.workflowConsistencyChecker,
+	)
+}
+
+func (e *historyEngineImpl) UnblockWorkflowExecution(
+	ctx context.Context,
+	namespaceUUID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+) error {
+	return unblockworkflowexecution.Invoke(
+		ctx,
+		definition.NewWorkflowKey(
+			namespaceUUID.String(),
+			execution.WorkflowId,
+			execution.RunId,
+		),
 		e.shardContext,
 		e.workflowConsistencyChecker,
 	)

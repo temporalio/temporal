@@ -86,6 +86,7 @@ const (
 	HistoryService_PurgeDLQMessages_FullMethodName                       = "/temporal.server.api.historyservice.v1.HistoryService/PurgeDLQMessages"
 	HistoryService_MergeDLQMessages_FullMethodName                       = "/temporal.server.api.historyservice.v1.HistoryService/MergeDLQMessages"
 	HistoryService_RefreshWorkflowTasks_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/RefreshWorkflowTasks"
+	HistoryService_UnblockWorkflowExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnblockWorkflowExecution"
 	HistoryService_GenerateLastHistoryReplicationTasks_FullMethodName    = "/temporal.server.api.historyservice.v1.HistoryService/GenerateLastHistoryReplicationTasks"
 	HistoryService_GetReplicationStatus_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/GetReplicationStatus"
 	HistoryService_RebuildMutableState_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/RebuildMutableState"
@@ -274,6 +275,8 @@ type HistoryServiceClient interface {
 	MergeDLQMessages(ctx context.Context, in *MergeDLQMessagesRequest, opts ...grpc.CallOption) (*MergeDLQMessagesResponse, error)
 	// RefreshWorkflowTasks refreshes all tasks of a workflow.
 	RefreshWorkflowTasks(ctx context.Context, in *RefreshWorkflowTasksRequest, opts ...grpc.CallOption) (*RefreshWorkflowTasksResponse, error)
+	// UnblockWorkflowExecution immediately unblocks a blocked/delayed workflow.
+	UnblockWorkflowExecution(ctx context.Context, in *UnblockWorkflowExecutionRequest, opts ...grpc.CallOption) (*UnblockWorkflowExecutionResponse, error)
 	// GenerateLastHistoryReplicationTasks generate a replication task for last history event for requested workflow execution
 	GenerateLastHistoryReplicationTasks(ctx context.Context, in *GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*GenerateLastHistoryReplicationTasksResponse, error)
 	GetReplicationStatus(ctx context.Context, in *GetReplicationStatusRequest, opts ...grpc.CallOption) (*GetReplicationStatusResponse, error)
@@ -726,6 +729,15 @@ func (c *historyServiceClient) RefreshWorkflowTasks(ctx context.Context, in *Ref
 	return out, nil
 }
 
+func (c *historyServiceClient) UnblockWorkflowExecution(ctx context.Context, in *UnblockWorkflowExecutionRequest, opts ...grpc.CallOption) (*UnblockWorkflowExecutionResponse, error) {
+	out := new(UnblockWorkflowExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UnblockWorkflowExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) GenerateLastHistoryReplicationTasks(ctx context.Context, in *GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*GenerateLastHistoryReplicationTasksResponse, error) {
 	out := new(GenerateLastHistoryReplicationTasksResponse)
 	err := c.cc.Invoke(ctx, HistoryService_GenerateLastHistoryReplicationTasks_FullMethodName, in, out, opts...)
@@ -1102,6 +1114,8 @@ type HistoryServiceServer interface {
 	MergeDLQMessages(context.Context, *MergeDLQMessagesRequest) (*MergeDLQMessagesResponse, error)
 	// RefreshWorkflowTasks refreshes all tasks of a workflow.
 	RefreshWorkflowTasks(context.Context, *RefreshWorkflowTasksRequest) (*RefreshWorkflowTasksResponse, error)
+	// UnblockWorkflowExecution immediately unblocks a blocked/delayed workflow.
+	UnblockWorkflowExecution(context.Context, *UnblockWorkflowExecutionRequest) (*UnblockWorkflowExecutionResponse, error)
 	// GenerateLastHistoryReplicationTasks generate a replication task for last history event for requested workflow execution
 	GenerateLastHistoryReplicationTasks(context.Context, *GenerateLastHistoryReplicationTasksRequest) (*GenerateLastHistoryReplicationTasksResponse, error)
 	GetReplicationStatus(context.Context, *GetReplicationStatusRequest) (*GetReplicationStatusResponse, error)
@@ -1286,6 +1300,9 @@ func (UnimplementedHistoryServiceServer) MergeDLQMessages(context.Context, *Merg
 }
 func (UnimplementedHistoryServiceServer) RefreshWorkflowTasks(context.Context, *RefreshWorkflowTasksRequest) (*RefreshWorkflowTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RefreshWorkflowTasks not implemented")
+}
+func (UnimplementedHistoryServiceServer) UnblockWorkflowExecution(context.Context, *UnblockWorkflowExecutionRequest) (*UnblockWorkflowExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnblockWorkflowExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) GenerateLastHistoryReplicationTasks(context.Context, *GenerateLastHistoryReplicationTasksRequest) (*GenerateLastHistoryReplicationTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GenerateLastHistoryReplicationTasks not implemented")
@@ -2155,6 +2172,24 @@ func _HistoryService_RefreshWorkflowTasks_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_UnblockWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnblockWorkflowExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UnblockWorkflowExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UnblockWorkflowExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UnblockWorkflowExecution(ctx, req.(*UnblockWorkflowExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_GenerateLastHistoryReplicationTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GenerateLastHistoryReplicationTasksRequest)
 	if err := dec(in); err != nil {
@@ -2723,6 +2758,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RefreshWorkflowTasks",
 			Handler:    _HistoryService_RefreshWorkflowTasks_Handler,
+		},
+		{
+			MethodName: "UnblockWorkflowExecution",
+			Handler:    _HistoryService_UnblockWorkflowExecution_Handler,
 		},
 		{
 			MethodName: "GenerateLastHistoryReplicationTasks",

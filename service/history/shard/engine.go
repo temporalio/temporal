@@ -104,6 +104,7 @@ type (
 		RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution *commonpb.WorkflowExecution) error
 		ImportWorkflowExecution(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest) (*historyservice.ImportWorkflowExecutionResponse, error)
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *commonpb.WorkflowExecution) error
+		UnblockWorkflowExecution(ctx context.Context, namespaceUUID namespace.ID, execution *commonpb.WorkflowExecution) error
 		GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error)
 		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)
 		UpdateWorkflowExecution(ctx context.Context, request *historyservice.UpdateWorkflowExecutionRequest) (*historyservice.UpdateWorkflowExecutionResponse, error)

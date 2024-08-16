@@ -564,3 +564,17 @@ func (c *metricClient) ResendReplicationTasks(
 
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
 }
+
+func (c *metricClient) UnblockWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.UnblockWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.UnblockWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientUnblockWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UnblockWorkflowExecution(ctx, request, opts...)
+}

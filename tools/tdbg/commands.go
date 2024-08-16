@@ -245,6 +245,46 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	return nil
 }
 
+func AdminUnblockWorkflowExecution(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	msg := fmt.Sprintf("Namespace: %s WorkflowID: %s RunID: %s\nImmediately unblock workflow?", nsName, wid, rid)
+	prompter.Prompt(msg)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	nsID, err := getNamespaceID(c, clientFactory, namespace.Name(nsName))
+	if err != nil {
+		return err
+	}
+
+	_, err = adminClient.UnblockWorkflowExecution(ctx, &adminservice.UnblockWorkflowExecutionRequest{
+		NamespaceId: nsID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("Unable to unblock workflow execution: %s", err)
+	} else {
+		fmt.Fprintln(c.App.Writer, color.Green(c, "Workflow execution unblocked."))
+	}
+	return nil
+}
+
 // AdminDescribeWorkflow describe a new workflow execution for admin
 func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	resp, err := describeMutableState(c, clientFactory)

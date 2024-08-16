@@ -604,3 +604,18 @@ func (c *retryableClient) ResendReplicationTasks(
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) UnblockWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.UnblockWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UnblockWorkflowExecutionResponse, error) {
+	var resp *adminservice.UnblockWorkflowExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UnblockWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}

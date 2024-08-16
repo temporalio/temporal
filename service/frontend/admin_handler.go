@@ -1507,6 +1507,34 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
 }
 
+// UnblockWorkflowExecution adds a workflow task to immediately unblock a blocked execution
+func (adh *AdminHandler) UnblockWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.UnblockWorkflowExecutionRequest,
+) (_ *adminservice.UnblockWorkflowExecutionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+	namespaceEntry, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = adh.historyClient.UnblockWorkflowExecution(ctx, &historyservice.UnblockWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request:     request,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.UnblockWorkflowExecutionResponse{}, nil
+}
+
 // ResendReplicationTasks requests replication task from remote cluster
 func (adh *AdminHandler) ResendReplicationTasks(
 	ctx context.Context,

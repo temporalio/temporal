@@ -199,6 +199,26 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 			},
 		},
 		{
+			Name:    "unblock",
+			Aliases: []string{},
+			Usage:   "Unblocks a blocked workflow execution, skipping start delays and backoffs",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagWorkflowID,
+					Aliases: FlagWorkflowIDAlias,
+					Usage:   "Workflow ID",
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminUnblockWorkflowExecution(c, clientFactory, prompterFactory(c))
+			},
+		},
+		{
 			Name:    "rebuild",
 			Aliases: []string{},
 			Usage:   "Rebuild a workflow mutable state using persisted history events",

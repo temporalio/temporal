@@ -276,6 +276,10 @@ service HistoryService {
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
     }
 
+    // UnblockWorkflowExecution immediately unblocks a blocked/delayed workflow.
+    rpc UnblockWorkflowExecution(UnblockWorkflowExecutionRequest) returns (UnblockWorkflowExecutionResponse) {
+    }
+
     // GenerateLastHistoryReplicationTasks generate a replication task for last history event for requested workflow execution
     rpc GenerateLastHistoryReplicationTasks(GenerateLastHistoryReplicationTasksRequest) returns (GenerateLastHistoryReplicationTasksResponse) {
     }

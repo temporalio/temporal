@@ -841,6 +841,26 @@ func (mr *MockAdminServiceClientMockRecorder) StreamWorkflowReplicationMessages(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).StreamWorkflowReplicationMessages), varargs...)
 }
 
+// UnblockWorkflowExecution mocks base method.
+func (m *MockAdminServiceClient) UnblockWorkflowExecution(ctx context.Context, in *adminservice.UnblockWorkflowExecutionRequest, opts ...grpc.CallOption) (*adminservice.UnblockWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnblockWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*adminservice.UnblockWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnblockWorkflowExecution indicates an expected call of UnblockWorkflowExecution.
+func (mr *MockAdminServiceClientMockRecorder) UnblockWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnblockWorkflowExecution", reflect.TypeOf((*MockAdminServiceClient)(nil).UnblockWorkflowExecution), varargs...)
+}
+
 // MockAdminService_StreamWorkflowReplicationMessagesClient is a mock of AdminService_StreamWorkflowReplicationMessagesClient interface.
 type MockAdminService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
@@ -1583,6 +1603,21 @@ func (m *MockAdminServiceServer) StreamWorkflowReplicationMessages(arg0 adminser
 func (mr *MockAdminServiceServerMockRecorder) StreamWorkflowReplicationMessages(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).StreamWorkflowReplicationMessages), arg0)
+}
+
+// UnblockWorkflowExecution mocks base method.
+func (m *MockAdminServiceServer) UnblockWorkflowExecution(arg0 context.Context, arg1 *adminservice.UnblockWorkflowExecutionRequest) (*adminservice.UnblockWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnblockWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.UnblockWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnblockWorkflowExecution indicates an expected call of UnblockWorkflowExecution.
+func (mr *MockAdminServiceServerMockRecorder) UnblockWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnblockWorkflowExecution", reflect.TypeOf((*MockAdminServiceServer)(nil).UnblockWorkflowExecution), arg0, arg1)
 }
 
 // mustEmbedUnimplementedAdminServiceServer mocks base method.

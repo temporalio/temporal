@@ -62,6 +62,7 @@ var (
 		"/temporal.server.api.historyservice.v1.HistoryService/VerifyChildExecutionCompletionRecorded": 1,
 		"/temporal.server.api.historyservice.v1.HistoryService/RecordWorkflowTaskStarted":              1,
 		"/temporal.server.api.historyservice.v1.HistoryService/RefreshWorkflowTasks":                   1,
+		"/temporal.server.api.historyservice.v1.HistoryService/UnblockWorkflowExecution":               1,
 		"/temporal.server.api.historyservice.v1.HistoryService/RemoveSignalMutableState":               1,
 		"/temporal.server.api.historyservice.v1.HistoryService/RemoveTask":                             1,
 		"/temporal.server.api.historyservice.v1.HistoryService/ReplicateEventsV2":                      1,

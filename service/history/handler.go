@@ -1877,6 +1877,43 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	return &historyservice.RefreshWorkflowTasksResponse{}, nil
 }
 
+func (h *Handler) UnblockWorkflowExecution(ctx context.Context, request *historyservice.UnblockWorkflowExecutionRequest) (_ *historyservice.UnblockWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	execution := request.GetRequest().GetExecution()
+	workflowID := execution.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	err = engine.UnblockWorkflowExecution(
+		ctx,
+		namespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      execution.RunId,
+		},
+	)
+
+	if err != nil {
+		err = h.convertError(err)
+		return nil, err
+	}
+
+	return &historyservice.UnblockWorkflowExecutionResponse{}, nil
+}
+
 func (h *Handler) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
