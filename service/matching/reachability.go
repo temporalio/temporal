@@ -221,18 +221,18 @@ func (rc *reachabilityCalculator) existsBackloggedActivityOrWFTaskAssignedToAny(
 }
 
 func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTargetOrDefault(buildId string) bool {
-	foundUnconditionalRule := false
+	foundUnrampedRule := false
 	for _, r := range getActiveAssignmentRules(rc.assignmentRules) {
 		if r.GetRule().GetTargetBuildId() == buildId {
 			return true
 		}
 		if r.GetRule().GetPercentageRamp() == nil {
-			// rules after an unconditional rule will not be reached
-			foundUnconditionalRule = true
+			// rules after an un-ramped rule will not be reached
+			foundUnrampedRule = true
 			break
 		}
 	}
-	if !foundUnconditionalRule && buildId == "" {
+	if !foundUnrampedRule && buildId == "" {
 		// unversioned is the default, and is reachable
 		return true
 	}
@@ -301,12 +301,12 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }
 
-// getDefaultBuildId gets the build ID mentioned in the first unconditional Assignment Rule.
+// getDefaultBuildId gets the build ID mentioned in the first un-ramped Assignment Rule.
 // If there is no default Build ID, the result for the unversioned queue will be returned.
 // This should only be called on the root.
 func getDefaultBuildId(assignmentRules []*persistencespb.AssignmentRule) string {
 	for _, ar := range getActiveAssignmentRules(assignmentRules) {
-		if isUnconditional(ar.GetRule()) {
+		if !isRamped(ar.GetRule()) {
 			return ar.GetRule().GetTargetBuildId()
 		}
 	}

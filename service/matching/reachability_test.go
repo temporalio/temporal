@@ -126,7 +126,7 @@ func TestExistsBackloggedActivityOrWFAssignedTo(t *testing.T) {
 Assignment Rules:
 [ (3, 50%), (2, nil) (1, nil) ]
 
-Expect 3 and 2 are reachable, but not 1 since it is behind an unconditional rule.
+Expect 3 and 2 are reachable, but not 1 since it is behind an un-ramped rule.
 */
 func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()

@@ -211,7 +211,7 @@ func TestInsertAssignmentRuleBasic(t *testing.T) {
 	maxRules := 10
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
-	assert.False(t, containsUnconditional(initialData.GetAssignmentRules()))
+	assert.False(t, containsUnramped(initialData.GetAssignmentRules()))
 	expected := &persistencepb.VersioningData{AssignmentRules: []*persistencepb.AssignmentRule{}}
 
 	// insert at index 0
@@ -419,7 +419,7 @@ func TestReplaceAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
 	assert.Equal(t, errRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
-func TestReplaceAssignmentRuleTestRequireUnconditional(t *testing.T) {
+func TestReplaceAssignmentRuleTestRequireUnramped(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -434,7 +434,7 @@ func TestReplaceAssignmentRuleTestRequireUnconditional(t *testing.T) {
 	}
 	_, err = replaceAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(20)), data, clock, 0, false)
 	assert.Error(t, err)
-	assert.Equal(t, errRequireUnconditionalAssignmentRule, err)
+	assert.Equal(t, errRequireUnrampedAssignmentRule, err)
 
 	// same as above but with force --> success
 	_, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock, 0, true)
@@ -527,7 +527,7 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDeleteAssignmentRuleTestRequireUnconditional(t *testing.T) {
+func TestDeleteAssignmentRuleTestRequireUnramped(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -542,7 +542,7 @@ func TestDeleteAssignmentRuleTestRequireUnconditional(t *testing.T) {
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
 	assert.Error(t, err)
-	assert.Equal(t, errRequireUnconditionalAssignmentRule, err)
+	assert.Equal(t, errRequireUnrampedAssignmentRule, err)
 
 	// same as above but with force --> success
 	_, err = deleteAssignmentRule(data, clock, 0, true)
@@ -647,7 +647,7 @@ func TestAddRedirectRuleInVersionSet(t *testing.T) {
 	assert.Equal(t, errTargetIsVersionSetMember, err)
 }
 
-func TestAddRedirectRuleSourceIsConditionalAssignmentRuleTarget(t *testing.T) {
+func TestAddRedirectRuleSourceIsRampedAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -659,7 +659,7 @@ func TestAddRedirectRuleSourceIsConditionalAssignmentRuleTarget(t *testing.T) {
 	// insert redirect rule with target 1 --> failure
 	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
 	assert.Error(t, err)
-	assert.Equal(t, errSourceIsConditionalAssignmentRuleTarget, err)
+	assert.Equal(t, errSourceIsRampedAssignmentRuleTarget, err)
 }
 
 func TestAddRedirectRuleAlreadyExists(t *testing.T) {

@@ -242,7 +242,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 	res := s.getVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 
-	// failure due to requirement that once an unconditional rule exists, at least one must always exist
+	// failure due to requirement that once an un-ramped rule exists, at least one must always exist
 	s.deleteAssignmentRule(ctx, tq, 0, cT, false)
 	s.Equal(res, s.getVersioningRules(ctx, tq))
 
