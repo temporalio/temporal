@@ -120,9 +120,13 @@ func TestAddTasksRate(t *testing.T) {
 	// mini windows will have the following format : (start time, end time)
 	// (0 - 4), (5 - 9), (10 - 14), (15 - 19), (20 - 24), (25 - 29), (30 - 34), ...
 
-	// tasks should be placed in the first mini-window
-	timeSource.Advance(1 * time.Second) // time: 1 second
+	// rate should be zero when no time is passed
+	require.Equal(t, float32(0), tr.rate()) // time: 0
 	trackTasksHelper(tr, 100)
+	require.Equal(t, float32(0), tr.rate()) // still zero because no time is passed
+
+	// tasks should be placed in the first mini-window
+	timeSource.Advance(1 * time.Second)                  // time: 1 second
 	require.InEpsilon(t, float32(100), tr.rate(), 0.001) // 100 tasks added in 1 second = 100 / 1 = 100
 
 	// tasks should be placed in the second mini-window with 6 total seconds elapsed
