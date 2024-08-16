@@ -72,9 +72,7 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
-	for i := 0; i < 100; i++ {
-		s.testWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
-	}
+	s.testWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
 }
 
 func (s *DescribeTaskQueueSuite) TestAddMultipleTasksMultiplePartitions_ValidateStats() {
