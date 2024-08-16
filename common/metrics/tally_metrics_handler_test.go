@@ -103,6 +103,6 @@ func recordTallyMetrics(h Handler) {
 	timer.Record(1248 * time.Millisecond)
 	timer.Record(5255 * time.Millisecond)
 	histogram.Record(1234567)
-	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
-	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
+	hitsTaggedCounter.Record(11, UnsafeTaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, UnsafeTaskQueueTag("filtered"))
 }

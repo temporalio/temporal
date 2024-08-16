@@ -25,6 +25,7 @@
 package elasticsearch
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -44,9 +46,8 @@ type (
 	}
 
 	valuesInterceptor struct {
-		namespace                      namespace.Name
-		searchAttributesTypeMap        searchattribute.NameTypeMap
-		searchAttributesMapperProvider searchattribute.MapperProvider
+		namespace               namespace.Name
+		searchAttributesTypeMap searchattribute.NameTypeMap
 	}
 )
 
@@ -65,15 +66,14 @@ func NewNameInterceptor(
 func NewValuesInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
 ) *valuesInterceptor {
 	return &valuesInterceptor{
-		namespace:                      namespaceName,
-		searchAttributesTypeMap:        saTypeMap,
-		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		namespace:               namespaceName,
+		searchAttributesTypeMap: saTypeMap,
 	}
 }
 
+// TODO: this is invoked for non-ES validation code flow. Needs refactoring
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
 	if searchattribute.IsMappable(name) {
@@ -81,10 +81,22 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		if err != nil {
 			return "", err
 		}
+
 		if mapper != nil {
 			fieldName, err = mapper.GetFieldName(name, ni.namespace.String())
 			if err != nil {
-				return "", err
+				if name != searchattribute.ScheduleID {
+					return "", err
+				}
+
+				// ScheduleId is a fake SA -- convert to WorkflowId
+				fieldName = searchattribute.WorkflowID
+			} else if name == searchattribute.ScheduleID && name == fieldName {
+				_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
+				if !isCustom {
+					// ScheduleId is a fake SA -- convert to WorkflowId
+					fieldName = searchattribute.WorkflowID
+				}
 			}
 		}
 	}
@@ -119,32 +131,23 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	return fieldName, nil
 }
 
-func (vi *valuesInterceptor) Values(fieldName string, values ...interface{}) ([]interface{}, error) {
+func (vi *valuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
 	fieldType, err := vi.searchAttributesTypeMap.GetType(fieldName)
 	if err != nil {
-		return nil, query.NewConverterError("invalid search attribute: %s", fieldName)
-	}
-
-	name := fieldName
-	if searchattribute.IsMappable(fieldName) {
-		mapper, err := vi.searchAttributesMapperProvider.GetMapper(vi.namespace)
-		if err != nil {
-			return nil, err
-		}
-		if mapper != nil {
-			name, err = mapper.GetAlias(fieldName, vi.namespace.String())
-			if err != nil {
-				return nil, err
-			}
-		}
+		return nil, query.NewConverterError("invalid search attribute: %s", name)
 	}
 
 	var result []interface{}
 	for _, value := range values {
-		value, err = parseSystemSearchAttributeValues(fieldName, value)
+		value, err = parseSystemSearchAttributeValues(name, value)
 		if err != nil {
 			return nil, err
 		}
+
+		if name == searchattribute.ScheduleID && fieldName == searchattribute.WorkflowID {
+			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
+		}
+
 		value, err = validateValueType(name, value, fieldType)
 		if err != nil {
 			return nil, err

@@ -27,6 +27,7 @@ package metricstest
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,7 +39,6 @@ import (
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"

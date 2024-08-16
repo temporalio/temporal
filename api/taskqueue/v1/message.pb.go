@@ -394,8 +394,10 @@ func (x *BuildIdRedirectInfo) GetAssignedBuildId() string {
 	return ""
 }
 
-// Information about task forwarding from one partition to its parent. Versioning decisions are made
-// at the source partition and sent to the parent partition in this message.
+// Information about task forwarding from one partition to its parent. Versioning decisions for activity/workflow
+// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
+// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
+// versioning decision is ignored and the parent partition makes a fresh decision.
 type TaskForwardInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -407,7 +409,7 @@ type TaskForwardInfo struct {
 	TaskSource      v12.TaskSource `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
 	// Redirect info is not present for Query and Nexus tasks.
 	RedirectInfo *BuildIdRedirectInfo `protobuf:"bytes,3,opt,name=redirect_info,json=redirectInfo,proto3" json:"redirect_info,omitempty"`
-	// Build ID that should be used to dispatch the task to.
+	// Build ID that should be used to dispatch the task to. Ignored in Query and Nexus tasks.
 	DispatchBuildId string `protobuf:"bytes,4,opt,name=dispatch_build_id,json=dispatchBuildId,proto3" json:"dispatch_build_id,omitempty"`
 	// Only used for old versioning. [cleanup-old-wv]
 	DispatchVersionSet string `protobuf:"bytes,5,opt,name=dispatch_version_set,json=dispatchVersionSet,proto3" json:"dispatch_version_set,omitempty"`

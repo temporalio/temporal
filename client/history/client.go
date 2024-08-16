@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -251,7 +252,7 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
 	}
-	_, targetClusterShardID, err := DecodeClusterShardMD(ctxMetadata)
+	_, targetClusterShardID, err := DecodeClusterShardMD(headers.NewGRPCHeaderGetter(ctx))
 	if err != nil {
 		return nil, err
 	}

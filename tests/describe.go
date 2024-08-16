@@ -90,6 +90,7 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 	s.NotNil(wfInfo.GetRootExecution())
 	s.Equal(id, wfInfo.RootExecution.GetWorkflowId())
 	s.Equal(we.RunId, wfInfo.RootExecution.GetRunId())
+	s.Equal(we.RunId, wfInfo.GetFirstRunId())
 
 	// workflow logic
 	workflowComplete := false

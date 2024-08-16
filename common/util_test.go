@@ -33,8 +33,12 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/testing/protopack"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
@@ -345,4 +349,73 @@ func TestIsServiceClientTransientError_ResourceExhausted(t *testing.T) {
 		},
 	))
 
+}
+
+func TestDiscardUnknownProto(t *testing.T) {
+	msRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: uuid.New(),
+			WorkflowId:  uuid.New(),
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId: uuid.New(),
+			State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+		TimerInfos: map[string]*persistencespb.TimerInfo{
+			"timer1": {
+				Version:        123,
+				StartedEventId: 10,
+			},
+		},
+		BufferedEvents: []*historypb.HistoryEvent{
+			{
+				EventId: -123,
+				Version: 123,
+				Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
+					ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
+						ScheduledEventId: 14,
+						StartedEventId:   15,
+					},
+				},
+			},
+		},
+		NextEventId: 101,
+	}
+
+	data, err := msRecord.Marshal()
+	require.NoError(t, err)
+
+	// now add some unknown fields to the record
+	msRecord.ProtoReflect().SetUnknown(
+		protopack.Message{
+			protopack.Tag{Number: 1000, Type: protopack.BytesType},
+		}.Marshal(),
+	)
+	msRecord.ExecutionInfo.ProtoReflect().SetUnknown(
+		protopack.Message{
+			protopack.Int32(-1),
+		}.Marshal(),
+	)
+	msRecord.TimerInfos["timer1"].ProtoReflect().SetUnknown(
+		protopack.Message{
+			protopack.String("unknown string"),
+		}.Marshal(),
+	)
+	msRecord.BufferedEvents[0].ProtoReflect().SetUnknown(
+		protopack.Message{
+			protopack.Bool(true),
+		}.Marshal(),
+	)
+
+	dataWithUnknown, err := msRecord.Marshal()
+	require.NoError(t, err)
+	require.NotEqual(t, data, dataWithUnknown)
+
+	// discard unknown fields
+	err = DiscardUnknownProto(msRecord)
+	require.NoError(t, err)
+
+	dataWithoutUnknown, err := msRecord.Marshal()
+	require.NoError(t, err)
+	require.Equal(t, data, dataWithoutUnknown)
 }

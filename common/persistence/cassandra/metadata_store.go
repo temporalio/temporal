@@ -489,7 +489,7 @@ func (m *MetadataStore) GetMetadata(
 }
 
 func (m *MetadataStore) updateMetadataBatch(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	notificationVersion int64,
 ) {
 	var nextVersion int64 = 1

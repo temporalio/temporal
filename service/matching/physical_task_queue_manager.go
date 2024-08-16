@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination physical_task_queue_manager_mock.go
-
 package matching
 
 import (
@@ -81,58 +79,21 @@ type (
 		directive   *taskqueuespb.TaskVersionDirective
 		forwardInfo *taskqueuespb.TaskForwardInfo
 	}
-
-	physicalTaskQueueManager interface {
-		Start()
-		Stop(unloadCause)
-		WaitUntilInitialized(context.Context) error
-		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
-		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
-		// from this task queue to pollers
-		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
-		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
-		MarkAlive()
-		// TrySyncMatch tries to match task to a local or remote poller. If not possible, returns false.
-		TrySyncMatch(ctx context.Context, task *internalTask) (bool, error)
-		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
-		SpoolTask(taskInfo *persistencespb.TaskInfo) error
-		ProcessSpooledTask(ctx context.Context, task *internalTask) error
-		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
-		// up the task, this method will return error. Task will not be persisted to db
-		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
-		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
-		// if dispatched to local poller then nil and nil is returned.
-		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// DispatchNexusTask dispatches a nexus task to a local or remote poller. If forwarded then result or
-		// error is returned, if dispatched to local poller then nil and nil is returned.
-		DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
-		UpdatePollerInfo(pollerIdentity, *pollMetadata)
-		GetAllPollerInfo() []*taskqueuepb.PollerInfo
-		HasPollerAfter(accessTime time.Time) bool
-		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
-		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		GetStats() *taskqueuepb.TaskQueueStats
-		UnloadFromPartitionManager(unloadCause)
-		String() string
-		QueueKey() *PhysicalTaskQueueKey
-	}
-
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
 	physicalTaskQueueManagerImpl struct {
-		status               int32
-		partitionMgr         *taskQueuePartitionManagerImpl
-		queue                *PhysicalTaskQueueKey
-		config               *taskQueueConfig
-		backlogMgr           *backlogManagerImpl
-		liveness             *liveness
-		matcher              *TaskMatcher // for matching a task producer with a poller
-		namespaceRegistry    namespace.Registry
-		logger               log.Logger
-		throttledLogger      log.ThrottledLogger
-		matchingClient       matchingservice.MatchingServiceClient
-		metricsHandler       metrics.Handler
-		clusterMeta          cluster.Metadata
-		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
+		status            int32
+		partitionMgr      *taskQueuePartitionManagerImpl
+		queue             *PhysicalTaskQueueKey
+		config            *taskQueueConfig
+		backlogMgr        *backlogManagerImpl
+		liveness          *liveness
+		matcher           *TaskMatcher // for matching a task producer with a poller
+		namespaceRegistry namespace.Registry
+		logger            log.Logger
+		throttledLogger   log.ThrottledLogger
+		matchingClient    matchingservice.MatchingServiceClient
+		clusterMeta       cluster.Metadata
+		metricsHandler    metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory              *pollerHistory
 		currentPolls               atomic.Int64
@@ -251,27 +212,27 @@ func newPhysicalTaskQueueManager(
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(queue.VersionSet()))
-	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(queue.VersionSet()))
 	buildIdTagValue := queue.VersionSet()
 	if buildIdTagValue == "" {
 		buildIdTagValue = queue.BuildId()
 	}
-	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
+	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(buildIdTagValue))
+	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(buildIdTagValue))
+	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(buildIdTagValue))
+		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
+
 	pqMgr := &physicalTaskQueueManagerImpl{
 		status:                     common.DaemonStatusInitialized,
 		partitionMgr:               partitionMgr,
 		namespaceRegistry:          e.namespaceRegistry,
 		matchingClient:             e.matchingRawClient,
-		metricsHandler:             e.metricsHandler,
 		clusterMeta:                e.clusterMeta,
 		queue:                      queue,
 		logger:                     logger,
 		throttledLogger:            throttledLogger,
 		config:                     config,
-		taggedMetricsHandler:       taggedMetricsHandler,
+		metricsHandler:             taggedMetricsHandler,
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
 	}
@@ -304,7 +265,7 @@ func newPhysicalTaskQueueManager(
 			return nil, err
 		}
 	}
-	pqMgr.matcher = newTaskMatcher(config, fwdr, pqMgr.taggedMetricsHandler)
+	pqMgr.matcher = newTaskMatcher(config, fwdr, pqMgr.metricsHandler)
 	for _, opt := range opts {
 		opt(pqMgr)
 	}
@@ -321,8 +282,8 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	}
 	c.liveness.Start()
 	c.backlogMgr.Start()
-	c.logger.Info("", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
-	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
+	c.logger.Info("Started physicalTaskQueueManager", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
+	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
 }
 
@@ -339,8 +300,8 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	c.backlogMgr.Stop()
 	c.matcher.Stop()
 	c.liveness.Stop()
-	c.logger.Info("", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
-	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
+	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
+	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
 }
 
@@ -366,7 +327,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
 
-	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.queue.NamespaceId())
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(c.queue.NamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +356,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// If we didn't do this, the task would be rejected when we call RecordXTaskStarted on
 		// history, but this is more efficient.
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
-			c.taggedMetricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
 			task.finish(nil)
 			continue
 		}
@@ -432,7 +393,7 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 ) error {
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
 		task.finish(nil)
-		c.taggedMetricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
@@ -579,4 +540,10 @@ func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.
 
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
 	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
+}
+
+func (c *physicalTaskQueueManagerImpl) ShouldEmitGauges() bool {
+	return c.config.BreakdownMetricsByTaskQueue() &&
+		c.config.BreakdownMetricsByPartition() &&
+		(!c.queue.IsVersioned() || c.config.BreakdownMetricsByBuildID())
 }

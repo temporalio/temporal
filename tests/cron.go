@@ -45,11 +45,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/payloads"
-
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 )
 
 func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
@@ -347,6 +346,15 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 			(expectedBackoff - executionTimeDiff).Round(time.Second).Seconds(),
 			targetBackoffDuration.Seconds())
 		lastExecution = executionInfo
+
+		// TODO: Remove the describeWorkflowExecution call when firstRunID in WorkflowExecutionInfo
+		// is populated by Visibility api as well.
+		dweResponse, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			Execution: executionInfo.GetExecution(),
+		})
+		s.NoError(err)
+		s.Equal(we.RunId, dweResponse.WorkflowExecutionInfo.GetFirstRunId())
 	}
 }
 

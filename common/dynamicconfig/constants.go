@@ -902,10 +902,8 @@ used when the first cache layer has a miss. Requires server restart for change t
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",
-		false,
-		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is 'false' until the
-feature gets more time in production.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
 	)
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
@@ -917,10 +915,9 @@ The API is under active development.`,
 
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
-		false,
-		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
-asynchronous workflow execution update that waits on the "Accepted"
-lifecycle stage. Default value is 'false'.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the UpdateWorkflowExecution API
+to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
@@ -1092,6 +1089,30 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		"matching.numTaskqueueReadPartitions",
 		defaultNumTaskQueuePartitions,
 		`MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue`,
+	)
+	MetricsBreakdownByTaskQueue = NewTaskQueueBoolSetting(
+		"metrics.breakdownByTaskQueue",
+		true,
+		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should 
+contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MetricsBreakdownByPartition = NewTaskQueueBoolSetting(
+		"metrics.breakdownByPartition",
+		true,
+		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should 
+contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky 
+queues will be "__sticky__". Disable this option if the partition cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
+		"metrics.breakdownByBuildID",
+		true,
+		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
+contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned 
+queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age 
+for VERSIONED queues.`,
 	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
@@ -2474,5 +2495,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+
+	LogAllReqErrors = NewNamespaceBoolSetting(
+		"system.logAllReqErrors",
+		false,
+		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
 )

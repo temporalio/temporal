@@ -283,11 +283,7 @@ func (i *Redirection) RedirectionAllowed(
 	ctx context.Context,
 ) bool {
 	// default to allow dc redirection
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return true
-	}
-	values := md.Get(DCRedirectionContextHeaderName)
+	values := metadata.ValueFromIncomingContext(ctx, DCRedirectionContextHeaderName)
 	if len(values) == 0 {
 		return true
 	}

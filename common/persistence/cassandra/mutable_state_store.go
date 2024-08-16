@@ -27,6 +27,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -34,10 +35,10 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -358,17 +359,12 @@ const (
 type (
 	MutableStateStore struct {
 		Session gocql.Session
-		Logger  log.Logger
 	}
 )
 
-func NewMutableStateStore(
-	session gocql.Session,
-	logger log.Logger,
-) *MutableStateStore {
+func NewMutableStateStore(session gocql.Session) *MutableStateStore {
 	return &MutableStateStore{
 		Session: session,
-		Logger:  logger,
 	}
 }
 
@@ -592,6 +588,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			namespaceID,
 			workflowID,
 			runID,
+			timestamp.TimeValuePtr(updateWorkflow.ExecutionState.StartTime),
 		); err != nil {
 			return err
 		}
@@ -722,6 +719,11 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 
 	var currentRunID string
 
+	var startTime *time.Time
+	if currentWorkflow != nil && currentWorkflow.ExecutionState != nil {
+		startTime = timestamp.TimeValuePtr(currentWorkflow.ExecutionState.StartTime)
+	}
+
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
@@ -730,6 +732,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			namespaceID,
 			workflowID,
 			resetWorkflow.ExecutionState.RunId,
+			startTime,
 		); err != nil {
 			return err
 		}
@@ -872,6 +875,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 	namespaceID string,
 	workflowID string,
 	runID string,
+	startTime *time.Time,
 ) error {
 
 	if resp, err := d.GetCurrentExecution(ctx, &p.GetCurrentExecutionRequest{
@@ -892,6 +896,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 			State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
 			LastWriteVersion: 0,
+			StartTime:        startTime,
 		}
 	}
 

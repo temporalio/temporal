@@ -411,6 +411,45 @@ func (s *collectionSuite) TestGetTypedListOfStruct() {
 	})
 }
 
+func (s *collectionSuite) TestGetTypedProtoEnum() {
+	def := enumspb.ARCHIVAL_STATE_UNSPECIFIED
+	setting := dynamicconfig.NewGlobalTypedSetting(
+		testGetTypedPropertyKey,
+		def,
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "ARCHIVAL_STATE_DISABLED")
+		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
+	})
+
+	s.Run("CaseInsensitive", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "archival_state_disabled")
+		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
+	})
+
+	s.Run("NotFound", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "some_other_string")
+		s.Equal(def, get())
+	})
+
+	s.Run("Int", func() {
+		s.client.SetValue(testGetTypedPropertyKey, 2)
+		s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, get())
+	})
+
+	s.Run("WrongType", func() {
+		s.client.SetValue(testGetTypedPropertyKey, true)
+		s.Equal(def, get())
+	})
+}
+
 func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
 	setting := dynamicconfig.NewDestinationIntSetting(testGetIntPropertyFilteredByDestinationKey, 10, "")
 	namespaceName := "testNamespace"
@@ -622,4 +661,9 @@ func (s *subscriptionSuite) TestSubscriptionWithDefault() {
 	s.client.Set(setting.Key(), nil)
 	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
 	s.Equal(100, <-vals)
+
+	// test nil callback
+	v, cancel := setting.Subscribe(s.cln)(nil)
+	s.Equal(100, v)
+	s.Nil(cancel)
 }
