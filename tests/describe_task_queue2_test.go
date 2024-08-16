@@ -72,7 +72,7 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 		s.testWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
 	}
 }
@@ -168,6 +168,24 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 		s.NoError(err)
 	}
 
+	// keep polling while the test last because matching may have got additional tasks from history due to retries.
+	stopWfPolling := make(chan interface{})
+	go func() {
+		for {
+			select {
+			case <-stopWfPolling:
+				break
+			default:
+				_, err := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+					Namespace: s.namespace,
+					TaskQueue: tq,
+					Identity:  identity,
+				})
+				s.NoError(err)
+			}
+		}
+	}()
+
 	// call describeTaskQueue to verify if the WTF backlog decreased and activity backlog increased
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(0)
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
@@ -178,6 +196,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
+	close(stopWfPolling)
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
@@ -194,12 +213,32 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 		}
 		i++
 	}
+	// keep polling while the test last because matching may have got additional tasks from history due to retries.
+	stopActPolling := make(chan interface{})
+	go func() {
+		for {
+			select {
+			case <-stopActPolling:
+				break
+			default:
+				_, err := s.client.PollActivityTaskQueue(
+					NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+						Namespace: s.namespace,
+						TaskQueue: tq,
+						Identity:  identity,
+					},
+				)
+				s.NoError(err)
+			}
+		}
+	}()
 
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = int64(0)
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
+	close(stopActPolling)
 }
 
 func (s *DescribeTaskQueueSuite) isBacklogHeadCreateTimeCorrect(actualBacklogAge time.Duration, expectEmptyBacklog bool) bool {
