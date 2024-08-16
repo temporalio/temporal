@@ -168,23 +168,31 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 		s.NoError(err)
 	}
 
-	// keep polling while the test last because matching may have got additional tasks from history due to retries.
-	stopWfPolling := make(chan interface{})
-	go func() {
-		for {
-			select {
-			case <-stopWfPolling:
-				break
-			default:
-				_, err := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-					Namespace: s.namespace,
-					TaskQueue: tq,
-					Identity:  identity,
-				})
-				s.NoError(err)
+	if isEnhancedMode {
+		// keep polling while the test last because matching may have got additional tasks from history due to retries.
+		stopWfPolling := make(chan interface{})
+		go func() {
+			for {
+				select {
+				case <-stopWfPolling:
+					return
+				default:
+					resp, err := s.client.PollWorkflowTaskQueue(
+						NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+							Namespace: s.namespace,
+							TaskQueue: tq,
+							Identity:  identity,
+						},
+					)
+					s.NoError(err)
+					if resp == nil || resp.GetAttempt() < 1 {
+						return // empty response likely means the queue is empty now
+					}
+				}
 			}
-		}
-	}()
+		}()
+		defer close(stopWfPolling)
+	}
 
 	// call describeTaskQueue to verify if the WTF backlog decreased and activity backlog increased
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(0)
@@ -196,7 +204,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
-	close(stopWfPolling)
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
@@ -213,32 +220,37 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 		}
 		i++
 	}
-	// keep polling while the test last because matching may have got additional tasks from history due to retries.
-	stopActPolling := make(chan interface{})
-	go func() {
-		for {
-			select {
-			case <-stopActPolling:
-				break
-			default:
-				_, err := s.client.PollActivityTaskQueue(
-					NewContext(), &workflowservice.PollActivityTaskQueueRequest{
-						Namespace: s.namespace,
-						TaskQueue: tq,
-						Identity:  identity,
-					},
-				)
-				s.NoError(err)
+	if isEnhancedMode {
+		// keep polling while the test last because matching may have got additional tasks from history due to retries.
+		stopActPolling := make(chan interface{})
+		go func() {
+			for {
+				select {
+				case <-stopActPolling:
+					return
+				default:
+					resp, err := s.client.PollActivityTaskQueue(
+						NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+							Namespace: s.namespace,
+							TaskQueue: tq,
+							Identity:  identity,
+						},
+					)
+					s.NoError(err)
+					if resp == nil || resp.GetAttempt() < 1 {
+						return // empty response likely means the queue is empty now
+					}
+				}
 			}
-		}
-	}()
+		}()
+		defer close(stopActPolling)
+	}
 
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = int64(0)
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate, isEnhancedMode)
-	close(stopActPolling)
 }
 
 func (s *DescribeTaskQueueSuite) isBacklogHeadCreateTimeCorrect(actualBacklogAge time.Duration, expectEmptyBacklog bool) bool {
@@ -291,8 +303,18 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			actStats := types[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].Stats
 
 			a := assert.New(t)
-			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.ApproximateBacklogCount)
-			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.ApproximateBacklogCount)
+			if expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] == 0 {
+				a.Equal(int64(0), wfStats.ApproximateBacklogCount)
+			} else {
+				// actual counter can be greater than the expected due to history retries
+				a.GreaterOrEqual(wfStats.ApproximateBacklogCount, expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW])
+			}
+			if expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] == 0 {
+				a.Equal(int64(0), actStats.ApproximateBacklogCount)
+			} else {
+				// actual counter can be greater than the expected due to history retries
+				a.GreaterOrEqual(actStats.ApproximateBacklogCount, expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY])
+			}
 			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] == 0, wfStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
 			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] == 0, actStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
 			a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksAddRate > 0)
@@ -300,7 +322,6 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
 		}, 6*time.Second, 100*time.Millisecond)
-
 	} else {
 		// Querying the Legacy API
 		s.Eventually(func() bool {
