@@ -650,21 +650,6 @@ func getBranchToken(
 	}
 }
 
-func getBranch(ms workflow.MutableState, eventID int64, eventVersion int64) (*historyspb.VersionHistory, error) {
-	versionHistories := ms.GetExecutionInfo().VersionHistories
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistories,
-		versionhistory.NewVersionHistoryItem(
-			eventID,
-			eventVersion,
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
-}
-
 func getEventsBlob(
 	ctx context.Context,
 	shardID int32,
