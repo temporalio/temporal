@@ -2924,6 +2924,23 @@ func (s *workflowHandlerSuite) TestExecuteMultiOperation() {
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpEagerWorkflow, errMultiOpAborted}, err)
 		})
+
+		// unique to MultiOperation:
+		s.Run("`workflow_start_delay` is invalid", func() {
+			startReq := validStartReq()
+			startReq.WorkflowStartDelay = durationpb.New(1 * time.Second)
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpStartDelay, errMultiOpAborted}, err)
+		})
 	})
 
 	s.Run("Update operation is validated", func() {
