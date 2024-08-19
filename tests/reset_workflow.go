@@ -494,12 +494,12 @@ func (t *resetTest) run() {
 	}
 }
 
-func (s *FunctionalSuite) TestResetWorkflow_Signal_ReapplyBufferAll() {
+func (s *FunctionalSuite) TestBufferedSignalIsReappliedOnReset() {
 	tv := testvars.New(s.T())
 	s.testResetWorkflowSignalReapplyBuffer(tv, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
-func (s *FunctionalSuite) TestResetWorkflow_Signal_ReapplyBufferNone() {
+func (s *FunctionalSuite) TestBufferedSignalIsDroppedOnReset() {
 	tv := testvars.New(s.T())
 	s.testResetWorkflowSignalReapplyBuffer(tv, enumspb.RESET_REAPPLY_TYPE_NONE)
 }
