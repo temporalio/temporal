@@ -32,3 +32,7 @@ var OutboundRequestLatency = metrics.NewTimerDef(
 	"nexus_outbound_latency",
 	metrics.WithDescription("Latency of outbound Nexus requests made by the history service."),
 )
+var OutboundRequestScheduleToStartLatency = metrics.NewTimerDef(
+	"nexus_outbound_schedule_to_start_latency",
+	metrics.WithDescription("Schedule to start latency of nexus operations."),
+)
