@@ -494,98 +494,74 @@ func (t *resetTest) run() {
 	}
 }
 
-func (s *FunctionalSuite) TestResetWorkflow_ReapplyBufferAll() {
-	workflowID := "functional-reset-workflow-test-reapply-buffer-all"
-	workflowTypeName := "functional-reset-workflow-test-reapply-buffer-all-type"
-	taskQueueName := "functional-reset-workflow-test-reapply-buffer-all-taskqueue"
-
-	s.testResetWorkflowReapplyBuffer(workflowID, workflowTypeName, taskQueueName, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
+func (s *FunctionalSuite) TestResetWorkflow_Signal_ReapplyBufferAll() {
+	tv := testvars.New(s.T())
+	s.testResetWorkflowSignalReapplyBuffer(tv, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
-func (s *FunctionalSuite) TestResetWorkflow_ReapplyBufferNone() {
-	workflowID := "functional-reset-workflow-test-reapply-buffer-none"
-	workflowTypeName := "functional-reset-workflow-test-reapply-buffer-none-type"
-	taskQueueName := "functional-reset-workflow-test-reapply-buffer-none-taskqueue"
-
-	s.testResetWorkflowReapplyBuffer(workflowID, workflowTypeName, taskQueueName, enumspb.RESET_REAPPLY_TYPE_NONE)
+func (s *FunctionalSuite) TestResetWorkflow_Signal_ReapplyBufferNone() {
+	tv := testvars.New(s.T())
+	s.testResetWorkflowSignalReapplyBuffer(tv, enumspb.RESET_REAPPLY_TYPE_NONE)
 }
 
-func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
-	workflowID string,
-	workflowTypeName string,
-	taskQueueName string,
+func (s *FunctionalSuite) testResetWorkflowSignalReapplyBuffer(
+	tv *testvars.TestVars,
 	reapplyType enumspb.ResetReapplyType,
 ) {
-	identity := "worker1"
+	/*
+		Test scenario:
+		- while the worker is processing a WFT, a Signal and a Reset arrive
+		- then, the worker responds with a CompleteWorkflowExecution command
+		- depending on the reapply type, the buffered signal is applied post-reset or not
+	*/
 
-	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	tv = s.startWorkflow(tv)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(tv.RunID()))
 
-	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
-		WorkflowId:          workflowID,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
-	}
-
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
-	runID := we.RunId
-
-	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		SignalName: "random signal name",
-		Input: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
-			Data: []byte("random data"),
-		}}},
-		Identity: identity,
-	}
-
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-
-	// workflow logic
-	resetRunID := ""
-	workflowComplete := false
+	var resetRunID string
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if len(resetRunID) == 0 {
-			signalRequest.RequestId = uuid.New()
-			_, err := s.client.SignalWorkflowExecution(NewContext(), signalRequest)
+		if resetRunID == "" {
+			s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, task.History.Events)
+
+			// (1) send Signal
+			_, err := s.client.SignalWorkflowExecution(NewContext(),
+				&workflowservice.SignalWorkflowExecutionRequest{
+					RequestId: uuid.New(),
+					Namespace: s.namespace,
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: tv.WorkflowID(),
+						RunId:      tv.RunID(),
+					},
+					SignalName: "random signal name",
+					Input: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
+						Data: []byte("random data"),
+					}}},
+					Identity: tv.WorkerIdentity(),
+				})
 			s.NoError(err)
 
-			// events layout
-			//  1. WorkflowExecutionStarted
-			//  2. WorkflowTaskScheduled
-			//  3. WorkflowTaskStarted
-			//  x. WorkflowExecutionSignaled
-
-			resp, err := s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
-				Namespace: s.namespace,
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowID,
-					RunId:      runID,
-				},
-				Reason:                    "reset execution from test",
-				WorkflowTaskFinishEventId: 3,
-				RequestId:                 uuid.New(),
-				ResetReapplyType:          reapplyType,
-			})
+			// (2) send Reset
+			resp, err := s.client.ResetWorkflowExecution(NewContext(),
+				&workflowservice.ResetWorkflowExecutionRequest{
+					Namespace: s.namespace,
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: tv.WorkflowID(),
+						RunId:      tv.RunID(),
+					},
+					Reason:                    "reset execution from test",
+					WorkflowTaskFinishEventId: 3,
+					RequestId:                 uuid.New(),
+					ResetReapplyType:          reapplyType,
+				})
 			s.NoError(err)
 			resetRunID = resp.RunId
 
 			return []*commandpb.Command{}, nil
 		}
 
-		workflowComplete = true
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
@@ -599,8 +575,8 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 	poller := &TaskPoller{
 		Client:              s.client,
 		Namespace:           s.namespace,
-		TaskQueue:           taskQueue,
-		Identity:            identity,
+		TaskQueue:           tv.TaskQueue(),
+		Identity:            tv.WorkerIdentity(),
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
@@ -613,28 +589,35 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	s.True(workflowComplete)
 
-	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      resetRunID,
-	})
-	signalCount := 0
-	for _, event := range events {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
-			signalCount++
-		}
-	}
-
+	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: resetRunID})
 	switch reapplyType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
-		s.Equal(1, signalCount)
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled  // reapplied Signal
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionCompleted
+`, events)
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		s.Equal(0, signalCount)
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled  // no reapplied Signal
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 WorkflowExecutionCompleted
+`, events)
 	default:
 		panic(fmt.Sprintf("unknown reset reapply type: %v", reapplyType))
 	}
-
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_WorkflowTask_Schedule() {
