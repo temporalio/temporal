@@ -851,7 +851,6 @@ func getDispatchByNsAndTqURL(address string, namespace string, taskQueue string)
 }
 
 func (s *ClientFunctionalSuite) createNexusEndpoint(name string, taskQueue string) *nexuspb.Endpoint {
-	name = strings.ReplaceAll(name, "-", "_")
 	resp, err := s.operatorClient.CreateNexusEndpoint(NewContext(), &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: name,

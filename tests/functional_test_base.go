@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -488,4 +489,10 @@ func (s *FunctionalTestBase) testWithMatchingBehavior(subtest func()) {
 			}
 		}
 	}
+}
+
+func RandomizedNexusEndpoint(name string) string {
+	re := regexp.MustCompile("[/_]")
+	safeName := re.ReplaceAllString(name, "-")
+	return fmt.Sprintf("%v-%v", safeName, uuid.New())
 }
