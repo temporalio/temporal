@@ -394,10 +394,6 @@ func ValidateTaskQueue(
 		return err
 	}
 
-	if strings.HasPrefix(taskQueue.GetName(), reservedTaskQueuePrefix) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v.", reservedTaskQueuePrefix))
-	}
-
 	if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		if err := ValidateTaskQueueName(taskQueue.GetNormalName(), maxIDLengthLimit); err != nil {
 			return err
@@ -426,6 +422,10 @@ func ValidateTaskQueueName(name string, maxLength int) error {
 
 	if strings.TrimSpace(name) != name {
 		return serviceerror.NewInvalidArgument("taskQueue name must not contain leading or trailing whitespace.")
+	}
+
+	if strings.HasPrefix(name, reservedTaskQueuePrefix) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v.", reservedTaskQueuePrefix))
 	}
 
 	if !utf8.ValidString(name) {
