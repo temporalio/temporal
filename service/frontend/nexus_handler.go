@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -51,6 +52,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -314,12 +316,29 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 	ctx = oc.augmentContext(ctx, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
+	var links []*commonpb.Link
+	for _, encodedLink := range options.Links {
+		switch encodedLink.Type {
+		case string((&commonpb.Link{}).ProtoReflect().Descriptor().FullName()):
+			link := &commonpb.Link{}
+			err := proto.Unmarshal(encodedLink.Data, link)
+			if err != nil {
+				oc.logger.Error("unable to deserialize link data", tag.Error(err))
+				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unable to deserialize link data")
+			}
+			links = append(links, link)
+		default:
+			oc.logger.Warn(fmt.Sprintf("unsupported link data type: %q", encodedLink.Type))
+		}
+	}
+
 	startOperationRequest := nexuspb.StartOperationRequest{
 		Service:        service,
 		Operation:      operation,
 		Callback:       options.CallbackURL,
 		CallbackHeader: options.CallbackHeader,
 		RequestId:      options.RequestID,
+		Links:          links,
 	}
 	request := oc.matchingRequest(&nexuspb.Request{
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
@@ -364,6 +383,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 		return nil, h.convertOutcomeToNexusHandlerError(t)
+
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_SyncSuccess:
@@ -371,11 +391,25 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
 			}, nil
+
 		case *nexuspb.StartOperationResponse_AsyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
+			var nexusLinks []nexus.Link
+			for _, link := range t.AsyncSuccess.GetLinks() {
+				linkData, err := proto.Marshal(link)
+				if err != nil {
+					return nil, commonnexus.ConvertGRPCError(err, false)
+				}
+				nexusLinks = append(nexusLinks, nexus.Link{
+					Data: linkData,
+					Type: string(link.ProtoReflect().Descriptor().FullName()),
+				})
+			}
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationID: t.AsyncSuccess.GetOperationId(),
+				Links:       nexusLinks,
 			}, nil
+
 		case *nexuspb.StartOperationResponse_OperationError:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
 			oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker

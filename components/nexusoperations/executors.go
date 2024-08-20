@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/proto"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -117,7 +118,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadOperationArgs(ctx, env, ref)
+	args, err := e.loadOperationArgs(ctx, ns, env, ref)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
 	}
@@ -194,6 +195,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
+	linkData, err := proto.Marshal(args.workflowEventLink)
+	if err != nil {
+		return err
+	}
+
 	callCtx, cancel := context.WithTimeout(
 		ctx,
 		e.Config.RequestTimeout(ns.Name().String(), task.EndpointName),
@@ -209,6 +215,10 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
+		Links: []nexus.Link{{
+			Data: linkData,
+			Type: string(args.workflowEventLink.ProtoReflect().Descriptor().FullName()),
+		}},
 	})
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
@@ -226,6 +236,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 					Operation: rawResult.Pending.Operation,
 					ID:        rawResult.Pending.ID,
 				},
+				Links: rawResult.Links,
 			}
 		} else {
 			var payload *commonpb.Payload
@@ -263,10 +274,16 @@ type startArgs struct {
 	endpointID               string
 	header                   map[string]string
 	payload                  *commonpb.Payload
+	workflowEventLink        *commonpb.Link
 	namespaceFailoverVersion int64
 }
 
-func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
+func (e taskExecutor) loadOperationArgs(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	env hsm.Environment,
+	ref hsm.Ref,
+) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
@@ -289,6 +306,18 @@ func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment
 		}
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
+		args.workflowEventLink = &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  ns.Name().String(),
+					WorkflowId: ref.WorkflowKey.WorkflowID,
+					RunId:      ref.WorkflowKey.RunID,
+					Event: &commonpb.Link_WorkflowEvent_EventId{
+						EventId: event.GetEventId(),
+					},
+				},
+			},
+		}
 		args.namespaceFailoverVersion = event.Version
 		return nil
 	})
@@ -309,6 +338,19 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				return hsm.TransitionOutput{}, err
 			}
 			if result.Pending != nil {
+				var links []*commonpb.Link
+				for _, nexusLink := range result.Links {
+					switch nexusLink.Type {
+					case string((&commonpb.Link{}).ProtoReflect().Descriptor().FullName()):
+						link := &commonpb.Link{}
+						if err := proto.Unmarshal(nexusLink.Data, link); err != nil {
+							return hsm.TransitionOutput{}, err
+						}
+						links = append(links, link)
+					default:
+						return hsm.TransitionOutput{}, fmt.Errorf("invalid link data type: %q", nexusLink.Type)
+					}
+				}
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
 				// to allow it to complete via callback.
 				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
@@ -318,6 +360,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 							ScheduledEventId: eventID,
 							OperationId:      result.Pending.ID,
 							RequestId:        operation.RequestId,
+							Links:            links,
 						},
 					}
 				})
