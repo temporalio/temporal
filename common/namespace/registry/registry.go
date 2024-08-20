@@ -221,7 +221,7 @@ func (r *registry) GetPingChecks() []pingable.Check {
 			Timeout: 10 * time.Second,
 			Ping: func() []pingable.Pingable {
 				r.cacheLock.Lock()
-				// lint:ignore SA2001 just checking if we can acquire the lock
+				//lint:ignore SA2001 just checking if we can acquire the lock
 				r.cacheLock.Unlock()
 				return nil
 			},
