@@ -144,18 +144,6 @@ func CompareVersionedTransition(
 	return 0
 }
 
-func CopyVersionedTransition(
-	transition *persistencespb.VersionedTransition,
-) *persistencespb.VersionedTransition {
-	if transition == nil {
-		return nil
-	}
-	return &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: transition.NamespaceFailoverVersion,
-		TransitionCount:          transition.TransitionCount,
-	}
-}
-
 func CopyVersionedTransitions(
 	transitions []*persistencespb.VersionedTransition,
 ) []*persistencespb.VersionedTransition {
@@ -164,7 +152,7 @@ func CopyVersionedTransitions(
 	}
 	copied := make([]*persistencespb.VersionedTransition, len(transitions))
 	for i, t := range transitions {
-		copied[i] = CopyVersionedTransition(t)
+		copied[i] = common.CloneProto(t)
 	}
 	return copied
 }
