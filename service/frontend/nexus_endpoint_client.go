@@ -48,7 +48,7 @@ import (
 )
 
 // EndpointNameRegex is the regular expression that endpoint names must match.
-var EndpointNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+var EndpointNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9\-]*[a-zA-Z0-9]$`)
 
 type (
 	// NexusEndpointClient manages frontend CRUD requests for Nexus endpoints.
