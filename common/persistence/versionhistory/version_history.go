@@ -46,12 +46,17 @@ func CopyVersionHistory(v *historyspb.VersionHistory) *historyspb.VersionHistory
 	token := make([]byte, len(v.BranchToken))
 	copy(token, v.BranchToken)
 
-	var items []*historyspb.VersionHistoryItem
-	for _, item := range v.Items {
-		items = append(items, CopyVersionHistoryItem(item))
-	}
+	items := CopyVersionHistoryItems(v.Items)
 
 	return NewVersionHistory(token, items)
+}
+
+func CopyVersionHistoryItems(items []*historyspb.VersionHistoryItem) []*historyspb.VersionHistoryItem {
+	var result []*historyspb.VersionHistoryItem
+	for _, item := range items {
+		result = append(result, CopyVersionHistoryItem(item))
+	}
+	return result
 }
 
 // CopyVersionHistoryUntilLCAVersionHistoryItem returns copy of VersionHistory up until LCA item.

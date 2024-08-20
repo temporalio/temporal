@@ -121,9 +121,10 @@ func (s *ackManagerSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	replicationProgressCache := NewProgressCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	s.replicationAckManager = NewAckManager(
-		s.mockShard, workflowCache, nil, s.mockExecutionMgr, s.logger,
+		s.mockShard, workflowCache, nil, replicationProgressCache, s.mockExecutionMgr, s.logger,
 	).(*ackMgrImpl)
 }
 
