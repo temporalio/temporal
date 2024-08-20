@@ -39,16 +39,5 @@ func RegistryLifetimeHooks(
 	lc fx.Lifecycle,
 	registry namespace.Registry,
 ) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				registry.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				registry.Stop()
-				return nil
-			},
-		},
-	)
+	lc.Append(fx.StartStopHook(registry.Start, registry.Stop))
 }
