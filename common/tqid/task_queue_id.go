@@ -360,6 +360,18 @@ func (p *NormalPartition) RoutingKey() string {
 	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
 }
 
+// ValidateTaskQueue validates a TaskQueue object.
+// It checks the TaskQueue's name for emptiness, length, UTF-8 validity, and whitespace.
+// For sticky queues, it also validates the NormalName.
+// If the name is empty and defaultVal is provided, it sets the name to defaultVal.
+// If the Kind is unspecified, it sets it to NORMAL.
+//
+// Parameters:
+//   - taskQueue: The TaskQueue to validate. If nil, returns an error.
+//   - defaultVal: Default name to use if taskQueue name is empty.
+//   - maxIDLengthLimit: Maximum allowed length for the TaskQueue name.
+//
+// Returns an error if validation fails, nil otherwise.
 func ValidateTaskQueue(
 	taskQueue *taskqueuepb.TaskQueue,
 	defaultVal string,
@@ -395,6 +407,15 @@ func ValidateTaskQueue(
 	return nil
 }
 
+// ValidateTaskQueueName checks if a given task queue name is valid.
+// It verifies the name is not empty, does not exceed the maximum length,
+// contains no leading or trailing whitespace, and is a valid UTF-8 string.
+//
+// Parameters:
+//   - name: The task queue name to validate.
+//   - maxLength: The maximum allowed length for the name.
+//
+// Returns an error if the name is invalid, nil otherwise.
 func ValidateTaskQueueName(name string, maxLength int) error {
 	if name == "" {
 		return serviceerror.NewInvalidArgument("TaskQueue is not set.")
