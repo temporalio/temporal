@@ -26,7 +26,6 @@ package respondworkflowtaskcompleted
 
 import (
 	"fmt"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"strings"
 
 	"github.com/pborman/uuid"
@@ -36,6 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
