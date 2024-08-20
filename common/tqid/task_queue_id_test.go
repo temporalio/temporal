@@ -28,10 +28,12 @@ import (
 	"errors"
 	"math/rand"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )
@@ -247,6 +249,179 @@ func TestInvalidRpcNames(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := PartitionFromProto(&taskqueuepb.TaskQueue{Name: name}, "", 0)
 			require.Error(t, err)
+		})
+	}
+}
+
+func TestValidateTaskQueue(t *testing.T) {
+	tests := []struct {
+		name             string
+		taskQueue        *taskqueuepb.TaskQueue
+		defaultVal       string
+		maxIDLengthLimit int
+		expectedError    string
+		expectedKind     enumspb.TaskQueueKind
+	}{
+		{
+			name:             "Nil task queue",
+			taskQueue:        nil,
+			defaultVal:       "default",
+			maxIDLengthLimit: 100,
+			expectedError:    "TaskQueue is not set.",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+		},
+		{
+			name:             "Empty name, no default",
+			taskQueue:        &taskqueuepb.TaskQueue{},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "Missing task queue name.",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Empty name, with default",
+			taskQueue:        &taskqueuepb.TaskQueue{},
+			defaultVal:       "default",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Valid name",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "valid-name"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Name exactly at max length",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: strings.Repeat("a", 100)},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Name one character over max length",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: strings.Repeat("a", 101)},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "TaskQueue length exceeds limit.",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Reserved prefix",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: reservedTaskQueuePrefix + "name"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "Task queue name cannot start with reserved prefix /_sys/.",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Valid UTF-8 name",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "válid-nàmé"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Invalid UTF-8 name",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: string([]byte{0xff, 0xfe, 0xfd})},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "TaskQueue \xff\xfe\xfd is not a valid UTF-8 string.",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Sticky queue with valid normal name",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
+		},
+		{
+			name:             "Sticky queue with invalid UTF-8 normal name",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: string([]byte{0xff, 0xfe, 0xfd})},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "TaskQueue \xff\xfe\xfd is not a valid UTF-8 string.",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
+		},
+		{
+			name:             "Sticky queue with empty normal name",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: ""},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "TaskQueue is not set.",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
+		},
+		{
+			name:             "Non-sticky queue with normal name set",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "normal", Kind: enumspb.TASK_QUEUE_KIND_NORMAL, NormalName: "should-be-ignored"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Task queue with unspecified kind",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "unspecified", Kind: enumspb.TASK_QUEUE_KIND_UNSPECIFIED},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Task queue name with only whitespace",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "   "},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "TaskQueue name must not contain leading or trailing whitespace.",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Task queue name with leading/trailing whitespace",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: " leading-trailing "},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "TaskQueue name must not contain leading or trailing whitespace",
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalTaskQueue := tt.taskQueue
+			var originalKind enumspb.TaskQueueKind
+			if tt.taskQueue != nil {
+				originalKind = tt.taskQueue.GetKind()
+			}
+
+			err := ValidateTaskQueue(tt.taskQueue, tt.defaultVal, tt.maxIDLengthLimit)
+
+			if tt.expectedError == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			}
+
+			if originalTaskQueue == nil {
+				assert.Nil(t, tt.taskQueue)
+			} else {
+				if originalKind == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+					assert.Equal(t, tt.expectedKind, tt.taskQueue.GetKind(), "Kind should be set to NORMAL if it was UNSPECIFIED")
+				} else {
+					assert.Equal(t, originalKind, tt.taskQueue.GetKind(), "Kind should not change if it wasn't UNSPECIFIED")
+				}
+			}
+
+			if tt.taskQueue != nil && tt.taskQueue.GetName() == "" && tt.defaultVal != "" {
+				assert.Equal(t, tt.defaultVal, tt.taskQueue.GetName())
+			}
 		})
 	}
 }

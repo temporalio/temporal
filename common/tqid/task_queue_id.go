@@ -29,17 +29,20 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/enums"
 )
 
 const (
 	// nonRootPartitionPrefix is the prefix for all mangled task queue names.
-	nonRootPartitionPrefix = "/_sys/"
-	partitionDelimiter     = "/"
+	nonRootPartitionPrefix  = "/_sys/"
+	partitionDelimiter      = "/"
+	reservedTaskQueuePrefix = "/_sys/"
 )
 
 type (
@@ -355,6 +358,60 @@ func (p *NormalPartition) Key() PartitionKey {
 
 func (p *NormalPartition) RoutingKey() string {
 	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
+}
+
+func ValidateTaskQueue(
+	taskQueue *taskqueuepb.TaskQueue,
+	defaultVal string,
+	maxIDLengthLimit int,
+) error {
+	if taskQueue == nil {
+		return serviceerror.NewInvalidArgument("TaskQueue is not set.")
+	}
+
+	enums.SetDefaultTaskQueueKind(&taskQueue.Kind)
+
+	if taskQueue.GetName() == "" {
+		if defaultVal == "" {
+			return serviceerror.NewInvalidArgument("Missing task queue name.")
+		}
+		taskQueue.Name = defaultVal
+	}
+
+	if err := ValidateTaskQueueName(taskQueue.GetName(), maxIDLengthLimit); err != nil {
+		return err
+	}
+
+	if strings.HasPrefix(taskQueue.GetName(), reservedTaskQueuePrefix) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Task queue name cannot start with reserved prefix %v.", reservedTaskQueuePrefix))
+	}
+
+	if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		if err := ValidateTaskQueueName(taskQueue.GetNormalName(), maxIDLengthLimit); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func ValidateTaskQueueName(name string, maxLength int) error {
+	if name == "" {
+		return serviceerror.NewInvalidArgument("TaskQueue is not set.")
+	}
+	if len(name) > maxLength {
+		return serviceerror.NewInvalidArgument("TaskQueue length exceeds limit.")
+	}
+
+	if strings.TrimSpace(name) != name {
+		return serviceerror.NewInvalidArgument("TaskQueue name must not contain leading or trailing whitespace.")
+	}
+
+	if !utf8.ValidString(name) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("TaskQueue %v is not a valid UTF-8 string.", name))
+	}
+
+	return nil
 }
 
 // parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.
