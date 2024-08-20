@@ -378,14 +378,14 @@ func ValidateTaskQueue(
 	maxIDLengthLimit int,
 ) error {
 	if taskQueue == nil {
-		return serviceerror.NewInvalidArgument("TaskQueue is not set.")
+		return serviceerror.NewInvalidArgument("taskQueue is not set.")
 	}
 
 	enums.SetDefaultTaskQueueKind(&taskQueue.Kind)
 
 	if taskQueue.GetName() == "" {
 		if defaultVal == "" {
-			return serviceerror.NewInvalidArgument("Missing task queue name.")
+			return serviceerror.NewInvalidArgument("missing task queue name.")
 		}
 		taskQueue.Name = defaultVal
 	}
@@ -395,7 +395,7 @@ func ValidateTaskQueue(
 	}
 
 	if strings.HasPrefix(taskQueue.GetName(), reservedTaskQueuePrefix) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Task queue name cannot start with reserved prefix %v.", reservedTaskQueuePrefix))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v.", reservedTaskQueuePrefix))
 	}
 
 	if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -418,18 +418,18 @@ func ValidateTaskQueue(
 // Returns an error if the name is invalid, nil otherwise.
 func ValidateTaskQueueName(name string, maxLength int) error {
 	if name == "" {
-		return serviceerror.NewInvalidArgument("TaskQueue is not set.")
+		return serviceerror.NewInvalidArgument("taskQueue is not set.")
 	}
 	if len(name) > maxLength {
-		return serviceerror.NewInvalidArgument("TaskQueue length exceeds limit.")
+		return serviceerror.NewInvalidArgument("taskQueue length exceeds limit.")
 	}
 
 	if strings.TrimSpace(name) != name {
-		return serviceerror.NewInvalidArgument("TaskQueue name must not contain leading or trailing whitespace.")
+		return serviceerror.NewInvalidArgument("taskQueue name must not contain leading or trailing whitespace.")
 	}
 
 	if !utf8.ValidString(name) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("TaskQueue %v is not a valid UTF-8 string.", name))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("taskQueue %v is not a valid UTF-8 string.", name))
 	}
 
 	return nil

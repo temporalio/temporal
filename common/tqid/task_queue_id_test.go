@@ -267,7 +267,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        nil,
 			defaultVal:       "default",
 			maxIDLengthLimit: 100,
-			expectedError:    "TaskQueue is not set.",
+			expectedError:    "taskQueue is not set.",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
 		},
 		{
@@ -275,7 +275,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        &taskqueuepb.TaskQueue{},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "Missing task queue name.",
+			expectedError:    "missing task queue name.",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		{
@@ -307,7 +307,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        &taskqueuepb.TaskQueue{Name: strings.Repeat("a", 101)},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "TaskQueue length exceeds limit.",
+			expectedError:    "taskQueue length exceeds limit.",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		{
@@ -315,7 +315,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        &taskqueuepb.TaskQueue{Name: reservedTaskQueuePrefix + "name"},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "Task queue name cannot start with reserved prefix /_sys/.",
+			expectedError:    "task queue name cannot start with reserved prefix /_sys/.",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		{
@@ -331,7 +331,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        &taskqueuepb.TaskQueue{Name: string([]byte{0xff, 0xfe, 0xfd})},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "TaskQueue \xff\xfe\xfd is not a valid UTF-8 string.",
+			expectedError:    "taskQueue \xff\xfe\xfd is not a valid UTF-8 string.",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		{
@@ -347,7 +347,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: string([]byte{0xff, 0xfe, 0xfd})},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "TaskQueue \xff\xfe\xfd is not a valid UTF-8 string.",
+			expectedError:    "taskQueue \xff\xfe\xfd is not a valid UTF-8 string.",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
 		},
 		{
@@ -355,7 +355,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: ""},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "TaskQueue is not set.",
+			expectedError:    "taskQueue is not set.",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
 		},
 		{
@@ -379,7 +379,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        &taskqueuepb.TaskQueue{Name: "   "},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "TaskQueue name must not contain leading or trailing whitespace.",
+			expectedError:    "taskQueue name must not contain leading or trailing whitespace.",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		{
@@ -387,7 +387,7 @@ func TestValidateTaskQueue(t *testing.T) {
 			taskQueue:        &taskqueuepb.TaskQueue{Name: " leading-trailing "},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "TaskQueue name must not contain leading or trailing whitespace",
+			expectedError:    "taskQueue name must not contain leading or trailing whitespace",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 	}

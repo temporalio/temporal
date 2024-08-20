@@ -417,7 +417,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskQueueNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(serviceerror.NewInvalidArgument("Missing task queue name."), err)
+	s.Equal(serviceerror.NewInvalidArgument("missing task queue name."), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionTimeout() {

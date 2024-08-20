@@ -637,7 +637,7 @@ func (s *OperatorSuite) TestCreate() {
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "TaskQueue is not set.")
+				s.ErrorContains(err, "taskQueue is not set.")
 			},
 		},
 		{
