@@ -26,6 +26,7 @@ package respondworkflowtaskcompleted
 
 import (
 	"fmt"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"strings"
 
 	"github.com/pborman/uuid"
@@ -664,6 +665,11 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	}
 
 	// Inherit task queue from previous execution if not provided on command
+	if attributes.TaskQueue == nil {
+		attributes.TaskQueue = &taskqueuepb.TaskQueue{
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+	}
 	if err := tqid.ValidateTaskQueue(attributes.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
@@ -784,6 +790,11 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	// Inherit taskqueue from parent workflow execution if not provided on command
+	if attributes.TaskQueue == nil {
+		attributes.TaskQueue = &taskqueuepb.TaskQueue{
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+	}
 	if err := tqid.ValidateTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, attributes.TaskQueue)
 	}
