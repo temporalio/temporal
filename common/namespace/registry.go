@@ -31,14 +31,6 @@ import (
 )
 
 type (
-	// PrepareCallbackFn is function to be called before CallbackFn is called,
-	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
-	PrepareCallbackFn func()
-
-	// CallbackFn is function to be called when the namespace cache entries are changed
-	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
-	CallbackFn func(oldNamespaces []*Namespace, newNamespaces []*Namespace)
-
 	// StateChangeCallbackFn can be registered to be called on any namespace state change or
 	// addition/removal from database, plus once for all namespaces after registration. There
 	// is no guarantee about when these are called.

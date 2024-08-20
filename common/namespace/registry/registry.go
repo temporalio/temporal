@@ -104,15 +104,6 @@ type (
 		// GetMetadata fetches the notification version for Temporal namespaces.
 		GetMetadata(context.Context) (*persistence.GetMetadataResponse, error)
 	}
-
-	// PrepareCallbackFn is function to be called before CallbackFn is called,
-	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
-	PrepareCallbackFn func()
-
-	// CallbackFn is function to be called when the namespace cache entries are changed
-	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
-	CallbackFn func(oldNamespaces []*namespace.Namespace, newNamespaces []*namespace.Namespace)
-
 	registry struct {
 		status                  int32
 		refresher               *goro.Handle
