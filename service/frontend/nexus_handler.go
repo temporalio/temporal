@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -308,7 +307,12 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 }
 
 // StartOperation implements the nexus.Handler interface.
-func (h *nexusHandler) StartOperation(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (result nexus.HandlerStartOperationResult[any], retErr error) {
+func (h *nexusHandler) StartOperation(
+	ctx context.Context,
+	service, operation string,
+	input *nexus.LazyValue,
+	options nexus.StartOperationOptions,
+) (result nexus.HandlerStartOperationResult[any], retErr error) {
 	oc, err := h.getOperationContext(ctx, "StartNexusOperation")
 	if err != nil {
 		return nil, err
@@ -316,20 +320,12 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 	ctx = oc.augmentContext(ctx, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
-	var links []*commonpb.Link
-	for _, encodedLink := range options.Links {
-		switch encodedLink.Type {
-		case string((&commonpb.Link{}).ProtoReflect().Descriptor().FullName()):
-			link := &commonpb.Link{}
-			err := proto.Unmarshal(encodedLink.Data, link)
-			if err != nil {
-				oc.logger.Error("unable to deserialize link data", tag.Error(err))
-				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unable to deserialize link data")
-			}
-			links = append(links, link)
-		default:
-			oc.logger.Warn(fmt.Sprintf("unsupported link data type: %q", encodedLink.Type))
-		}
+	var links []*nexuspb.Link
+	for _, nexusLink := range options.Links {
+		links = append(links, &nexuspb.Link{
+			Data: nexusLink.Data,
+			Type: nexusLink.Type,
+		})
 	}
 
 	startOperationRequest := nexuspb.StartOperationRequest{
@@ -396,13 +392,9 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
 			var nexusLinks []nexus.Link
 			for _, link := range t.AsyncSuccess.GetLinks() {
-				linkData, err := proto.Marshal(link)
-				if err != nil {
-					return nil, commonnexus.ConvertGRPCError(err, false)
-				}
 				nexusLinks = append(nexusLinks, nexus.Link{
-					Data: linkData,
-					Type: string(link.ProtoReflect().Descriptor().FullName()),
+					Data: link.GetData(),
+					Type: link.GetType(),
 				})
 			}
 			return &nexus.HandlerStartOperationResultAsync{

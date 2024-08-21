@@ -348,7 +348,8 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 						}
 						links = append(links, link)
 					default:
-						return hsm.TransitionOutput{}, fmt.Errorf("invalid link data type: %q", nexusLink.Type)
+						// If the link data type is unsupported, just ignore it for now.
+						e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
 					}
 				}
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
@@ -360,9 +361,10 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 							ScheduledEventId: eventID,
 							OperationId:      result.Pending.ID,
 							RequestId:        operation.RequestId,
-							Links:            links,
 						},
 					}
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					e.Links = links
 				})
 				return TransitionStarted.Apply(operation, EventStarted{
 					Time:       env.Now(),
