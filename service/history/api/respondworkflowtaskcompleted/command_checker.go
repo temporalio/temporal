@@ -309,7 +309,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 		activityType = attributes.ActivityType.GetName()
 	}
 
-	if err := tqid.ValidateTaskQueue(attributes.TaskQueue, "", v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, "", v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("invalid TaskQueue on ScheduleActivityTaskCommand: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
 	}
 
@@ -670,7 +670,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.ValidateTaskQueue(attributes.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
 
@@ -795,7 +795,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.ValidateTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, attributes.TaskQueue)
 	}
 

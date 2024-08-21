@@ -29,14 +29,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/enums"
 )
 
 const (
@@ -359,81 +357,6 @@ func (p *NormalPartition) Key() PartitionKey {
 
 func (p *NormalPartition) RoutingKey() string {
 	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
-}
-
-// ValidateTaskQueue validates a TaskQueue object.
-// It checks the TaskQueue's name for emptiness, length, UTF-8 validity, and whitespace.
-// For sticky queues, it also validates the NormalName.
-// If the name is empty and defaultVal is provided, it sets the name to defaultVal.
-// If the Kind is unspecified, it sets it to NORMAL.
-//
-// Parameters:
-//   - taskQueue: The TaskQueue to validate. If nil, returns an error.
-//   - defaultVal: Default name to use if taskQueue name is empty.
-//   - maxIDLengthLimit: Maximum allowed length for the TaskQueue name.
-//
-// Returns an error if validation fails, nil otherwise.
-func ValidateTaskQueue(
-	taskQueue *taskqueuepb.TaskQueue,
-	defaultName string,
-	maxIDLengthLimit int,
-) error {
-	if taskQueue == nil {
-		return serviceerror.NewInvalidArgument("taskQueue is not set.")
-	}
-
-	enums.SetDefaultTaskQueueKind(&taskQueue.Kind)
-
-	if taskQueue.GetName() == "" {
-		if defaultVal == "" {
-			return serviceerror.NewInvalidArgument("missing task queue name.")
-		}
-		taskQueue.Name = defaultVal
-	}
-
-	if err := ValidateTaskQueueName(taskQueue.GetName(), maxIDLengthLimit); err != nil {
-		return err
-	}
-
-	if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		if err := ValidateTaskQueueName(taskQueue.GetNormalName(), maxIDLengthLimit); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// ValidateTaskQueueName checks if a given task queue name is valid.
-// It verifies the name is not empty, does not exceed the maximum length,
-// contains no leading or trailing whitespace, and is a valid UTF-8 string.
-//
-// Parameters:
-//   - name: The task queue name to validate.
-//   - maxLength: The maximum allowed length for the name.
-//
-// Returns an error if the name is invalid, nil otherwise.
-func ValidateTaskQueueName(name string, maxLength int) error {
-	if name == "" {
-		return serviceerror.NewInvalidArgument("taskQueue is not set.")
-	}
-	if len(name) > maxLength {
-		return serviceerror.NewInvalidArgument("taskQueue length exceeds limit.")
-	}
-
-	if strings.TrimSpace(name) != name {
-		return serviceerror.NewInvalidArgument("taskQueue name must not contain leading or trailing whitespace.")
-	}
-
-	if strings.HasPrefix(name, reservedTaskQueuePrefix) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v.", reservedTaskQueuePrefix))
-	}
-
-	if !utf8.ValidString(name) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("taskQueue %v is not a valid UTF-8 string.", name))
-	}
-
-	return nil
 }
 
 // parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.
