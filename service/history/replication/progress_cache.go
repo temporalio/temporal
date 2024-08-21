@@ -60,9 +60,10 @@ type (
 	}
 
 	ReplicationProgress struct {
-		versionedTransitions       [][]*persistencespb.VersionedTransition
-		eventVersionHistoryItems   [][]*historyspb.VersionHistoryItem
-		lastVersionTransitionIndex int
+		versionedTransitions         [][]*persistencespb.VersionedTransition
+		eventVersionHistoryItems     [][]*historyspb.VersionHistoryItem
+		lastVersionTransitionIndex   int
+		lastEventVersionHistoryIndex int
 	}
 
 	Key struct {
@@ -119,6 +120,7 @@ func (c *progressCacheImpl) updateStates(
 	for idx, transitions := range item.versionedTransitions {
 		if workflow.TransitionHistoryStalenessCheck(versionedTransitions, transitions[len(transitions)-1]) == nil {
 			item.versionedTransitions[idx] = workflow.CopyVersionedTransitions(versionedTransitions)
+			item.lastVersionTransitionIndex = idx
 			return true
 		}
 		if workflow.TransitionHistoryStalenessCheck(transitions, versionedTransitions[len(versionedTransitions)-1]) == nil {
@@ -143,6 +145,7 @@ func (c *progressCacheImpl) updateEvents(
 		item.eventVersionHistoryItems = [][]*historyspb.VersionHistoryItem{
 			versionhistory.CopyVersionHistoryItems(eventVersionHistoryItems),
 		}
+		item.lastEventVersionHistoryIndex = 0
 		return true, nil
 	}
 
@@ -158,10 +161,12 @@ func (c *progressCacheImpl) updateEvents(
 		if versionhistory.IsEqualVersionHistoryItem(historyItems[len(historyItems)-1], lcaItem) {
 			// incoming version history can be appended to the current version histories
 			item.eventVersionHistoryItems[idx] = versionhistory.CopyVersionHistoryItems(eventVersionHistoryItems)
+			item.lastEventVersionHistoryIndex = idx
 			return true, nil
 		}
 	}
 
+	item.lastEventVersionHistoryIndex = len(item.eventVersionHistoryItems)
 	item.eventVersionHistoryItems = append(item.eventVersionHistoryItems, versionhistory.CopyVersionHistoryItems(eventVersionHistoryItems))
 	return true, nil
 }
@@ -191,6 +196,47 @@ func (c *progressCacheImpl) Update(
 		c.cache.Put(cacheKey, item)
 	}
 	return nil
+}
+
+func (c *ReplicationProgress) LastSyncedTransition() *persistencespb.VersionedTransition {
+	if c == nil ||
+		len(c.versionedTransitions) == 0 ||
+		c.lastVersionTransitionIndex < 0 ||
+		c.lastVersionTransitionIndex >= len(c.versionedTransitions) {
+		return nil
+	}
+	transitions := c.versionedTransitions[c.lastVersionTransitionIndex]
+	return transitions[len(transitions)-1]
+}
+
+// func (c *ReplicationProgress) LastSyncedEventHistoryItems() []*historyspb.VersionHistoryItem {
+// 	if c == nil ||
+// 		len(c.eventVersionHistoryItems) == 0 ||
+// 		c.lastEventVersionHistoryIndex < 0 ||
+// 		c.lastEventVersionHistoryIndex >= len(c.eventVersionHistoryItems) {
+// 		return nil
+// 	}
+// 	return c.eventVersionHistoryItems[c.lastEventVersionHistoryIndex]
+// }
+
+// func (c *ReplicationProgress) GetLastEventVersion() int64 {
+// 	items := c.LastSyncedEventHistoryItems()
+// 	if len(items) == 0 {
+// 		return 0
+// 	}
+// 	return items[len(items)-1].Version
+// }
+
+func (c *ReplicationProgress) TaskSent(versionedTransition *persistencespb.VersionedTransition) bool {
+	if c == nil {
+		return false
+	}
+	for _, transitions := range c.versionedTransitions {
+		if workflow.TransitionHistoryStalenessCheck(transitions, versionedTransition) == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *ReplicationProgress) CacheSize() int {

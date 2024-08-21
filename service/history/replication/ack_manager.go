@@ -69,6 +69,7 @@ type (
 		) (*replicationspb.ReplicationTask, error)
 		ConvertTaskByCluster(
 			ctx context.Context,
+			historyEngine shard.Engine,
 			task tasks.Task,
 			targetClusterID int32,
 		) (*replicationspb.ReplicationTask, error)
@@ -468,6 +469,7 @@ func (p *ackMgrImpl) ConvertTask(
 
 func (p *ackMgrImpl) ConvertTaskByCluster(
 	ctx context.Context,
+	historyEngine shard.Engine,
 	task tasks.Task,
 	targetClusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
@@ -476,6 +478,7 @@ func (p *ackMgrImpl) ConvertTaskByCluster(
 		return convertSyncVersionedTransitionTask(
 			ctx,
 			p.shardContext,
+			historyEngine,
 			task,
 			p.shardContext.GetShardID(),
 			p.workflowCache,
