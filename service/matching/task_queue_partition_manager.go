@@ -470,8 +470,9 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 }
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
+	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers, reportInternalTaskQueue bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
