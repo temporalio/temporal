@@ -103,6 +103,9 @@ func RegisterExecutor(
 	if err := hsm.RegisterImmediateExecutor(registry, exec.executeSchedulerRunTask); err != nil {
 		return err
 	}
+	if err := hsm.RegisterImmediateExecutor(registry, exec.executeSchedulerProcessBufferTask); err != nil {
+		return err
+	}
 	if err := hsm.RegisterRemoteMethod(registry, ProcessWorkflowCompletionEvent{}, exec.processWorkflowCompletionEvent); err != nil {
 		return err
 	}
@@ -155,14 +158,13 @@ func (e taskExecutor) executeSchedulerRunTask(
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
-	//ctx, cancel := context.WithTimeout(ctx, e.Config.ExecutionTimeout(ns.Name().String()))
-	//defer cancel()
+	ctx, cancel := context.WithTimeout(ctx, e.Config.ExecutionTimeout(ns.Name().String()))
+	defer cancel()
 
-	var sCopy Scheduler
 	// This block computes, in a critical section, the actions that the scheduler should take. It then proceeds to log
 	// the intents down and update scheduler state. We perform the intended actions outside the critical section to
 	// avoid blocking
-	err = env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
@@ -170,6 +172,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 		if err != nil {
 			return err
 		}
+
 		// Update in case namespace was renamed since creation
 		s.Args.State.Namespace = ns.Name().String()
 		tweakables := e.Config.Tweakables(s.Args.State.Namespace)
@@ -209,6 +212,28 @@ func (e taskExecutor) executeSchedulerRunTask(
 
 		// process backfills if we have any too
 		e.processBackfills(s, &tweakables)
+		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
+			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
+		})
+	})
+}
+
+func (e taskExecutor) executeSchedulerProcessBufferTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task SchedulerProcessBufferTask,
+) error {
+	var sCopy Scheduler
+	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		if err := node.CheckRunning(); err != nil {
+			return err
+		}
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+
 		// Copy the scheduler state for use outside of the critical section
 		// TODO(Tianyu): This copy is mostly here for convenience, as the existing scheduler code is written assuming
 		// access to the scheduler data structure. Probably the better HSM way is to copy out necessary information, but
@@ -220,6 +245,9 @@ func (e taskExecutor) executeSchedulerRunTask(
 		return nil
 	})
 
+	if err != nil {
+		return err
+	}
 	// try starting workflows in the buffer
 	// nolint:revive
 	for {
@@ -271,16 +299,10 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 	e.Logger.Debug("processBuffer", tag.NewInt("buffer", len(sCopy.Args.State.BufferedStarts)), tag.NewInt("running", len(sCopy.Args.Info.RunningWorkflows)))
 	tryAgain = false
 
-	// Make sure we have something to start. If not, we can clear the buffer.
+	// Make sure we have something to start. If not, we can exit.
 	req := sCopy.Args.Schedule.Action.GetStartWorkflow()
 	if req == nil || len(sCopy.Args.State.BufferedStarts) == 0 {
-		sCopy.Args.State.BufferedStarts = nil
-		// TODO(Tianyu): Check for retention period and complete schedule after retention period has passed
-		err = env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-			return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
-				return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
-			})
-		})
+		return
 	}
 
 	isRunning := len(sCopy.Args.Info.RunningWorkflows) > 0
@@ -297,6 +319,9 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 	results := make([]startWorkflowResult, 0)
 
 	for _, start := range allStarts {
+		// TODO(Tianyu): This is likely not correct -- by mutating actions remaining here as part of canTakeScheduledAction
+		// it assumes no concurrent tasks running to start workflows.  Even though this is a reasonable assumption, it probably
+		//isn't enforced by the HSM framework atm.
 		if !e.canTakeScheduledAction(sCopy, start.Manual, true) {
 			// try again to drain the buffer if paused or out of actions
 			tryAgain = true
@@ -345,10 +370,7 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 		for _, r := range results {
 			s.recordAction(r.result, r.nonOverlapping)
 		}
-
-		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
-			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
-		})
+		return nil
 	})
 	return
 }
@@ -637,6 +659,23 @@ func (e taskExecutor) logPauseOnError(s *Scheduler, lastEventType enumspb.EventT
 	}
 }
 
+func (e taskExecutor) prepareRefForRemoteMethod(ref hsm.Ref) hsm.Ref {
+	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
+	// This is a workaround and should be removed after relevant changes are made in the HSM framework
+	smRef := common.CloneProto(ref.StateMachineRef)
+	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
+	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
+	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
+	smRef.MachineLastUpdateVersionedTransition = nil
+	smRef.MachineTransitionCount = 0
+	newRef := hsm.Ref{
+		WorkflowKey:     ref.WorkflowKey,
+		StateMachineRef: smRef,
+		TaskID:          0,
+	}
+	return newRef
+}
+
 func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hsm.Environment, ref hsm.Ref, input any) (any, error) {
 	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
 	// This is a workaround and should be removed after relevant changes are made in the HSM framework
@@ -812,8 +851,6 @@ func (e taskExecutor) patchSchedule(ctx context.Context, env hsm.Environment, re
 	// This is a workaround and should be removed after relevant changes are made in the HSM framework
 	smRef := common.CloneProto(ref.StateMachineRef)
 	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
-	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
-	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
 	smRef.MachineLastUpdateVersionedTransition = nil
 	smRef.MachineTransitionCount = 0
 	newRef := hsm.Ref{
@@ -904,13 +941,13 @@ func (e taskExecutor) updateSchedule(ctx context.Context, env hsm.Environment, r
 		// don't touch Info
 
 		s.ensureFields(&tweakables)
-		// TODO(Tianyu): Original scheduler code does not propagate failure here. Instead, other parts of the code will generate and propagate error when they see no compiled spec.
+		// Original scheduler code does not propagate failure here. Instead, other parts of the code will generate and propagate error when they see no compiled spec.
 		_ = e.tryCompileSpec(s)
 
 		s.Args.Info.UpdateTime = timestamppb.Now()
 		s.Args.State.ConflictToken++
 
-		// Attempt to immediately trigger the scheduler
+		// Attempt to immediately trigger the scheduler.
 		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
 			return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
 		})

@@ -138,7 +138,7 @@ func (s *Scheduler) SetState(state enumsspb.SchedulerState) {
 func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch s.HsmState { // nolint:exhaustive
 	case enumsspb.SCHEDULER_STATE_WAITING:
-		return []hsm.Task{SchedulerWaitTask{Deadline: s.NextInvocationTime.AsTime()}}, nil
+		return []hsm.Task{SchedulerProcessBufferTask{}, SchedulerWaitTask{Deadline: s.NextInvocationTime.AsTime()}}, nil
 	case enumsspb.SCHEDULER_STATE_EXECUTING:
 		// This task is done locally and do not need a destination
 		return []hsm.Task{SchedulerActivateTask{}}, nil
@@ -182,10 +182,13 @@ func RegisterStateMachine(r *hsm.Registry) error {
 }
 
 // EventSchedulerActivate is triggered when the scheduler state machine should wake up and perform work.
-type EventSchedulerActivate struct{}
+type EventSchedulerActivate struct {
+	// Instruct the task to schedule more invocation into the future or treat itself as a one-off
+	scheduleMore bool
+}
 
 var TransitionSchedulerActivate = hsm.NewTransition(
-	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_WAITING},
+	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_EXECUTING, enumsspb.SCHEDULER_STATE_WAITING},
 	enumsspb.SCHEDULER_STATE_EXECUTING,
 	func(scheduler *Scheduler, event EventSchedulerActivate) (hsm.TransitionOutput, error) {
 		tasks, err := scheduler.RegenerateTasks(nil)

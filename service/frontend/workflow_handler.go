@@ -3372,6 +3372,9 @@ func (wh *WorkflowHandler) UpdateSchedule(
 					Type: schedulerhsm.StateMachineType,
 				},
 			},
+			MachineInitialVersionedTransition:    nil,
+			MachineLastUpdateVersionedTransition: nil,
+			MachineTransitionCount:               0,
 		}
 		req := &historyservice.InvokeStateMachineMethodRequest{
 			NamespaceId: namespaceID.String(),
