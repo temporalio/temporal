@@ -37,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -292,6 +293,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// nil inner fields.
 		if res.GetUserData() != nil {
 			m.setUserDataForNonOwningPartition(res.GetUserData())
+			m.logUserDataChange("fetched user data from parent", res.GetUserData())
 		}
 		hasFetchedUserData = true
 		m.setUserDataState(userDataEnabled, nil)
@@ -335,6 +337,8 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	m.logUserDataChange("loaded user data from db", response.UserData)
 
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -445,6 +449,7 @@ func (m *userDataManagerImpl) updateUserData(
 	if err == nil {
 		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
 		m.setUserDataLocked(updatedVersionedData)
+		m.logUserDataChange("modified user data", updatedVersionedData)
 	}
 	return updatedVersionedData, shouldReplicate, err
 }
@@ -458,4 +463,11 @@ func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persist
 func (m *userDataManagerImpl) callerInfoContext(ctx context.Context) context.Context {
 	ns, _ := m.namespaceRegistry.GetNamespaceName(namespace.ID(m.partition.NamespaceId()))
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
+}
+
+func (m *userDataManagerImpl) logUserDataChange(message string, data *persistencespb.VersionedTaskQueueUserData) {
+	m.logger.Info(message,
+		tag.UserDataVersion(data.GetVersion()),
+		tag.Timestamp(hybrid_logical_clock.UTC(data.GetData().GetClock())),
+	)
 }
