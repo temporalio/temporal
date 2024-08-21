@@ -39,9 +39,8 @@ import (
 
 const (
 	// nonRootPartitionPrefix is the prefix for all mangled task queue names.
-	nonRootPartitionPrefix  = "/_sys/"
-	partitionDelimiter      = "/"
-	reservedTaskQueuePrefix = "/_sys/"
+	nonRootPartitionPrefix = "/_sys/"
+	partitionDelimiter     = "/"
 )
 
 type (

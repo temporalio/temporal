@@ -11,6 +11,10 @@ import (
 	"go.temporal.io/server/common/enums"
 )
 
+const (
+	reservedTaskQueuePrefix = "/_sys/"
+)
+
 // NormalizeAndValidate validates a TaskQueue object and normalizes its fields.
 // It checks the TaskQueue's name for emptiness, length, UTF-8 validity, and whitespace.
 // For sticky queues, it also validates the NormalName.
