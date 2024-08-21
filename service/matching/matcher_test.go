@@ -295,7 +295,13 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsEmpty() {
 		gomock.Any(),
 	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
 	_, e := t.matcher.Poll(ctx, &pollMetadata{})
-	t.ErrorAs(e, &errNoTasks)
+
+	// The error has to be copied to prevent a data race detection.
+	// t.ErrorAs modifies the target error, which is just a package variable.
+	// Its a great example of why we should adopt error types.
+	// (also, remove after error types are adopted)
+	targetErr := errNoTasks
+	t.ErrorAs(e, &targetErr)
 	cancel()
 }
 
