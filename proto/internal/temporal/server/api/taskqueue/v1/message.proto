@@ -50,8 +50,16 @@ message TaskVersionDirective {
     }
 }
 
+message InternalTaskQueueStatus {
+    int64 read_level = 1;
+    int64 ack_level = 2;
+    temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
+    int64 read_buffer_length = 4;
+}
+
 message TaskQueueVersionInfoInternal {
     PhysicalTaskQueueInfo physical_task_queue_info = 2;
+    InternalTaskQueueStatus internal_task_queue_status = 3;
 }
 
 message PhysicalTaskQueueInfo {
