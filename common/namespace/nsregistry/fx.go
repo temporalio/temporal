@@ -22,12 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package nsregistry
 
 import (
-	"context"
-
 	"go.uber.org/fx"
+
+	"go.temporal.io/server/common/namespace"
 )
 
 var RegistryLifetimeHooksModule = fx.Options(
@@ -36,18 +36,7 @@ var RegistryLifetimeHooksModule = fx.Options(
 
 func RegistryLifetimeHooks(
 	lc fx.Lifecycle,
-	registry Registry,
+	registry namespace.Registry,
 ) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				registry.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				registry.Stop()
-				return nil
-			},
-		},
-	)
+	lc.Append(fx.StartStopHook(registry.Start, registry.Stop))
 }
