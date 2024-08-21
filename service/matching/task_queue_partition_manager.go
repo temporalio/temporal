@@ -472,7 +472,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers, reportInternalTaskQueue bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
@@ -488,21 +488,21 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for bid := range buildIds {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
-			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
+			PhysicalTaskQueueInfo:   &taskqueuespb.PhysicalTaskQueueInfo{},
+			InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{},
 		}
-		var physicalQueue physicalTaskQueueManager
-		if vq, ok := pm.versionedQueues[bid]; ok {
-			physicalQueue = vq
-		} else if bid == "" {
-			physicalQueue = pm.defaultQueue
+		physicalQueue, err := pm.getPhysicalQueue(ctx, bid)
+		if err != nil {
+			return nil, err
 		}
-		if physicalQueue != nil {
-			if reportPollers {
-				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
-			}
-			if reportStats {
-				vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
-			}
+		if reportPollers {
+			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
+		}
+		if reportStats {
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
+		}
+		if internalTaskQueueStatus {
+			vInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
 		}
 		versionsInfo[bid] = vInfo
 	}

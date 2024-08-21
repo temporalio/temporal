@@ -28,6 +28,7 @@ package matching
 
 import (
 	"context"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -67,6 +68,7 @@ type (
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		GetStats() *taskqueuepb.TaskQueueStats
+		GetInternalTaskQueueStatus() *taskqueue.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
 		String() string
 		QueueKey() *PhysicalTaskQueueKey

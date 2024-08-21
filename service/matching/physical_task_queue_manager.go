@@ -481,6 +481,15 @@ func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
 	}
 }
 
+func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() *taskqueuespb.InternalTaskQueueStatus {
+	return &taskqueuespb.InternalTaskQueueStatus{
+		ReadLevel:        c.backlogMgr.taskAckManager.getReadLevel(),
+		AckLevel:         c.backlogMgr.taskAckManager.getAckLevel(),
+		TaskIdBlock:      &taskqueuepb.TaskIdBlock{StartId: c.backlogMgr.taskWriter.taskIDBlock.start, EndId: c.backlogMgr.taskWriter.taskIDBlock.end},
+		ReadBufferLength: int64(len(c.backlogMgr.taskReader.taskBuffer)),
+	}
+}
+
 func (c *physicalTaskQueueManagerImpl) String() string {
 	buf := new(bytes.Buffer)
 	if c.queue.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
