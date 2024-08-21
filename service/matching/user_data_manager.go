@@ -67,6 +67,8 @@ type (
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
+		// Handles the maybe-long-poll GetUserData RPC.
+		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 	}
 
 	UserDataUpdateOptions struct {
@@ -277,6 +279,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 			WaitNewData:              hasFetchedUserData,
 		})
 		if err != nil {
+			m.logger.Error("error fetching user data from parent", tag.Error(err))
 			var unimplErr *serviceerror.Unimplemented
 			if errors.As(err, &unimplErr) {
 				// This might happen during a deployment. The older version couldn't have had any user data,
@@ -293,7 +296,9 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// nil inner fields.
 		if res.GetUserData() != nil {
 			m.setUserDataForNonOwningPartition(res.GetUserData())
-			m.logUserDataChange("fetched user data from parent", res.GetUserData())
+			m.logNewUserData("fetched user data from parent", res.GetUserData())
+		} else {
+			m.logger.Debug("fetched user data from parent, no change")
 		}
 		hasFetchedUserData = true
 		m.setUserDataState(userDataEnabled, nil)
@@ -338,7 +343,7 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 		return err
 	}
 
-	m.logUserDataChange("loaded user data from db", response.UserData)
+	m.logNewUserData("loaded user data from db", response.UserData)
 
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -417,6 +422,7 @@ func (m *userDataManagerImpl) updateUserData(
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err != nil {
+		m.logger.Error("user data update function failed", tag.Error(err))
 		return nil, false, err
 	}
 
@@ -445,13 +451,80 @@ func (m *userDataManagerImpl) updateUserData(
 		BuildIdsAdded:   added,
 		BuildIdsRemoved: removed,
 	})
-	var updatedVersionedData *persistencespb.VersionedTaskQueueUserData
-	if err == nil {
-		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
-		m.setUserDataLocked(updatedVersionedData)
-		m.logUserDataChange("modified user data", updatedVersionedData)
+	if err != nil {
+		m.logger.Error("failed to push new user data to owning matching node for namespace", tag.Error(err))
+		return nil, false, err
 	}
+
+	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
+	m.logNewUserData("modified user data", updatedVersionedData)
+	m.setUserDataLocked(updatedVersionedData)
+
 	return updatedVersionedData, shouldReplicate, err
+}
+
+func (m *userDataManagerImpl) HandleGetUserDataRequest(
+	ctx context.Context,
+	req *matchingservice.GetTaskQueueUserDataRequest,
+) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+	version := req.GetLastKnownUserDataVersion()
+	if version < 0 {
+		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
+	}
+
+	if req.WaitNewData {
+		var cancel context.CancelFunc
+		ctx, cancel = newChildContext(ctx, m.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
+		defer cancel()
+	}
+
+	for {
+		resp := &matchingservice.GetTaskQueueUserDataResponse{}
+		userData, userDataChanged, err := m.GetUserData()
+		if errors.Is(err, errTaskQueueClosed) {
+			// If we're closing, return a success with no data, as if the request expired. We shouldn't
+			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
+			// change of ownership. The caller will retry and be redirected to the new owner.
+			m.logger.Debug("returning empty user data (closing)", tag.NewBoolTag("long-poll", req.WaitNewData))
+			return resp, nil
+		} else if err != nil {
+			return nil, err
+		}
+		if req.WaitNewData && userData.GetVersion() == version {
+			// long-poll: wait for data to change/appear
+			select {
+			case <-ctx.Done():
+				m.logger.Debug("returning empty user data (expired)", tag.NewBoolTag("long-poll", req.WaitNewData))
+				return resp, nil
+			case <-userDataChanged:
+				m.logger.Debug("user data changed while blocked in long poll")
+				continue
+			}
+		}
+		if userData != nil {
+			if userData.Version > version {
+				resp.UserData = userData
+				m.logger.Info("returning user data",
+					tag.NewBoolTag("long-poll", req.WaitNewData),
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.Version),
+				)
+			} else if userData.Version < version {
+				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
+				// We rely on client retries in this case to let the system eventually self-heal.
+				m.logger.Error("requested task queue user data for version greater than known version",
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.Version),
+				)
+				return nil, serviceerror.NewInvalidArgument(
+					"requested task queue user data for version greater than known version")
+			}
+		} else {
+			m.logger.Debug("returning empty user data (no data)", tag.NewBoolTag("long-poll", req.WaitNewData))
+		}
+		return resp, nil
+	}
+
 }
 
 func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
@@ -465,7 +538,7 @@ func (m *userDataManagerImpl) callerInfoContext(ctx context.Context) context.Con
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
-func (m *userDataManagerImpl) logUserDataChange(message string, data *persistencespb.VersionedTaskQueueUserData) {
+func (m *userDataManagerImpl) logNewUserData(message string, data *persistencespb.VersionedTaskQueueUserData) {
 	m.logger.Info(message,
 		tag.UserDataVersion(data.GetVersion()),
 		tag.Timestamp(hybrid_logical_clock.UTC(data.GetData().GetClock())),
