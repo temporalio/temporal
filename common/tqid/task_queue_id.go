@@ -375,7 +375,7 @@ func (p *NormalPartition) RoutingKey() string {
 // Returns an error if validation fails, nil otherwise.
 func ValidateTaskQueue(
 	taskQueue *taskqueuepb.TaskQueue,
-	defaultVal string,
+	defaultName string,
 	maxIDLengthLimit int,
 ) error {
 	if taskQueue == nil {
