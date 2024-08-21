@@ -220,8 +220,9 @@ func (r *registry) GetPingChecks() []pingable.Check {
 			// we don't do any persistence ops, this shouldn't be blocked
 			Timeout: 10 * time.Second,
 			Ping: func() []pingable.Pingable {
+				// just checking if we can acquire the lock
 				r.cacheLock.Lock()
-				//lint:ignore SA2001 just checking if we can acquire the lock
+				// nolint:staticcheck
 				r.cacheLock.Unlock()
 				return nil
 			},
