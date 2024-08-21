@@ -167,6 +167,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		tasks.NewDefaultTaskCategoryRegistry(),
+		s.mockResource.GetMatchingClient(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()

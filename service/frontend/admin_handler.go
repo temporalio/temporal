@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"io"
 	"maps"
 	"net"
@@ -130,7 +131,8 @@ type (
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
-		taskCategoryRegistry tasks.TaskCategoryRegistry
+		taskCategoryRegistry  tasks.TaskCategoryRegistry
+		matchingServiceClient matchingservice.MatchingServiceClient
 	}
 
 	NewAdminHandlerArgs struct {
@@ -162,7 +164,8 @@ type (
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
-		CategoryRegistry tasks.TaskCategoryRegistry
+		CategoryRegistry      tasks.TaskCategoryRegistry
+		matchingServiceClient matchingservice.MatchingServiceClient
 	}
 )
 
@@ -228,6 +231,7 @@ func NewAdminHandler(
 		healthServer:               args.HealthServer,
 		historyHealthChecker:       historyHealthChecker,
 		taskCategoryRegistry:       args.CategoryRegistry,
+		matchingServiceClient:      args.matchingServiceClient,
 	}
 }
 
@@ -1604,6 +1608,39 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		Tasks:         resp.Tasks,
 		NextPageToken: resp.NextPageToken,
 	}, nil
+}
+
+// GetTaskQueueTasks returns information for a given task queue partition of the task queue
+func (adh *AdminHandler) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+) (_ *adminservice.DescribeTaskQueuePartitionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.matchingServiceClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId:        namespaceID.String(),
+		TaskQueuePartition: request.GetTaskQueuePartition(),
+		Versions:           request.GetBuildId(),
+		ReportStats:        true,
+		ReportPollers:      true,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.DescribeTaskQueuePartitionResponse{
+		// gotta populate resp with the information here
+	}, nil
+
 }
 
 func (adh *AdminHandler) DeleteWorkflowExecution(

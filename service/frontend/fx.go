@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"fmt"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"net"
 
 	"github.com/gorilla/mux"
@@ -609,6 +610,7 @@ func AdminHandlerProvider(
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -637,6 +639,7 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		taskCategoryRegistry,
+		matchingClient,
 	}
 	return NewAdminHandler(args)
 }
