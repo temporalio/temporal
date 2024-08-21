@@ -56,7 +56,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/namespace/registry"
+	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -105,7 +105,7 @@ var Module = fx.Options(
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
-	registry.RegistryLifetimeHooksModule,
+	nsregistry.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
 		func(p namespace.Registry) pingable.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
@@ -213,7 +213,7 @@ func NamespaceRegistryProvider(
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
 ) namespace.Registry {
-	return registry.NewRegistry(
+	return nsregistry.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),

@@ -24,7 +24,7 @@
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination registry_mock.go
 
-package registry
+package nsregistry
 
 import (
 	"context"

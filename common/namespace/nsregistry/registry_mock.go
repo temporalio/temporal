@@ -26,7 +26,7 @@
 // Source: registry.go
 
 // Package registry is a generated GoMock package.
-package registry
+package nsregistry
 
 import (
 	context "context"

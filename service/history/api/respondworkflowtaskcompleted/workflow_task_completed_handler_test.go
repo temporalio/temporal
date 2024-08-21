@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace/registry"
+	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/configs"
@@ -97,7 +97,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		col := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), logger)
 		config := configs.NewConfig(col, 1)
 		mockMeta := persistence.NewMockMetadataManager(gomock.NewController(t))
-		nsReg := registry.NewRegistry(
+		nsReg := nsregistry.NewRegistry(
 			mockMeta,
 			true,
 			func() time.Duration { return 1 * time.Hour },
