@@ -312,8 +312,11 @@ func (e taskExecutor) loadOperationArgs(
 					Namespace:  ns.Name().String(),
 					WorkflowId: ref.WorkflowKey.WorkflowID,
 					RunId:      ref.WorkflowKey.RunID,
-					Event: &commonpb.Link_WorkflowEvent_EventId{
-						EventId: event.GetEventId(),
+					Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
+						HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+							EventId:   event.GetEventId(),
+							EventType: event.GetEventType(),
+						},
 					},
 				},
 			},
