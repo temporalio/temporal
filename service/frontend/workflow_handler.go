@@ -83,6 +83,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -604,6 +605,9 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 		}
 		if startReq.RequestEagerExecution {
 			return nil, "", errMultiOpEagerWorkflow
+		}
+		if timestamp.DurationValue(startReq.WorkflowStartDelay) > 0 {
+			return nil, "", errMultiOpStartDelay
 		}
 
 		workflowId = startReq.WorkflowId
