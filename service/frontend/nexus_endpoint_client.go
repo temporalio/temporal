@@ -369,7 +369,7 @@ func (c *NexusEndpointClient) validateUpsertSpec(spec *nexuspb.EndpointSpec) err
 			return serviceerror.NewFailedPrecondition(fmt.Sprintf("could not verify namespace referenced by target exists: %v", nsErr.Error()))
 		}
 
-		if err := tqid.ValidateTaskQueueName(variant.Worker.GetTaskQueue(), c.config.maxTaskQueueLength()); err != nil {
+		if err := tqid.Validate(variant.Worker.GetTaskQueue(), c.config.maxTaskQueueLength()); err != nil {
 			issues.Appendf("invalid target task queue: %q", err.Error())
 		}
 	case *nexuspb.EndpointTarget_External_:
