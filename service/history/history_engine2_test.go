@@ -47,6 +47,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute"
@@ -2275,6 +2276,51 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	).Return(startEvent, nil).AnyTimes()
 
 	err = s.historyEngine.RefreshWorkflowTasks(metrics.AddMetricsContext(context.Background()), tests.NamespaceID, execution)
+	s.NoError(err)
+}
+
+func (s *engine2Suite) TestUnblockWorkflowExecution() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	// add wf start event
+	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
+	startEvent := addWorkflowExecutionStartedEvent(ms, execution, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Minute, 20*time.Minute, 200*time.Minute, "identity")
+	startVersion := startEvent.GetVersion()
+	startTime := startEvent.GetEventTime().AsTime()
+
+	// add backoff task
+	backoffTaskTimestamp := startTime.Add(1 * time.Minute)
+	ms.AddTasks(&tasks.WorkflowBackoffTimerTask{
+		// TaskID is set by shard
+		WorkflowKey:         definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
+		VisibilityTimestamp: backoffTaskTimestamp,
+		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START,
+		Version:             startVersion,
+	})
+	ms.GetExecutionInfo().ExecutionTime = timestamppb.New(backoffTaskTimestamp)
+
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		events.EventKey{
+			NamespaceID: tests.NamespaceID,
+			WorkflowID:  execution.GetWorkflowId(),
+			RunID:       execution.GetRunId(),
+			EventID:     common.FirstEventID,
+			Version:     startVersion,
+		},
+		common.FirstEventID,
+		gomock.Any(),
+	).Return(startEvent, nil).AnyTimes()
+
+	err := s.historyEngine.UnblockWorkflowExecution(metrics.AddMetricsContext(context.Background()), tests.NamespaceID, execution)
 	s.NoError(err)
 }
 

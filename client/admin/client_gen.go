@@ -412,3 +412,13 @@ func (c *clientImpl) ResendReplicationTasks(
 	defer cancel()
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
 }
+
+func (c *clientImpl) UnblockWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.UnblockWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UnblockWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UnblockWorkflowExecution(ctx, request, opts...)
+}

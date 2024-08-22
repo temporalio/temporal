@@ -1301,6 +1301,26 @@ func (mr *MockHistoryServiceClientMockRecorder) TerminateWorkflowExecution(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).TerminateWorkflowExecution), varargs...)
 }
 
+// UnblockWorkflowExecution mocks base method.
+func (m *MockHistoryServiceClient) UnblockWorkflowExecution(ctx context.Context, in *historyservice.UnblockWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.UnblockWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnblockWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.UnblockWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnblockWorkflowExecution indicates an expected call of UnblockWorkflowExecution.
+func (mr *MockHistoryServiceClientMockRecorder) UnblockWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnblockWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).UnblockWorkflowExecution), varargs...)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) UpdateWorkflowExecution(ctx context.Context, in *historyservice.UpdateWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -2448,6 +2468,21 @@ func (m *MockHistoryServiceServer) TerminateWorkflowExecution(arg0 context.Conte
 func (mr *MockHistoryServiceServerMockRecorder) TerminateWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).TerminateWorkflowExecution), arg0, arg1)
+}
+
+// UnblockWorkflowExecution mocks base method.
+func (m *MockHistoryServiceServer) UnblockWorkflowExecution(arg0 context.Context, arg1 *historyservice.UnblockWorkflowExecutionRequest) (*historyservice.UnblockWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnblockWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.UnblockWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnblockWorkflowExecution indicates an expected call of UnblockWorkflowExecution.
+func (mr *MockHistoryServiceServerMockRecorder) UnblockWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnblockWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).UnblockWorkflowExecution), arg0, arg1)
 }
 
 // UpdateWorkflowExecution mocks base method.

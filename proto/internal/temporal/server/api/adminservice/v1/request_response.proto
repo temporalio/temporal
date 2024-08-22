@@ -378,6 +378,15 @@ message RefreshWorkflowTasksRequest {
 message RefreshWorkflowTasksResponse {
 }
 
+message UnblockWorkflowExecutionRequest {
+  reserved 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  string namespace_id = 3;
+}
+
+message UnblockWorkflowExecutionResponse {
+}
+
 message ResendReplicationTasksRequest {
   string namespace_id = 1;
   string workflow_id = 2;

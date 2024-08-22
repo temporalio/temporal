@@ -140,6 +140,10 @@ service AdminService {
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
     }
 
+    // UnblockWorkflowExecution immediately unblocks a blocked/delayed workflow.
+    rpc UnblockWorkflowExecution(UnblockWorkflowExecutionRequest) returns (UnblockWorkflowExecutionResponse) {
+    }
+
     // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
     rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
     }

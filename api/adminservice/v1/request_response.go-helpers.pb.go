@@ -1990,6 +1990,80 @@ func (this *RefreshWorkflowTasksResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type UnblockWorkflowExecutionRequest to the protobuf v3 wire format
+func (val *UnblockWorkflowExecutionRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UnblockWorkflowExecutionRequest from the protobuf v3 wire format
+func (val *UnblockWorkflowExecutionRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UnblockWorkflowExecutionRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UnblockWorkflowExecutionRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UnblockWorkflowExecutionRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UnblockWorkflowExecutionRequest
+	switch t := that.(type) {
+	case *UnblockWorkflowExecutionRequest:
+		that1 = t
+	case UnblockWorkflowExecutionRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UnblockWorkflowExecutionResponse to the protobuf v3 wire format
+func (val *UnblockWorkflowExecutionResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UnblockWorkflowExecutionResponse from the protobuf v3 wire format
+func (val *UnblockWorkflowExecutionResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UnblockWorkflowExecutionResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UnblockWorkflowExecutionResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UnblockWorkflowExecutionResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UnblockWorkflowExecutionResponse
+	switch t := that.(type) {
+	case *UnblockWorkflowExecutionResponse:
+		that1 = t
+	case UnblockWorkflowExecutionResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ResendReplicationTasksRequest to the protobuf v3 wire format
 func (val *ResendReplicationTasksRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
