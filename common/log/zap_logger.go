@@ -217,13 +217,17 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 		encodeConfig.EncodeCaller = nil
 	}
 
-	outputPath := "stderr"
+	var outputPaths []string
 	if len(cfg.OutputFile) > 0 {
-		outputPath = cfg.OutputFile
+		outputPaths = append(outputPaths, cfg.OutputFile)
 	}
 	if cfg.Stdout {
-		outputPath = "stdout"
+		outputPaths = append(outputPaths, "stdout")
 	}
+	if len(outputPaths) == 0 {
+		outputPaths = []string{"stderr"}
+	}
+
 	encoding := "json"
 	if cfg.Format == "console" {
 		encoding = "console"
@@ -234,8 +238,8 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 		Sampling:         nil,
 		Encoding:         encoding,
 		EncoderConfig:    encodeConfig,
-		OutputPaths:      []string{outputPath},
-		ErrorOutputPaths: []string{outputPath},
+		OutputPaths:      outputPaths,
+		ErrorOutputPaths: outputPaths,
 		DisableCaller:    disableCaller,
 	}
 	logger, _ := config.Build()
