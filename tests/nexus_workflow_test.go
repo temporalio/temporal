@@ -51,8 +51,10 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -392,14 +394,75 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	testClusterInfo, err := s.client.GetClusterInfo(ctx, &workflowservice.GetClusterInfoRequest{})
 	s.NoError(err)
 
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
 	var callbackToken, publicCallbackUrl string
 
+	handlerLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "handler-ns",
+				WorkflowId: "handler-wf-id",
+				RunId:      "handler-run-id",
+				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
+					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+	}
+	handlerLinkData, err := proto.Marshal(handlerLink)
+	s.NoError(err)
+
 	h := nexustest.Handler{
-		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
 			s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
+
+			s.Len(options.Links, 1)
+			var links []*commonpb.Link
+			for _, nexusLink := range options.Links {
+				link := &commonpb.Link{}
+				err := proto.Unmarshal(nexusLink.Data, link)
+				s.NoError(err)
+				links = append(links, link)
+			}
+			s.NotNil(links[0].GetWorkflowEvent())
+			protorequire.ProtoEqual(s.T(), &commonpb.Link_WorkflowEvent{
+				Namespace:  s.namespace,
+				WorkflowId: run.GetID(),
+				RunId:      run.GetRunID(),
+				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
+					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+						// Event history:
+						// 1 WORKFLOW_EXECUTION_STARTED
+						// 2 WORKFLOW_TASK_SCHEDULED
+						// 3 WORKFLOW_TASK_STARTED
+						// 4 WORKFLOW_TASK_COMPLETED
+						// 5 NEXUS_OPERATION_SCHEDULED
+						EventId:   5,
+						EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+					},
+				},
+			}, links[0].GetWorkflowEvent())
+
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
-			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+			return &nexus.HandlerStartOperationResultAsync{
+				OperationID: "test",
+				Links: []nexus.Link{{
+					Data: handlerLinkData,
+					Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
+				}},
+			}, nil
 		},
 	}
 	listenAddr := nexustest.AllocListenAddress(s.T())
@@ -417,11 +480,6 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 			},
 		},
 	})
-	s.NoError(err)
-
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		TaskQueue: taskQueue,
-	}, "workflow")
 	s.NoError(err)
 
 	pollResp, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -476,6 +534,9 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
 	s.Greater(startedEventIdx, 0)
+
+	s.Len(pollResp.History.Events[startedEventIdx].Links, 1)
+	protorequire.ProtoEqual(s.T(), handlerLink, pollResp.History.Events[startedEventIdx].Links[0])
 
 	// Completion request fails if the result payload is too large.
 	largeCompletion, err := nexus.NewOperationCompletionSuccessful(

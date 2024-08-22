@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/queues"
+	"google.golang.org/protobuf/proto"
 )
 
 var endpointEntry = &persistence.NexusEndpointEntry{
@@ -88,22 +89,73 @@ func (h handler) CancelOperation(ctx context.Context, service, operation, operat
 }
 
 func TestProcessInvocationTask(t *testing.T) {
+	handlerLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "handler-ns",
+				WorkflowId: "handler-wf-id",
+				RunId:      "handler-run-id",
+				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
+					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+	}
+	handlerLinkData, err := proto.Marshal(handlerLink)
+	require.NoError(t, err)
+
 	cases := []struct {
-		name                  string
-		endpointNotFound      bool
-		eventHasNoEndpointID  bool
-		onStartOperation      func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
-		expectedMetricOutcome string
-		checkOutcome          func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
-		requestTimeout        time.Duration
-		destinationDown       bool
+		name                       string
+		endpointNotFound           bool
+		eventHasNoEndpointID       bool
+		checkStartOperationOptions func(t *testing.T, options nexus.StartOperationOptions)
+		onStartOperation           func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
+		expectedMetricOutcome      string
+		checkOutcome               func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
+		requestTimeout             time.Duration
+		destinationDown            bool
 	}{
 		{
 			name:            "async start",
 			requestTimeout:  time.Hour,
 			destinationDown: false,
-			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
+			checkStartOperationOptions: func(t *testing.T, options nexus.StartOperationOptions) {
+				require.Len(t, options.Links, 1)
+				var links []*commonpb.Link
+				for _, nexusLink := range options.Links {
+					link := &commonpb.Link{}
+					err := proto.Unmarshal(nexusLink.Data, link)
+					require.NoError(t, err)
+					links = append(links, link)
+				}
+				require.NotNil(t, links[0].GetWorkflowEvent())
+				protorequire.ProtoEqual(t, &commonpb.Link_WorkflowEvent{
+					Namespace:  "ns-name",
+					WorkflowId: "wf-id",
+					RunId:      "run-id",
+					Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
+						HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				}, links[0].GetWorkflowEvent())
+			},
+			onStartOperation: func(
+				ctx context.Context,
+				service, operation string,
+				input *nexus.LazyValue,
+				options nexus.StartOperationOptions,
+			) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultAsync{
+					OperationID: "op-id",
+					Links: []nexus.Link{{
+						Data: handlerLinkData,
+						Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
+					}},
+				}, nil
 			},
 			expectedMetricOutcome: "pending",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -115,6 +167,8 @@ func TestProcessInvocationTask(t *testing.T) {
 					OperationId:      "op-id",
 					RequestId:        op.RequestId,
 				}, events[0].GetNexusOperationStartedEventAttributes())
+				require.Len(t, events[0].Links, 1)
+				protorequire.ProtoEqual(t, handlerLink, events[0].Links[0])
 			},
 		},
 		{
@@ -311,7 +365,17 @@ func TestProcessInvocationTask(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			listenAddr := nexustest.AllocListenAddress(t)
 			h := handler{}
-			h.OnStartOperation = tc.onStartOperation
+			h.OnStartOperation = func(
+				ctx context.Context,
+				service, operation string,
+				input *nexus.LazyValue,
+				options nexus.StartOperationOptions,
+			) (nexus.HandlerStartOperationResult[any], error) {
+				if tc.checkStartOperationOptions != nil {
+					tc.checkStartOperationOptions(t, options)
+				}
+				return tc.onStartOperation(ctx, service, operation, input, options)
+			}
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)

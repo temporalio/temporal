@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/frontend/configs"
+	"google.golang.org/protobuf/proto"
 )
 
 var op = nexus.NewOperationReference[string, string]("my-operation")
@@ -61,6 +62,41 @@ func (s *ClientFunctionalSuite) mustToPayload(v any) *commonpb.Payload {
 }
 
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
+	callerLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "caller-ns",
+				WorkflowId: "caller-wf-id",
+				RunId:      "caller-run-id",
+				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
+					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+						EventId:   5,
+						EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+					},
+				},
+			},
+		},
+	}
+	callerLinkData, err := proto.Marshal(callerLink)
+	s.NoError(err)
+
+	handlerLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "handler-ns",
+				WorkflowId: "handler-wf-id",
+				RunId:      "handler-run-id",
+				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
+					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+	}
+	handlerLinkData, err := proto.Marshal(handlerLink)
+	s.NoError(err)
+
 	type testcase struct {
 		outcome   string
 		endpoint  *nexuspb.Endpoint
@@ -90,12 +126,19 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				s.Equal("http://localhost/callback", start.Callback)
 				s.Equal("request-id", start.RequestId)
 				s.Equal("value", res.Request.Header["key"])
+				s.Len(start.GetLinks(), 1)
+				s.Equal(callerLinkData, start.Links[0].GetData())
+				s.Equal(string(callerLink.ProtoReflect().Descriptor().FullName()), start.Links[0].Type)
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_StartOperation{
 						StartOperation: &nexuspb.StartOperationResponse{
 							Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
 								AsyncSuccess: &nexuspb.StartOperationResponse_Async{
 									OperationId: "test-id",
+									Links: []*nexuspb.Link{{
+										Data: handlerLinkData,
+										Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
+									}},
 								},
 							},
 						},
@@ -105,6 +148,11 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				require.NoError(t, err)
 				require.Equal(t, "test-id", res.Pending.ID)
+				require.Len(t, res.Links, 1)
+				require.Equal(t, nexus.Link{
+					Data: handlerLinkData,
+					Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
+				}, res.Links[0])
 			},
 		},
 		{
@@ -204,6 +252,10 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				CallbackURL: "http://localhost/callback",
 				RequestID:   "request-id",
 				Header:      header,
+				Links: []nexus.Link{{
+					Data: callerLinkData,
+					Type: string(callerLink.ProtoReflect().Descriptor().FullName()),
+				}},
 			})
 			var unexpectedResponseErr *nexus.UnexpectedResponseError
 			return err == nil || !(errors.As(err, &unexpectedResponseErr) && unexpectedResponseErr.Response.StatusCode == http.StatusNotFound)

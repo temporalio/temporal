@@ -146,4 +146,4 @@ require (
 	modernc.org/token v1.1.0 // indirect
 )
 
-replace github.com/nexus-rpc/sdk-go => github.com/rodrigozhou/nexus-rpc-sdk-go v0.0.0-20240821183033-e5054d0a14d7
+replace github.com/nexus-rpc/sdk-go => github.com/rodrigozhou/nexus-rpc-sdk-go v0.0.0-20240822030153-753e4187b971
