@@ -57,6 +57,11 @@ func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *Tweakables) *Sch
 			HsmState: enumsspb.SCHEDULER_STATE_WAITING,
 		},
 	}
+	s.ensureFields(tweakables)
+	return s
+}
+
+func (s *Scheduler) ensureFields(tweakables *Tweakables) {
 	if s.Args.Schedule == nil {
 		s.Args.Schedule = &schedpb.Schedule{}
 	}
@@ -82,7 +87,6 @@ func NewScheduler(args *schedspb.StartScheduleArgs, tweakables *Tweakables) *Sch
 	if s.Args.State == nil {
 		s.Args.State = &schedspb.InternalState{}
 	}
-	return s
 }
 
 func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
@@ -134,7 +138,7 @@ func (s *Scheduler) SetState(state enumsspb.SchedulerState) {
 func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch s.HsmState { // nolint:exhaustive
 	case enumsspb.SCHEDULER_STATE_WAITING:
-		return []hsm.Task{SchedulerWaitTask{Deadline: s.NextInvocationTime.AsTime()}}, nil
+		return []hsm.Task{SchedulerProcessBufferTask{}, SchedulerWaitTask{Deadline: s.NextInvocationTime.AsTime()}}, nil
 	case enumsspb.SCHEDULER_STATE_EXECUTING:
 		// This task is done locally and do not need a destination
 		return []hsm.Task{SchedulerActivateTask{}}, nil
@@ -181,7 +185,7 @@ func RegisterStateMachine(r *hsm.Registry) error {
 type EventSchedulerActivate struct{}
 
 var TransitionSchedulerActivate = hsm.NewTransition(
-	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_WAITING},
+	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_EXECUTING, enumsspb.SCHEDULER_STATE_WAITING},
 	enumsspb.SCHEDULER_STATE_EXECUTING,
 	func(scheduler *Scheduler, event EventSchedulerActivate) (hsm.TransitionOutput, error) {
 		tasks, err := scheduler.RegenerateTasks(nil)

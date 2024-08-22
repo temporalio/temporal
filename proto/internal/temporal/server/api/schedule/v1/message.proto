@@ -153,5 +153,4 @@ message HsmSchedulerState {
     StartScheduleArgs args = 1;
     temporal.server.api.enums.v1.SchedulerState hsm_state = 2;
     google.protobuf.Timestamp next_invocation_time = 3;
-
 }

@@ -88,7 +88,6 @@ func TrimStateMachineTimers(
 	for _, timerGroup := range mutableState.GetExecutionInfo().StateMachineTimers {
 		trimmedTaskInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(timerGroup.Infos))
 		for _, taskInfo := range timerGroup.GetInfos() {
-
 			node, err := hsmRoot.Child(hsm.Ref{
 				StateMachineRef: taskInfo.Ref,
 			}.StateMachinePath())

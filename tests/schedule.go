@@ -554,6 +554,252 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	}, 10*time.Second, 1*time.Second)
 }
 
+func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
+	sid := "sched-test-basics"
+	wid := "sched-test-basics-wf"
+	wt := "sched-test-basics-wt"
+	wt2 := "sched-test-basics-wt2"
+
+	// switch this to test with search attribute mapper:
+	// csaKeyword := "AliasForCustomKeywordField"
+	csaKeyword := "CustomKeywordField"
+	csaInt := "CustomIntField"
+	csaBool := "CustomBoolField"
+
+	s.OverrideDynamicConfig(schedulerhsm.UseExperimentalHsmScheduler, true)
+
+	wfMemo := payload.EncodeString("workflow memo")
+	wfSAValue := payload.EncodeString("workflow sa value")
+	schMemo := payload.EncodeString("schedule memo")
+	schSAValue := payload.EncodeString("schedule sa value")
+	schSAIntValue, _ := payload.Encode(123)
+	schSABoolValue, _ := payload.Encode(true)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(5 * time.Second)},
+			},
+			Calendar: []*schedulepb.CalendarSpec{
+				{DayOfMonth: "10", Year: "2010"},
+			},
+			CronString: []string{"11 11/11 11 11 1 2011"},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Memo: &commonpb.Memo{
+						Fields: map[string]*commonpb.Payload{"wfmemo1": wfMemo},
+					},
+					SearchAttributes: &commonpb.SearchAttributes{
+						IndexedFields: map[string]*commonpb.Payload{csaKeyword: wfSAValue},
+					},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
+		},
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				csaKeyword: schSAValue,
+				csaInt:     schSAIntValue,
+				csaBool:    schSABoolValue,
+			},
+		},
+	}
+
+	var runs, runs2 int32
+	workflowFn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			atomic.AddInt32(&runs, 1)
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+	workflow2Fn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			atomic.AddInt32(&runs2, 1)
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflow2Fn, workflow.RegisterOptions{Name: wt2})
+
+	// create
+	createTime := time.Now()
+	_, err := s.client.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+
+	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 12*time.Second, 500*time.Millisecond)
+
+	// describe
+	describeResp, err := s.client.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	checkSpec := func(spec *schedulepb.ScheduleSpec) {
+		protorequire.ProtoSliceEqual(s.T(), schedule.Spec.Interval, spec.Interval)
+		s.Nil(spec.Calendar)
+		s.Nil(spec.CronString)
+		s.ProtoElementsMatch([]*schedulepb.StructuredCalendarSpec{
+			{
+				Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				Minute:     []*schedulepb.Range{{Start: 11, End: 11, Step: 1}},
+				Hour:       []*schedulepb.Range{{Start: 11, End: 23, Step: 11}},
+				DayOfMonth: []*schedulepb.Range{{Start: 11, End: 11, Step: 1}},
+				Month:      []*schedulepb.Range{{Start: 11, End: 11, Step: 1}},
+				DayOfWeek:  []*schedulepb.Range{{Start: 1, End: 1, Step: 1}},
+				Year:       []*schedulepb.Range{{Start: 2011, End: 2011, Step: 1}},
+			},
+			{
+				Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				Hour:       []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				DayOfMonth: []*schedulepb.Range{{Start: 10, End: 10, Step: 1}},
+				Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
+				DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
+				Year:       []*schedulepb.Range{{Start: 2010, End: 2010, Step: 1}},
+			},
+		}, spec.StructuredCalendar)
+	}
+	checkSpec(describeResp.Schedule.Spec)
+
+	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy)     // set to default value
+	s.EqualValues(365*24*3600, describeResp.Schedule.Policies.CatchupWindow.AsDuration().Seconds()) // set to default value
+
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+	s.Equal(schSABoolValue.Data, describeResp.SearchAttributes.IndexedFields[csaBool].Data)
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BuildIds])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
+	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csaKeyword].Data)
+	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
+
+	s.DurationNear(describeResp.Info.CreateTime.AsTime().Sub(createTime), 0, 3*time.Second)
+	s.EqualValues(2, describeResp.Info.ActionCount)
+	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
+	s.EqualValues(0, describeResp.Info.OverlapSkipped)
+	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
+	s.EqualValues(2, len(describeResp.Info.RecentActions))
+	action0 := describeResp.Info.RecentActions[0]
+	s.WithinRange(action0.ScheduleTime.AsTime(), createTime, time.Now())
+	s.True(action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 0)
+	s.DurationNear(action0.ActualTime.AsTime().Sub(action0.ScheduleTime.AsTime()), 0, 3*time.Second)
+
+	// TODO(Tianyu): It is not yet possible to test visibility features. Add tests later after they have been integrated with HSM
+
+	// update schedule, no updates to search attributes
+	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
+	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
+
+	updateTime := time.Now()
+	_, err = s.client.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	})
+	s.NoError(err)
+
+	// wait for one new run
+	s.Eventually(
+		func() bool { return atomic.LoadInt32(&runs2) == 1 },
+		7*time.Second,
+		500*time.Millisecond,
+	)
+
+	// describe again
+	describeResp, err = s.client.DescribeSchedule(
+		NewContext(),
+		&workflowservice.DescribeScheduleRequest{
+			Namespace:  s.namespace,
+			ScheduleId: sid,
+		},
+	)
+	s.NoError(err)
+
+	s.Len(describeResp.SearchAttributes.GetIndexedFields(), 3)
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+	s.Equal(schSABoolValue.Data, describeResp.SearchAttributes.IndexedFields[csaBool].Data)
+	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csaKeyword].Data)
+	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
+
+	s.DurationNear(describeResp.Info.UpdateTime.AsTime().Sub(updateTime), 0, 3*time.Second)
+	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
+	s.True(lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.AsTime().UnixNano())
+
+	// TODO(Tianyu): It is not yet possible to test visibility features. Add tests later after they have been integrated with HSM
+	// update schedule and search attributes
+
+	// pause
+	_, err = s.client.PatchSchedule(NewContext(), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			Pause: "because I said so",
+		},
+		Identity:  "test",
+		RequestId: uuid.New(),
+	})
+	s.NoError(err)
+
+	time.Sleep(7 * time.Second) // nolint:forbidigo
+	s.EqualValues(1, atomic.LoadInt32(&runs2), "has not run again")
+
+	describeResp, err = s.client.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	s.True(describeResp.Schedule.State.Paused)
+	s.Equal("because I said so", describeResp.Schedule.State.Notes)
+
+	// finally delete
+	_, err = s.client.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
+
+	_, err = s.client.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.Error(err)
+
+	// TODO(Tianyu): It is not yet possible to test visibility features. Add tests later after they have been integrated with HSM
+	// s.Eventually(func() bool { // wait for visibility
+	//	listResp, err := s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+	//		Namespace:       s.namespace,
+	//		MaximumPageSize: 5,
+	//	})
+	//	s.NoError(err)
+	//	return len(listResp.Schedules) == 0
+	// }, 10*time.Second, 1*time.Second)
+}
+
 func (s *ScheduleFunctionalSuite) TestInput() {
 	sid := "sched-test-input"
 	wid := "sched-test-input-wf"

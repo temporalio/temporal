@@ -86,7 +86,9 @@ type (
 
 func (e errFollow) Error() string { return string(e) }
 
-var ErrSchedulerConflict = errors.New("concurrent scheduler task execution detected, unable to update scheduler state")
+var (
+	errUpdateConflict = errors.New("conflicting concurrent update")
+)
 
 func RegisterExecutor(
 	registry *hsm.Registry,
@@ -101,8 +103,22 @@ func RegisterExecutor(
 	if err := hsm.RegisterImmediateExecutor(registry, exec.executeSchedulerRunTask); err != nil {
 		return err
 	}
-
-	return hsm.RegisterRemoteMethod(registry, ProcessWorkflowCompletionEvent{}, exec.processWorkflowCompletionEvent)
+	if err := hsm.RegisterImmediateExecutor(registry, exec.executeSchedulerProcessBufferTask); err != nil {
+		return err
+	}
+	if err := hsm.RegisterRemoteMethod(registry, ProcessWorkflowCompletionEvent{}, exec.processWorkflowCompletionEvent); err != nil {
+		return err
+	}
+	if err := hsm.RegisterRemoteMethod(registry, Describe{}, exec.describe); err != nil {
+		return err
+	}
+	if err := hsm.RegisterRemoteMethod(registry, ListMatchingTimes{}, exec.listMatchingTimes); err != nil {
+		return err
+	}
+	if err := hsm.RegisterRemoteMethod(registry, PatchSchedule{}, exec.patchSchedule); err != nil {
+		return err
+	}
+	return hsm.RegisterRemoteMethod(registry, UpdateSchedule{}, exec.updateSchedule)
 }
 
 func (e taskExecutor) executeSchedulerWaitTask(
@@ -118,30 +134,18 @@ func (e taskExecutor) executeSchedulerWaitTask(
 	})
 }
 
-func workflowListDiff(newList, oldList []*commonpb.WorkflowExecution) []*commonpb.WorkflowExecution {
-	var diff []*commonpb.WorkflowExecution
-
-	for i, j := 0, 0; j < len(oldList); j++ {
-		if i >= len(newList) || newList[i] != oldList[j] {
-			diff = append(diff, oldList[j])
-		} else {
-			i++
+func (e taskExecutor) tryCompileSpec(s *Scheduler) error {
+	if s.cspec == nil {
+		cspec, err := e.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
+		if err != nil {
+			if e.Logger != nil {
+				e.Logger.Error("Invalid schedule", tag.Error(err))
+			}
+			return err
 		}
+		s.cspec = cspec
 	}
-
-	return diff
-}
-
-func removeFromList(l, toRemove []*commonpb.WorkflowExecution) []*commonpb.WorkflowExecution {
-	var result []*commonpb.WorkflowExecution
-
-	for i, j := 0, 0; j < len(toRemove); j++ {
-		for ; i < len(l) && l[i] != toRemove[j]; i++ {
-			result = append(result, l[i])
-		}
-	}
-
-	return result
+	return nil
 }
 
 func (e taskExecutor) executeSchedulerRunTask(
@@ -157,86 +161,97 @@ func (e taskExecutor) executeSchedulerRunTask(
 	ctx, cancel := context.WithTimeout(ctx, e.Config.ExecutionTimeout(ns.Name().String()))
 	defer cancel()
 
-	var s Scheduler
-	var prevArgs *schedspb.HsmSchedulerState
-	var prevRunningWorkflows []*commonpb.WorkflowExecution
-	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+	// This block computes, in a critical section, the actions that the scheduler should take. It then proceeds to log
+	// the intents down and update scheduler state. We perform the intended actions outside the critical section to
+	// avoid blocking
+	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		prevS, err := hsm.MachineData[*Scheduler](node)
+		s, err := hsm.MachineData[*Scheduler](node)
 		if err != nil {
 			return err
 		}
-		prevArgs = prevS.HsmSchedulerState
 
-		// Ensure that this is copy, so later (stateful) processing does not update state machine without protection
-		s = Scheduler{
-			HsmSchedulerState: common.CloneProto(prevS.HsmSchedulerState),
-			cspec:             prevS.cspec,
+		// Update in case namespace was renamed since creation
+		s.Args.State.Namespace = ns.Name().String()
+		tweakables := e.Config.Tweakables(s.Args.State.Namespace)
+		err = e.tryCompileSpec(s)
+		if err != nil {
+			return err
 		}
 
-		// Copy the list of current running workflows so we can tell later which ones are newly started
-		prevRunningWorkflows = make([]*commonpb.WorkflowExecution, len(prevS.Args.Info.RunningWorkflows))
-		for i := 0; i < len(prevS.Args.Info.RunningWorkflows); i++ {
-			prevRunningWorkflows[i] = prevS.Args.Info.RunningWorkflows[i]
+		if s.Args.State.LastProcessedTime == nil {
+			// log these as json since it's more readable than the Go representation
+			specJson, _ := protojson.Marshal(s.Args.Schedule.Spec)
+			policiesJson, _ := protojson.Marshal(s.Args.Schedule.Policies)
+			e.Logger.Info("Starting schedule", tag.NewStringTag("spec", string(specJson)), tag.NewStringTag("policies", string(policiesJson)))
+			s.Args.State.LastProcessedTime = timestamppb.Now()
+			s.Args.State.ConflictToken = scheduler.InitialConflictToken
+			s.Args.Info.CreateTime = s.Args.State.LastProcessedTime
 		}
-		return err
+
+		t1 := timestamp.TimeValue(s.Args.State.LastProcessedTime)
+		t2 := time.Now()
+		if t2.Before(t1) {
+			e.Logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
+			t2 = t1
+		}
+		nextWakeup, lastAction := e.processTimeRange(
+			s,
+			&tweakables,
+			t1, t2,
+			// resolve this to the schedule's policy as late as possible
+			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+			false,
+			nil,
+		)
+
+		s.Args.State.LastProcessedTime = timestamppb.New(lastAction)
+		s.NextInvocationTime = timestamppb.New(nextWakeup)
+
+		// process backfills if we have any too
+		e.processBackfills(s, &tweakables)
+		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
+			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
+		})
 	})
+}
+
+func (e taskExecutor) executeSchedulerProcessBufferTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task SchedulerProcessBufferTask,
+) error {
+	var sCopy Scheduler
+	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		if err := node.CheckRunning(); err != nil {
+			return err
+		}
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+
+		// Copy the scheduler state for use outside of the critical section
+		// TODO(Tianyu): This copy is mostly here for convenience, as the existing scheduler code is written assuming
+		// access to the scheduler data structure. Probably the better HSM way is to copy out necessary information, but
+		// that is left for future refactor.
+		sCopy = Scheduler{
+			HsmSchedulerState: common.CloneProto(s.HsmSchedulerState),
+			cspec:             s.cspec,
+		}
+		return nil
+	})
+
 	if err != nil {
 		return err
 	}
-	// Update in case namespace was renamed since creation
-	s.Args.State.Namespace = ns.Name().String()
-	tweakables := e.Config.Tweakables(s.Args.State.Namespace)
-
-	if s.cspec == nil {
-		cspec, err := e.SpecBuilder.NewCompiledSpec(s.Args.Schedule.Spec)
-		if err != nil {
-			if e.Logger != nil {
-				e.Logger.Error("Invalid schedule", tag.Error(err))
-			}
-			return err
-		}
-		s.cspec = cspec
-	}
-
-	if s.Args.State.LastProcessedTime == nil {
-		// log these as json since it's more readable than the Go representation
-		specJson, _ := protojson.Marshal(s.Args.Schedule.Spec)
-		policiesJson, _ := protojson.Marshal(s.Args.Schedule.Policies)
-		e.Logger.Info("Starting schedule", tag.NewStringTag("spec", string(specJson)), tag.NewStringTag("policies", string(policiesJson)))
-		s.Args.State.LastProcessedTime = timestamppb.Now()
-		s.Args.State.ConflictToken = scheduler.InitialConflictToken
-		s.Args.Info.CreateTime = s.Args.State.LastProcessedTime
-	}
-
-	t1 := timestamp.TimeValue(s.Args.State.LastProcessedTime)
-	t2 := time.Now()
-	if t2.Before(t1) {
-		e.Logger.Warn("Time went backwards", tag.NewStringTag("time", t1.String()), tag.NewStringTag("time", t2.String()))
-		t2 = t1
-	}
-	nextWakeup, lastAction := e.processTimeRange(
-		&s,
-		&tweakables,
-		t1, t2,
-		// resolve this to the schedule's policy as late as possible
-		enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
-		false,
-		nil,
-	)
-
-	s.Args.State.LastProcessedTime = timestamppb.New(lastAction)
-	s.NextInvocationTime = timestamppb.New(nextWakeup)
-
-	// process backfills if we have any too
-	e.processBackfills(&s, &tweakables)
-
 	// try starting workflows in the buffer
 	// nolint:revive
 	for {
-		hasNext, err := e.processBuffer(ctx, env, ref, &s)
+		hasNext, err := e.processBuffer(ctx, env, ref, &sCopy)
 		if err != nil {
 			return err
 		}
@@ -244,29 +259,7 @@ func (e taskExecutor) executeSchedulerRunTask(
 			break
 		}
 	}
-
-	// TODO(Tianyu): Check for retention period and complete schedule after retention period has passed
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		sPtr, err := hsm.MachineData[*Scheduler](node)
-		if err != nil {
-			return err
-		}
-		// All updates should touch at least one of these two fields
-		if sPtr.HsmState != s.HsmState || sPtr.HsmSchedulerState != prevArgs {
-			return ErrSchedulerConflict
-		}
-		// TODO(Tianyu): This is less than ideal --- we need some better way of concurrency control in the hsm, as it
-		// is decidedly weaker than the sequential guarantee of workflows, and the existence of env.Access is 1. not
-		// strong enough to implement that semantics, and 2. prevents solutions such as mutexes from being used
-
-		// Remove any workflows that had completed in the meantime
-		removeFromList(s.Args.Info.RunningWorkflows, workflowListDiff(sPtr.Args.Info.RunningWorkflows, prevRunningWorkflows))
-		// Copy outside scheduler, which has been updated, to the state machine
-		*sPtr = s
-		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
-			return TransitionSchedulerWait.Apply(scheduler, EventSchedulerWait{})
-		})
-	})
+	return nil
 }
 
 func (e taskExecutor) canTakeScheduledAction(s *Scheduler, manual, decrement bool) bool {
@@ -294,38 +287,47 @@ func (e taskExecutor) canTakeScheduledAction(s *Scheduler, manual, decrement boo
 	return false
 }
 
+type startWorkflowResult struct {
+	result         *schedpb.ScheduleActionResult
+	nonOverlapping bool
+}
+
 func (e taskExecutor) processBuffer(ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-	s *Scheduler) (tryAgain bool, err error) {
-	e.Logger.Debug("processBuffer", tag.NewInt("buffer", len(s.Args.State.BufferedStarts)), tag.NewInt("running", len(s.Args.Info.RunningWorkflows)))
+	sCopy *Scheduler) (tryAgain bool, err error) {
+	e.Logger.Debug("processBuffer", tag.NewInt("buffer", len(sCopy.Args.State.BufferedStarts)), tag.NewInt("running", len(sCopy.Args.Info.RunningWorkflows)))
 	tryAgain = false
 
-	// Make sure we have something to start. If not, we can clear the buffer.
-	req := s.Args.Schedule.Action.GetStartWorkflow()
-	if req == nil || len(s.Args.State.BufferedStarts) == 0 {
-		s.Args.State.BufferedStarts = nil
+	// Make sure we have something to start. If not, we can exit.
+	req := sCopy.Args.Schedule.Action.GetStartWorkflow()
+	if req == nil || len(sCopy.Args.State.BufferedStarts) == 0 {
 		return
 	}
 
-	isRunning := len(s.Args.Info.RunningWorkflows) > 0
-	action := scheduler.ProcessBuffer(s.Args.State.BufferedStarts, isRunning, s.resolveOverlapPolicy)
+	isRunning := len(sCopy.Args.Info.RunningWorkflows) > 0
+	action := scheduler.ProcessBuffer(sCopy.Args.State.BufferedStarts, isRunning, sCopy.resolveOverlapPolicy)
 
 	// Try starting whatever we're supposed to start now
 	allStarts := action.OverlappingStarts
 	if action.NonOverlappingStart != nil {
 		allStarts = append(allStarts, action.NonOverlappingStart)
 	}
-	s.Args.State.BufferedStarts = action.NewBuffer
-	s.Args.Info.OverlapSkipped += action.OverlapSkipped
+
+	// For checking how many actions were taken
+	remainingActions := sCopy.Args.Schedule.State.RemainingActions
+	results := make([]startWorkflowResult, 0)
 
 	for _, start := range allStarts {
-		if !e.canTakeScheduledAction(s, start.Manual, true) {
+		// TODO(Tianyu): This is likely not correct -- by mutating actions remaining here as part of canTakeScheduledAction
+		// it assumes no concurrent tasks running to start workflows.  Even though this is a reasonable assumption, it probably
+		// isn't enforced by the HSM framework atm.
+		if !e.canTakeScheduledAction(sCopy, start.Manual, true) {
 			// try again to drain the buffer if paused or out of actions
 			tryAgain = true
 			continue
 		}
-		result, err := e.startWorkflow(ctx, s, ref, start, req)
+		result, err := e.startWorkflow(ctx, sCopy, ref, start, req)
 		metricsWithTag := e.MetricsHandler.WithTags(metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 		if err != nil {
 			e.Logger.Error("Failed to start workflow", tag.Error(err))
@@ -337,19 +339,39 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 			continue
 		}
 		metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Record(1)
-		s.recordAction(result, start == action.NonOverlappingStart)
+		results = append(results, startWorkflowResult{
+			result:         result,
+			nonOverlapping: start == action.NonOverlappingStart,
+		})
 	}
+	actionsDecremented := remainingActions - sCopy.Args.Schedule.State.RemainingActions
 
 	// Terminate or cancel if required (terminate overrides cancel if both are present)
 	if action.NeedTerminate {
-		for _, ex := range s.Args.Info.RunningWorkflows {
-			e.terminateWorkflow(ctx, s, ex)
+		for _, ex := range sCopy.Args.Info.RunningWorkflows {
+			e.terminateWorkflow(ctx, sCopy, ex)
 		}
 	} else if action.NeedCancel {
-		for _, ex := range s.Args.Info.RunningWorkflows {
-			e.cancelWorkflow(ctx, s, ex)
+		for _, ex := range sCopy.Args.Info.RunningWorkflows {
+			e.cancelWorkflow(ctx, sCopy, ex)
 		}
 	}
+
+	// TODO(Tianyu): Check for retention period and complete schedule after retention period has passed
+	err = env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+
+		s.Args.State.BufferedStarts = action.NewBuffer
+		s.Args.Info.OverlapSkipped += action.OverlapSkipped
+		s.Args.Schedule.State.RemainingActions -= actionsDecremented
+		for _, r := range results {
+			s.recordAction(r.result, r.nonOverlapping)
+		}
+		return nil
+	})
 	return
 }
 
@@ -597,6 +619,13 @@ func (e taskExecutor) cancelWorkflow(
 	}
 }
 
+func checkConflict(s *Scheduler, token int64) error {
+	if token == 0 || token == s.Args.State.ConflictToken {
+		return nil
+	}
+	return errUpdateConflict
+}
+
 func getWorkflowResult(input *persistencepb.HSMCompletionCallbackArg) (*commonpb.Payloads, *failure.Failure, error) {
 	switch input.LastEvent.EventType { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
@@ -630,9 +659,26 @@ func (e taskExecutor) logPauseOnError(s *Scheduler, lastEventType enumspb.EventT
 	}
 }
 
+func (e taskExecutor) prepareRefForRemoteMethod(ref hsm.Ref) hsm.Ref {
+	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
+	// This is a workaround and should be removed after relevant changes are made in the HSM framework
+	smRef := common.CloneProto(ref.StateMachineRef)
+	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
+	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
+	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
+	smRef.MachineLastUpdateVersionedTransition = nil
+	smRef.MachineTransitionCount = 0
+	newRef := hsm.Ref{
+		WorkflowKey:     ref.WorkflowKey,
+		StateMachineRef: smRef,
+		TaskID:          0,
+	}
+	return newRef
+}
+
 func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hsm.Environment, ref hsm.Ref, input any) (any, error) {
 	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
-	// This is a workaround and should be
+	// This is a workaround and should be removed after relevant changes are made in the HSM framework
 	smRef := common.CloneProto(ref.StateMachineRef)
 	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
 	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
@@ -701,5 +747,210 @@ func (e taskExecutor) processWorkflowCompletionEvent(ctx context.Context, env hs
 		e.Logger.Debug("started workflow finished", tag.WorkflowID(castInput.WorkflowId), tag.NewStringTag("status", castInput.LastEvent.EventType.String()),
 			tag.NewBoolTag("pause-after-failure", pauseOnFailure))
 		return nil
+	})
+}
+
+// Returns up to `n` future action times.
+//
+// After workflow version `AccurateFutureActionTimes`, No more than the
+// schedule's `RemainingActions` will be returned. Future action times that
+// precede the schedule's UpdateTime are not included.
+func getFutureActionTimes(s *Scheduler, n int) []*timestamppb.Timestamp {
+	// Note that `s` may be a `scheduler` created outside of a workflow context, used to
+	// compute list info at creation time or in a query. In that case inWorkflowContext will
+	// be false, and this function and anything it calls should not use s.ctx.
+
+	base := timestamp.TimeValue(s.Args.State.LastProcessedTime)
+
+	// Pure version not using workflow context
+	next := func(t time.Time) time.Time {
+		return s.cspec.GetNextTime(s.jitterSeed(), t).Next
+	}
+
+	if s.Args.Schedule.State.LimitedActions {
+		n = min(int(s.Args.Schedule.State.RemainingActions), n)
+	}
+
+	if s.cspec == nil {
+		return nil
+	}
+	out := make([]*timestamppb.Timestamp, 0, n)
+	t1 := base
+	for len(out) < n {
+		t1 = next(t1)
+		if t1.IsZero() {
+			break
+		}
+
+		if s.Args.Info.UpdateTime.AsTime().After(t1) {
+			// Skip action times whose nominal times are prior to the schedule's update time
+			continue
+		}
+
+		out = append(out, timestamppb.New(t1))
+	}
+	return out
+}
+
+func (e taskExecutor) describe(ctx context.Context, env hsm.Environment, ref hsm.Ref, _ any) (any, error) {
+	result := &schedspb.DescribeResponse{}
+	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		tweakables := e.Config.Tweakables(s.Args.State.Namespace)
+		// this is a query handler, don't modify s.Info directly
+		infoCopy := common.CloneProto(s.Args.Info)
+		infoCopy.FutureActionTimes = getFutureActionTimes(s, tweakables.FutureActionCount)
+		infoCopy.BufferSize = int64(len(s.Args.State.BufferedStarts))
+		result.Schedule = s.Args.Schedule
+		result.Info = infoCopy
+		result.ConflictToken = s.Args.State.ConflictToken
+
+		return nil
+	})
+	return result, err
+}
+
+func (e taskExecutor) listMatchingTimes(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
+	castReq := req.(*workflowservice.ListScheduleMatchingTimesRequest) // nolint:revive
+	if castReq == nil || castReq.StartTime == nil || castReq.EndTime == nil {
+		return nil, errors.New("missing or invalid query") // nolint:goerr113
+	}
+	result := &workflowservice.ListScheduleMatchingTimesResponse{}
+	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		if s.cspec == nil {
+			return fmt.Errorf("invalid schedule") // nolint:goerr113
+		}
+
+		var out []*timestamppb.Timestamp
+		t1 := timestamp.TimeValue(castReq.StartTime)
+		for i := 0; i < MaxListMatchingTimesCount; i++ {
+			// don't need to call GetNextTime in SideEffect because this is just a query
+			t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
+			if t1.IsZero() || t1.After(timestamp.TimeValue(castReq.EndTime)) {
+				break
+			}
+			out = append(out, timestamppb.New(t1))
+		}
+		result.StartTime = out
+		return nil
+	})
+
+	return result, err
+}
+
+func (e taskExecutor) patchSchedule(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
+	castReq := req.(*schedpb.SchedulePatch) // nolint:revive
+	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
+	// This is a workaround and should be removed after relevant changes are made in the HSM framework
+	smRef := common.CloneProto(ref.StateMachineRef)
+	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
+	smRef.MachineLastUpdateVersionedTransition = nil
+	smRef.MachineTransitionCount = 0
+	newRef := hsm.Ref{
+		WorkflowKey:     ref.WorkflowKey,
+		StateMachineRef: smRef,
+		TaskID:          0,
+	}
+
+	return nil, env.Access(ctx, newRef, hsm.AccessWrite, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		e.Logger.Debug("Schedule patch")
+		tweakables := e.Config.Tweakables(s.Args.State.Namespace)
+
+		if trigger := castReq.TriggerImmediately; trigger != nil {
+			now := time.Now()
+			e.bufferWorkflowStart(s, &tweakables, now, now, trigger.OverlapPolicy, true)
+		}
+
+		for _, bfr := range castReq.BackfillRequest {
+			startTime := timestamp.TimeValue(bfr.GetStartTime()).Add(-1 * time.Millisecond)
+			bfr.StartTime = timestamppb.New(startTime)
+
+			// Add to ongoing backfills to process incrementally
+			if len(s.Args.State.OngoingBackfills) >= tweakables.MaxBufferSize {
+				e.Logger.Warn("Buffer overrun for backfill requests")
+				e.MetricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(1)
+				s.Args.Info.BufferDropped += 1
+				continue
+			}
+			s.Args.State.OngoingBackfills = append(s.Args.State.OngoingBackfills, common.CloneProto(bfr))
+		}
+
+		if castReq.Pause != "" {
+			s.Args.Schedule.State.Paused = true
+			s.Args.Schedule.State.Notes = castReq.Pause
+			s.Args.State.ConflictToken++
+		}
+		if castReq.Unpause != "" {
+			s.Args.Schedule.State.Paused = false
+			s.Args.Schedule.State.Notes = castReq.Unpause
+			s.Args.State.ConflictToken++
+		}
+
+		// Attempt to immediately trigger the scheduler
+		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
+			return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
+		})
+	})
+}
+
+func (e taskExecutor) updateSchedule(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
+	castReq := req.(*schedspb.FullUpdateRequest) // nolint:revive
+	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
+	// This is a workaround and should be removed after relevant changes are made in the HSM framework
+	smRef := common.CloneProto(ref.StateMachineRef)
+	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
+	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
+	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
+	smRef.MachineLastUpdateVersionedTransition = nil
+	smRef.MachineTransitionCount = 0
+	newRef := hsm.Ref{
+		WorkflowKey:     ref.WorkflowKey,
+		StateMachineRef: smRef,
+		TaskID:          0,
+	}
+
+	return nil, env.Access(ctx, newRef, hsm.AccessWrite, func(node *hsm.Node) error {
+		s, err := hsm.MachineData[*Scheduler](node)
+		if err != nil {
+			return err
+		}
+		tweakables := e.Config.Tweakables(s.Args.State.Namespace)
+
+		if err := checkConflict(s, castReq.ConflictToken); err != nil {
+			e.Logger.Warn("Update conflicted with concurrent change")
+			return errUpdateConflict
+		}
+
+		e.Logger.Debug("Schedule update")
+
+		s.Args.Schedule.Spec = castReq.Schedule.GetSpec()
+		s.Args.Schedule.Action = castReq.Schedule.GetAction()
+		s.Args.Schedule.Policies = castReq.Schedule.GetPolicies()
+		s.Args.Schedule.State = castReq.Schedule.GetState()
+		// don't touch Info
+
+		s.ensureFields(&tweakables)
+		// Original scheduler code does not propagate failure here. Instead, other parts of the code will generate and propagate error when they see no compiled spec.
+		s.cspec = nil
+		_ = e.tryCompileSpec(s)
+
+		s.Args.Info.UpdateTime = timestamppb.Now()
+		s.Args.State.ConflictToken++
+
+		// Attempt to immediately trigger the scheduler.
+		return hsm.MachineTransition(node, func(scheduler *Scheduler) (hsm.TransitionOutput, error) {
+			return TransitionSchedulerActivate.Apply(scheduler, EventSchedulerActivate{})
+		})
 	})
 }

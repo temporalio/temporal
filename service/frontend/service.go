@@ -29,6 +29,8 @@ import (
 	"sync"
 	"time"
 
+	schedulerhsm "go.temporal.io/server/components/scheduler"
+
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -202,6 +204,8 @@ type Config struct {
 	// Health check
 	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
+	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
@@ -316,7 +320,8 @@ func NewConfig(
 
 		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
 
-		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
+		LogAllReqErrors:             dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 }
 

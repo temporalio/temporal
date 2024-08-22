@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -59,6 +60,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
@@ -96,6 +98,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -3118,24 +3121,52 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		}
 	}
 
-	// then query to get current state from the workflow itself
-	req := &historyservice.QueryWorkflowRequest{
-		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.QueryWorkflowRequest{
-			Namespace: request.Namespace,
-			Execution: execution,
-			Query:     &querypb.WorkflowQuery{QueryType: scheduler.QueryNameDescribe},
-		},
-	}
-	res, err := wh.historyClient.QueryWorkflow(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
 	var queryResponse schedspb.DescribeResponse
-	err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
-	if err != nil {
-		return nil, err
+	// TODO(Tianyu): This code currently assumes that ExperimentalHsmScheduler is an all-or-nothing flag, which is a
+	// simplifying assumption due to the lack of visibility support on non-workflow HSMs. This assumption should be
+	// revisited once visibility support is added
+	if wh.config.UseExperimentalHsmScheduler(request.Namespace) {
+		ref := &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: schedulerhsm.StateMachineType,
+				},
+			},
+		}
+		req := &historyservice.InvokeStateMachineMethodRequest{
+			NamespaceId: namespaceID.String(),
+			WorkflowId:  execution.WorkflowId,
+			RunId:       execution.RunId,
+			Ref:         ref,
+			MethodName:  schedulerhsm.Describe{}.Name(),
+			Input:       nil,
+		}
+		res, err := wh.historyClient.InvokeStateMachineMethod(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := proto.Unmarshal(res.Output, &queryResponse); err != nil {
+			return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+		}
+	} else {
+		// then query to get current state from the workflow itself
+		req := &historyservice.QueryWorkflowRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &workflowservice.QueryWorkflowRequest{
+				Namespace: request.Namespace,
+				Execution: execution,
+				Query:     &querypb.WorkflowQuery{QueryType: scheduler.QueryNameDescribe},
+			},
+		}
+		res, err := wh.historyClient.QueryWorkflow(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = wh.annotateSearchAttributesOfScheduledWorkflow(&queryResponse, request.GetNamespace())
@@ -3334,19 +3365,50 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		return nil, err
 	}
 
-	_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: namespaceID.String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-			SignalName:        scheduler.SignalNameUpdate,
-			Input:             inputPayloads,
-			Identity:          request.Identity,
-			RequestId:         request.RequestId,
-		},
-	})
-	if err != nil {
-		return nil, err
+	// TODO(Tianyu): This code currently assumes that ExperimentalHsmScheduler is an all-or-nothing flag, which is a
+	// simplifying assumption due to the lack of visibility support on non-workflow HSMs. This assumption should be
+	// revisited once visibility support is added
+	if wh.config.UseExperimentalHsmScheduler(request.Namespace) {
+		inputBytes, err := input.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		ref := &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: schedulerhsm.StateMachineType,
+				},
+			},
+			MachineInitialVersionedTransition:    nil,
+			MachineLastUpdateVersionedTransition: nil,
+			MachineTransitionCount:               0,
+		}
+		req := &historyservice.InvokeStateMachineMethodRequest{
+			NamespaceId: namespaceID.String(),
+			WorkflowId:  workflowID,
+			Ref:         ref,
+			MethodName:  schedulerhsm.UpdateSchedule{}.Name(),
+			Input:       inputBytes,
+		}
+		_, err = wh.historyClient.InvokeStateMachineMethod(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+			NamespaceId: namespaceID.String(),
+			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         request.Namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				SignalName:        scheduler.SignalNameUpdate,
+				Input:             inputPayloads,
+				Identity:          request.Identity,
+				RequestId:         request.RequestId,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &workflowservice.UpdateScheduleResponse{}, nil
@@ -3401,17 +3463,46 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: namespaceID.String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-			SignalName:        scheduler.SignalNamePatch,
-			Input:             inputPayloads,
-			Identity:          request.Identity,
-			RequestId:         request.RequestId,
-		},
-	})
+	// TODO(Tianyu): This code currently assumes that ExperimentalHsmScheduler is an all-or-nothing flag, which is a
+	// simplifying assumption due to the lack of visibility support on non-workflow HSMs. This assumption should be
+	// revisited once visibility support is added
+	if wh.config.UseExperimentalHsmScheduler(request.Namespace) {
+		inputBytes, err := request.Patch.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		ref := &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: schedulerhsm.StateMachineType,
+				},
+			},
+		}
+		req := &historyservice.InvokeStateMachineMethodRequest{
+			NamespaceId: namespaceID.String(),
+			WorkflowId:  workflowID,
+			Ref:         ref,
+			MethodName:  schedulerhsm.PatchSchedule{}.Name(),
+			Input:       inputBytes,
+		}
+		_, err = wh.historyClient.InvokeStateMachineMethod(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+			NamespaceId: namespaceID.String(),
+			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         request.Namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				SignalName:        scheduler.SignalNamePatch,
+				Input:             inputPayloads,
+				Identity:          request.Identity,
+				RequestId:         request.RequestId,
+			},
+		})
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -3458,28 +3549,58 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		return nil, err
 	}
 
-	req := &historyservice.QueryWorkflowRequest{
-		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.QueryWorkflowRequest{
-			Namespace: request.Namespace,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-			Query: &querypb.WorkflowQuery{
-				QueryType: scheduler.QueryNameListMatchingTimes,
-				QueryArgs: queryPayload,
-			},
-		},
-	}
-	res, err := wh.historyClient.QueryWorkflow(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
 	var response workflowservice.ListScheduleMatchingTimesResponse
-	err = payloads.Decode(res.GetResponse().GetQueryResult(), &response)
-	if err != nil {
-		return nil, err
-	}
+	// TODO(Tianyu): This code currently assumes that ExperimentalHsmScheduler is an all-or-nothing flag, which is a
+	// simplifying assumption due to the lack of visibility support on non-workflow HSMs. This assumption should be
+	// revisited once visibility support is added
+	if wh.config.UseExperimentalHsmScheduler(request.Namespace) {
+		inputBytes, err := request.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		ref := &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: schedulerhsm.StateMachineType,
+				},
+			},
+		}
+		req := &historyservice.InvokeStateMachineMethodRequest{
+			NamespaceId: namespaceID.String(),
+			WorkflowId:  workflowID,
+			Ref:         ref,
+			MethodName:  schedulerhsm.ListMatchingTimes{}.Name(),
+			Input:       inputBytes,
+		}
+		res, err := wh.historyClient.InvokeStateMachineMethod(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if err := proto.Unmarshal(res.Output, &response); err != nil {
+			return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+		}
+	} else {
+		req := &historyservice.QueryWorkflowRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &workflowservice.QueryWorkflowRequest{
+				Namespace: request.Namespace,
+				Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				Query: &querypb.WorkflowQuery{
+					QueryType: scheduler.QueryNameListMatchingTimes,
+					QueryArgs: queryPayload,
+				},
+			},
+		}
+		res, err := wh.historyClient.QueryWorkflow(ctx, req)
+		if err != nil {
+			return nil, err
+		}
 
+		err = payloads.Decode(res.GetResponse().GetQueryResult(), &response)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &response, nil
 }
 
@@ -3536,6 +3657,11 @@ func (wh *WorkflowHandler) ListSchedules(
 	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
 	if request.GetMaximumPageSize() <= 0 || request.GetMaximumPageSize() > maxPageSize {
 		request.MaximumPageSize = maxPageSize
+	}
+
+	if wh.config.UseExperimentalHsmScheduler(request.Namespace) {
+		// TODO(Tianyu): this is not yet implemented because HSM does not support integration with visibility features yet.
+		return nil, fmt.Errorf("listing of HSM-based schedulers is not yet supported") // nolint:goerr113
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
