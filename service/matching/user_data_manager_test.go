@@ -26,11 +26,14 @@ package matching
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -39,8 +42,10 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )
 
@@ -64,7 +69,6 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 	tqCfg := defaultTqmTestOpts(controller)
@@ -97,7 +101,6 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 	tqCfg := defaultTqmTestOpts(controller)
@@ -133,7 +136,6 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	tqCfg := defaultTqmTestOpts(controller)
@@ -172,7 +174,6 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	// note: using activity here
 	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
@@ -240,7 +241,6 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	tqCfg := defaultTqmTestOpts(controller)
@@ -312,7 +312,6 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	tqCfg := defaultTqmTestOpts(controller)
@@ -386,7 +385,6 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	taskQueue := newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	dbq := UnversionedQueueKey(taskQueue.NormalPartition(31))
@@ -426,7 +424,6 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	// note: activity root
 	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
@@ -465,7 +462,6 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 	tqCfg := defaultTqmTestOpts(controller)
 
@@ -508,7 +504,6 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	ctx := context.Background()
 
 	subTqId := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
@@ -534,4 +529,89 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 
 func newTestUnversionedPhysicalQueueKey(namespaceId string, name string, taskType enumspb.TaskQueueType, partition int) *PhysicalTaskQueueKey {
 	return UnversionedQueueKey(newTestTaskQueue(namespaceId, name, taskType).NormalPartition(partition))
+}
+
+func TestUserData_Propagation(t *testing.T) {
+	t.Parallel()
+
+	const N = 7
+
+	ctx := context.Background()
+	controller := gomock.NewController(t)
+	opts := defaultTqmTestOpts(controller)
+
+	keys := make([]*PhysicalTaskQueueKey, N)
+	for i := range keys {
+		keys[i] = newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, i)
+	}
+
+	managers := make([]*userDataManagerImpl, N)
+	var tm *testTaskManager
+	for i := range managers {
+		optsi := *opts // share config and mock client
+		optsi.dbq = keys[i]
+		managers[i] = createUserDataManager(t, controller, &optsi)
+		if i == 0 {
+			// only the root uses persistence
+			tm = managers[0].store.(*testTaskManager)
+		}
+		// use two levels
+		managers[i].config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFn(3)
+		// override timeouts to run much faster
+		managers[i].config.GetUserDataLongPollTimeout = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
+		managers[i].config.GetUserDataMinWaitTime = 10 * time.Millisecond
+		managers[i].config.GetUserDataReturnBudget = 10 * time.Millisecond
+		managers[i].config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithMaximumInterval(1 * time.Second)
+		managers[i].logger = log.With(managers[i].logger, tag.HostID(fmt.Sprintf("%d", i)))
+	}
+
+	// hook up "rpcs"
+	opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+			// inject failures
+			if rand.Float64() < 0.1 {
+				return nil, serviceerror.NewUnavailable("timeout")
+			}
+			p, err := tqid.NormalPartitionFromRpcName(req.TaskQueue, req.NamespaceId, req.TaskQueueType)
+			require.NoError(t, err)
+			require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW, p.TaskType())
+			res, err := managers[p.PartitionId()].HandleGetUserDataRequest(ctx, req)
+			return res, err
+		},
+	).AnyTimes()
+	opts.matchingClientMock.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+			err := tm.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+				NamespaceID:     req.NamespaceId,
+				TaskQueue:       req.TaskQueue,
+				UserData:        req.UserData,
+				BuildIdsAdded:   req.BuildIdsAdded,
+				BuildIdsRemoved: req.BuildIdsRemoved,
+			})
+			return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+		},
+	).AnyTimes()
+
+	defer time.Sleep(50 * time.Millisecond) // extra buffer to let goroutines exit after manager.Stop()
+	for i := range managers {
+		managers[i].Start()
+		defer managers[i].Stop()
+	}
+
+	const iters = 5
+	for iter := 0; iter < iters; iter++ {
+		err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+			return data, false, nil
+		})
+		require.NoError(t, err)
+		start := time.Now()
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			for i := 1; i < N; i++ {
+				d, _, err := managers[i].GetUserData()
+				assert.NoError(c, err, "number", i)
+				assert.Equal(c, iter+1, int(d.GetVersion()), "number", i)
+			}
+		}, 5*time.Second, 10*time.Millisecond, "failed to propagate")
+		t.Log("Propagation time:", time.Since(start))
+	}
 }

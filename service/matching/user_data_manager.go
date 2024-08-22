@@ -343,11 +343,10 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 		return err
 	}
 
-	m.logNewUserData("loaded user data from db", response.UserData)
-
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.setUserDataLocked(response.UserData)
+	m.logNewUserData("loaded user data from db", response.UserData)
 
 	return nil
 }
@@ -357,6 +356,9 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
 	if m.store == nil {
 		return errUserDataNoMutateNonRoot
+	}
+	if err := m.WaitUntilInitialized(ctx); err != nil {
+		return err
 	}
 	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
 	if err != nil {
@@ -474,7 +476,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 
 	if req.WaitNewData {
 		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, m.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
+		ctx, cancel = newChildContext(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
 		defer cancel()
 	}
 
@@ -494,7 +496,11 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ctx.Done():
-				m.logger.Debug("returning empty user data (expired)", tag.NewBoolTag("long-poll", req.WaitNewData))
+				m.logger.Debug("returning empty user data (expired)",
+					tag.NewBoolTag("long-poll", req.WaitNewData),
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.GetVersion()),
+				)
 				return resp, nil
 			case <-userDataChanged:
 				m.logger.Debug("user data changed while blocked in long poll")
