@@ -33,10 +33,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/internal/nettest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/internal/nettest"
 )
 
 func TestGRPCBuilder(t *testing.T) {
@@ -91,7 +92,7 @@ func TestGRPCBuilder(t *testing.T) {
 	// dialedAddress is the actual address that the gRPC framework dialed after resolving the URL using our resolver.
 	var dialedAddress string
 
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		url,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
