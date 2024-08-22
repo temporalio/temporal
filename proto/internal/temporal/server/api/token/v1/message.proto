@@ -102,4 +102,7 @@ message NexusOperationCompletion {
     // Reference including the path to the backing Operation state machine and a version + transition count for
     // staleness checks.
     temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+    // Request ID embedded in the NexusOperationScheduledEvent.
+    // Allows completing a started operation after a workflow has been reset.
+    string request_id = 5;
 }
