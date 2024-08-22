@@ -26,6 +26,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"strconv"
@@ -42,6 +43,10 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -752,4 +757,68 @@ func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
+}
+
+func CaNOnceWorkflow(ctx workflow.Context, input string) (string, error) {
+	if input != "don't CaN" {
+		return input, workflow.NewContinueAsNewError(ctx, CaNOnceWorkflow, "don't CaN")
+	}
+	return input, nil
+}
+
+func (s *FunctionalSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
+	id := "functional-reset-workflow-test"
+	tq := "functional-reset-workflow-test-taskqueue"
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// get sdkClient
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.hostPort,
+		Namespace: s.namespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
+
+	// start workflow that does CaN once
+	w := worker.New(sdkClient, tq, worker.Options{Identity: id})
+	w.RegisterWorkflow(CaNOnceWorkflow)
+	s.NoError(w.Start())
+	defer w.Stop()
+	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, CaNOnceWorkflow, "")
+	s.NoError(err)
+
+	// wait for your workflow and its CaN to complete
+	s.Eventually(func() bool {
+		resp, err := s.client.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     fmt.Sprintf("WorkflowId = \"%s\" AND ExecutionStatus != \"Running\"", run.GetID()),
+		})
+		s.NoError(err)
+		return resp.GetCount() >= 2
+	}, 30*time.Second, time.Second)
+
+	wfExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+
+	// Find reset point (last completed workflow task)
+	events := s.getHistory(s.namespace, wfExec)
+	var lastWorkflowTask *historypb.HistoryEvent
+	for _, event := range events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			lastWorkflowTask = event
+		}
+	}
+
+	// reset the original workflow
+	_, err = s.client.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.namespace,
+		WorkflowExecution:         wfExec,
+		WorkflowTaskFinishEventId: lastWorkflowTask.GetEventId(),
+		RequestId:                 uuid.New(),
+	})
+	s.NoError(err)
 }
