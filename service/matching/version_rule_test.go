@@ -211,7 +211,7 @@ func TestInsertAssignmentRuleBasic(t *testing.T) {
 	maxRules := 10
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
-	assert.False(t, containsUnramped(initialData.GetAssignmentRules()))
+	assert.False(t, containsFullyRamped(initialData.GetAssignmentRules()))
 	expected := &persistencepb.VersioningData{AssignmentRules: []*persistencepb.AssignmentRule{}}
 
 	// insert at index 0
@@ -282,7 +282,7 @@ func TestInsertAssignmentRuleInVersionSet(t *testing.T) {
 	assert.Equal(t, errTargetIsVersionSetMember, err)
 }
 
-func TestInsertAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
+func TestInsertAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data, err := insertRedirectRule(mkRedirectRule("0", "1"), mkInitialData(0, clock), clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
@@ -291,7 +291,7 @@ func TestInsertAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
 	// insert 1 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, ignoreMaxRules)
 	assert.Error(t, err)
-	assert.Equal(t, errRampedAssignmentRuleIsRedirectRuleSource, err)
+	assert.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
 func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
@@ -400,7 +400,7 @@ func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
 	assert.Equal(t, errTargetIsVersionSetMember, err)
 }
 
-func TestReplaceAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
+func TestReplaceAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -412,14 +412,14 @@ func TestReplaceAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
 		mkRedirectRulePersistence(mkRedirectRule("0", "1"), clock, nil),
 	}
 
-	// replace with target isSource and ramp != nil --> failure
+	// replace with target isSource and ramp < 100 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
 	t.Log(err)
 	assert.Error(t, err)
-	assert.Equal(t, errRampedAssignmentRuleIsRedirectRuleSource, err)
+	assert.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
-func TestReplaceAssignmentRuleTestRequireUnramped(t *testing.T) {
+func TestReplaceAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -428,13 +428,13 @@ func TestReplaceAssignmentRuleTestRequireUnramped(t *testing.T) {
 		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
 	}
 
-	// replace unfiltered rule with filtered rule --> failure
+	// replace fully-ramped rule with partially-ramped rule --> failure
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
 		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
 	}
 	_, err = replaceAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(20)), data, clock, 0, false)
 	assert.Error(t, err)
-	assert.Equal(t, errRequireUnrampedAssignmentRule, err)
+	assert.Equal(t, errRequireFullyRampedAssignmentRule, err)
 
 	// same as above but with force --> success
 	_, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock, 0, true)
@@ -527,7 +527,7 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDeleteAssignmentRuleTestRequireUnramped(t *testing.T) {
+func TestDeleteAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -536,19 +536,19 @@ func TestDeleteAssignmentRuleTestRequireUnramped(t *testing.T) {
 		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
 	}
 
-	// delete only unfiltered rule --> failure
+	// delete only fully-ramped rule --> failure
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
 		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
 	assert.Error(t, err)
-	assert.Equal(t, errRequireUnrampedAssignmentRule, err)
+	assert.Equal(t, errRequireFullyRampedAssignmentRule, err)
 
 	// same as above but with force --> success
 	_, err = deleteAssignmentRule(data, clock, 0, true)
 	assert.NoError(t, err)
 
-	// delete one of two unfiltered rules --> success
+	// delete one of two fully-ramped rules --> success
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
 		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
 		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
@@ -647,7 +647,7 @@ func TestAddRedirectRuleInVersionSet(t *testing.T) {
 	assert.Equal(t, errTargetIsVersionSetMember, err)
 }
 
-func TestAddRedirectRuleSourceIsRampedAssignmentRuleTarget(t *testing.T) {
+func TestAddRedirectRuleSourceIsPartiallyRampedAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -659,7 +659,7 @@ func TestAddRedirectRuleSourceIsRampedAssignmentRuleTarget(t *testing.T) {
 	// insert redirect rule with target 1 --> failure
 	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
 	assert.Error(t, err)
-	assert.Equal(t, errSourceIsRampedAssignmentRuleTarget, err)
+	assert.Equal(t, errSourceIsPartiallyRampedAssignmentRuleTarget, err)
 }
 
 func TestAddRedirectRuleAlreadyExists(t *testing.T) {
