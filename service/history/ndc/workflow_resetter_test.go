@@ -602,7 +602,10 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
+	mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{RunID: uuid.New()}).AnyTimes()
 	updateRegistry := update.NewRegistry(mutableState)
+	currentWorkflow := NewMockWorkflow(s.controller)
+	currentWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
 	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
@@ -613,6 +616,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 		ctx,
 		mutableState,
 		updateRegistry,
+		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
@@ -730,7 +734,10 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
+	mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{RunID: uuid.New()}).AnyTimes()
 	updateRegistry := update.NewRegistry(mutableState)
+	currentWorkflow := NewMockWorkflow(s.controller)
+	currentWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
 	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
@@ -741,6 +748,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		ctx,
 		mutableState,
 		updateRegistry,
+		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
