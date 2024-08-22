@@ -388,6 +388,11 @@ var TransitionCanceled = hsm.NewTransition(
 		enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
 		enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
 		enumsspb.NEXUS_OPERATION_STATE_STARTED,
+		// Requesting cancelation of an unstarted operation transitions the machine to CANCELED and adds a
+		// NEXUS_OPERATION_CANCELED event.
+		// During replication the NEXUS_OPERATION_CANCELED event is applied when the machine is already canceled so we
+		// mark this as a valid transition.
+		enumsspb.NEXUS_OPERATION_STATE_CANCELED,
 	},
 	enumsspb.NEXUS_OPERATION_STATE_CANCELED,
 	func(op Operation, event EventCanceled) (hsm.TransitionOutput, error) {
@@ -395,6 +400,7 @@ var TransitionCanceled = hsm.NewTransition(
 		// response to a StartOpration request.  This may not be the case if a completion comes in before a response to
 		// the request but we ignore that detail for simplicity.
 		if event.CompletionSource == CompletionSourceResponse ||
+			// TODO: we'll never be in SCHEDULED state here, the state changes before calling the apply function.
 			event.CompletionSource == CompletionSourceUnspecified && op.State() == enumsspb.NEXUS_OPERATION_STATE_SCHEDULED {
 			op.recordAttempt(event.Time)
 			op.LastAttemptFailure = nil
@@ -461,7 +467,7 @@ func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, er
 		}, CompletionSourceCancelRequested)
 	}
 	return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
-		return TranstionCancelationScheduled.Apply(c, EventCancelationScheduled{
+		return TransitionCancelationScheduled.Apply(c, EventCancelationScheduled{
 			Time: t,
 			Node: child,
 		})
@@ -608,7 +614,7 @@ type EventCancelationScheduled struct {
 	Node *hsm.Node
 }
 
-var TranstionCancelationScheduled = hsm.NewTransition(
+var TransitionCancelationScheduled = hsm.NewTransition(
 	[]enumspb.NexusOperationCancellationState{enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED},
 	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
 	func(op Cancelation, event EventCancelationScheduled) (hsm.TransitionOutput, error) {
