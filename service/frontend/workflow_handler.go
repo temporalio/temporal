@@ -29,8 +29,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"net/url"
 	"strings"
 	"sync/atomic"

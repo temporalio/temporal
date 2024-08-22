@@ -25,7 +25,6 @@
 package frontend
 
 import (
-	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"net"
 	"sync"
 	"time"

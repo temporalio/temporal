@@ -785,7 +785,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	})
 	s.NoError(err)
 
-	describeResp, err = s.client.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+	_, err = s.client.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.namespace,
 		ScheduleId: sid,
 	})

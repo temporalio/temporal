@@ -814,9 +814,9 @@ func (e taskExecutor) describe(ctx context.Context, env hsm.Environment, ref hsm
 }
 
 func (e taskExecutor) listMatchingTimes(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
-	castReq := req.(*workflowservice.ListScheduleMatchingTimesRequest)
+	castReq := req.(*workflowservice.ListScheduleMatchingTimesRequest) // nolint:revive
 	if castReq == nil || castReq.StartTime == nil || castReq.EndTime == nil {
-		return nil, errors.New("missing or invalid query")
+		return nil, errors.New("missing or invalid query") // nolint:goerr113
 	}
 	result := &workflowservice.ListScheduleMatchingTimesResponse{}
 	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
@@ -825,7 +825,7 @@ func (e taskExecutor) listMatchingTimes(ctx context.Context, env hsm.Environment
 			return err
 		}
 		if s.cspec == nil {
-			return fmt.Errorf("invalid schedule: %s", s.Args.Info.InvalidScheduleError)
+			return fmt.Errorf("invalid schedule") // nolint:goerr113
 		}
 
 		var out []*timestamppb.Timestamp
@@ -846,7 +846,7 @@ func (e taskExecutor) listMatchingTimes(ctx context.Context, env hsm.Environment
 }
 
 func (e taskExecutor) patchSchedule(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
-	castReq := req.(*schedpb.SchedulePatch)
+	castReq := req.(*schedpb.SchedulePatch) // nolint:revive
 	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
 	// This is a workaround and should be removed after relevant changes are made in the HSM framework
 	smRef := common.CloneProto(ref.StateMachineRef)
@@ -905,7 +905,7 @@ func (e taskExecutor) patchSchedule(ctx context.Context, env hsm.Environment, re
 }
 
 func (e taskExecutor) updateSchedule(ctx context.Context, env hsm.Environment, ref hsm.Ref, req any) (any, error) {
-	castReq := req.(*schedspb.FullUpdateRequest)
+	castReq := req.(*schedspb.FullUpdateRequest) // nolint:revive
 	// TODO(Tianyu): This is here temporarily to ensure that hsm framework does not reject this as stale.
 	// This is a workaround and should be removed after relevant changes are made in the HSM framework
 	smRef := common.CloneProto(ref.StateMachineRef)
