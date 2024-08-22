@@ -657,7 +657,7 @@ func (s *OperatorSuite) TestCreate() {
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "TaskQueue length exceeds limit")
+				s.ErrorContains(err, "taskQueue length exceeds limit")
 			},
 		},
 		{
