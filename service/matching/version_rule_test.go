@@ -84,6 +84,8 @@ func mkAssignmentRule(target string, ramp *taskqueuepb.BuildIdAssignmentRule_Per
 	// because casting Rule to (*BuildIdAssignmentRule_WorkerRatioRamp) succeeds
 	if ramp != nil {
 		ret.Ramp = ramp
+	} else {
+		ret.Ramp = mkNewAssignmentPercentageRamp(100)
 	}
 	return ret
 }
