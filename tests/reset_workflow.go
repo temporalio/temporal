@@ -760,9 +760,6 @@ func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 }
 
 func CaNOnceWorkflow(ctx workflow.Context, input string) (string, error) {
-	if err := workflow.Sleep(ctx, time.Millisecond); err != nil {
-		return "", err
-	}
 	if input != "don't CaN" {
 		return input, workflow.NewContinueAsNewError(ctx, CaNOnceWorkflow, "don't CaN")
 	}
