@@ -35,7 +35,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -360,17 +359,12 @@ const (
 type (
 	MutableStateStore struct {
 		Session gocql.Session
-		Logger  log.Logger
 	}
 )
 
-func NewMutableStateStore(
-	session gocql.Session,
-	logger log.Logger,
-) *MutableStateStore {
+func NewMutableStateStore(session gocql.Session) *MutableStateStore {
 	return &MutableStateStore{
 		Session: session,
-		Logger:  logger,
 	}
 }
 

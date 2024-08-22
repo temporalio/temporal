@@ -341,7 +341,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	ctx := tests.NewContext()
 	ns := s.createNexusRequestForwardingNamespace()
 	taskQueue := fmt.Sprintf("%v-%v", "test-task-queue", uuid.New())
-	endpointName := "test_complete_operation_forwarding_endpoint_name"
+	endpointName := tests.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackUrl string
 

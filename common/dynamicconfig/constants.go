@@ -2223,6 +2223,16 @@ that task will be sent to DLQ.`,
 		10,
 		`Maximum number of resend events batch for a single replication request`,
 	)
+	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
+		"history.ReplicationProgressCacheMaxSize",
+		128000,
+		`ReplicationProgressCacheMaxSize is the maximum number of entries in the replication progress cache`,
+	)
+	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
+		"history.ReplicationProgressCacheTTL",
+		time.Hour,
+		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
+	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
@@ -2485,5 +2495,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+
+	LogAllReqErrors = NewNamespaceBoolSetting(
+		"system.logAllReqErrors",
+		false,
+		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
 )

@@ -440,6 +440,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 				c.metricsHandlerForInterceptors,
 				[]tag.Tag{tag.Operation(methodNameForMetrics), tag.WorkflowNamespace(c.namespace.Name().String())},
 				retErr,
+				c.namespace.Name(),
 			)
 		}
 	})

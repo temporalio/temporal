@@ -194,6 +194,10 @@ func (s *taskTracker) rate() float32 {
 	elapsedTime := min(currentTime.Sub(s.bucketStartTime)+s.totalIntervalSize,
 		currentTime.Sub(s.startTime))
 
+	if elapsedTime <= 0 {
+		return 0
+	}
+
 	// rate per second
 	return float32(totalTasks) / float32(elapsedTime.Seconds())
 }
@@ -282,7 +286,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	}
 	c.liveness.Start()
 	c.backlogMgr.Start()
-	c.logger.Info("", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
+	c.logger.Info("Started physicalTaskQueueManager", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
 }
@@ -300,7 +304,7 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	c.backlogMgr.Stop()
 	c.matcher.Stop()
 	c.liveness.Stop()
-	c.logger.Info("", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
+	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
 }
@@ -364,8 +368,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.namespace = c.partitionMgr.ns.Name()
 		task.backlogCountHint = c.backlogMgr.BacklogCountHint
 
-		if task.redirectInfo == nil && (!task.isStarted() || !task.started.hasEmptyResponse()) {
-			// only track the original polls, not forwarded ones.
+		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
+			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
 			c.tasksDispatchedInIntervals.incrementTaskCount()
 		}
 		return task, nil

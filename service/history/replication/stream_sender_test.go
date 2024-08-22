@@ -809,10 +809,10 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item1).Times(0)
-	s.taskConverter.EXPECT().Convert(item2).Return(task2, nil)
-	s.taskConverter.EXPECT().Convert(item3).Times(0)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID).Times(0)
+	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID).Times(0)
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -896,7 +896,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item1).Return(task1, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID).Return(task1, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -979,8 +979,8 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item0).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID).Return(task2, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{

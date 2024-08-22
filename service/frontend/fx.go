@@ -355,11 +355,13 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	serviceConfig *Config,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
+		serviceConfig.LogAllReqErrors,
 	)
 }
 

@@ -159,6 +159,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				ctx,
 				resetMutableState,
 				currentUpdateRegistry,
+				currentWorkflow,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -186,6 +187,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				ctx,
 				resetMutableState,
 				currentUpdateRegistry,
+				currentWorkflow,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -574,6 +576,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
 	currentUpdateRegistry update.Registry,
+	currentWorkflow Workflow,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
@@ -609,22 +612,30 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	}
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
-		context, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
-			ctx,
-			r.shardContext,
-			namespaceID,
-			&commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			locks.PriorityHigh,
-		)
-		if err != nil {
-			return 0, nil, err
-		}
-		defer func() { release(retError) }()
+		var wfCtx workflow.Context
+		var err error
 
-		mutableState, err := context.LoadMutableState(ctx, r.shardContext)
+		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
+			wfCtx = currentWorkflow.GetContext()
+		} else {
+			var release wcache.ReleaseCacheFunc
+			wfCtx, release, err = r.workflowCache.GetOrCreateWorkflowExecution(
+				ctx,
+				r.shardContext,
+				namespaceID,
+				&commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				locks.PriorityHigh,
+			)
+			if err != nil {
+				return 0, nil, err
+			}
+			defer func() { release(retError) }()
+		}
+
+		mutableState, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 		if err != nil {
 			// no matter what error happen, we need to retry
 			return 0, nil, err

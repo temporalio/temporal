@@ -602,7 +602,8 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
-	updateRegistry := update.NewRegistry(mutableState)
+	currentUpdateRegistry := update.NewRegistry(mutableState)
+	currentWorkflow := NewMockWorkflow(s.controller)
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
 	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
@@ -612,7 +613,8 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		updateRegistry,
+		currentUpdateRegistry,
+		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
@@ -730,7 +732,10 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
-	updateRegistry := update.NewRegistry(mutableState)
+	mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{RunID: "random-run-id"})
+	currentUpdateRegistry := update.NewRegistry(mutableState)
+	currentWorkflow := NewMockWorkflow(s.controller)
+	currentWorkflow.EXPECT().GetMutableState().Return(mutableState)
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
 	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
@@ -740,7 +745,8 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		updateRegistry,
+		currentUpdateRegistry,
+		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,

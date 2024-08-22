@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace_test
+package nsregistry_test
 
 import (
 	"sync"
@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -52,7 +53,7 @@ type (
 		*require.Assertions
 
 		controller     *gomock.Controller
-		regPersistence *namespace.MockPersistence
+		regPersistence *nsregistry.MockPersistence
 		registry       namespace.Registry
 	}
 )
@@ -69,8 +70,8 @@ func (s *registrySuite) TearDownSuite() {}
 func (s *registrySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.regPersistence = namespace.NewMockPersistence(s.controller)
-	s.registry = namespace.NewRegistry(
+	s.regPersistence = nsregistry.NewMockPersistence(s.controller)
+	s.registry = nsregistry.NewRegistry(
 		s.regPersistence,
 		true,
 		dynamicconfig.GetDurationPropertyFn(time.Second),
@@ -168,7 +169,7 @@ func (s *registrySuite) TestListNamespace() {
 	pageToken := []byte("some random page token")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
+		PageSize:       nsregistry.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -177,7 +178,7 @@ func (s *registrySuite) TestListNamespace() {
 	}, nil)
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
+		PageSize:       nsregistry.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  pageToken,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -263,7 +264,7 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 	namespaceNotificationVersion++
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
+		PageSize:       nsregistry.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -350,7 +351,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion++
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
+		PageSize:       nsregistry.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -401,7 +402,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion++
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
+		PageSize:       nsregistry.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -469,7 +470,7 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	entryOld := namespace.FromPersistentState(namespaceRecordOld)
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
+		PageSize:       nsregistry.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -566,7 +567,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	namespaceNotificationVersion++
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
+		PageSize:       nsregistry.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -577,7 +578,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	}, nil)
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
+		PageSize:       nsregistry.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
 	}).Return(&persistence.ListNamespacesResponse{
