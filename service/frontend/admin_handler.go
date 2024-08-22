@@ -1610,7 +1610,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 	}, nil
 }
 
-// GetTaskQueueTasks returns information for a given task queue partition of the task queue
+// DescribeTaskQueuePartition returns information for a given task queue partition of the task queue
 func (adh *AdminHandler) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *adminservice.DescribeTaskQueuePartitionRequest,
@@ -1626,19 +1626,21 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 	}
 
 	resp, err := adh.matchingServiceClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
-		NamespaceId:        namespaceID.String(),
-		TaskQueuePartition: request.GetTaskQueuePartition(),
-		Versions:           request.GetBuildId(),
-		ReportStats:        true,
-		ReportPollers:      true,
+		NamespaceId:                   namespaceID.String(),
+		TaskQueuePartition:            request.GetTaskQueuePartition(),
+		Versions:                      request.GetBuildId(),
+		ReportStats:                   true,
+		ReportPollers:                 true,
+		ReportInternalTaskQueueStatus: true,
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
+	// The response returned is for multiple build Id's
 	return &adminservice.DescribeTaskQueuePartitionResponse{
-		// gotta populate resp with the information here
+		VersionsInfoInternal: resp.VersionsInfoInternal,
 	}, nil
 
 }

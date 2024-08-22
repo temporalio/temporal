@@ -578,7 +578,5 @@ message InternalTaskQueueStatus {
 }
 
 message DescribeTaskQueuePartitionResponse {
-  InternalTaskQueueStatus status = 1;
-  repeated temporal.api.taskqueue.v1.PollerInfo pollers = 2;
-  temporal.api.taskqueue.v1.TaskQueueStats task_queue_stats = 3;
+  map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
 }

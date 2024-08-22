@@ -281,6 +281,26 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeMutableState(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeMutableState), varargs...)
 }
 
+// DescribeTaskQueuePartition mocks base method.
+func (m *MockAdminServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *adminservice.DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*adminservice.DescribeTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeTaskQueuePartition", varargs...)
+	ret0, _ := ret[0].(*adminservice.DescribeTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
+func (mr *MockAdminServiceClientMockRecorder) DescribeTaskQueuePartition(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeTaskQueuePartition), varargs...)
+}
+
 // GetDLQMessages mocks base method.
 func (m *MockAdminServiceClient) GetDLQMessages(ctx context.Context, in *adminservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1164,6 +1184,21 @@ func (m *MockAdminServiceServer) DescribeMutableState(arg0 context.Context, arg1
 func (mr *MockAdminServiceServerMockRecorder) DescribeMutableState(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeMutableState), arg0, arg1)
+}
+
+// DescribeTaskQueuePartition mocks base method.
+func (m *MockAdminServiceServer) DescribeTaskQueuePartition(arg0 context.Context, arg1 *adminservice.DescribeTaskQueuePartitionRequest) (*adminservice.DescribeTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeTaskQueuePartition", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.DescribeTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
+func (mr *MockAdminServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeTaskQueuePartition), arg0, arg1)
 }
 
 // GetDLQMessages mocks base method.
