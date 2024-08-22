@@ -775,7 +775,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// get sdkClient cuz idk how to use s.client.StartWorkflowExecution
+	// get sdkClient
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,
