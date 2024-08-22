@@ -296,12 +296,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsEmpty() {
 	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
 	_, e := t.matcher.Poll(ctx, &pollMetadata{})
 
-	// The error has to be copied to prevent a data race detection.
-	// t.ErrorAs modifies the target error, which is just a package variable.
-	// Its a great example of why we should adopt error types.
-	// (also, remove after error types are adopted)
-	targetErr := errNoTasks
-	t.ErrorAs(e, &targetErr)
+	t.ErrorIs(e, errNoTasks)
 	cancel()
 }
 
@@ -408,14 +403,14 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
-			t.Assert().Error(err, context.DeadlineExceeded)
+			t.Assert().ErrorIs(err, context.DeadlineExceeded)
 		},
 	).Return(nil, context.DeadlineExceeded).AnyTimes()
 
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	_, err := t.matcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().Error(err, context.DeadlineExceeded)
+	t.Assert().ErrorIs(err, context.DeadlineExceeded)
 	cancel()
 
 	// send query and expect generic DeadlineExceeded error
@@ -425,28 +420,28 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
-			t.Assert().Error(err, context.DeadlineExceeded)
+			t.Assert().ErrorIs(err, context.DeadlineExceeded)
 		},
 	).Return(nil, context.DeadlineExceeded)
 
 	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond*10)
 	_, err = t.matcher.OfferQuery(ctx, task)
 	cancel()
-	t.Error(err, context.DeadlineExceeded)
+	t.ErrorIs(err, context.DeadlineExceeded)
 }
 
 func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
-			t.Assert().Error(err, context.DeadlineExceeded)
+			t.Assert().ErrorIs(err, context.DeadlineExceeded)
 		},
 	).Return(nil, context.DeadlineExceeded).AnyTimes()
 
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	_, err := t.matcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().Error(err, context.DeadlineExceeded)
+	t.Assert().ErrorIs(err, context.DeadlineExceeded)
 	cancel()
 
 	// wait 10ms after the poll
@@ -464,14 +459,14 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
-			t.Assert().Error(err, errNoRecentPoller)
+			t.Assert().ErrorIs(err, errNoRecentPoller)
 		},
 	).Return(nil, errNoRecentPoller)
 
 	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond*10)
 	_, err = t.matcher.OfferQuery(ctx, task)
 	cancel()
-	t.Error(err, errNoRecentPoller)
+	t.ErrorIs(err, errNoRecentPoller)
 }
 
 func (t *MatcherTestSuite) TestQueryNoPollerAtAll() {
@@ -482,14 +477,14 @@ func (t *MatcherTestSuite) TestQueryNoPollerAtAll() {
 			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
-			t.Assert().Error(err, errNoRecentPoller)
+			t.Assert().ErrorIs(err, errNoRecentPoller)
 		},
 	).Return(nil, errNoRecentPoller)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	_, err := t.matcher.OfferQuery(ctx, task)
 	cancel()
-	t.Error(err, errNoRecentPoller)
+	t.ErrorIs(err, errNoRecentPoller)
 }
 
 func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
