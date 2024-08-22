@@ -608,21 +608,31 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		return "", err
 	}
 
+	// todo: make currentWorkflow
+
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
-		context, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
-			ctx,
-			r.shardContext,
-			namespaceID,
-			&commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			locks.PriorityHigh,
-		)
-		if err != nil {
-			return 0, nil, err
+		var context workflow.Context
+		var err error
+
+		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
+			context = currentWorkflow.GetContext()
+		} else {
+			var release wcache.ReleaseCacheFunc
+			context, release, err = r.workflowCache.GetOrCreateWorkflowExecution(
+				ctx,
+				r.shardContext,
+				namespaceID,
+				&commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				locks.PriorityHigh,
+			)
+			if err != nil {
+				return 0, nil, err
+			}
+			defer func() { release(retError) }()
 		}
-		defer func() { release(retError) }()
 
 		mutableState, err := context.LoadMutableState(ctx, r.shardContext)
 		if err != nil {
