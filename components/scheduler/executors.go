@@ -321,7 +321,7 @@ func (e taskExecutor) processBuffer(ctx context.Context,
 	for _, start := range allStarts {
 		// TODO(Tianyu): This is likely not correct -- by mutating actions remaining here as part of canTakeScheduledAction
 		// it assumes no concurrent tasks running to start workflows.  Even though this is a reasonable assumption, it probably
-		//isn't enforced by the HSM framework atm.
+		// isn't enforced by the HSM framework atm.
 		if !e.canTakeScheduledAction(sCopy, start.Manual, true) {
 			// try again to drain the buffer if paused or out of actions
 			tryAgain = true

@@ -644,10 +644,8 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 
 	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 12*time.Second, 500*time.Millisecond)
-	time.Sleep(1 * time.Second)
 
 	// describe
-
 	describeResp, err := s.client.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.namespace,
 		ScheduleId: sid,
@@ -765,7 +763,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	})
 	s.NoError(err)
 
-	time.Sleep(7 * time.Second)
+	time.Sleep(7 * time.Second) //nolint:revive
 	s.EqualValues(1, atomic.LoadInt32(&runs2), "has not run again")
 
 	describeResp, err = s.client.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
@@ -792,14 +790,14 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	s.Error(err)
 
 	// TODO(Tianyu): It is not yet possible to test visibility features. Add tests later after they have been integrated with HSM
-	//s.Eventually(func() bool { // wait for visibility
+	// s.Eventually(func() bool { // wait for visibility
 	//	listResp, err := s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
 	//		Namespace:       s.namespace,
 	//		MaximumPageSize: 5,
 	//	})
 	//	s.NoError(err)
 	//	return len(listResp.Schedules) == 0
-	//}, 10*time.Second, 1*time.Second)
+	// }, 10*time.Second, 1*time.Second)
 }
 
 func (s *ScheduleFunctionalSuite) TestInput() {
