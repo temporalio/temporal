@@ -763,7 +763,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	})
 	s.NoError(err)
 
-	time.Sleep(7 * time.Second) //nolint:revive
+	time.Sleep(7 * time.Second) // nolint:forbidigo
 	s.EqualValues(1, atomic.LoadInt32(&runs2), "has not run again")
 
 	describeResp, err = s.client.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
