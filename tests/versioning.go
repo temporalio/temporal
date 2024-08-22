@@ -342,7 +342,7 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
+	s.Equal(100, res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 
 	// recent versioned poller on wrong build ID --> failure
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "3", true)
@@ -359,7 +359,7 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
+	s.Equal(100, res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 }
 
 func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
@@ -4680,7 +4680,7 @@ func (s *VersioningIntegSuite) commitBuildId(
 		endIdx := len(res.GetAssignmentRules()) - 1
 		addedRule := res.GetAssignmentRules()[endIdx].GetRule()
 		s.Assert().Equal(targetBuildId, addedRule.GetTargetBuildId())
-		s.Assert().Nil(addedRule.GetRamp())
+		s.Assert().Equal(100, addedRule.GetPercentageRamp().GetRampPercentage())
 		s.Assert().Nil(addedRule.GetPercentageRamp())
 
 		foundOtherAssignmentRuleForTarget := false
@@ -4689,7 +4689,7 @@ func (s *VersioningIntegSuite) commitBuildId(
 			if r.GetRule().GetTargetBuildId() == targetBuildId && i != endIdx {
 				foundOtherAssignmentRuleForTarget = true
 			}
-			if r.GetRule().GetRamp() == nil && r.GetRule().GetTargetBuildId() != targetBuildId {
+			if r.GetRule().GetPercentageRamp().GetRampPercentage() == 100 && r.GetRule().GetTargetBuildId() != targetBuildId {
 				foundFullyRampedAssignmentRuleForOtherTarget = true
 			}
 		}
@@ -4824,6 +4824,9 @@ func (s *VersioningIntegSuite) doAddAssignmentRule(ctx context.Context, tq strin
 	})
 	s.NoError(err)
 	s.NotNil(res)
+	if rule.GetRamp() == nil {
+		rule.Ramp = &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueuepb.RampByPercentage{RampPercentage: 100}}
+	}
 	return rule
 }
 
