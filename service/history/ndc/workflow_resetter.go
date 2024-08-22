@@ -159,6 +159,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				ctx,
 				resetMutableState,
 				currentUpdateRegistry,
+				currentWorkflow,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -186,6 +187,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				ctx,
 				resetMutableState,
 				currentUpdateRegistry,
+				currentWorkflow,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -574,6 +576,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
 	currentUpdateRegistry update.Registry,
+	currentWorkflow Workflow,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
@@ -607,8 +610,6 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	default:
 		return "", err
 	}
-
-	// todo: make currentWorkflow
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
 		var context workflow.Context
