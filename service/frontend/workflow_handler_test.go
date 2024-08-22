@@ -37,6 +37,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -49,10 +55,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -416,7 +418,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskQueueNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errTaskQueueNotSet, err)
+	s.Equal(serviceerror.NewInvalidArgument("missing task queue name"), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionTimeout() {
@@ -2722,24 +2724,6 @@ func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-}
-
-func (s *workflowHandlerSuite) Test_ValidateTaskQueue() {
-	wh := s.getWorkflowHandler(s.newConfig())
-
-	tq := taskqueuepb.TaskQueue{Name: "\x87\x01"}
-	err := wh.validateTaskQueue(&tq)
-	s.Error(err)
-	s.Contains(err.Error(), "is not a valid UTF-8 string")
-
-	tq = taskqueuepb.TaskQueue{Name: "valid-tq-name"}
-	err = wh.validateTaskQueue(&tq)
-	s.NoError(err)
-
-	tq = taskqueuepb.TaskQueue{Name: "valid-tq-name", NormalName: "\x87\x01", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
-	err = wh.validateTaskQueue(&tq)
-	s.Error(err)
-	s.Contains(err.Error(), "is not a valid UTF-8 string")
 }
 
 func (s *workflowHandlerSuite) TestExecuteMultiOperation() {

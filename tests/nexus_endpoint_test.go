@@ -30,6 +30,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/nexus/v1"
@@ -636,7 +637,7 @@ func (s *OperatorSuite) TestCreate() {
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "TaskQueue is not set on request")
+				s.ErrorContains(err, "taskQueue is not set")
 			},
 		},
 		{
@@ -656,7 +657,7 @@ func (s *OperatorSuite) TestCreate() {
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "TaskQueue length exceeds limit")
+				s.ErrorContains(err, "taskQueue length exceeds limit")
 			},
 		},
 		{
