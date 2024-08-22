@@ -612,14 +612,14 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	}
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
-		var context workflow.Context
+		var wfCtx workflow.Context
 		var err error
 
 		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
-			context = currentWorkflow.GetContext()
+			wfCtx = currentWorkflow.GetContext()
 		} else {
 			var release wcache.ReleaseCacheFunc
-			context, release, err = r.workflowCache.GetOrCreateWorkflowExecution(
+			wfCtx, release, err = r.workflowCache.GetOrCreateWorkflowExecution(
 				ctx,
 				r.shardContext,
 				namespaceID,
@@ -635,7 +635,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			defer func() { release(retError) }()
 		}
 
-		mutableState, err := context.LoadMutableState(ctx, r.shardContext)
+		mutableState, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 		if err != nil {
 			// no matter what error happen, we need to retry
 			return 0, nil, err
