@@ -70,8 +70,14 @@ var (
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, max))
 	}
 	// errRequireFullyRampedAssignmentRule is thrown if the task queue previously had a fully-ramped assignment rule and
-	// the requested operation would result in a list of assignment rules that are all partially-ramped. This is
-	errRequireFullyRampedAssignmentRule = serviceerror.NewFailedPrecondition("there must exist at least one fully-ramped assignment rule, use force=true to bypass this requirement")
+	// the requested operation would result in a list of assignment rules without a fully-ramped assigment rule, which
+	// effectively means that the task queue does not have a default version. This error is only thrown when moving from
+	// a task queue with a fully-ramped assignment rule (aka versioned with a default Build ID / default version) to a
+	// task queue without any fully-ramped assignment rules, because that operation would make the unversioned queue the
+	// default queue. It's important that users do not accidentally make the unversioned queue the default after the
+	// unversioned worker has already been decommissioned, so we throw this error. If you are intentionally reverting from
+	// a versioned default Build ID to an unversioned default Build ID, use force=true to bypass this requirement.
+	errRequireFullyRampedAssignmentRule = serviceerror.NewFailedPrecondition("there must exist at least one fully-ramped assignment rule, use force=true to bypass this requirement and make the unversioned queue the default")
 	errExceedsMaxRedirectRules          = func(cnt, max int) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of redirect rules permitted in namespace (%v/%v)", cnt, max))
 	}
