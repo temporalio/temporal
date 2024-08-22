@@ -103,18 +103,13 @@ func (t SchedulerProcessBufferTask) Kind() hsm.TaskKind {
 }
 
 func (SchedulerProcessBufferTask) Concurrent() bool {
-	return true
-}
-
-func (SchedulerProcessBufferTask) Validate(node *hsm.Node) error {
-	// Always valid as this task always just clears the buffer and does nothing if the buffer is empty
-	return nil
+	return false
 }
 
 type SchedulerProcessBufferTaskSerializer struct{}
 
 func (SchedulerProcessBufferTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if _, ok := kind.(hsm.TaskKindTimer); ok {
+	if _, ok := kind.(hsm.TaskKindOutbound); ok {
 		return SchedulerProcessBufferTask{}, nil
 	}
 	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)

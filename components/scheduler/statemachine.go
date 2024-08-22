@@ -182,10 +182,7 @@ func RegisterStateMachine(r *hsm.Registry) error {
 }
 
 // EventSchedulerActivate is triggered when the scheduler state machine should wake up and perform work.
-type EventSchedulerActivate struct {
-	// Instruct the task to schedule more invocation into the future or treat itself as a one-off
-	scheduleMore bool
-}
+type EventSchedulerActivate struct{}
 
 var TransitionSchedulerActivate = hsm.NewTransition(
 	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_EXECUTING, enumsspb.SCHEDULER_STATE_WAITING},

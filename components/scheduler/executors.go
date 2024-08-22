@@ -942,6 +942,7 @@ func (e taskExecutor) updateSchedule(ctx context.Context, env hsm.Environment, r
 
 		s.ensureFields(&tweakables)
 		// Original scheduler code does not propagate failure here. Instead, other parts of the code will generate and propagate error when they see no compiled spec.
+		s.cspec = nil
 		_ = e.tryCompileSpec(s)
 
 		s.Args.Info.UpdateTime = timestamppb.Now()

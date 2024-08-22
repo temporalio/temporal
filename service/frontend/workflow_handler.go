@@ -3653,6 +3653,7 @@ func (wh *WorkflowHandler) ListSchedules(
 	}
 
 	if wh.config.UseExperimentalHsmScheduler(request.Namespace) {
+		// TODO(Tianyu): this is not yet implemented because HSM does not support integration with visibility features yet.
 		return nil, fmt.Errorf("listing of HSM-based schedulers is not yet supported") // nolint:goerr113
 	}
 

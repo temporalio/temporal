@@ -311,6 +311,13 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)
 	}
 
+	// TODO(Tianyu): A new use case with the introduction of remote methods, is that external clients may need to create
+	// state machine references from ID to send them messages (e.g., describe a schedule) and won't be able to populate
+	// these fields. This is a temporary fix to bypass this check, but should be carefully thought through later.
+	if ref.StateMachineRef.MachineLastUpdateVersionedTransition == nil {
+		return nil
+	}
+
 	if node.InternalRepr().InitialVersionedTransition.NamespaceFailoverVersion !=
 		ref.StateMachineRef.MachineInitialVersionedTransition.NamespaceFailoverVersion {
 		if potentialStaleState {

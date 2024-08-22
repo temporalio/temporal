@@ -638,7 +638,6 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	s.worker.RegisterWorkflowWithOptions(workflow2Fn, workflow.RegisterOptions{Name: wt2})
 
 	// create
-
 	createTime := time.Now()
 	_, err := s.client.CreateSchedule(NewContext(), req)
 	s.NoError(err)
@@ -706,99 +705,9 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	s.True(action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 0)
 	s.DurationNear(action0.ActualTime.AsTime().Sub(action0.ScheduleTime.AsTime()), 0, 3*time.Second)
 
-	// list
-
-	visibilityResponse := s.getScheduleEntryFomVisibility(sid)
-	s.Equal(sid, visibilityResponse.ScheduleId)
-	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csaKeyword].Data)
-	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
-	s.Equal(schSABoolValue.Data, describeResp.SearchAttributes.IndexedFields[csaBool].Data)
-	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
-	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.BuildIds])
-	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
-	s.Equal(schMemo.Data, visibilityResponse.Memo.Fields["schedmemo1"].Data)
-	checkSpec(visibilityResponse.Info.Spec)
-	s.Equal(wt, visibilityResponse.Info.WorkflowType.Name)
-	s.False(visibilityResponse.Info.Paused)
-	s.assertSameRecentActions(describeResp, visibilityResponse)
-
-	// list workflows
-
-	wfResp, err := s.client.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  5,
-		Query:     "",
-	})
-	s.NoError(err)
-	s.GreaterOrEqual(len(wfResp.Executions), 2) // could have had a 3rd run while waiting for visibility
-	for _, ex := range wfResp.Executions {
-		s.Equal(wt, ex.Type.Name, "should only see started workflows")
-	}
-	ex0 := wfResp.Executions[0]
-	s.True(strings.HasPrefix(ex0.Execution.WorkflowId, wid))
-	s.True(ex0.Execution.RunId == describeResp.Info.RecentActions[0].GetStartWorkflowResult().RunId ||
-		ex0.Execution.RunId == describeResp.Info.RecentActions[1].GetStartWorkflowResult().RunId)
-	s.Equal(wt, ex0.Type.Name)
-	s.Nil(ex0.ParentExecution) // not a child workflow
-	s.Equal(wfMemo.Data, ex0.Memo.Fields["wfmemo1"].Data)
-	s.Equal(wfSAValue.Data, ex0.SearchAttributes.IndexedFields[csaKeyword].Data)
-	s.Equal(payload.EncodeString(sid).Data, ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById].Data)
-	var ex0StartTime time.Time
-	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime], &ex0StartTime))
-	s.WithinRange(ex0StartTime, createTime, time.Now())
-	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
-
-	// list with QueryWithAnyNamespaceDivision, we should see the scheduler workflow
-
-	wfResp, err = s.client.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  5,
-		Query:     searchattribute.QueryWithAnyNamespaceDivision(`ExecutionStatus = "Running"`),
-	})
-	s.NoError(err)
-	count := 0
-	for _, ex := range wfResp.Executions {
-		if ex.Type.Name == scheduler.WorkflowType {
-			count++
-		}
-	}
-	s.EqualValues(1, count, "should see scheduler workflow")
-
-	// list workflows with an exact match on namespace division (implementation details here, not public api)
-
-	wfResp, err = s.client.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  5,
-		Query:     fmt.Sprintf("%s = '%s'", searchattribute.TemporalNamespaceDivision, scheduler.NamespaceDivision),
-	})
-	s.NoError(err)
-	s.EqualValues(1, len(wfResp.Executions), "should see scheduler workflow")
-	ex0 = wfResp.Executions[0]
-	s.Equal(scheduler.WorkflowType, ex0.Type.Name)
-
-	// list schedules with search attribute filter
-
-	listResp, err := s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
-		Namespace:       s.namespace,
-		MaximumPageSize: 5,
-		Query:           "CustomKeywordField = 'schedule sa value' AND TemporalSchedulePaused = false",
-	})
-	s.NoError(err)
-	s.Len(listResp.Schedules, 1)
-	entry := listResp.Schedules[0]
-	s.Equal(sid, entry.ScheduleId)
-
-	// list schedules with invalid search attribute filter
-
-	_, err = s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
-		Namespace:       s.namespace,
-		MaximumPageSize: 5,
-		Query:           "ExecutionDuration > '1s'",
-	})
-	s.Error(err)
+	// TODO(Tianyu): It is not yet possible to test visibility features. Add tests later after they have been integrated with HSM
 
 	// update schedule, no updates to search attributes
-
 	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
 	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
 
@@ -841,86 +750,10 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
 	s.True(lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.AsTime().UnixNano())
 
+	// TODO(Tianyu): It is not yet possible to test visibility features. Add tests later after they have been integrated with HSM
 	// update schedule and search attributes
 
-	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
-	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
-
-	csaDouble := "CustomDoubleField"
-	schSADoubleValue, _ := payload.Encode(3.14)
-	schSAIntValue, _ = payload.Encode(321)
-	_, err = s.client.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
-		Namespace:  s.namespace,
-		ScheduleId: sid,
-		Schedule:   schedule,
-		Identity:   "test",
-		RequestId:  uuid.New(),
-		SearchAttributes: &commonpb.SearchAttributes{
-			IndexedFields: map[string]*commonpb.Payload{
-				csaKeyword: schSAValue,       // same key, same value
-				csaInt:     schSAIntValue,    // same key, new value
-				csaDouble:  schSADoubleValue, // new key
-				// csaBool is removed
-			},
-		},
-	})
-	s.NoError(err)
-
-	// wait until search attributes are updated
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			describeResp, err = s.client.DescribeSchedule(
-				NewContext(),
-				&workflowservice.DescribeScheduleRequest{
-					Namespace:  s.namespace,
-					ScheduleId: sid,
-				},
-			)
-			assert.NoError(c, err)
-			assert.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
-			assert.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
-			assert.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
-			assert.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
-			assert.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
-		},
-		2*time.Second,
-		500*time.Millisecond,
-	)
-
-	// update schedule and unset search attributes
-
-	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
-	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
-
-	_, err = s.client.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
-		Namespace:        s.namespace,
-		ScheduleId:       sid,
-		Schedule:         schedule,
-		Identity:         "test",
-		RequestId:        uuid.New(),
-		SearchAttributes: &commonpb.SearchAttributes{},
-	})
-	s.NoError(err)
-
-	// wait until search attributes are updated
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			describeResp, err = s.client.DescribeSchedule(
-				NewContext(),
-				&workflowservice.DescribeScheduleRequest{
-					Namespace:  s.namespace,
-					ScheduleId: sid,
-				},
-			)
-			assert.NoError(c, err)
-			assert.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
-		},
-		2*time.Second,
-		500*time.Millisecond,
-	)
-
 	// pause
-
 	_, err = s.client.PatchSchedule(NewContext(), &workflowservice.PatchScheduleRequest{
 		Namespace:  s.namespace,
 		ScheduleId: sid,
@@ -944,20 +777,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	s.True(describeResp.Schedule.State.Paused)
 	s.Equal("because I said so", describeResp.Schedule.State.Notes)
 
-	// don't loop to wait for visibility, we already waited 7s from the patch
-	listResp, err = s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
-		Namespace:       s.namespace,
-		MaximumPageSize: 5,
-	})
-	s.NoError(err)
-	s.Equal(1, len(listResp.Schedules))
-	entry = listResp.Schedules[0]
-	s.Equal(sid, entry.ScheduleId)
-	s.True(entry.Info.Paused)
-	s.Equal("because I said so", entry.Info.Notes)
-
 	// finally delete
-
 	_, err = s.client.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
 		Namespace:  s.namespace,
 		ScheduleId: sid,
@@ -971,14 +791,15 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmBasics() {
 	})
 	s.Error(err)
 
-	s.Eventually(func() bool { // wait for visibility
-		listResp, err := s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 5,
-		})
-		s.NoError(err)
-		return len(listResp.Schedules) == 0
-	}, 10*time.Second, 1*time.Second)
+	// TODO(Tianyu): It is not yet possible to test visibility features. Add tests later after they have been integrated with HSM
+	//s.Eventually(func() bool { // wait for visibility
+	//	listResp, err := s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+	//		Namespace:       s.namespace,
+	//		MaximumPageSize: 5,
+	//	})
+	//	s.NoError(err)
+	//	return len(listResp.Schedules) == 0
+	//}, 10*time.Second, 1*time.Second)
 }
 
 func (s *ScheduleFunctionalSuite) TestInput() {
