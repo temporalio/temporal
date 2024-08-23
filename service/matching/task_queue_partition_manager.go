@@ -472,7 +472,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
@@ -500,9 +500,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		if reportStats {
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
-		}
-		if internalTaskQueueStatus {
-			vInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
 		}
 		versionsInfo[bid] = vInfo
 	}
