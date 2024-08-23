@@ -63,6 +63,7 @@ type MatcherTestSuite struct {
 	client      *matchingservicemock.MockMatchingServiceClient
 	fwdr        *Forwarder
 	cfg         *taskQueueConfig
+	rootcfg     *taskQueueConfig
 	queue       *PhysicalTaskQueueKey
 	matcher     *TaskMatcher // matcher for child partition
 	rootMatcher *TaskMatcher // matcher for parent partition
@@ -95,8 +96,8 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.Assert().NoError(err)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
 
-	rootTaskqueueCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopMetricsHandler)
+	t.rootcfg = newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
+	t.rootMatcher = newTaskMatcher(t.rootcfg, nil, metrics.NoopMetricsHandler)
 }
 
 func (t *MatcherTestSuite) TearDownTest() {
@@ -403,18 +404,19 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
-			t.Assert().ErrorIs(err, context.DeadlineExceeded)
+			t.Assert().ErrorIs(err, errNoTasks)
 		},
-	).Return(nil, context.DeadlineExceeded).AnyTimes()
+	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
 
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
-	_, err := t.matcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().ErrorIs(err, context.DeadlineExceeded)
+	task, err := t.matcher.PollForQuery(ctx, &pollMetadata{})
+	t.Assert().Empty(task.started.workflowTaskInfo)
+	t.Assert().NoError(err)
 	cancel()
 
 	// send query and expect generic DeadlineExceeded error
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task = newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			task.forwardInfo = req.GetForwardInfo()
@@ -434,26 +436,27 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
-			t.Assert().ErrorIs(err, context.DeadlineExceeded)
+			t.Assert().ErrorIs(err, errNoTasks)
 		},
-	).Return(nil, context.DeadlineExceeded).AnyTimes()
+	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
 
 	// make a poll that expires
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
-	_, err := t.matcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().ErrorIs(err, context.DeadlineExceeded)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond) 
+	task, err := t.matcher.PollForQuery(ctx, &pollMetadata{})
+	t.Assert().Empty(task.started.workflowTaskInfo)
+	t.Assert().NoError(err)
 	cancel()
 
 	// wait 10ms after the poll
 	time.Sleep(time.Millisecond * 10)
 
 	// set the window to 5ms
-	t.cfg.QueryPollerUnavailableWindow = func() time.Duration {
-		return time.Millisecond * 5
-	}
+	t.cfg.QueryPollerUnavailableWindow = dynamicconfig.GetDurationPropertyFn(time.Millisecond * 5)
+	t.rootcfg.QueryPollerUnavailableWindow = dynamicconfig.GetDurationPropertyFn(time.Millisecond * 5)
+
 
 	// make the query and expect errNoRecentPoller
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task = newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			task.forwardInfo = req.GetForwardInfo()
