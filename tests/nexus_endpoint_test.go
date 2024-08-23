@@ -30,6 +30,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/nexus/v1"
@@ -166,7 +167,7 @@ type MatchingSuite struct {
 }
 
 func (s *MatchingSuite) TestCreate() {
-	endpointName := "test_matching_create_endpoint_name"
+	endpointName := RandomizedNexusEndpoint(s.T().Name())
 	entry := s.createNexusEndpoint(endpointName)
 	s.Equal(int64(1), entry.Version)
 	s.NotNil(entry.Endpoint.Clock)
@@ -193,8 +194,8 @@ func (s *MatchingSuite) TestCreate() {
 }
 
 func (s *MatchingSuite) TestUpdate() {
-	endpointName := "test_update_endpoint_name"
-	updatedName := "updated_name"
+	endpointName := RandomizedNexusEndpoint(s.T().Name())
+	updatedName := RandomizedNexusEndpoint(s.T().Name() + "-updated")
 	endpoint := s.createNexusEndpoint(endpointName)
 	type testcase struct {
 		name      string
@@ -283,7 +284,7 @@ func (s *MatchingSuite) TestUpdate() {
 }
 
 func (s *MatchingSuite) TestDelete() {
-	endpointName := "test_delete_endpoint_name"
+	endpointName := RandomizedNexusEndpoint(s.T().Name())
 	endpoint := s.createNexusEndpoint(endpointName)
 	type testcase struct {
 		name       string
@@ -468,7 +469,7 @@ type OperatorSuite struct {
 }
 
 func (s *OperatorSuite) TestCreate() {
-	endpointName := "test_operator_create_endpoint_name"
+	endpointName := RandomizedNexusEndpoint(s.T().Name())
 	type testcase struct {
 		name      string
 		request   *operatorservice.CreateNexusEndpointRequest
@@ -636,7 +637,7 @@ func (s *OperatorSuite) TestCreate() {
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "TaskQueue is not set on request")
+				s.ErrorContains(err, "taskQueue is not set")
 			},
 		},
 		{
@@ -656,7 +657,7 @@ func (s *OperatorSuite) TestCreate() {
 			},
 			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-				s.ErrorContains(err, "TaskQueue length exceeds limit")
+				s.ErrorContains(err, "taskQueue length exceeds limit")
 			},
 		},
 		{
@@ -767,8 +768,8 @@ func (s *OperatorSuite) TestCreate() {
 }
 
 func (s *OperatorSuite) TestUpdate() {
-	endpointName := "test_operator_update_endpoint_name"
-	updatedName := "updated_name"
+	endpointName := RandomizedNexusEndpoint(s.T().Name())
+	updatedName := RandomizedNexusEndpoint(s.T().Name() + "-updated")
 	endpoint := s.createNexusEndpoint(endpointName)
 	type testcase struct {
 		name      string
@@ -996,7 +997,7 @@ func (s *OperatorSuite) TestList() {
 }
 
 func (s *OperatorSuite) TestGet() {
-	endpointName := "test_operator_get_endpoint_name"
+	endpointName := RandomizedNexusEndpoint(s.T().Name())
 	endpoint := s.createNexusEndpoint(endpointName)
 
 	type testcase struct {

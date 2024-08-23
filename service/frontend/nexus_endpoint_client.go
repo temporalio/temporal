@@ -30,10 +30,11 @@ import (
 	"regexp"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -45,10 +46,11 @@ import (
 	cnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/tqid"
 )
 
 // EndpointNameRegex is the regular expression that endpoint names must match.
-var EndpointNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+var EndpointNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9\-]*[a-zA-Z0-9]$`)
 
 type (
 	// NexusEndpointClient manages frontend CRUD requests for Nexus endpoints.
@@ -367,7 +369,7 @@ func (c *NexusEndpointClient) validateUpsertSpec(spec *nexuspb.EndpointSpec) err
 			return serviceerror.NewFailedPrecondition(fmt.Sprintf("could not verify namespace referenced by target exists: %v", nsErr.Error()))
 		}
 
-		if err := validateTaskQueueName(variant.Worker.GetTaskQueue(), c.config.maxTaskQueueLength()); err != nil {
+		if err := tqid.ValidateTaskQueueName(variant.Worker.GetTaskQueue(), c.config.maxTaskQueueLength()); err != nil {
 			issues.Appendf("invalid target task queue: %q", err.Error())
 		}
 	case *nexuspb.EndpointTarget_External_:

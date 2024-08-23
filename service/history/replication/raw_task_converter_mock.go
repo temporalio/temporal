@@ -60,16 +60,16 @@ func (m *MockSourceTaskConverter) EXPECT() *MockSourceTaskConverterMockRecorder 
 }
 
 // Convert mocks base method.
-func (m *MockSourceTaskConverter) Convert(task tasks.Task) (*repication.ReplicationTask, error) {
+func (m *MockSourceTaskConverter) Convert(task tasks.Task, targetClusterID int32) (*repication.ReplicationTask, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Convert", task)
+	ret := m.ctrl.Call(m, "Convert", task, targetClusterID)
 	ret0, _ := ret[0].(*repication.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Convert indicates an expected call of Convert.
-func (mr *MockSourceTaskConverterMockRecorder) Convert(task interface{}) *gomock.Call {
+func (mr *MockSourceTaskConverterMockRecorder) Convert(task, targetClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Convert", reflect.TypeOf((*MockSourceTaskConverter)(nil).Convert), task)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Convert", reflect.TypeOf((*MockSourceTaskConverter)(nil).Convert), task, targetClusterID)
 }

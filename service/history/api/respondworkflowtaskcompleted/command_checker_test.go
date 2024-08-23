@@ -33,13 +33,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -609,52 +608,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGloba
 
 	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, targetNamespaceID)
 	s.Nil(err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateTaskQueueName() {
-	newTaskQueue := func(name string) *taskqueuepb.TaskQueue {
-		return &taskqueuepb.TaskQueue{
-			Name: name,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}
-	}
-
-	testCases := []struct {
-		defaultVal  string
-		input       *taskqueuepb.TaskQueue
-		output      *taskqueuepb.TaskQueue
-		isOutputErr bool
-	}{
-		{"tq-1", nil, newTaskQueue("tq-1"), false},
-		{"", newTaskQueue("tq-1"), newTaskQueue("tq-1"), false},
-		{"tq-1", newTaskQueue("tq-1"), newTaskQueue("tq-1"), false},
-		{"", newTaskQueue("/tl-1"), newTaskQueue("/tl-1"), false},
-		{"", newTaskQueue("/__temporal_sys"), newTaskQueue("/__temporal_sys"), false},
-		{"", nil, newTaskQueue(""), true},
-		{"", newTaskQueue(""), newTaskQueue(""), true},
-		{"", newTaskQueue(reservedTaskQueuePrefix), newTaskQueue(reservedTaskQueuePrefix), true},
-		{"tq-1", newTaskQueue(reservedTaskQueuePrefix), newTaskQueue(reservedTaskQueuePrefix), true},
-		{"", newTaskQueue(reservedTaskQueuePrefix + "tq-1"), newTaskQueue(reservedTaskQueuePrefix + "tq-1"), true},
-		{"tq-1", newTaskQueue(reservedTaskQueuePrefix + "tq-1"), newTaskQueue(reservedTaskQueuePrefix + "tq-1"), true},
-	}
-
-	for _, tc := range testCases {
-		key := tc.defaultVal + "#"
-		if tc.input != nil {
-			key += tc.input.GetName()
-		} else {
-			key += "nil"
-		}
-		s.Run(key, func() {
-			output, err := s.validator.validateTaskQueue(tc.input, tc.defaultVal)
-			if tc.isOutputErr {
-				s.Error(err)
-			} else {
-				s.NoError(err)
-			}
-			s.EqualValues(tc.output, output)
-		})
-	}
 }
 
 func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {

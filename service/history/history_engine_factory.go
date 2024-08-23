@@ -55,6 +55,7 @@ type (
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
+		ReplicationProgressCache        replication.ProgressCache
 		NewCacheFn                      wcache.NewCacheFn
 		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
@@ -93,6 +94,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.Config,
 		f.RawMatchingClient,
 		wfCache,
+		f.ReplicationProgressCache,
 		f.EventSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,
