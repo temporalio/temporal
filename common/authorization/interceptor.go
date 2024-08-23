@@ -219,7 +219,9 @@ func (a *Interceptor) GetAuthInfo(tlsConnection *credentials.TLSInfo, header hea
 }
 
 // GetClaims uses the policy's claimMapper to map the provided authInfo to claims.
-func (a *Interceptor) GetClaims(authInfo *AuthInfo) (*Claims, error) {
+func (a *Interceptor) GetClaims(authInfo *AuthInfo) (claims *Claims, err error) {
+	defer log.CapturePanic(a.logger, &err)
+
 	return a.claimMapper.GetClaims(authInfo)
 }
 
@@ -234,10 +236,12 @@ func (a *Interceptor) EnhanceContext(ctx context.Context, authInfo *AuthInfo, cl
 
 // Authorize uses the policy's authorizer to authorize a request based on provided claims and call target.
 // Logs and emits metrics when unauthorized.
-func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) error {
+func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) (err error) {
 	if a.authorizer == nil {
 		return nil
 	}
+
+	defer log.CapturePanic(a.logger, &err)
 
 	mh := a.getMetricsHandler(ct.Namespace)
 
