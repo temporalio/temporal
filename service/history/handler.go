@@ -2340,6 +2340,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		ctx,
 		engine.StateMachineEnvironment(),
 		ref,
+		request.Completion.RequestId,
 		request.GetSuccess(),
 		opErr,
 	)
