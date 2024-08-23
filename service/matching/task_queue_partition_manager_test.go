@@ -113,6 +113,33 @@ func (s *PartitionManagerTestSuite) TestAddTaskNoRules_AssignedTask() {
 	s.validatePollTask(bld, true)
 }
 
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// adding a task to a versioned queue
+	bld := "buildXYZ"
+	s.validateAddTask("", false, nil, worker_versioning.MakeBuildIdDirective(bld))
+	buildIds := make(map[string]bool)
+	buildIds[bld] = true
+
+	// task is backlogged in the source queue so it is loaded by now
+	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", bld, false)
+	s.Assert().NoError(err)
+	s.Assert().NotNil(sourceQ)
+
+	// unload sourceQ
+	s.partitionMgr.unloadPhysicalQueue(sourceQ, unloadCauseUnspecified)
+
+	// calling Describe on an unloaded physical queue
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, false)
+	s.NoError(err)
+
+	// 1 task in the backlog
+	s.NotNil(resp.VersionsInfoInternal[bld].PhysicalTaskQueueInfo.TaskQueueStats)
+	s.Equal(int64(1), resp.VersionsInfoInternal[bld].PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount)
+}
+
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)
