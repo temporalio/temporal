@@ -546,7 +546,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
 	defer cancel()
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -591,7 +591,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	rule2 := s.addAssignmentRuleWithRampPercentage(ctx, tq, v2, 50)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule2)
@@ -673,7 +673,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 		return "done!", nil
 	}
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
@@ -694,7 +694,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
 
 	// update rules with v2 as the default build
-	rule = s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
@@ -776,7 +776,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), "", true, "binary-checksum", "", nil)
 
 	// update rules with v1 as the default build
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
@@ -805,7 +805,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// start wf without worker
@@ -821,7 +821,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
 
 	// update latest build to v2
-	rule = s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	failedTask := make(chan struct{})
@@ -847,7 +847,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v2, true, "", "", []string{v1})
 
 	// update latest build to v3
-	rule = s.addAssignmentRuleWithFullRamp(ctx, tq, v3)
+	rule = s.addAssignmentRule(ctx, tq, v3)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	timedoutTask := make(chan struct{})
@@ -917,7 +917,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// v1 fails the task
@@ -973,7 +973,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	defer w2.Stop()
 
 	// update latest build to v2
-	rule = s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// wait for multiple timeouts to make sure more attempts do not generate more history events
@@ -1000,7 +1000,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	defer w3.Stop()
 
 	// update latest build to v3
-	rule = s.addAssignmentRuleWithFullRamp(ctx, tq, v3)
+	rule = s.addAssignmentRule(ctx, tq, v3)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	var out string
@@ -1035,10 +1035,10 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, actTq, v1)
+	rule := s.addAssignmentRule(ctx, actTq, v1)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 	if versionedWf {
-		rule = s.addAssignmentRuleWithFullRamp(ctx, wfTq, wfV1)
+		rule = s.addAssignmentRule(ctx, wfTq, wfV1)
 		s.waitForAssignmentRulePropagation(ctx, wfTq, rule)
 	}
 
@@ -1097,7 +1097,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	)
 
 	// update latest build to v2
-	rule = s.addAssignmentRuleWithFullRamp(ctx, actTq, v2)
+	rule = s.addAssignmentRule(ctx, actTq, v2)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
 	failedTask := make(chan struct{})
@@ -1131,7 +1131,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	)
 
 	// update latest build to v3
-	rule = s.addAssignmentRuleWithFullRamp(ctx, actTq, v3)
+	rule = s.addAssignmentRule(ctx, actTq, v3)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
 	timedoutTask := make(chan struct{})
@@ -1225,10 +1225,10 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, actTq, v1)
+	rule := s.addAssignmentRule(ctx, actTq, v1)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 	if versionedWf {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, wfTq, wfV1)
+		rule := s.addAssignmentRule(ctx, wfTq, wfV1)
 		s.waitForAssignmentRulePropagation(ctx, wfTq, rule)
 	}
 
@@ -1325,7 +1325,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	defer w2.Stop()
 
 	// update latest build to v2
-	rule = s.addAssignmentRuleWithFullRamp(ctx, actTq, v2)
+	rule = s.addAssignmentRule(ctx, actTq, v2)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
 	s.waitForChan(ctx, timedoutTask)
@@ -1358,7 +1358,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	defer w3.Stop()
 
 	// update latest build to v3
-	rule = s.addAssignmentRuleWithFullRamp(ctx, actTq, v3)
+	rule = s.addAssignmentRule(ctx, actTq, v3)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
 	var out string
@@ -1403,7 +1403,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	act := func() error {
@@ -1568,7 +1568,7 @@ func (s *VersioningIntegSuite) dispatchNotUsingVersioning(newVersioning bool) {
 	defer cancel()
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -1722,7 +1722,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 	defer cancel()
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -1909,7 +1909,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 	defer cancel()
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -1942,9 +1942,9 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 
 	// now register v2 as default
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+		rule := s.addAssignmentRule(ctx, tq, v2)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
-		rule = s.addAssignmentRuleWithFullRamp(ctx, actxTq, v2)
+		rule = s.addAssignmentRule(ctx, actxTq, v2)
 		s.waitForAssignmentRulePropagation(ctx, actxTq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v2)
@@ -2083,7 +2083,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	s.NoError(w12.Start())
 	defer w12.Stop()
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
@@ -2164,7 +2164,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	versions := []string{v1}
@@ -2655,9 +2655,9 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 	}
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
-		rule = s.addAssignmentRuleWithFullRamp(ctx, childxTq, v1)
+		rule = s.addAssignmentRule(ctx, childxTq, v1)
 		s.waitForAssignmentRulePropagation(ctx, childxTq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -2690,9 +2690,9 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 
 	// now register v2 as default
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+		rule := s.addAssignmentRule(ctx, tq, v2)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
-		rule = s.addAssignmentRuleWithFullRamp(ctx, childxTq, v2)
+		rule = s.addAssignmentRule(ctx, childxTq, v2)
 		s.waitForAssignmentRulePropagation(ctx, childxTq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v2)
@@ -2795,7 +2795,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 	}
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -2944,7 +2944,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 	defer cancel()
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -2966,7 +2966,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 	s.waitForChan(ctx, started)
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+		rule := s.addAssignmentRule(ctx, tq, v2)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 		rrule := s.addRedirectRule(ctx, tq, v1, v11)
 		s.waitForRedirectRulePropagation(ctx, tq, rrule)
@@ -3115,9 +3115,9 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	}
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
-		rule = s.addAssignmentRuleWithFullRamp(ctx, canxTq, v1)
+		rule = s.addAssignmentRule(ctx, canxTq, v1)
 		s.waitForAssignmentRulePropagation(ctx, canxTq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -3148,9 +3148,9 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 
 	// now make v2 as a new default
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+		rule := s.addAssignmentRule(ctx, tq, v2)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
-		rule = s.addAssignmentRuleWithFullRamp(ctx, canxTq, v2)
+		rule = s.addAssignmentRule(ctx, canxTq, v2)
 		s.waitForAssignmentRulePropagation(ctx, canxTq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v2)
@@ -3255,7 +3255,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	defer cancel()
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -3280,7 +3280,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	if newVersioning {
 		rule := s.addRedirectRule(ctx, tq, v1, v11)
 		s.waitForRedirectRulePropagation(ctx, tq, rule)
-		rule2 := s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+		rule2 := s.addAssignmentRule(ctx, tq, v2)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule2)
 	} else {
 		s.addCompatibleBuildId(ctx, tq, v11, v1, false)
@@ -3494,7 +3494,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
@@ -3517,7 +3517,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	s.waitForChan(ctx, started1)
 
 	// now register v2 as a new default
-	rule = s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	// add another 100ms to make sure it got to sticky queues also
 	time.Sleep(100 * time.Millisecond)
@@ -3588,7 +3588,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	defer cancel()
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+		rule := s.addAssignmentRule(ctx, tq, v1)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		s.addNewDefaultBuildId(ctx, tq, v1)
@@ -3621,7 +3621,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	)
 
 	if newVersioning {
-		rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+		rule := s.addAssignmentRule(ctx, tq, v2)
 		s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	} else {
 		// now register v11 as newer compatible with v1 AND v2 as a new default.
@@ -3696,7 +3696,7 @@ func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId() {
 		return "done!", nil
 	}
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	w1 := worker.New(
@@ -3779,7 +3779,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdCan(inheritBu
 		}
 	}
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	w1 := worker.New(
@@ -3879,7 +3879,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdChildWf(inher
 		return "parent done!", nil
 	}
 
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	w1 := worker.New(
@@ -3932,7 +3932,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, v1, inheritedBuildId, nil)
 
 	// update rules with v2 as the default build
-	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v2)
+	rule := s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// now reset the wf to first wf task
@@ -3986,7 +3986,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	defer cancel()
 
 	// 1. Add assignment rule A and start workflow with build id A
-	s.addAssignmentRuleWithFullRamp(ctx, tq, "A")
+	s.addAssignmentRule(ctx, tq, "A")
 	started := make(chan struct{}, 10)
 	wf := func(ctx workflow.Context) (string, error) {
 		started <- struct{}{}
@@ -4048,7 +4048,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 		"": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable because unversioned is default
 	})
 
-	s.addAssignmentRuleWithFullRamp(ctx, tq, "A")
+	s.addAssignmentRule(ctx, tq, "A")
 	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"", "A"}}, map[string]enumspb.BuildIdTaskReachability{
 		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,   // reachable by default assignment rule
 		"":  enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, // unreachable because no longer default
@@ -4790,7 +4790,7 @@ func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, new
 	s.NotNil(res)
 }
 
-func (s *VersioningIntegSuite) addAssignmentRuleWithFullRamp(ctx context.Context, tq, buildId string) *taskqueuepb.BuildIdAssignmentRule {
+func (s *VersioningIntegSuite) addAssignmentRule(ctx context.Context, tq, buildId string) *taskqueuepb.BuildIdAssignmentRule {
 	return s.addAssignmentRuleWithRampPercentage(ctx, tq, buildId, 100)
 }
 
