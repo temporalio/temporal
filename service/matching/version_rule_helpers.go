@@ -106,7 +106,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		return nil, errInvalidNegativeIndex
 	}
 	rule := handleAssignmentRuleNilRamp(req.GetRule())
-	if ramp := rule.GetPercentageRamp(); !isValidRamp(ramp) {
+	if !hasValidRamp(rule) {
 		return nil, errInvalidRampPercentage
 	}
 	target := rule.GetTargetBuildId()
@@ -138,7 +138,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 ) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rule := handleAssignmentRuleNilRamp(req.GetRule())
-	if ramp := rule.GetPercentageRamp(); !isValidRamp(ramp) {
+	if !hasValidRamp(rule) {
 		return nil, errInvalidRampPercentage
 	}
 	target := rule.GetTargetBuildId()
@@ -495,21 +495,17 @@ func given2ActualIdx(idx int32, rules []*persistencespb.AssignmentRule) int {
 	return -1
 }
 
-// handleAssignmentRuleNilRamp returns a new rule object. If the ramp was nil, it is converted to 100%
+// handleAssignmentRuleNilRamp mutates and returns rule object to convert nil ramp to 100%
 func handleAssignmentRuleNilRamp(rule *taskqueue.BuildIdAssignmentRule) *taskqueue.BuildIdAssignmentRule {
-	rampPercentage := float32(100)
-	if rule.GetRamp() != nil {
-		rampPercentage = rule.GetPercentageRamp().GetRampPercentage()
+	if rule.GetRamp() == nil {
+		rule.Ramp = &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100}}
 	}
-	return &taskqueue.BuildIdAssignmentRule{
-		TargetBuildId: rule.GetTargetBuildId(),
-		Ramp:          &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: rampPercentage}},
-	}
+	return rule
 }
 
-// isValidRamp returns true if the percentage ramp is within [0, 100]
-func isValidRamp(ramp *taskqueue.RampByPercentage) bool {
-	return ramp.RampPercentage >= 0 && ramp.RampPercentage <= 100
+// hasValidRamp returns true if the rule has a ramp percentage within [0, 100] or a ramp of nil
+func hasValidRamp(rule *taskqueue.BuildIdAssignmentRule) bool {
+	return rule.GetRamp() == nil || (rule.GetPercentageRamp().GetRampPercentage() >= 0 && rule.GetPercentageRamp().GetRampPercentage() <= 100)
 }
 
 // isFullyRamped returns true if the rule has a ramp percentage of 100 or a ramp of nil
