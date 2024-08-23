@@ -31,7 +31,6 @@ import (
 
 	"github.com/pborman/uuid"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/tasks"

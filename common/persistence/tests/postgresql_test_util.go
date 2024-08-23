@@ -30,8 +30,6 @@ import (
 	"strconv"
 	"testing"
 
-	"go.uber.org/zap/zaptest"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
+	"go.uber.org/zap/zaptest"
 )
 
 // TODO merge the initialization with existing persistence setup

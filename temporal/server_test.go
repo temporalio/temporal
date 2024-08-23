@@ -33,8 +33,8 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
-
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -42,9 +42,7 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 // TestNewServer verifies that NewServer doesn't cause any fx errors, and that there are no unexpected error logs after

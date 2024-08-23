@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
