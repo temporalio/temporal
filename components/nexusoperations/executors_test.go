@@ -91,6 +91,7 @@ func TestProcessInvocationTask(t *testing.T) {
 	cases := []struct {
 		name                  string
 		endpointNotFound      bool
+		eventHasNoEndpointID  bool
 		onStartOperation      func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
@@ -281,7 +282,20 @@ func TestProcessInvocationTask(t *testing.T) {
 			endpointNotFound: true,
 			requestTimeout:   time.Hour,
 			destinationDown:  false,
-			onStartOperation: nil, // This should not be called if the service is not found.
+			onStartOperation: nil, // This should not be called if the endpoint is not found.
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
+				require.Equal(t, "endpoint not registered", op.LastAttemptFailure.Message)
+				require.Equal(t, 1, len(events))
+			},
+		},
+		{
+			name:                 "endpoint not found on command processing",
+			eventHasNoEndpointID: true,
+			requestTimeout:       time.Hour,
+			destinationDown:      false,
+			onStartOperation:     nil, // This should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
@@ -301,7 +315,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{mustNewScheduledEvent(time.Now(), time.Hour)}}
+			event := mustNewScheduledEvent(time.Now(), time.Hour)
+			if tc.eventHasNoEndpointID {
+				event.GetNexusOperationScheduledEventAttributes().EndpointId = ""
+			}
+			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
 			node := newOperationNode(t, backend, backend.Events[0])
 			env := fakeEnv{node}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)

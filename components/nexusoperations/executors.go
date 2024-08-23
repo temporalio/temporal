@@ -122,6 +122,17 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to load operation args: %w", err)
 	}
 
+	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
+	// indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
+	if args.endpointID == "" {
+		return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
+			Message: "endpoint not registered",
+			Response: &http.Response{
+				StatusCode: http.StatusNotFound,
+			},
+		})
+	}
+
 	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
