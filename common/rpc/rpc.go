@@ -234,9 +234,9 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
-	connection := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn)
+	connection := d.interNodeGrpcConnections.Get(hostName)
 	if connection != nil {
-		return connection
+		return connection.(*grpc.ClientConn)
 	}
 	var tlsClientConfig *tls.Config
 	var err error
@@ -247,9 +247,9 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 			return nil
 		}
 	}
-	connection = d.dial(hostName, tlsClientConfig)
-	d.interNodeGrpcConnections.Put(hostName, connection)
-	return connection
+	c := d.dial(hostName, tlsClientConfig)
+	d.interNodeGrpcConnections.Put(hostName, c)
+	return c
 }
 
 func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
