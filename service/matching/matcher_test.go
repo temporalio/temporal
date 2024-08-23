@@ -331,7 +331,7 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	cancel()
 
 	// even old task is forwarded if last poll is not recent enough
-	time.Sleep(t.childConfig.MaxWaitForPollerBeforeFwd() + time.Millisecond)
+	time.Sleep(t.childConfig.MaxWaitForPollerBeforeFwd() + time.Millisecond) //nolint:forbidigo
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 	go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
