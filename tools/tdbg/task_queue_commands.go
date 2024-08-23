@@ -26,10 +26,11 @@ package tdbg
 
 import (
 	"fmt"
-
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 )
 
 // AdminListTaskQueueTasks displays task information
@@ -103,5 +104,96 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 	if err := paginate(c, paginationFunc, pageSize); err != nil {
 		return fmt.Errorf("unable to list Task Queue Tasks: %v", err)
 	}
+	return nil
+}
+
+// AdminDescribeTaskQueuePartition displays task queue partition information
+func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory) error {
+	// TODO Shivam - clean this up
+
+	// extracting the namespace
+	namespace, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	// extracting the task queue name
+	tqName, err := getRequiredOption(c, FlagTaskQueue)
+	if err != nil {
+		return err
+	}
+
+	// extracting the task queue type
+	tqTypeString, err := getRequiredOption(c, FlagTaskQueueType)
+	if err != nil {
+		return err
+	}
+
+	tlTypeInt, err := StringToEnum(tqTypeString, enumspb.TaskQueueType_value)
+	if err != nil {
+		return fmt.Errorf("invalid task queue type: %v", err)
+	}
+	tqType := enumspb.TaskQueueType(tlTypeInt)
+	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		return fmt.Errorf("missing Task Queue type")
+	}
+
+	// extracting the task queue partition id
+	partitionID := 0
+	if c.IsSet(FlagPartitionID) {
+		partitionID = c.Int(FlagPartitionID)
+	}
+
+	// extracting the task queue partition sticky name
+	stickyName := ""
+	if c.IsSet(FlagStickyName) {
+		stickyName = c.String(FlagStickyName)
+	}
+
+	// extracting the task queue partition buildId's
+	buildIDs := make([]string, 0)
+	if c.IsSet(FlagBuildIDs) {
+		buildIDs = c.StringSlice(FlagBuildIDs)
+	}
+
+	// extracting the unversioned flag
+	unversioned := true
+	if c.IsSet(FlagUnversioned) {
+		unversioned = c.Bool(FlagUnversioned)
+	}
+
+	// extracting the allActive flag
+	allActive := true
+	if c.IsSet(FlagAllActive) {
+		allActive = c.Bool(FlagAllActive)
+	}
+
+	tqPartition := &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     tqName,
+		TaskQueueType: tqType,
+	}
+	if stickyName != "" {
+		tqPartition.PartitionId = &taskqueuespb.TaskQueuePartition_StickyName{StickyName: stickyName}
+	} else {
+		tqPartition.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionID)}
+	}
+
+	client := clientFactory.AdminClient(c)
+	req := &adminservice.DescribeTaskQueuePartitionRequest{
+		Namespace:          namespace,
+		TaskQueuePartition: tqPartition,
+		BuildId: &taskqueue.TaskQueueVersionSelection{
+			BuildIds:    buildIDs,
+			Unversioned: unversioned,
+			AllActive:   allActive,
+		},
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := client.DescribeTaskQueuePartition(ctx, req)
+
+	prettyPrintJSONObject(c, response)
+
 	return nil
 }
