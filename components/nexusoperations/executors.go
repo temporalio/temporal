@@ -178,6 +178,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,
 		Ref:         smRef,
+		RequestId:   args.requestID,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
