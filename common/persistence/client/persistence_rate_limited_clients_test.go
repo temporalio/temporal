@@ -113,7 +113,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			systemRPS:         100,
 			expectRateLimit:   true,
 			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			expectedMessage:   "Namespace Shard Persistence Max QPS Reached.",
+			expectedMessage:   "Namespace Per-Shard Persistence Max QPS Reached.",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
