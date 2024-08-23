@@ -312,7 +312,10 @@ func CommitBuildID(timestamp *hlc.Clock,
 	}
 
 	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencespb.AssignmentRule{
-		Rule:            &taskqueue.BuildIdAssignmentRule{TargetBuildId: target},
+		Rule: &taskqueue.BuildIdAssignmentRule{
+			TargetBuildId: target,
+			Ramp:          &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100}},
+		},
 		CreateTimestamp: timestamp,
 	})
 	if err := checkAssignmentConditions(data, maxAssignmentRules, false); err != nil {

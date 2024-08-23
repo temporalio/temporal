@@ -317,11 +317,6 @@ func TestInsertAssignmentRuleInvalidRampPercentage(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, errInvalidRampPercentage, err)
 
-	// insert with ramp percent == 100 --> failure
-	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(100)), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
-
 	// insert with ramp percent > 100 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(101)), data, clock, 0, ignoreMaxRules)
 	assert.Error(t, err)
@@ -416,7 +411,6 @@ func TestReplaceAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) 
 
 	// replace with target isSource and ramp < 100 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
-	t.Log(err)
 	assert.Error(t, err)
 	assert.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
@@ -472,11 +466,6 @@ func TestReplaceAssignmentRuleInvalidRampPercentage(t *testing.T) {
 
 	// replace with ramp percent < 0 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(-1)), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
-
-	// replace with ramp percent == 100 --> failure
-	_, err = replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(100)), data, clock, 0, false)
 	assert.Error(t, err)
 	assert.Equal(t, errInvalidRampPercentage, err)
 

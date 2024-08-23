@@ -342,7 +342,7 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-	s.Equal(100, res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
+	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 
 	// recent versioned poller on wrong build ID --> failure
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "3", true)
@@ -359,7 +359,7 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-	s.Equal(100, res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
+	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 }
 
 func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
@@ -4680,8 +4680,7 @@ func (s *VersioningIntegSuite) commitBuildId(
 		endIdx := len(res.GetAssignmentRules()) - 1
 		addedRule := res.GetAssignmentRules()[endIdx].GetRule()
 		s.Assert().Equal(targetBuildId, addedRule.GetTargetBuildId())
-		s.Assert().Equal(100, addedRule.GetPercentageRamp().GetRampPercentage())
-		s.Assert().Nil(addedRule.GetPercentageRamp())
+		s.Assert().Equal(float32(100), addedRule.GetPercentageRamp().GetRampPercentage())
 
 		foundOtherAssignmentRuleForTarget := false
 		foundFullyRampedAssignmentRuleForOtherTarget := false
