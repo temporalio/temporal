@@ -49,6 +49,7 @@ message TaskVersionDirective {
         string assigned_build_id = 2;
     }
 }
+
 message TaskQueueVersionInfoInternal {
     PhysicalTaskQueueInfo physical_task_queue_info = 2;
 }
