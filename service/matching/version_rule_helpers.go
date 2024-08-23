@@ -495,14 +495,16 @@ func given2ActualIdx(idx int32, rules []*persistencespb.AssignmentRule) int {
 	return -1
 }
 
-// handleAssignmentRuleNilRamp converts a rule with nil ramp to have 100% ramp and returns the same rule object
+// handleAssignmentRuleNilRamp returns a new rule object. If the ramp was nil, it is converted to 100%
 func handleAssignmentRuleNilRamp(rule *taskqueue.BuildIdAssignmentRule) *taskqueue.BuildIdAssignmentRule {
-	if rule.GetRamp() == nil {
-		rule.Ramp = &taskqueue.BuildIdAssignmentRule_PercentageRamp{
-			PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100},
-		}
+	rampPercentage := float32(100)
+	if rule.GetRamp() != nil {
+		rampPercentage = rule.GetPercentageRamp().GetRampPercentage()
 	}
-	return rule
+	return &taskqueue.BuildIdAssignmentRule{
+		TargetBuildId: rule.GetTargetBuildId(),
+		Ramp:          &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: rampPercentage}},
+	}
 }
 
 // isValidRamp returns true if the percentage ramp is within [0, 100]
