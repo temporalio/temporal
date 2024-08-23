@@ -470,11 +470,10 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 }
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
+	ctx context.Context,
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
-	defer pm.versionedQueuesLock.RUnlock()
-
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
@@ -483,25 +482,22 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			buildIds[k] = true
 		}
 	}
+	pm.versionedQueuesLock.RUnlock()
 
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for bid := range buildIds {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
-		var physicalQueue physicalTaskQueueManager
-		if vq, ok := pm.versionedQueues[bid]; ok {
-			physicalQueue = vq
-		} else if bid == "" {
-			physicalQueue = pm.defaultQueue
+		physicalQueue, err := pm.getPhysicalQueue(ctx, bid)
+		if err != nil {
+			return nil, err
 		}
-		if physicalQueue != nil {
-			if reportPollers {
-				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
-			}
-			if reportStats {
-				vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
-			}
+		if reportPollers {
+			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
+		}
+		if reportStats {
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
 		}
 		versionsInfo[bid] = vInfo
 	}
