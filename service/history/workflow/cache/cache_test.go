@@ -40,18 +40,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/persistence"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -160,6 +159,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 	mockMS1 := workflow.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(true).AnyTimes()
 	mockMS1.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mockMS1.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
@@ -269,6 +269,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	// all we need is a fake MutableState
 	mock := workflow.NewMockMutableState(s.controller)
 	mock.EXPECT().IsDirty().Return(false).AnyTimes()
+	mock.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	ctx.(*workflow.ContextImpl).MutableState = mock
 
 	release(nil)
@@ -340,6 +341,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		// all we need is a fake MutableState
 		mock := workflow.NewMockMutableState(s.controller)
 		mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry())
+		mock.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask()
 		ctx.(*workflow.ContextImpl).MutableState = mock
 		release(errors.New("some random error message"))
 	}
@@ -462,6 +464,45 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 	latency2, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name())
 	s.True(ok)
 	s.Greater(latency2, latency1)
+}
+
+func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+
+	s.mockShard.SetMetricsHandler(metricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metricsHandler)
+
+	release1, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		tests.NamespaceID,
+		tests.WorkflowID,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	s.Eventually(func() bool {
+		release1(nil)
+		snapshot := capture.Snapshot()
+		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
+		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"]
+	}, 150*time.Millisecond, 100*time.Millisecond)
+
+	capture = metricsHandler.StartCapture()
+	release2, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		tests.NamespaceID,
+		tests.WorkflowID,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	s.Eventually(func() bool {
+		release2(nil)
+		snapshot := capture.Snapshot()
+		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 200*time.Millisecond)
+		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"]
+	}, 300*time.Millisecond, 200*time.Millisecond)
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {

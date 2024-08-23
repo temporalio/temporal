@@ -30,7 +30,6 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-
 	"go.temporal.io/server/common/log"
 	dbschemas "go.temporal.io/server/schema"
 )

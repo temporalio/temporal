@@ -31,7 +31,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"

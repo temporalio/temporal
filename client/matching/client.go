@@ -33,15 +33,14 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/debug"
 )
 
 var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)

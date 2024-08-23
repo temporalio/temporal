@@ -26,7 +26,6 @@ package tasks
 
 import (
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -37,12 +36,12 @@ func Tags(
 ) []tag.Tag {
 	// TODO: convert this to a method GetEventID on task interface
 	// or remove this tag as the value is visible in the Task tag value.
-	taskEventID := int64(0)
+	taskEventID := common.EmptyEventID
 	taskCategory := task.GetCategory()
 	switch taskCategory.ID() {
 	case CategoryIDTransfer:
 		taskEventID = GetTransferTaskEventID(task)
-	case CategoryIDTimer:
+	case CategoryIDTimer, CategoryIDMemoryTimer:
 		taskEventID = GetTimerTaskEventID(task)
 	default:
 		// no-op, other task categories don't have task eventID

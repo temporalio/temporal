@@ -30,7 +30,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/convert"
@@ -78,10 +77,7 @@ func NewHistoryImporter(
 		shardContext:   shardContext,
 		namespaceCache: shardContext.GetNamespaceRegistry(),
 		workflowCache:  workflowCache,
-		taskRefresher: workflow.NewTaskRefresher(
-			shardContext,
-			logger,
-		),
+		taskRefresher:  workflow.NewTaskRefresher(shardContext),
 		transactionMgr: NewTransactionManager(shardContext, workflowCache, nil, logger, true),
 		logger:         logger,
 
@@ -192,6 +188,7 @@ func (r *HistoryImporterImpl) applyEvents(
 		eventsSlice,
 		nil,
 		"",
+		nil,
 	)
 	if err != nil {
 		return nil, false, err
@@ -350,7 +347,7 @@ func (r *HistoryImporterImpl) commit(
 
 	if !mutableStateSpec.ExistsInDB {
 		// refresh tasks to be generated
-		if err := r.taskRefresher.RefreshTasks(
+		if err := r.taskRefresher.Refresh(
 			ctx,
 			memNDCWorkflow.GetMutableState(),
 		); err != nil {
@@ -441,7 +438,7 @@ func (r *HistoryImporterImpl) commit(
 	dbNDCWorkflow.GetContext().Clear()
 	// imported events is the new current branch, update write to DB
 	// refresh tasks to be generated
-	if err := r.taskRefresher.RefreshTasks(
+	if err := r.taskRefresher.Refresh(
 		ctx,
 		memNDCWorkflow.GetMutableState(),
 	); err != nil {

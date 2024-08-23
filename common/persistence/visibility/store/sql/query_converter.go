@@ -32,11 +32,11 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -380,7 +380,7 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 		return err
 	}
 
-	err = c.convertValueExpr(&expr.Right, saColNameExpr.alias, saColNameExpr.valueType)
+	err = c.convertValueExpr(&expr.Right, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
 	if err != nil {
 		return err
 	}
@@ -443,11 +443,11 @@ func (c *QueryConverter) convertRangeCond(exprRef *sqlparser.Expr) error {
 			saColNameExpr.valueType.String(),
 		)
 	}
-	err = c.convertValueExpr(&expr.From, saColNameExpr.alias, saColNameExpr.valueType)
+	err = c.convertValueExpr(&expr.From, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
 	if err != nil {
 		return err
 	}
-	err = c.convertValueExpr(&expr.To, saColNameExpr.alias, saColNameExpr.valueType)
+	err = c.convertValueExpr(&expr.To, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
 	if err != nil {
 		return err
 	}
@@ -469,13 +469,18 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 		var err error
 		saFieldName, err = c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
 		if err != nil {
-			return nil, query.NewConverterError(
-				"%s: column name '%s' is not a valid search attribute",
-				query.InvalidExpressionErrMessage,
-				saAlias,
-			)
+			if saAlias != searchattribute.ScheduleID {
+				return nil, query.NewConverterError(
+					"%s: column name '%s' is not a valid search attribute",
+					query.InvalidExpressionErrMessage,
+					saAlias,
+				)
+			}
+			// ScheduleId is a fake SA -- convert to WorkflowId
+			saFieldName = searchattribute.WorkflowID
 		}
 	}
+
 	saType, err := c.saTypeMap.GetType(saFieldName)
 	if err != nil {
 		// This should never happen since it came from mapping.
@@ -504,16 +509,22 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 
 func (c *QueryConverter) convertValueExpr(
 	exprRef *sqlparser.Expr,
-	saName string,
+	name string,
+	saFieldName string,
 	saType enumspb.IndexedValueType,
 ) error {
 	expr := *exprRef
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		value, err := c.parseSQLVal(e, saName, saType)
+		value, err := c.parseSQLVal(e, name, saType)
 		if err != nil {
 			return err
 		}
+
+		if name == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
+			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
+		}
+
 		switch v := value.(type) {
 		case string:
 			// escape strings for safety
@@ -529,7 +540,7 @@ func (c *QueryConverter) convertValueExpr(
 				"%s: unexpected value type %T for search attribute %s",
 				query.InvalidExpressionErrMessage,
 				v,
-				saName,
+				name,
 			)
 		}
 		return nil
@@ -539,7 +550,7 @@ func (c *QueryConverter) convertValueExpr(
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
 		for i := range e {
-			err := c.convertValueExpr(&e[i], saName, saType)
+			err := c.convertValueExpr(&e[i], name, saFieldName, saType)
 			if err != nil {
 				return err
 			}

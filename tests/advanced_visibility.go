@@ -40,18 +40,16 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
+	"go.temporal.io/api/operatorservice/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -64,6 +62,9 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -2022,9 +2023,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2187,9 +2187,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2272,9 +2271,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2449,13 +2447,12 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	})
 	s.Require().NoError(err)
 
-	dc := s.testCluster.host.dcClient
 	// Verify new workflows are considered reachable by v01 which is no longer queue default within the configured
 	// duration
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
-	dc.OverrideValue(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+	s.OverrideDynamicConfig(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 	// Verify new workflows aren't reachable
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
@@ -2589,12 +2586,11 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	})
 	s.Require().NoError(err)
 
-	dc := s.testCluster.host.dcClient
 	// Verify new workflows are considered reachable by the unversioned worker immediately after making the queue versioned
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
-	dc.OverrideValue(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+	s.OverrideDynamicConfig(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
@@ -2647,6 +2643,96 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	})
 	s.Require().NoError(err)
 	s.Require().Equal(0, len(res.BuildIdReachability[0].TaskQueueReachability))
+}
+
+func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
+	ctx := NewContext()
+
+	// Test 1: List schedule with "scheduleId" query
+	scheduleID := "test-schedule-" + uuid.New()
+	workflowType := "test-workflow-type"
+	workflowID := "test-schedule-" + uuid.New()
+
+	schedule := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		RequestId:  uuid.New(),
+		ScheduleId: scheduleID,
+		Schedule: &schedulepb.Schedule{
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   workflowID,
+						WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: "default"},
+					},
+				},
+			},
+			Policies: &schedulepb.SchedulePolicies{},
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(time.Hour)},
+				},
+			},
+		},
+	}
+
+	_, err := s.client.CreateSchedule(ctx, schedule)
+	s.NoError(err)
+
+	listRequest := &workflowservice.ListSchedulesRequest{
+		Namespace:       s.namespace,
+		MaximumPageSize: 1,
+		Query:           fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, scheduleID),
+	}
+
+	s.Eventually(func() bool {
+		listResponse, err := s.client.ListSchedules(ctx, listRequest)
+		if err != nil || len(listResponse.Schedules) != 1 {
+			return false
+		}
+
+		return listResponse.Schedules[0].ScheduleId == scheduleID
+	}, 30*time.Second, 1*time.Second)
+
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, scheduleID)
+	listResponse, err := s.client.ListSchedules(ctx, listRequest)
+	s.NoError(err)
+	s.Len(listResponse.Schedules, 1)
+	s.Equal(listResponse.Schedules[0].ScheduleId, scheduleID)
+
+	// Test 2: List schedule with custom "scheduleId" search attribute
+	s.addCustomKeywordSearchAttribute(ctx, searchattribute.ScheduleID)
+
+	// Create the schedule with the new search attribute and verify it can be listed
+	customScheduleID := "test-schedule-" + uuid.New()
+	customSearchAttrValue := "testScheduleId"
+
+	schedule.RequestId = uuid.New()
+	schedule.ScheduleId = customScheduleID
+	schedule.SearchAttributes = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			searchattribute.ScheduleID: payload.EncodeString(customSearchAttrValue),
+		},
+	}
+
+	_, err = s.client.CreateSchedule(ctx, schedule)
+	s.NoError(err)
+
+	listRequest.Query = fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
+	s.Eventually(func() bool {
+		listResponse, err := s.client.ListSchedules(ctx, listRequest)
+		if err != nil || len(listResponse.Schedules) != 1 {
+			return false
+		}
+
+		return listResponse.Schedules[0].ScheduleId == customScheduleID
+	}, 30*time.Second, 1*time.Second)
+
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, customSearchAttrValue)
+	listResponse, err = s.client.ListSchedules(ctx, listRequest)
+	s.NoError(err)
+	s.Len(listResponse.Schedules, 1)
+	s.Equal(listResponse.Schedules[0].ScheduleId, customScheduleID)
 }
 
 func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
@@ -2717,4 +2803,28 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
 	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
+}
+
+func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Context, attrName string) {
+	// Add new search attribute
+	_, err := s.operatorClient.AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+		SearchAttributes: map[string]enumspb.IndexedValueType{
+			attrName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+		Namespace: s.namespace,
+	})
+	s.NoError(err)
+
+	// Wait for search attribute to be available
+	s.Eventually(func() bool {
+		descResp, err := s.operatorClient.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
+			Namespace: s.namespace,
+		})
+		if err != nil {
+			return false
+		}
+
+		_, exists := descResp.CustomAttributes[attrName]
+		return exists
+	}, 30*time.Second, 1*time.Second)
 }

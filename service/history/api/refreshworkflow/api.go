@@ -30,10 +30,8 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -58,22 +56,5 @@ func Invoke(
 	}
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := workflowLease.GetMutableState()
-	mutableStateTaskRefresher := workflow.NewTaskRefresher(
-		shard,
-		shard.GetLogger(),
-	)
-
-	err = mutableStateTaskRefresher.RefreshTasks(ctx, mutableState)
-	if err != nil {
-		return err
-	}
-
-	return shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: shard.GetShardID(),
-		// RangeID is set by shard
-		NamespaceID: workflowKey.NamespaceID,
-		WorkflowID:  workflowKey.WorkflowID,
-		Tasks:       mutableState.PopTasks(),
-	})
+	return workflowLease.GetContext().RefreshTasks(ctx, shard)
 }

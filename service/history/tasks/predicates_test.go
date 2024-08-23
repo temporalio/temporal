@@ -25,15 +25,14 @@
 package tasks
 
 import (
+	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/rand"
-	"golang.org/x/exp/slices"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"

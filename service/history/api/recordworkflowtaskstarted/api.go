@@ -32,8 +32,6 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -43,6 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 //nolint:revive // cyclomatic complexity
@@ -90,23 +90,24 @@ func Invoke(
 			}
 
 			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
-			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
-
-			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-			// some extreme cassandra failure cases.
-			if workflowTask == nil && scheduledEventID >= mutableState.GetNextEventID() {
-				metrics.StaleMutableStateCounter.With(metricsScope).Record(1)
-				// Reload workflow execution history
-				// ErrStaleState will trigger updateWorkflow function to reload the mutable state
-				return nil, consts.ErrStaleState
+			if workflowTask == nil {
+				// This can happen if (one of):
+				//  - WFT is already completed as a result of another call (safe to drop this WFT),
+				//  - Speculative WFT is lost (ScheduleToStart timeout for speculative WFT will recreate it).
+				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
-			// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
-			// task is not outstanding than it is most probably a duplicate and complete the task.
-			if workflowTask == nil {
-				// Looks like WorkflowTask already completed as a result of another call.
-				// It is OK to drop the task at this point.
-				return nil, serviceerror.NewNotFound("Workflow task not found.")
+			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
+
+			// Check to see if mutable cache is stale in some extreme cassandra failure cases.
+			// For speculative and transient WFT scheduledEventID is always ahead of NextEventID.
+			// Because there is a clock check above the stack, this should never happen.
+			transientWFT := workflowTask.Attempt > 1
+			if workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && !transientWFT &&
+				scheduledEventID >= mutableState.GetNextEventID() {
+
+				metrics.StaleMutableStateCounter.With(metricsScope).Record(1)
+				return nil, consts.ErrStaleState
 			}
 
 			workflowKey = mutableState.GetWorkflowKey()
@@ -170,15 +171,16 @@ func Invoke(
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
-			taskQueue := workflowTask.TaskQueue
-			metrics.TaskScheduleToStartLatency.With(metrics.GetPerTaskQueueScope(
-				metricsScope,
-				namespaceName.String(),
-				taskQueue.GetName(),
-				taskQueue.GetKind(),
-			)).Record(workflowScheduleToStartLatency,
-				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-			)
+			tqPartition := tqid.UnsafePartitionFromProto(workflowTask.TaskQueue, req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			metrics.TaskScheduleToStartLatency.With(
+				metrics.GetPerTaskQueuePartitionScope(
+					metricsScope,
+					namespaceName.String(),
+					tqPartition,
+					config.BreakdownMetricsByTaskQueue(namespaceName.String(), tqPartition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+					false, // we don't want breakdown by normal partition, only sticky vs normal breakdown.
+				),
+			).Record(workflowScheduleToStartLatency)
 
 			resp, err = CreateRecordWorkflowTaskStartedResponse(
 				ctx,

@@ -27,7 +27,9 @@ package workflow
 import (
 	"time"
 
+	"go.temporal.io/server/api/persistence/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -51,4 +53,49 @@ func convertSyncActivityInfos(
 		}
 	}
 	return outputs
+}
+
+func SanitizeMutableState(
+	workflowMutableState *persistence.WorkflowMutableState,
+) error {
+	// Some values stored in mutable state are cluster or shard specific.
+	// E.g task status (if task is created or not), taskID (derived from shard rangeID), txnID (derived from shard rangeID), etc.
+	// Those fields should not be replicated across clusters and should be sanitized.
+	workflowMutableState.ExecutionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
+	workflowMutableState.ExecutionInfo.LastFirstEventTxnId = common.EmptyEventTaskID
+	workflowMutableState.ExecutionInfo.CloseVisibilityTaskId = common.EmptyEventTaskID
+	workflowMutableState.ExecutionInfo.CloseTransferTaskId = common.EmptyEventTaskID
+	// TODO: after adding cluster to clock info, no need to reset clock here
+	workflowMutableState.ExecutionInfo.ParentClock = nil
+	for _, childExecutionInfo := range workflowMutableState.ChildExecutionInfos {
+		childExecutionInfo.Clock = nil
+	}
+	// Timer tasks are generated locally, do not sync them.
+	workflowMutableState.ExecutionInfo.StateMachineTimers = nil
+	workflowMutableState.ExecutionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
+
+	rootNode := persistence.StateMachineNode{
+		Children: workflowMutableState.ExecutionInfo.SubStateMachinesByType,
+	}
+	SanitizeStateMachineNode(&rootNode)
+
+	return nil
+}
+
+func SanitizeStateMachineNode(
+	node *persistence.StateMachineNode,
+) {
+	if node == nil {
+		return
+	}
+
+	// Node TransitionCount is cluster local information used for detecting staleness.
+	// Reset it to 1 since we are creating a new mutable state.
+	node.TransitionCount = 1
+
+	for _, stateMachineMap := range node.Children {
+		for _, childNode := range stateMachineMap.MachinesById {
+			SanitizeStateMachineNode(childNode)
+		}
+	}
 }

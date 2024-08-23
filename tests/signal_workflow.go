@@ -41,9 +41,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -51,6 +48,8 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *FunctionalSuite) TestSignalWorkflow() {
@@ -1599,7 +1598,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 func (s *FunctionalSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication() {
 
 	// setting this to 0 to be sure we are terminating the current workflow
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	id := "functional-signal-with-start-workflow-id-reuse-test"
 	wt := "functional-signal-with-start-workflow-id-reuse-test-type"

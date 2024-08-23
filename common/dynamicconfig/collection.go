@@ -30,12 +30,12 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type (
@@ -106,6 +107,10 @@ const (
 var (
 	errKeyNotPresent        = errors.New("key not present")
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
+
+	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
+	durationType  = reflect.TypeOf(time.Duration(0))
+	stringType    = reflect.TypeOf("")
 )
 
 // NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
@@ -169,12 +174,12 @@ func (c *Collection) pollForChanges(ctx context.Context) error {
 	interval := DynamicConfigSubscriptionPollInterval.Get(c)
 	for ctx.Err() == nil {
 		util.InterruptibleSleep(ctx, interval())
-		c.pollOnce(ctx)
+		c.pollOnce()
 	}
 	return ctx.Err()
 }
 
-func (c *Collection) pollOnce(ctx context.Context) {
+func (c *Collection) pollOnce() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
 	if c.callbackPool == nil {
@@ -308,6 +313,16 @@ func subscribe[T any](
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
 
+	// get one value immediately (note that subscriptionLock is held here so we can't race with
+	// an update)
+	init := matchAndConvert(c, key, def, cdef, convert, prec)
+
+	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
+	// current value and skip the subscription.  The cancellation func returned is also nil.
+	if callback == nil {
+		return init, nil
+	}
+
 	c.subscriptionIdx++
 	id := c.subscriptionIdx
 
@@ -315,9 +330,6 @@ func subscribe[T any](
 		c.subscriptions[key] = make(map[int]any)
 	}
 
-	// get and return one value immediately (note that subscriptionLock is held here so we
-	// can't race with an update)
-	init := matchAndConvert(c, key, def, cdef, convert, prec)
 	c.subscriptions[key][id] = &subscription[T]{
 		prec: prec,
 		f:    callback,
@@ -463,8 +475,10 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 		out := def
 		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result: &out,
-			// If we want more than one hook in the future, combine them with mapstructure.OrComposeDecodeHookFunc
-			DecodeHook: mapstructureHookDuration,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructureHookDuration,
+				mapstructureHookProtoEnum,
+			),
 		})
 		if err != nil {
 			return out, err
@@ -477,8 +491,24 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 // Parses string into time.Duration. mapstructure has an implementation of this already but it
 // calls time.ParseDuration and we want to use our own method.
 func mapstructureHookDuration(f, t reflect.Type, data any) (any, error) {
-	if t != reflect.TypeOf(time.Duration(0)) {
+	if t != durationType {
 		return data, nil
 	}
 	return convertDuration(data)
+}
+
+// Parses proto enum values from strings.
+func mapstructureHookProtoEnum(f, t reflect.Type, data any) (any, error) {
+	if f != stringType || !t.Implements(protoEnumType) {
+		return data, nil
+	}
+	vals := reflect.New(t).Interface().(protoreflect.Enum).Descriptor().Values()
+	str := strings.ToLower(data.(string)) // we checked f above so this can't fail
+	for i := 0; i < vals.Len(); i++ {
+		val := vals.Get(i)
+		if str == strings.ToLower(string(val.Name())) {
+			return val.Number(), nil
+		}
+	}
+	return nil, fmt.Errorf("name %q not found in enum %s", data, t.Name())
 }

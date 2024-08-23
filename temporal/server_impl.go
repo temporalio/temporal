@@ -28,9 +28,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-
-	"go.uber.org/multierr"
-	"golang.org/x/exp/slices"
+	"slices"
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.uber.org/multierr"
 )
 
 type (

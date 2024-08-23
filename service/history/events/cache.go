@@ -32,7 +32,6 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
@@ -132,7 +131,7 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 }
 
 func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
@@ -168,7 +167,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, f
 }
 
 func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope))
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
@@ -180,7 +179,7 @@ func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 }
 
 func (e *CacheImpl) DeleteEvent(key EventKey) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope))
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
@@ -197,7 +196,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
 
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope))
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()

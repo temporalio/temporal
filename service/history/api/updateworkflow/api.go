@@ -29,14 +29,11 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -53,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -135,6 +133,7 @@ func (u *Updater) ApplyRequest(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
+	u.wfKey = ms.GetWorkflowKey()
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
 
 	if !ms.IsWorkflowExecutionRunning() {
@@ -145,8 +144,6 @@ func (u *Updater) ApplyRequest(
 		}
 		return nil, consts.ErrWorkflowCompleted
 	}
-
-	u.wfKey = ms.GetWorkflowKey()
 
 	if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
 		// If workflow task is constantly failing, the update to that workflow will also fail.

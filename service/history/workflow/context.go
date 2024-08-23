@@ -35,7 +35,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -67,6 +66,8 @@ type (
 		Unlock()
 
 		IsDirty() bool
+
+		RefreshTasks(ctx context.Context, shardContext shard.Context) error
 
 		ReapplyEvents(
 			ctx context.Context,
@@ -217,6 +218,7 @@ func (c *ContextImpl) Clear() {
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
+		c.MutableState.RemoveSpeculativeWorkflowTaskTimeoutTask()
 		c.MutableState = nil
 	}
 	if c.updateRegistry != nil {
@@ -890,6 +892,27 @@ func (c *ContextImpl) ReapplyEvents(
 	)
 
 	return err
+}
+
+func (c *ContextImpl) RefreshTasks(
+	ctx context.Context,
+	shardContext shard.Context,
+) error {
+	mutableState, err := c.LoadMutableState(ctx, shardContext)
+	if err != nil {
+		return err
+	}
+
+	if err := NewTaskRefresher(shardContext).Refresh(ctx, mutableState); err != nil {
+		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
+		// and we are operating on a closed workflow.
+		return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, TransactionPolicyPassive)
+	}
+	return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
 
 // TODO: remove `fallbackMutableState` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)

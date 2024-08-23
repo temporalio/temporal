@@ -28,9 +28,8 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (

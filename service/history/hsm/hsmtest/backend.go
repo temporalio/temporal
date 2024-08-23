@@ -29,10 +29,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"google.golang.org/protobuf/proto"
-
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/service/history/hsm"
+	"google.golang.org/protobuf/proto"
 )
 
 type NodeBackend struct {

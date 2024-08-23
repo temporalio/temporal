@@ -35,8 +35,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
@@ -46,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type testMocks struct {
@@ -326,7 +325,9 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 func newTestMocks(t *testing.T) *testMocks {
 	ctrl := gomock.NewController(t)
 	testConfig := NewEndpointRegistryConfig(dynamicconfig.NewNoopCollection())
-	testConfig.refreshEnabled = dynamicconfig.GetBoolPropertyFn(true)
+	testConfig.refreshEnabled = func(func(bool)) (bool, func()) {
+		return true, func() {}
+	}
 	return &testMocks{
 		config:         testConfig,
 		matchingClient: matchingservicemock.NewMockMatchingServiceClient(ctrl),

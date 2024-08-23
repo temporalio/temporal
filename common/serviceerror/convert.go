@@ -26,10 +26,9 @@ package serviceerror
 
 import (
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"go.temporal.io/server/api/errordetails/v1"
 )
 
 // FromStatus converts gRPC status to service error.
@@ -57,6 +56,8 @@ func FromStatus(st *status.Status) error {
 			return newShardOwnershipLost(st, errDetails)
 		case *errordetails.RetryReplicationFailure:
 			return newRetryReplication(st, errDetails)
+		case *errordetails.SyncStateFailure:
+			return newSyncState(st, errDetails)
 		}
 	case codes.Unavailable:
 		switch errDetails.(type) {

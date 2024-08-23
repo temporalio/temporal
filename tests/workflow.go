@@ -43,18 +43,16 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/testing/testvars"
-
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/testvars"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestStartWorkflowExecution() {
@@ -123,7 +121,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 
 	// setting this to 0 to be sure we are terminating old workflow
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	testCases := []struct {
 		name                     string
@@ -779,6 +777,7 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 		}
 		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().AsTime().Add(backoff)
 		s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
+		s.Equal(we.RunId, dweResponse.WorkflowExecutionInfo.GetFirstRunId())
 	}
 
 	// Check run id links
@@ -982,7 +981,7 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
 	// reset reuse minimal interval to allow workflow termination
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	runMultiOp := func(
 		tv *testvars.TestVars,
@@ -1097,13 +1096,14 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		s.Run("workflow is not running", func() {
 			tv := testvars.New(s.T())
 
-			_, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
+			resp, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
 			s.NoError(err)
+			s.True(resp.Responses[0].GetStartWorkflow().Started)
 		})
 
 		s.Run("workflow is running", func() {
 
-			s.Run("workflow id reuse policy use-existing: only send update", func() {
+			s.Run("workflow id conflict policy use-existing: only send update", func() {
 				tv := testvars.New(s.T())
 
 				_, err := s.client.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
@@ -1111,12 +1111,12 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
+				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
 				s.NoError(err)
+				s.False(resp.Responses[0].GetStartWorkflow().Started)
 			})
 
-			s.Run("workflow id reuse policy terminate-existing: terminate workflow first, then start and update", func() {
+			s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
 				tv := testvars.New(s.T())
 
 				initReq := startWorkflowReq(tv)
@@ -1126,21 +1126,20 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
+				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
 				s.NoError(err)
+				s.True(resp.Responses[0].GetStartWorkflow().Started)
 
 				descResp, err := s.client.DescribeWorkflowExecution(NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.namespace,
 						Execution: &commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: initWF.RunId},
 					})
-
 				s.NoError(err)
 				s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
 			})
 
-			s.Run("workflow id reuse policy fail: abort multi operation", func() {
+			s.Run("workflow id conflict policy fail: abort multi operation", func() {
 				tv := testvars.New(s.T())
 
 				_, err := s.client.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
@@ -1149,7 +1148,6 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
 				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
 				s.NotNil(err)
 				s.Equal(err.Error(), "MultiOperation could not be executed.")
 				errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()

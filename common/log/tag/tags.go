@@ -29,11 +29,11 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // All logging tags are defined in this file.
@@ -57,7 +57,10 @@ func Operation(operation string) ZapTag {
 
 // Error returns tag for Error
 func Error(err error) ZapTag {
-	return NewErrorTag(err)
+	return ZapTag{
+		// NOTE: zap already chosen "error" as key
+		field: zap.Error(err),
+	}
 }
 
 // ServiceErrorType returns tag for ServiceErrorType

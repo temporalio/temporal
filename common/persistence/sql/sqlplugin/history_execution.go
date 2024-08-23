@@ -27,9 +27,9 @@ package sqlplugin
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
 )
@@ -66,6 +66,7 @@ type (
 		WorkflowID       string
 		RunID            primitives.UUID
 		CreateRequestID  string
+		StartTime        *time.Time
 		LastWriteVersion int64
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus

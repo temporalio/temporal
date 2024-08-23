@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
@@ -114,6 +113,7 @@ type (
 			newEvents []*historypb.HistoryEvent,
 			newRunID string,
 		) error
+		BackfillHistoryEvents(ctx context.Context, request *shard.BackfillHistoryEventsRequest) error
 	}
 
 	HistoryReplicatorImpl struct {
@@ -227,6 +227,191 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	return r.doApplyEvents(ctx, task)
 }
 
+func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
+	ctx context.Context,
+	request *shard.BackfillHistoryEventsRequest,
+) error {
+	task, err := newReplicationTaskFromBatch(
+		r.clusterMetadata,
+		r.logger,
+		request.WorkflowKey,
+		request.BaseExecutionInfo,
+		request.VersionHistoryItems,
+		request.Events,
+		request.NewEvents,
+		request.NewRunID,
+		request.VersionedHistory,
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.doApplyBackfillEvents(ctx, task, r.applyBackfillEvents)
+}
+
+func (r *HistoryReplicatorImpl) doApplyBackfillEvents(
+	ctx context.Context,
+	task replicationTask,
+	action func(context.Context, workflow.MutableState, workflow.Context, wcache.ReleaseCacheFunc, replicationTask) error,
+) (retError error) {
+	wfContext, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		r.shardContext,
+		task.getNamespaceID(),
+		task.getExecution(),
+		locks.PriorityLow,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			releaseFn(errPanic)
+			panic(rec)
+		}
+		releaseFn(retError)
+	}()
+
+	mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
+	switch err.(type) {
+	case nil:
+		return action(ctx, mutableState, wfContext, releaseFn, task)
+	case *serviceerror.NotFound:
+		return serviceerrors.NewSyncState(
+			mutableStateMissingMessage,
+			task.getNamespaceID().String(),
+			task.getWorkflowID(),
+			task.getRunID(),
+			task.getVersionedTransition(),
+		)
+	default:
+		return err
+	}
+}
+
+func (r *HistoryReplicatorImpl) applyBackfillEvents(
+	ctx context.Context,
+	mutableState workflow.MutableState,
+	wfContext workflow.Context,
+	releaseFn wcache.ReleaseCacheFunc,
+	task replicationTask,
+) (retError error) {
+	versionedTransition := task.getVersionedTransition()
+	if versionedTransition == nil {
+		return serviceerror.NewInvalidArgument("versioned transition is required for backfill task")
+	}
+
+	if task.getFirstEvent().GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		return serviceerror.NewInvalidArgument("workflow execution started event is not expected in backfill task")
+	}
+
+	transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
+	if workflow.CompareVersionedTransition(versionedTransition, transitionHistory[len(transitionHistory)-1]) > 0 {
+		return serviceerrors.NewSyncState(
+			mutableStateMissingMessage,
+			task.getNamespaceID().String(),
+			task.getWorkflowID(),
+			task.getRunID(),
+			task.getVersionedTransition(),
+		)
+	}
+
+	err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
+	if err == nil {
+		return nil
+	}
+
+	mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.GetOrCreateHistoryBranch(ctx, wfContext, mutableState, task)
+	if err != nil {
+		return err
+	} else if !prepareHistoryBranchOut.DoContinue {
+		metrics.DuplicateReplicationEventsCounter.With(r.metricsHandler).Record(
+			1,
+			metrics.OperationTag(metrics.BackfillHistoryEventsTaskScope))
+		return nil
+	}
+
+	if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == prepareHistoryBranchOut.BranchIndex {
+		// for backfill, we should create a new branch even if the branch is current
+		mutableState, prepareHistoryBranchOut, err = r.mutableStateMapper.CreateHistoryBranch(ctx, wfContext, mutableState, task)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = task.skipDuplicatedEvents(prepareHistoryBranchOut.EventsApplyIndex)
+	if err != nil {
+		return err
+	}
+
+	if len(task.getNewEvents()) != 0 {
+		return r.applyBackfillEventsWithNew(
+			ctx,
+			wfContext,
+			releaseFn,
+			task,
+		)
+	}
+	return r.applyBackfillEventsWithoutNew(
+		ctx,
+		wfContext,
+		mutableState,
+		prepareHistoryBranchOut.BranchIndex,
+		releaseFn,
+		task,
+	)
+}
+
+func (r *HistoryReplicatorImpl) applyBackfillEventsWithNew(
+	ctx context.Context,
+	wfContext workflow.Context,
+	releaseFn wcache.ReleaseCacheFunc,
+	task replicationTask,
+) (retError error) {
+	wfContext.Clear()
+	releaseFn(nil)
+
+	task, newTask, err := task.splitTask()
+	if err != nil {
+		return err
+	}
+
+	if err := r.doApplyEvents(ctx, newTask); err != nil {
+		newTask.getLogger().Error(
+			"nDCHistoryReplicator unable to create new workflow when applyBackfillEvents",
+			tag.Error(err),
+		)
+		return err
+	}
+
+	if err := r.doApplyBackfillEvents(ctx, task, r.applyBackfillEvents); err != nil {
+		newTask.getLogger().Error(
+			"nDCHistoryReplicator unable to create target workflow when applyBackfillEvents",
+			tag.Error(err),
+		)
+		return err
+	}
+	return nil
+}
+
+func (r *HistoryReplicatorImpl) applyBackfillEventsWithoutNew(
+	ctx context.Context,
+	wfContext workflow.Context,
+	mutableState workflow.MutableState,
+	branchIndex int32,
+	releaseFn wcache.ReleaseCacheFunc,
+	task replicationTask,
+) (retError error) {
+	return r.applyNonStartEventsToNonCurrentBranchWithoutContinueAsNew(
+		ctx,
+		wfContext,
+		mutableState,
+		branchIndex,
+		releaseFn,
+		task,
+	)
+}
+
 func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
@@ -245,6 +430,7 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 		eventsSlice,
 		newEvents,
 		newRunID,
+		nil,
 	)
 	if err != nil {
 		return err

@@ -39,19 +39,11 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/proto"
-
-	"go.temporal.io/server/common/definition"
-
-	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/internal/effect"
-	"go.temporal.io/server/internal/protocol"
-	"go.temporal.io/server/service/history/workflow/update"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -60,9 +52,14 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/internal/protocol"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -597,11 +594,9 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 	}
-	metrics.ActivityEagerExecutionCounter.With(handler.metricsHandler).Record(
-		1,
-		metrics.NamespaceTag(string(handler.mutableState.GetNamespaceEntry().Name())),
-		metrics.TaskQueueTag(ai.TaskQueue),
-	)
+	metrics.ActivityEagerExecutionCounter.With(
+		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
+	).Record(1)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
 		resp.ActivityTasks = append(resp.ActivityTasks, activityTask)

@@ -39,11 +39,10 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/proto"
 )
 
 func prettyPrintJSONObject(c *cli.Context, o interface{}) {

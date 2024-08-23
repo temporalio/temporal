@@ -45,16 +45,12 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
-	serviceerror2 "go.temporal.io/server/common/serviceerror"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -66,9 +62,11 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
@@ -77,6 +75,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -835,7 +835,9 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Zero(sanitizedMutableState.executionInfo.TaskGenerationShardClockTimestamp)
 	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
-		s.Equal(int64(1), node.InternalRepr().TransitionCount)
+		if node.Parent != nil {
+			s.Equal(int64(1), node.InternalRepr().TransitionCount)
+		}
 		return nil
 	})
 	s.NoError(err)
@@ -1077,6 +1079,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 				TransitionCount:          1024,
 			},
 		},
+		FirstExecutionRunId:              uuid.New(),
+		WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
 	}
 
 	state := &persistencespb.WorkflowExecutionState{
@@ -1305,6 +1309,73 @@ func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 	s.Assert().Equal(now, ai.StartedTime.AsTime())
 	s.Assert().Equal(requestID, ai.RequestId)
 	s.Assert().Nil(ai.LastHeartbeatDetails)
+}
+
+func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
+	dbState := s.buildWorkflowMutableState()
+	dbState.BufferedEvents = nil
+
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
+	workflowTaskCompletedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		workflowTaskInfo,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		WorkflowTaskCompletionLimits{
+			MaxResetPoints:              10,
+			MaxSearchAttributeValueSize: 1024,
+		},
+	)
+	s.NoError(err)
+
+	err = callbacks.RegisterStateMachine(s.mockShard.StateMachineRegistry())
+	s.NoError(err)
+	coll := callbacks.MachineCollection(s.mutableState.HSM())
+	_, err = coll.Add(
+		"test-callback-carryover",
+		callbacks.NewCallback(
+			timestamppb.Now(),
+			callbacks.NewWorkflowClosedTrigger(),
+			&persistencespb.Callback{
+				Variant: &persistencespb.Callback_Nexus_{
+					Nexus: &persistencespb.Callback_Nexus{
+						Url: "test-callback-carryover-url",
+					},
+				},
+			},
+		),
+	)
+	s.NoError(err)
+
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(2)
+	_, newRunMutableState, err := s.mutableState.AddContinueAsNewEvent(
+		context.Background(),
+		workflowTaskCompletedEvent.GetEventId(),
+		workflowTaskCompletedEvent.GetEventId(),
+		"",
+		&commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+			// All other fields will default to those in the current run.
+			WorkflowRunTimeout: s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
+		},
+	)
+	s.NoError(err)
+
+	newColl := callbacks.MachineCollection(newRunMutableState.HSM())
+	s.Equal(1, newColl.Size())
+
+	currentRunExecutionInfo := s.mutableState.GetExecutionInfo()
+	newRunExecutionInfo := newRunMutableState.GetExecutionInfo()
+	s.Equal(currentRunExecutionInfo.TaskQueue, newRunExecutionInfo.TaskQueue)
+	s.Equal(currentRunExecutionInfo.WorkflowTypeName, newRunExecutionInfo.WorkflowTypeName)
+	protorequire.ProtoEqual(s.T(), currentRunExecutionInfo.DefaultWorkflowTaskTimeout, newRunExecutionInfo.DefaultWorkflowTaskTimeout)
+	protorequire.ProtoEqual(s.T(), currentRunExecutionInfo.WorkflowRunTimeout, newRunExecutionInfo.WorkflowRunTimeout)
+	protorequire.ProtoEqual(s.T(), currentRunExecutionInfo.WorkflowExecutionExpirationTime, newRunExecutionInfo.WorkflowExecutionExpirationTime)
+	s.Equal(currentRunExecutionInfo.WorkflowExecutionTimerTaskStatus, newRunExecutionInfo.WorkflowExecutionTimerTaskStatus)
+	s.Equal(currentRunExecutionInfo.FirstExecutionRunId, newRunExecutionInfo.FirstExecutionRunId)
+
+	// Add more checks here if needed.
 }
 
 func (s *mutableStateSuite) TestTotalEntitiesCount() {

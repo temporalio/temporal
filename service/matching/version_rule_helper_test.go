@@ -30,7 +30,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 

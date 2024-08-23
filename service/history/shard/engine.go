@@ -32,7 +32,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -93,6 +92,7 @@ type (
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
 		SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error
 		SyncHSM(ctx context.Context, request *SyncHSMRequest) error
+		BackfillHistoryEvents(ctx context.Context, request *BackfillHistoryEventsRequest) error
 		GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
@@ -130,6 +130,7 @@ type (
 		ConvertReplicationTask(
 			ctx context.Context,
 			task tasks.Task,
+			clusterID int32,
 		) (*replicationspb.ReplicationTask, error)
 		GetReplicationTasksIter(
 			ctx context.Context,
@@ -137,6 +138,7 @@ type (
 			minInclusiveTaskID int64,
 			maxExclusiveTaskID int64,
 		) (collection.Iterator[tasks.Task], error)
+		GetMaxReplicationTaskInfo() (int64, time.Time)
 	}
 )
 
@@ -146,5 +148,18 @@ type (
 
 		StateMachineNode    *persistencespb.StateMachineNode
 		EventVersionHistory *historyspb.VersionHistory
+	}
+
+	BackfillHistoryEventsRequest struct {
+		definition.WorkflowKey
+
+		SourceClusterName   string
+		VersionedHistory    *persistencespb.VersionedTransition
+		BaseExecutionInfo   *workflowpb.BaseExecutionInfo
+		VersionHistoryItems []*historyspb.VersionHistoryItem
+
+		Events    [][]*historypb.HistoryEvent
+		NewEvents []*historypb.HistoryEvent
+		NewRunID  string
 	}
 )

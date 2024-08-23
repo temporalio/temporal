@@ -41,17 +41,17 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
@@ -97,11 +97,11 @@ func (s *FunctionalSuite) sendUpdateNoErrorInternal(tv *testvars.TestVars, updat
 	retCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 	syncCh := make(chan struct{})
 	go func() {
-		ur := s.sendUpdateInternal(NewContext(), tv, updateID, waitPolicy, true)
-		// Unblock return only after update is admitted by server.
+		urCh := s.sendUpdateInternal(NewContext(), tv, updateID, waitPolicy, true)
+		// Unblock return only after the server admits update.
 		syncCh <- struct{}{}
-		// Unblocked when update result is ready.
-		retCh <- (<-ur).response
+		// Unblocked when an update result is ready.
+		retCh <- (<-urCh).response
 	}()
 	<-syncCh
 	return retCh
@@ -131,7 +131,8 @@ func (s *FunctionalSuite) sendUpdateInternal(
 				},
 			},
 		})
-		// It is important to do assert here to fail fast without trying to process update in wtHandler.
+		// It is important to do assert here (before writing to channel which doesn't have readers yet)
+		// to fail fast without trying to process update in wtHandler.
 		if requireNoError {
 			require.NoError(s.T(), updateErr)
 		}
@@ -189,9 +190,21 @@ func (s *FunctionalSuite) clearUpdateRegistryAndAbortPendingUpdates(tv *testvars
 // Simulating an unexpected loss of the update registry due to a crash. The shard finalizer won't run,
 // therefore the workflow context is NOT cleared, pending update requests are NOT aborted and will time out.
 func (s *FunctionalSuite) loseUpdateRegistryAndAbandonPendingUpdates(tv *testvars.TestVars) {
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.ShardFinalizerTimeout, 0)
+	s.OverrideDynamicConfig(dynamicconfig.ShardFinalizerTimeout, 0)
 	defer s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.ShardFinalizerTimeout)
 	s.closeShard(tv.WorkflowID())
+}
+
+func (s *FunctionalSuite) speculativeWorkflowTaskOutcomes(
+	snap map[string][]*metricstest.CapturedRecording,
+) (commits, rollbacks int) {
+	for _ = range snap[metrics.SpeculativeWorkflowTaskCommits.Name()] {
+		commits += 1
+	}
+	for _ = range snap[metrics.SpeculativeWorkflowTaskRollbacks.Name()] {
+		rollbacks += 1
+	}
+	return
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_AcceptComplete() {
@@ -219,6 +232,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Accept
 				// Clear RunID in tv to test code paths when APIs have to fetch current RunID themselves.
 				tv = tv.WithRunID("")
 			}
+
+			capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 			wtHandlerCalls := 0
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -300,6 +316,10 @@ func (s *FunctionalSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Accept
 
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
+
+			commits, rollbacks := s.speculativeWorkflowTaskOutcomes(capture.Snapshot())
+			s.Equal(1, commits)
+			s.Equal(0, rollbacks)
 
 			events := s.getHistory(s.namespace, tv.WorkflowExecution())
 
@@ -663,10 +683,12 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_RunningWorkflowTask_NewEmptySpeculativeWorkflowTask_Rejected() {
-
 	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
+
+	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 	var updateResultCh <-chan *workflowservice.UpdateWorkflowExecutionResponse
 
@@ -760,6 +782,10 @@ func (s *FunctionalSuite) TestUpdateWorkflow_RunningWorkflowTask_NewEmptySpecula
 
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
+
+	commits, rollbacks := s.speculativeWorkflowTaskOutcomes(capture.Snapshot())
+	s.Equal(0, commits)
+	s.Equal(1, rollbacks)
 
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
 
@@ -983,7 +1009,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedWorkflow() {
 		// Send same Update request again, receiving the same Update result.
 		updateResultCh = s.sendUpdateNoError(tv, "1")
 		updateResult2 := <-updateResultCh
-		s.EqualValues(updateResult1.GetOutcome(), updateResult2.GetOutcome())
+		s.EqualValues(updateResult1, updateResult2)
 	})
 
 	s.Run("receive error from accepted Update", func() {
@@ -2129,6 +2155,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
 	s.NoError(err)
 	s.NotNil(res)
 	updateResult1 := <-updateResultCh1
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult1.Stage)
 	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, updateResult1.GetOutcome().GetSuccess()))
 	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
@@ -2801,13 +2828,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_StartToClos
 	// ensure correct metrics were recorded
 	snap := capture.Snapshot()
 
-	// var speculativeWorkflowTaskTimeoutTasks int
-	// for _, m := range snap[metrics.TaskRequests.Name()] {
-	// 	if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
-	// 		speculativeWorkflowTaskTimeoutTasks += 1
-	// 	}
-	// }
-	// s.Equal(1, speculativeWorkflowTaskTimeoutTasks, "expected 1 speculative workflow task timeout task to be created")
+	var speculativeWorkflowTaskTimeoutTasks int
+	for _, m := range snap[metrics.TaskRequests.Name()] {
+		if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
+			speculativeWorkflowTaskTimeoutTasks += 1
+		}
+	}
+	s.Equal(1, speculativeWorkflowTaskTimeoutTasks, "expected 1 speculative workflow task timeout task to be created")
 
 	var speculativeStartToCloseTimeouts int
 	for _, m := range snap[metrics.StartToCloseTimeoutCounter.Name()] {
@@ -3234,142 +3261,182 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 
 func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 	type testCase struct {
-		Name          string
-		Description   string
-		UpdateErr     string
-		UpdateFailure string
-		Commands      func(tv *testvars.TestVars) []*commandpb.Command
-		Messages      func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message
+		name          string
+		description   string
+		updateErr     string
+		updateFailure string
+		commands      func(tv *testvars.TestVars) []*commandpb.Command
+		messages      func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message
+	}
+	type completionCommand struct {
+		name        string
+		finalStatus enumspb.WorkflowExecutionStatus
+		command     func(_ *testvars.TestVars) *commandpb.Command
 	}
 	testCases := []testCase{
 		{
-			Name:          "admitted",
-			Description:   "update in stateAdmitted must get an error",
-			UpdateErr:     "workflow execution already completed",
-			UpdateFailure: "",
-			Commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },
-			Messages:      func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
+			name:          "update admitted",
+			description:   "update in stateAdmitted must get an error",
+			updateErr:     "workflow execution already completed",
+			updateFailure: "",
+			commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },
+			messages:      func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
 		},
 		{
-			Name:          "accepted",
-			Description:   "update in stateAccepted must get an error",
-			UpdateErr:     "workflow execution already completed",
-			UpdateFailure: "",
-			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
-			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
+			name:          "update accepted",
+			description:   "update in stateAccepted must get an error",
+			updateErr:     "workflow execution already completed",
+			updateFailure: "",
+			commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
+			messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.UpdateAcceptMessages(tv, updRequestMsg, "1")
 			},
 		},
 		{
-			Name:          "completed",
-			Description:   "completed update must not be affected by workflow completion",
-			UpdateErr:     "",
-			UpdateFailure: "",
-			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCompleteCommands(tv, "1") },
-			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
+			name:          "update completed",
+			description:   "completed update must not be affected by workflow completion",
+			updateErr:     "",
+			updateFailure: "",
+			commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCompleteCommands(tv, "1") },
+			messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1")
 			},
 		},
 		{
-			Name:          "rejected",
-			Description:   "rejected update must be rejected with rejection from workflow",
-			UpdateErr:     "",
-			UpdateFailure: "rejection-of-", // Rejection from workflow.
-			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return nil },
-			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
+			name:          "update rejected",
+			description:   "rejected update must be rejected with rejection from workflow",
+			updateErr:     "",
+			updateFailure: "rejection-of-", // Rejection from workflow.
+			commands:      func(tv *testvars.TestVars) []*commandpb.Command { return nil },
+			messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.UpdateRejectMessages(tv, updRequestMsg, "1")
 			},
 		},
 	}
 
+	workflowCompletionCommands := []completionCommand{
+		{
+			name:        "workflow completed",
+			finalStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			command: func(_ *testvars.TestVars) *commandpb.Command {
+				return &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+				}
+			},
+		},
+		{
+			name:        "workflow continued as new",
+			finalStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+			command: func(tv *testvars.TestVars) *commandpb.Command {
+				return &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType: tv.WorkflowType(),
+						TaskQueue:    tv.TaskQueue(),
+					}},
+				}
+			},
+		},
+		{
+			name:        "workflow failed",
+			finalStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			command: func(tv *testvars.TestVars) *commandpb.Command {
+				return &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+						Failure: tv.Any().ApplicationFailure(),
+					}},
+				}
+			},
+		},
+	}
+
 	for _, tc := range testCases {
-		s.Run(tc.Name, func() {
-			tv := testvars.New(s.T())
+		for _, wfCC := range workflowCompletionCommands {
+			s.Run(tc.name+" "+wfCC.name, func() {
+				tv := testvars.New(s.T())
 
-			tv = s.startWorkflow(tv)
+				tv = s.startWorkflow(tv)
 
-			wtHandlerCalls := 0
-			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-				wtHandlerCalls++
-				switch wtHandlerCalls {
-				case 1:
-					// Completes first WT with empty command list.
-					return nil, nil
-				case 2:
-					return append(tc.Commands(tv), &commandpb.Command{
-						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
-					}), nil
-				default:
-					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
-					return nil, nil
+				wtHandlerCalls := 0
+				wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+					wtHandlerCalls++
+					switch wtHandlerCalls {
+					case 1:
+						// Completes first WT with empty command list.
+						return nil, nil
+					case 2:
+						return append(tc.commands(tv), wfCC.command(tv)), nil
+					default:
+						s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+						return nil, nil
+					}
 				}
-			}
 
-			msgHandlerCalls := 0
-			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-				msgHandlerCalls++
-				switch msgHandlerCalls {
-				case 1:
-					return nil, nil
-				case 2:
-					updRequestMsg := task.Messages[0]
-					return tc.Messages(tv, updRequestMsg), nil
-				default:
-					s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
-					return nil, nil
+				msgHandlerCalls := 0
+				msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+					msgHandlerCalls++
+					switch msgHandlerCalls {
+					case 1:
+						return nil, nil
+					case 2:
+						updRequestMsg := task.Messages[0]
+						return tc.messages(tv, updRequestMsg), nil
+					default:
+						s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+						return nil, nil
+					}
 				}
-			}
 
-			poller := &TaskPoller{
-				Client:              s.client,
-				Namespace:           s.namespace,
-				TaskQueue:           tv.TaskQueue(),
-				Identity:            tv.WorkerIdentity(),
-				WorkflowTaskHandler: wtHandler,
-				MessageHandler:      msgHandler,
-				Logger:              s.Logger,
-				T:                   s.T(),
-			}
+				poller := &TaskPoller{
+					Client:              s.client,
+					Namespace:           s.namespace,
+					TaskQueue:           tv.TaskQueue(),
+					Identity:            tv.WorkerIdentity(),
+					WorkflowTaskHandler: wtHandler,
+					MessageHandler:      msgHandler,
+					Logger:              s.Logger,
+					T:                   s.T(),
+				}
 
-			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask()
-			s.NoError(err)
+				// Drain first WT.
+				_, err := poller.PollAndProcessWorkflowTask()
+				s.NoError(err)
 
-			halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
-			defer cancel()
-			updateResultCh := s.sendUpdate(halfSecondTimeoutCtx, tv, "1")
+				updateResultCh := s.sendUpdate(NewContext(), tv, "1")
 
-			// Complete workflow.
-			_, err = poller.PollAndProcessWorkflowTask()
-			s.NoError(err)
+				// Complete workflow.
+				_, err = poller.PollAndProcessWorkflowTask()
+				s.NoError(err)
 
-			updateResult := <-updateResultCh
-			if tc.UpdateErr != "" {
-				s.Error(updateResult.err, tc.Description)
-				s.Contains(updateResult.err.Error(), tc.UpdateErr, tc.Description)
-			} else {
-				s.NoError(updateResult.err, tc.Description)
-			}
+				updateResult := <-updateResultCh
+				if tc.updateErr != "" {
+					s.Error(updateResult.err, tc.description)
+					s.Contains(updateResult.err.Error(), tc.updateErr, tc.description)
+				} else {
+					s.NoError(updateResult.err, tc.description)
+				}
 
-			if tc.UpdateFailure != "" {
-				s.NotNil(updateResult.response.GetOutcome().GetFailure(), tc.Description)
-				s.Contains(updateResult.response.GetOutcome().GetFailure().GetMessage(), tc.UpdateFailure, tc.Description)
-			} else {
-				s.Nil(updateResult.response.GetOutcome().GetFailure(), tc.Description)
-			}
+				if tc.updateFailure != "" {
+					s.NotNil(updateResult.response.GetOutcome().GetFailure(), tc.description)
+					s.Contains(updateResult.response.GetOutcome().GetFailure().GetMessage(), tc.updateFailure, tc.description)
+				} else {
+					s.Nil(updateResult.response.GetOutcome().GetFailure(), tc.description)
+				}
 
-			// Check that update didn't block workflow completion.
-			descResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: s.namespace,
-				Execution: tv.WorkflowExecution(),
+				// Check that update didn't block workflow completion.
+				descResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: s.namespace,
+					Execution: tv.WorkflowExecution(),
+				})
+				s.NoError(err)
+				s.Equal(wfCC.finalStatus, descResp.WorkflowExecutionInfo.Status)
+
+				s.Equal(2, wtHandlerCalls)
+				s.Equal(2, msgHandlerCalls)
 			})
-			s.NoError(err)
-			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
-
-			s.Equal(2, wtHandlerCalls)
-			s.Equal(2, msgHandlerCalls)
-		})
+		}
 	}
 }
 
@@ -4663,9 +4730,6 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_WorkerSkipp
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_LastWorkflowTask_HasUpdateMessage() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
-	}
 	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
 

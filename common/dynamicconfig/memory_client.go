@@ -22,32 +22,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package dynamicconfig
 
 import (
-	"context"
-
-	"go.uber.org/fx"
+	"sync"
 )
 
-var RegistryLifetimeHooksModule = fx.Options(
-	fx.Invoke(RegistryLifetimeHooks),
-)
+type MemoryClient struct {
+	lock      sync.RWMutex
+	overrides map[Key]any
+}
 
-func RegistryLifetimeHooks(
-	lc fx.Lifecycle,
-	registry Registry,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				registry.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				registry.Stop()
-				return nil
-			},
-		},
-	)
+func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+	if v, ok := d.overrides[name]; ok {
+		if value, ok := v.([]ConstrainedValue); ok {
+			return value
+		}
+		return []ConstrainedValue{{Value: v}}
+	}
+	return nil
+}
+
+func (d *MemoryClient) OverrideValue(setting GenericSetting, value any) {
+	d.OverrideValueByKey(setting.Key(), value)
+}
+
+func (d *MemoryClient) OverrideValueByKey(name Key, value any) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	d.overrides[name] = value
+}
+
+func (d *MemoryClient) RemoveOverride(setting GenericSetting) {
+	d.RemoveOverrideByKey(setting.Key())
+}
+
+func (d *MemoryClient) RemoveOverrideByKey(name Key) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	delete(d.overrides, name)
+}
+
+// NewMemoryClient - returns a memory based dynamic config client
+func NewMemoryClient() *MemoryClient {
+	return &MemoryClient{
+		overrides: make(map[Key]any),
+	}
 }

@@ -28,10 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -39,7 +35,6 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -61,12 +56,14 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -126,6 +123,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
+	// By default, retError is passed to workflow lease release method in deferred function.
+	// If error is passed, then workflow context and mutable state are cleared.
+	// If no changes to mutable state are made or changes already persisted (in memory version corresponds to the database),
+	// then the lease is released without an error, i.e. workflow context and mutable state are NOT cleared.
+	releaseLeaseWithError := true
+
 	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -162,8 +165,43 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 	weContext := workflowLease.GetContext()
 	ms := workflowLease.GetMutableState()
-
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
+	defer func() {
+		var errForRelease error
+		if releaseLeaseWithError {
+			// If the workflow context needs to be cleared, operation error passed to Release func (default).
+			// Otherwise, leave it nil here to avoid clearing the workflow context (but still return error to the caller).
+			errForRelease = retError
+		}
+		if retError != nil && currentWorkflowTask != nil && currentWorkflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && ms.IsStickyTaskQueueSet() {
+			// If, while completing WFT, error is occurred and returned to the worker then worker will clear its cache.
+			// New WFT will also be created on sticky task queue and sent to worker.
+			// Because worker doesn't have a workflow in cache, it needs to replay it from the beginning,
+			// but sticky WFT has only partial history. Worker will request full history using GetWorkflowExecutionHistory API.
+			// This history doesn't have speculative WFT events. If WFT is speculative,
+			// then worker will see inconsistency between history from it and full history, and will fail WFT.
+			//
+			// To prevent unexpected WFT failure, server clears stickiness for this workflow, next WFT will go to normal task queue,
+			// and will have full history attached to it.
+			// This is NOT 100% bulletproof solution because this write operation may also fail.
+			// TODO: remove this call when GetWorkflowExecutionHistory includes speculative WFT events.
+			if clearStickyErr := handler.clearStickyTaskQueue(ctx, workflowLease.GetContext()); clearStickyErr != nil {
+				handler.logger.Error("Failed to clear stickiness after speculative workflow task failed to complete.",
+					tag.NewErrorTag("clear-sticky-error", clearStickyErr),
+					tag.Error(retError),
+					tag.WorkflowID(token.GetWorkflowId()),
+					tag.WorkflowRunID(token.GetRunId()),
+					tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
+
+				// Workflow context is already cleared and need to be cleared one more time if clearStickyTaskQueue failed.
+				// Use clearStickyErr for that.
+				errForRelease = clearStickyErr
+			}
+		}
+
+		workflowLease.GetReleaseFn()(errForRelease)
+	}()
+
 	if !ms.IsWorkflowExecutionRunning() ||
 		currentWorkflowTask == nil ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID ||
@@ -171,8 +209,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		(token.StartedTime != nil && !currentWorkflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(currentWorkflowTask.StartedTime)) ||
 		currentWorkflowTask.Attempt != token.Attempt ||
 		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
-		// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
-		workflowLease.GetReleaseFn()(nil)
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
@@ -184,12 +222,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// TODO: remove !ms.IsStickyTaskQueueSet() from above condition after old WV cleanup [cleanup-old-wv]
 		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
 		if wftCompletedBuildId != wftStartedBuildId {
-			workflowLease.GetReleaseFn()(nil)
+			// Mutable state wasn't changed yet and doesn't have to be cleared.
+			releaseLeaseWithError = false
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId))
 		}
 	}
-
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	var effects effect.Buffer
 	defer func() {
@@ -212,6 +249,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
 	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().GetUseVersioning() {
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
 		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
 	}
 
@@ -634,15 +673,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry)
 
 	if wtHeartbeatTimedOut {
-		// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
-		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
-		workflowLease.GetReleaseFn()(nil)
+		// Mutable state was already persisted and doesn't need to be cleared although error is returned to the worker.
+		releaseLeaseWithError = false
 		return nil, serviceerror.NewNotFound("workflow task heartbeat timeout")
 	}
 
 	if wtFailedCause != nil {
-		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
-		workflowLease.GetReleaseFn()(nil)
+		// Mutable state was already persisted and doesn't need to be cleared although error is returned to the worker.
+		releaseLeaseWithError = false
 		return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 	}
 
@@ -974,6 +1012,23 @@ func failWorkflowTask(
 
 	// Return reloaded mutable state back to the caller for further updates.
 	return mutableState, wtFailedEventID, nil
+}
+
+func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Context, wfContext workflow.Context) error {
+
+	// Clear all changes in the workflow context that was made already.
+	wfContext.Clear()
+
+	ms, err := wfContext.LoadMutableState(ctx, handler.shardContext)
+	if err != nil {
+		return err
+	}
+	ms.ClearStickyTaskQueue()
+	err = wfContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Filter function to be passed to mutable_state.HasAnyBufferedEvent

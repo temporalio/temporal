@@ -29,7 +29,6 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -53,7 +52,9 @@ type (
 		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
-		InMemory            bool
+
+		// InMemory field is not persisted in the database.
+		InMemory bool
 
 		// state is used by speculative WT only.
 		state atomic.Uint32 // of type ctasks.State

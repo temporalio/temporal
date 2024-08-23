@@ -25,11 +25,10 @@
 package utf8validator
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(

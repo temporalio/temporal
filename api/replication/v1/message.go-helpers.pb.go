@@ -583,3 +583,151 @@ func (this *SyncHSMAttributes) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type BackfillHistoryTaskAttributes to the protobuf v3 wire format
+func (val *BackfillHistoryTaskAttributes) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BackfillHistoryTaskAttributes from the protobuf v3 wire format
+func (val *BackfillHistoryTaskAttributes) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BackfillHistoryTaskAttributes) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BackfillHistoryTaskAttributes values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BackfillHistoryTaskAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BackfillHistoryTaskAttributes
+	switch t := that.(type) {
+	case *BackfillHistoryTaskAttributes:
+		that1 = t
+	case BackfillHistoryTaskAttributes:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NewRunInfo to the protobuf v3 wire format
+func (val *NewRunInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NewRunInfo from the protobuf v3 wire format
+func (val *NewRunInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NewRunInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NewRunInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NewRunInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NewRunInfo
+	switch t := that.(type) {
+	case *NewRunInfo:
+		that1 = t
+	case NewRunInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type VerifyVersionedTransitionTaskAttributes to the protobuf v3 wire format
+func (val *VerifyVersionedTransitionTaskAttributes) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type VerifyVersionedTransitionTaskAttributes from the protobuf v3 wire format
+func (val *VerifyVersionedTransitionTaskAttributes) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *VerifyVersionedTransitionTaskAttributes) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two VerifyVersionedTransitionTaskAttributes values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *VerifyVersionedTransitionTaskAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *VerifyVersionedTransitionTaskAttributes
+	switch t := that.(type) {
+	case *VerifyVersionedTransitionTaskAttributes:
+		that1 = t
+	case VerifyVersionedTransitionTaskAttributes:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SyncVersionedTransitionTaskAttributes to the protobuf v3 wire format
+func (val *SyncVersionedTransitionTaskAttributes) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncVersionedTransitionTaskAttributes from the protobuf v3 wire format
+func (val *SyncVersionedTransitionTaskAttributes) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncVersionedTransitionTaskAttributes) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncVersionedTransitionTaskAttributes values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncVersionedTransitionTaskAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncVersionedTransitionTaskAttributes
+	switch t := that.(type) {
+	case *SyncVersionedTransitionTaskAttributes:
+		that1 = t
+	case SyncVersionedTransitionTaskAttributes:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

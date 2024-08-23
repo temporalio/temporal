@@ -42,14 +42,18 @@ var _ Scheduler[Task] = (*SequentialScheduler[Task])(nil)
 type (
 	SequentialSchedulerOptions struct {
 		QueueSize   int
-		WorkerCount dynamicconfig.IntPropertyFn
+		WorkerCount dynamicconfig.TypedSubscribable[int]
 	}
 
 	SequentialScheduler[T Task] struct {
-		status           int32
-		shutdownChan     chan struct{}
-		shutdownWG       sync.WaitGroup
+		status       int32
+		shutdownChan chan struct{}
+		shutdownWG   sync.WaitGroup
+
+		workerLock       sync.Mutex
 		workerShutdownCh []chan struct{}
+
+		workerCountSubscriptionCancelFn func()
 
 		options      *SequentialSchedulerOptions
 		queues       collection.ConcurrentTxMap
@@ -88,10 +92,9 @@ func (s *SequentialScheduler[T]) Start() {
 		return
 	}
 
-	s.startWorkers(s.options.WorkerCount())
-
-	s.shutdownWG.Add(1)
-	go s.workerMonitor()
+	initialWorkerCount, workerCountSubscriptionCancelFn := s.options.WorkerCount(s.updateWorkerCount)
+	s.workerCountSubscriptionCancelFn = workerCountSubscriptionCancelFn
+	s.updateWorkerCount(initialWorkerCount)
 
 	s.logger.Info("sequential scheduler started")
 }
@@ -106,6 +109,8 @@ func (s *SequentialScheduler[T]) Stop() {
 	}
 
 	close(s.shutdownChan)
+	s.workerCountSubscriptionCancelFn()
+	s.updateWorkerCount(0)
 	// must be called after the close of the shutdownChan
 	s.drainTasks()
 
@@ -186,36 +191,34 @@ func (s *SequentialScheduler[T]) TrySubmit(task T) bool {
 	}
 }
 
-func (s *SequentialScheduler[T]) workerMonitor() {
-	defer s.shutdownWG.Done()
+func (s *SequentialScheduler[T]) updateWorkerCount(targetWorkerNum int) {
+	s.workerLock.Lock()
+	defer s.workerLock.Unlock()
 
-	for {
-		timer := time.NewTimer(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
-		select {
-		case <-s.shutdownChan:
-			timer.Stop()
-			s.stopWorkers(len(s.workerShutdownCh))
-			return
-		case <-timer.C:
-			targetWorkerNum := s.options.WorkerCount()
-			if targetWorkerNum < 0 {
-				s.logger.Error("Target worker pool size is negative. Please fix the dynamic config.", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
-				continue
-			}
-			currentWorkerNum := len(s.workerShutdownCh)
-
-			if targetWorkerNum == currentWorkerNum {
-				continue
-			}
-
-			if targetWorkerNum > currentWorkerNum {
-				s.startWorkers(targetWorkerNum - currentWorkerNum)
-			} else {
-				s.stopWorkers(currentWorkerNum - targetWorkerNum)
-			}
-			s.logger.Info("Update worker pool size", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
-		}
+	if s.isStopped() {
+		// Always set the value to 0 when scheduler is stopped,
+		// in case there's a race condition between subscription callback invocation
+		// and the invocation made from Stop()
+		targetWorkerNum = 0
 	}
+
+	if targetWorkerNum < 0 {
+		s.logger.Error("Target worker pool size is negative. Please fix the dynamic config.", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
+		return
+	}
+
+	currentWorkerNum := len(s.workerShutdownCh)
+	if targetWorkerNum == currentWorkerNum {
+		return
+	}
+
+	if targetWorkerNum > currentWorkerNum {
+		s.startWorkers(targetWorkerNum - currentWorkerNum)
+	} else {
+		s.stopWorkers(currentWorkerNum - targetWorkerNum)
+	}
+
+	s.logger.Info("Update worker pool size", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
 }
 
 func (s *SequentialScheduler[T]) startWorkers(

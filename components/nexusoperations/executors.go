@@ -38,8 +38,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/fx"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -51,6 +49,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	"go.uber.org/fx"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -178,6 +177,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,
 		Ref:         smRef,
+		RequestId:   args.requestID,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
@@ -203,7 +203,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	methodTag := metrics.NexusMethodTag("StartOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	outcomeTag := metrics.NexusOutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
+	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
 	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
 
@@ -486,7 +486,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	methodTag := metrics.NexusMethodTag("CancelOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	statusCodeTag := metrics.NexusOutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
+	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
 	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
 

@@ -44,12 +44,11 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/grpc/codes"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporaltest"
+	"google.golang.org/grpc/codes"
 )
 
 // to be used in example code

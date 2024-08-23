@@ -27,11 +27,10 @@ package interceptor
 import (
 	"context"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc"
 )
 
 type (
