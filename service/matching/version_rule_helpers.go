@@ -77,7 +77,7 @@ var (
 	// default queue. It's important that users do not accidentally make the unversioned queue the default after the
 	// unversioned worker has already been decommissioned, so we throw this error. If you are intentionally reverting from
 	// a versioned default Build ID to an unversioned default Build ID, use force=true to bypass this requirement.
-	errRequireFullyRampedAssignmentRule = serviceerror.NewFailedPrecondition("there must exist at least one fully-ramped assignment rule, use force=true to bypass this requirement and make the unversioned queue the default")
+	errRequireFullyRampedAssignmentRule = serviceerror.NewFailedPrecondition("at least one fully-ramped assignment rule must exist (use force=true to bypass this requirement and set the unversioned queue as the default)")
 	errExceedsMaxRedirectRules          = func(cnt, max int) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of redirect rules permitted in namespace (%v/%v)", cnt, max))
 	}
