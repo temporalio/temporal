@@ -592,7 +592,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	defer cancel()
 
 	rule := s.addAssignmentRuleWithFullRamp(ctx, tq, v1)
-	rule2 := s.addAssignmentRuleWithPartialRamp(ctx, tq, v2, 50)
+	rule2 := s.addAssignmentRule(ctx, tq, v2, 50)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule2)
 
@@ -4791,13 +4791,10 @@ func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, new
 }
 
 func (s *VersioningIntegSuite) addAssignmentRuleWithFullRamp(ctx context.Context, tq, buildId string) *taskqueuepb.BuildIdAssignmentRule {
-	rule := &taskqueuepb.BuildIdAssignmentRule{
-		TargetBuildId: buildId,
-	}
-	return s.doAddAssignmentRule(ctx, tq, rule)
+	return s.addAssignmentRule(ctx, tq, buildId, 100)
 }
 
-func (s *VersioningIntegSuite) addAssignmentRuleWithPartialRamp(ctx context.Context, tq, buildId string, ramp float32) *taskqueuepb.BuildIdAssignmentRule {
+func (s *VersioningIntegSuite) addAssignmentRule(ctx context.Context, tq, buildId string, ramp float32) *taskqueuepb.BuildIdAssignmentRule {
 	rule := &taskqueuepb.BuildIdAssignmentRule{
 		TargetBuildId: buildId,
 		Ramp: &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{
@@ -4823,9 +4820,6 @@ func (s *VersioningIntegSuite) doAddAssignmentRule(ctx context.Context, tq strin
 	})
 	s.NoError(err)
 	s.NotNil(res)
-	if rule.GetRamp() == nil {
-		rule.Ramp = &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueuepb.RampByPercentage{RampPercentage: 100}}
-	}
 	return rule
 }
 

@@ -226,7 +226,7 @@ func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTargetOrDefault
 		if r.GetRule().GetTargetBuildId() == buildId {
 			return true
 		}
-		if !isPartiallyRamped(r.GetRule()) {
+		if isFullyRamped(r.GetRule()) {
 			// rules after a fully-ramped rule will not be reached
 			foundFullyRampedRule = true
 			break
@@ -306,7 +306,7 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 // This should only be called on the root.
 func getDefaultBuildId(assignmentRules []*persistencespb.AssignmentRule) string {
 	for _, ar := range getActiveAssignmentRules(assignmentRules) {
-		if !isPartiallyRamped(ar.GetRule()) {
+		if isFullyRamped(ar.GetRule()) {
 			return ar.GetRule().GetTargetBuildId()
 		}
 	}

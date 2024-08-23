@@ -113,7 +113,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, errTargetIsVersionSetMember
 	}
-	if isPartiallyRamped(rule) && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
+	if !isFullyRamped(rule) && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
 		return nil, errPartiallyRampedAssignmentRuleIsRedirectRuleSource
 	}
 	data = cloneOrMkData(data)
@@ -145,7 +145,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, errTargetIsVersionSetMember
 	}
-	if isPartiallyRamped(rule) && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
+	if !isFullyRamped(rule) && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
 		return nil, errPartiallyRampedAssignmentRuleIsRedirectRuleSource
 	}
 	rules := data.GetAssignmentRules()
@@ -306,7 +306,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 		if ar.GetRule().GetTargetBuildId() == target {
 			ar.DeleteTimestamp = timestamp
 		}
-		if !isPartiallyRamped(ar.GetRule()) {
+		if isFullyRamped(ar.GetRule()) {
 			ar.DeleteTimestamp = timestamp
 		}
 	}
@@ -450,7 +450,7 @@ outer:
 //	This doesn't make sense, so we prohibit it.
 func isPartiallyRampedAssignmentRuleTarget(buildID string, assignmentRules []*persistencespb.AssignmentRule) bool {
 	for _, r := range getActiveAssignmentRules(assignmentRules) {
-		if isPartiallyRamped(r.GetRule()) && buildID == r.GetRule().GetTargetBuildId() {
+		if !isFullyRamped(r.GetRule()) && buildID == r.GetRule().GetTargetBuildId() {
 			return true
 		}
 	}
@@ -463,7 +463,7 @@ func containsFullyRamped(rules []*persistencespb.AssignmentRule) bool {
 	found := false
 	for _, rule := range rules {
 		ar := rule.GetRule()
-		if !isPartiallyRamped(ar) {
+		if isFullyRamped(ar) {
 			found = true
 		}
 	}
@@ -512,9 +512,9 @@ func isValidRamp(ramp *taskqueue.RampByPercentage) bool {
 	return ramp.RampPercentage >= 0 && ramp.RampPercentage <= 100
 }
 
-// isPartiallyRamped returns true if the rule has a ramp percentage < 100
-func isPartiallyRamped(rule *taskqueue.BuildIdAssignmentRule) bool {
-	return rule.GetPercentageRamp().GetRampPercentage() < 100
+// isFullyRamped returns true if the rule has a ramp percentage of 100 or a ramp of nil
+func isFullyRamped(rule *taskqueue.BuildIdAssignmentRule) bool {
+	return rule.GetRamp() == nil || rule.GetPercentageRamp().GetRampPercentage() == 100
 }
 
 // isCyclic returns true if there is a cycle in the DAG of redirect rules.
@@ -622,11 +622,11 @@ func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string)
 		if r.GetDeleteTimestamp() != nil {
 			continue
 		}
-		if rampPercentage := r.GetRule().GetPercentageRamp().GetRampPercentage(); rampPercentage < 100 {
+		if !isFullyRamped(r.GetRule()) {
 			if rampThreshold == -1. {
 				rampThreshold = calcRampThreshold(runId)
 			}
-			if float64(rampPercentage) <= rampThreshold {
+			if float64(r.GetRule().GetPercentageRamp().GetRampPercentage()) <= rampThreshold {
 				continue
 			}
 		}
