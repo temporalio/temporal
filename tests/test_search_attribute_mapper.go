@@ -29,7 +29,6 @@ import (
 	"strings"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/searchattribute"
 )
 

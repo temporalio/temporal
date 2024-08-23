@@ -29,10 +29,9 @@ import (
 	"slices"
 	"time"
 
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	expmaps "golang.org/x/exp/maps"
 )
 
 var (

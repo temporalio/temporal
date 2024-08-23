@@ -31,9 +31,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	schedpb "go.temporal.io/api/schedule/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type calendarSuite struct {

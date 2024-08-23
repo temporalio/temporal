@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 )

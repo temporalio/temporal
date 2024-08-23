@@ -31,7 +31,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence"
 )

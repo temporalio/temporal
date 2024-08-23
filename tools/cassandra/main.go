@@ -29,7 +29,6 @@ import (
 	"os"
 
 	"github.com/urfave/cli"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/environment"
 	dbschemas "go.temporal.io/server/schema"

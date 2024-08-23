@@ -30,9 +30,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/fx"
-	"google.golang.org/grpc/codes"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/common/persistence"
@@ -40,6 +37,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/fx"
+	"google.golang.org/grpc/codes"
 )
 
 type (

@@ -32,7 +32,6 @@ import (
 	"strings"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )

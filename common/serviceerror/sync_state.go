@@ -25,12 +25,11 @@
 package serviceerror
 
 import (
+	"go.temporal.io/server/api/errordetails/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-
-	"go.temporal.io/server/api/errordetails/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 type (
