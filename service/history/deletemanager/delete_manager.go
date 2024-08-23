@@ -30,7 +30,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"

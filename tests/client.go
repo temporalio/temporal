@@ -25,12 +25,10 @@
 package tests
 
 import (
-	"google.golang.org/grpc"
-
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"google.golang.org/grpc"
 )
 
 // AdminClient is the interface exposed by admin service client

@@ -28,9 +28,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"go.temporal.io/api/serviceerror"
-
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"

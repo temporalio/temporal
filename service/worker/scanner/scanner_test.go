@@ -32,7 +32,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/config"

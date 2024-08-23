@@ -32,7 +32,6 @@ import (
 	"io"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"

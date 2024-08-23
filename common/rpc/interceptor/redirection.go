@@ -31,9 +31,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/clock"
@@ -44,6 +41,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 const (

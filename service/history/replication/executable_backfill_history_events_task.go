@@ -28,7 +28,6 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"

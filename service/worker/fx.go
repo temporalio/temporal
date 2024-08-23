@@ -27,8 +27,6 @@ package worker
 import (
 	"context"
 
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -53,6 +51,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(

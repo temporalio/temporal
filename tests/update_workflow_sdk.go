@@ -35,7 +35,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 )

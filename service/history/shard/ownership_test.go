@@ -31,7 +31,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"

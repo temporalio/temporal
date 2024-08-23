@@ -33,8 +33,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -46,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/internal/goro"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (

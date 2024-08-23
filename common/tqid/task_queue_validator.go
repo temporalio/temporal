@@ -27,7 +27,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	enums2 "go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/enums"
@@ -67,12 +67,12 @@ func NormalizeAndValidate(
 		taskQueue.Name = defaultName
 	}
 
-	if err := ValidateTaskQueueName(taskQueue.GetName(), maxIDLengthLimit); err != nil {
+	if err := Validate(taskQueue.GetName(), maxIDLengthLimit); err != nil {
 		return err
 	}
 
-	if taskQueue.GetKind() == enums2.TASK_QUEUE_KIND_STICKY {
-		if err := ValidateTaskQueueName(taskQueue.GetNormalName(), maxIDLengthLimit); err != nil {
+	if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		if err := Validate(taskQueue.GetNormalName(), maxIDLengthLimit); err != nil {
 			return err
 		}
 	}
@@ -80,7 +80,7 @@ func NormalizeAndValidate(
 	return nil
 }
 
-// ValidateTaskQueueName checks if a given task queue name is valid.
+// Validate checks if a given task queue name is valid.
 // It verifies the name is not empty, does not exceed the maximum length,
 // and is a valid UTF-8 string.
 //
@@ -89,19 +89,19 @@ func NormalizeAndValidate(
 //   - maxLength: The maximum allowed length for the name.
 //
 // Returns an error if the name is invalid, nil otherwise.
-func ValidateTaskQueueName(name string, maxLength int) error {
-	if name == "" {
+func Validate(taskQueueName string, maxLength int) error {
+	if taskQueueName == "" {
 		return serviceerror.NewInvalidArgument("taskQueue is not set")
 	}
-	if len(name) > maxLength {
+	if len(taskQueueName) > maxLength {
 		return serviceerror.NewInvalidArgument("taskQueue length exceeds limit")
 	}
 
-	if !utf8.ValidString(name) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("taskQueue %q is not a valid UTF-8 string", name))
+	if !utf8.ValidString(taskQueueName) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("taskQueue %q is not a valid UTF-8 string", taskQueueName))
 	}
 
-	if strings.HasPrefix(name, reservedTaskQueuePrefix) {
+	if strings.HasPrefix(taskQueueName, reservedTaskQueuePrefix) {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v", reservedTaskQueuePrefix))
 	}
 

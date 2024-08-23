@@ -30,9 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/fx"
-	"google.golang.org/grpc/health"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -40,6 +37,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/internal/goro"
+	"go.uber.org/fx"
+	"google.golang.org/grpc/health"
 )
 
 type (

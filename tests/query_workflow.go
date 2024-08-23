@@ -34,16 +34,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
-
-	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/log/tag"
 )
 
 func (s *ClientFunctionalSuite) TestQueryWorkflow_Sticky() {

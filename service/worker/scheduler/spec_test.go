@@ -29,12 +29,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	schedpb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	schedpb "go.temporal.io/api/schedule/v1"
-
-	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type specSuite struct {

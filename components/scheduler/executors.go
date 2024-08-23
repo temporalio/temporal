@@ -36,14 +36,8 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
-	"go.uber.org/fx"
-	"golang.org/x/exp/slices"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -54,6 +48,11 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/fx"
+	"golang.org/x/exp/slices"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (

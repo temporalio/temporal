@@ -27,10 +27,9 @@ package admin
 import (
 	"context"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/backoff"
+	"google.golang.org/grpc"
 )
 
 var _ adminservice.AdminServiceClient = (*retryableClient)(nil)

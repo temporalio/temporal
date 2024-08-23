@@ -35,26 +35,22 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/common/enums"
-
 	"go.temporal.io/server/api/historyservice/v1"
-
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/tasktoken"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (

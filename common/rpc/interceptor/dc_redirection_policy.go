@@ -31,7 +31,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"

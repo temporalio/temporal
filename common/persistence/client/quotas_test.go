@@ -32,11 +32,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/temporalapi"
-
-	"go.temporal.io/api/workflowservice/v1"
 )
 
 type (

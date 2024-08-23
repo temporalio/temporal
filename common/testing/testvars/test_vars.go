@@ -35,11 +35,10 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (

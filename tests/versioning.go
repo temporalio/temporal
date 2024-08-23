@@ -36,12 +36,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/tqid"
-	"go.temporal.io/server/common/worker_versioning"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -53,12 +47,15 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type VersioningIntegSuite struct {

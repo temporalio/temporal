@@ -25,8 +25,6 @@ package history
 import (
 	"fmt"
 
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -41,6 +39,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 // outboundQueuePersistenceMaxRPSRatio is meant to ensure queue loading doesn't consume more than 30% of the host's
