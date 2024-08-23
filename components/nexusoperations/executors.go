@@ -339,7 +339,8 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 					case strings.HasPrefix(nexusLink.Type, string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())):
 						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 						if err != nil {
-							return hsm.TransitionOutput{}, err
+							// silently ignore for now
+							continue
 						}
 						links = append(links, &commonpb.Link{
 							Variant: &commonpb.Link_WorkflowEvent_{

@@ -55,7 +55,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/queues"
-	"google.golang.org/protobuf/proto"
 )
 
 var endpointEntry = &persistence.NexusEndpointEntry{
@@ -89,21 +88,17 @@ func (h handler) CancelOperation(ctx context.Context, service, operation, operat
 }
 
 func TestProcessInvocationTask(t *testing.T) {
-	handlerLink := &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  "handler-ns",
-				WorkflowId: "handler-wf-id",
-				RunId:      "handler-run-id",
-				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
-					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
 		},
 	}
-	handlerLinkData, err := proto.Marshal(handlerLink)
+	handlerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 	require.NoError(t, err)
 
 	cases := []struct {
@@ -125,18 +120,21 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Len(t, options.Links, 1)
 				var links []*commonpb.Link
 				for _, nexusLink := range options.Links {
-					link := &commonpb.Link{}
-					err := proto.Unmarshal(nexusLink.Data, link)
+					link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 					require.NoError(t, err)
-					links = append(links, link)
+					links = append(links, &commonpb.Link{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: link,
+						},
+					})
 				}
 				require.NotNil(t, links[0].GetWorkflowEvent())
 				protorequire.ProtoEqual(t, &commonpb.Link_WorkflowEvent{
 					Namespace:  "ns-name",
 					WorkflowId: "wf-id",
 					RunId:      "run-id",
-					Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
-						HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 							EventId:   1,
 							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 						},
@@ -151,10 +149,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			) (nexus.HandlerStartOperationResult[any], error) {
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationID: "op-id",
-					Links: []nexus.Link{{
-						Data: handlerLinkData,
-						Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
-					}},
+					Links:       []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -168,7 +163,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					RequestId:        op.RequestId,
 				}, events[0].GetNexusOperationStartedEventAttributes())
 				require.Len(t, events[0].Links, 1)
-				protorequire.ProtoEqual(t, handlerLink, events[0].Links[0])
+				protorequire.ProtoEqual(t, handlerLink, events[0].Links[0].GetWorkflowEvent())
 			},
 		},
 		{

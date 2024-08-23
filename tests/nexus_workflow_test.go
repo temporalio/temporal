@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -401,21 +400,17 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 
 	var callbackToken, publicCallbackUrl string
 
-	handlerLink := &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  "handler-ns",
-				WorkflowId: "handler-wf-id",
-				RunId:      "handler-run-id",
-				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
-					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
 		},
 	}
-	handlerLinkData, err := proto.Marshal(handlerLink)
+	handlerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 	s.NoError(err)
 
 	h := nexustest.Handler{
@@ -430,18 +425,21 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 			s.Len(options.Links, 1)
 			var links []*commonpb.Link
 			for _, nexusLink := range options.Links {
-				link := &commonpb.Link{}
-				err := proto.Unmarshal(nexusLink.Data, link)
+				link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 				s.NoError(err)
-				links = append(links, link)
+				links = append(links, &commonpb.Link{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: link,
+					},
+				})
 			}
 			s.NotNil(links[0].GetWorkflowEvent())
 			protorequire.ProtoEqual(s.T(), &commonpb.Link_WorkflowEvent{
 				Namespace:  s.namespace,
 				WorkflowId: run.GetID(),
 				RunId:      run.GetRunID(),
-				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
-					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 						// Event history:
 						// 1 WORKFLOW_EXECUTION_STARTED
 						// 2 WORKFLOW_TASK_SCHEDULED
@@ -458,10 +456,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 			publicCallbackUrl = options.CallbackURL
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationID: "test",
-				Links: []nexus.Link{{
-					Data: handlerLinkData,
-					Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
-				}},
+				Links:       []nexus.Link{handlerNexusLink},
 			}, nil
 		},
 	}
@@ -536,7 +531,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	s.Greater(startedEventIdx, 0)
 
 	s.Len(pollResp.History.Events[startedEventIdx].Links, 1)
-	protorequire.ProtoEqual(s.T(), handlerLink, pollResp.History.Events[startedEventIdx].Links[0])
+	protorequire.ProtoEqual(s.T(), handlerLink, pollResp.History.Events[startedEventIdx].Links[0].GetWorkflowEvent())
 
 	// Completion request fails if the result payload is too large.
 	largeCompletion, err := nexus.NewOperationCompletionSuccessful(

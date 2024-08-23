@@ -133,8 +133,8 @@ var (
 				Namespace:  "handler-ns",
 				WorkflowId: "handler-wf-id",
 				RunId:      "handler-run-id",
-				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
-					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 					},
 				},
