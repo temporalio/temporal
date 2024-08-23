@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/proto"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -195,7 +194,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
-	linkData, err := proto.Marshal(args.workflowEventLink)
+	nexusLink, err := ConvertLinkWorkflowEventToNexusLink(args.workflowEventLink)
 	if err != nil {
 		return err
 	}
@@ -215,10 +214,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
-		Links: []nexus.Link{{
-			Data: linkData,
-			Type: string(args.workflowEventLink.ProtoReflect().Descriptor().FullName()),
-		}},
+		Links: []nexus.Link{nexusLink},
 	})
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
@@ -274,7 +270,7 @@ type startArgs struct {
 	endpointID               string
 	header                   map[string]string
 	payload                  *commonpb.Payload
-	workflowEventLink        *commonpb.Link
+	workflowEventLink        *commonpb.Link_WorkflowEvent
 	namespaceFailoverVersion int64
 }
 
@@ -306,18 +302,14 @@ func (e taskExecutor) loadOperationArgs(
 		}
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
-		args.workflowEventLink = &commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  ns.Name().String(),
-					WorkflowId: ref.WorkflowKey.WorkflowID,
-					RunId:      ref.WorkflowKey.RunID,
-					Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
-						HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
-							EventId:   event.GetEventId(),
-							EventType: event.GetEventType(),
-						},
-					},
+		args.workflowEventLink = &commonpb.Link_WorkflowEvent{
+			Namespace:  ns.Name().String(),
+			WorkflowId: ref.WorkflowKey.WorkflowID,
+			RunId:      ref.WorkflowKey.RunID,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   event.GetEventId(),
+					EventType: event.GetEventType(),
 				},
 			},
 		}
@@ -343,13 +335,17 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			if result.Pending != nil {
 				var links []*commonpb.Link
 				for _, nexusLink := range result.Links {
-					switch nexusLink.Type {
-					case string((&commonpb.Link{}).ProtoReflect().Descriptor().FullName()):
-						link := &commonpb.Link{}
-						if err := proto.Unmarshal(nexusLink.Data, link); err != nil {
+					switch {
+					case strings.HasPrefix(nexusLink.Type, string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())):
+						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+						if err != nil {
 							return hsm.TransitionOutput{}, err
 						}
-						links = append(links, link)
+						links = append(links, &commonpb.Link{
+							Variant: &commonpb.Link_WorkflowEvent_{
+								WorkflowEvent: link,
+							},
+						})
 					default:
 						// If the link data type is unsupported, just ignore it for now.
 						e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))

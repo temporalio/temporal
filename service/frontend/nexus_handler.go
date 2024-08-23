@@ -51,7 +51,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -323,7 +322,7 @@ func (h *nexusHandler) StartOperation(
 	var links []*nexuspb.Link
 	for _, nexusLink := range options.Links {
 		links = append(links, &nexuspb.Link{
-			Data: nexusLink.Data,
+			Url:  nexusLink.URL.String(),
 			Type: nexusLink.Type,
 		})
 	}
@@ -392,8 +391,13 @@ func (h *nexusHandler) StartOperation(
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
 			var nexusLinks []nexus.Link
 			for _, link := range t.AsyncSuccess.GetLinks() {
+				linkURL, err := url.Parse(link.Url)
+				if err != nil {
+					// silently ignore for now
+					continue
+				}
 				nexusLinks = append(nexusLinks, nexus.Link{
-					Data: link.GetData(),
+					URL:  linkURL,
 					Type: link.GetType(),
 				})
 			}

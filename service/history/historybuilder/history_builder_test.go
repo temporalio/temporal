@@ -127,6 +127,20 @@ var (
 			"random header key": testPayload,
 		},
 	}
+	testLink = &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "handler-ns",
+				WorkflowId: "handler-wf-id",
+				RunId:      "handler-run-id",
+				Event: &commonpb.Link_WorkflowEvent_HistoryEvent_{
+					HistoryEvent: &commonpb.Link_WorkflowEvent_HistoryEvent{
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+	}
 	testFailure       = &failurepb.Failure{}
 	testRequestReason = "test request reason"
 )
@@ -224,6 +238,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 			Memo:             testMemo,
 			SearchAttributes: testSearchAttributes,
 			Header:           testHeader,
+			Links:            []*commonpb.Link{testLink},
 		},
 	}
 
@@ -244,6 +259,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 			EventTime: timestamppb.New(s.now),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			Version:   s.version,
+			Links:     []*commonpb.Link{testLink},
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:                    testWorkflowType,
