@@ -29,10 +29,9 @@ import (
 
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
-	"go.uber.org/atomic"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.uber.org/atomic"
 )
 
 // Used to convert out of order acks into ackLevel movement.

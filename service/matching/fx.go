@@ -25,11 +25,6 @@
 package matching
 
 import (
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -48,6 +43,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var Module = fx.Options(

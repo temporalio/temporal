@@ -28,7 +28,6 @@ import "encoding/json"
 
 type (
 	jsonHistoryTokenSerializer struct{}
-
 	// historyPagingToken is used to serialize/deserialize pagination token for ReadHistoryBranchRequest
 	historyPagingToken struct {
 		LastEventID int64
@@ -37,7 +36,6 @@ type (
 		// recording which branchRange it is reading
 		CurrentRangeIndex int
 		FinalRangeIndex   int
-
 		// LastNodeID is the last known node ID attached to a history node
 		LastNodeID int64
 		// LastTransactionID is the last known transaction ID attached to a history node

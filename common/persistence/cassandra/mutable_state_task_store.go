@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"

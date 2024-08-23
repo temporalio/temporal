@@ -31,19 +31,17 @@ import (
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func RandomShardInfo(

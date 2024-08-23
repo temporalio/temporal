@@ -34,15 +34,14 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/tests/testutils"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -52,7 +51,7 @@ const (
 
 var (
 	frontendURL         = "dummy://" // not needed for test
-	frontendHTTPURL         = "dummy://" // not needed for test
+	frontendHTTPURL     = "dummy://" // not needed for test
 	noExtraInterceptors = []grpc.UnaryClientInterceptor{}
 )
 

@@ -45,8 +45,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -55,6 +53,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {

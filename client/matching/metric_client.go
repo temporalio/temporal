@@ -30,8 +30,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -39,6 +37,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"google.golang.org/grpc"
 )
 
 var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)

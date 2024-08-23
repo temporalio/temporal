@@ -37,12 +37,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -55,7 +49,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -82,6 +75,10 @@ import (
 	e "go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (

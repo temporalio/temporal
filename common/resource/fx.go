@@ -31,12 +31,7 @@ import (
 	"os"
 	"time"
 
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
@@ -69,6 +64,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/utf8validator"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 )
 
 type (

@@ -30,7 +30,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/mock"

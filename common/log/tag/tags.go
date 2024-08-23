@@ -29,12 +29,11 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.uber.org/zap"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // All logging tags are defined in this file.

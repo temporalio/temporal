@@ -25,10 +25,9 @@
 package dynamicconfig
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/pingable"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(

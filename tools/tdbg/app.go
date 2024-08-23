@@ -30,11 +30,10 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/service/history/tasks"
-
-	"github.com/temporalio/tctl-kit/pkg/color"
 )
 
 type (

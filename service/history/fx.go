@@ -25,10 +25,6 @@
 package history
 
 import (
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -50,6 +46,9 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
+	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
@@ -62,10 +61,9 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
-
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
-	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var Module = fx.Options(
