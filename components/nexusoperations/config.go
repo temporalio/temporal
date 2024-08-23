@@ -37,7 +37,9 @@ var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 
 var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
 	"component.nexusoperations.limit.operation.concurrency",
-	1000,
+	// Temporary limit due to a persistence limitation, this will be increased when we change persistence to accept
+	// partial sub state machine updates.
+	30,
 	`MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
 Once the limit is reached, ScheduleNexusOperation commands will be rejected.`,
 )
