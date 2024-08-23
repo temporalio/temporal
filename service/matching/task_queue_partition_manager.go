@@ -488,8 +488,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for bid := range buildIds {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
-			PhysicalTaskQueueInfo:   &taskqueuespb.PhysicalTaskQueueInfo{},
-			InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{},
+			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
 		physicalQueue, err := pm.getPhysicalQueue(ctx, bid)
 		if err != nil {

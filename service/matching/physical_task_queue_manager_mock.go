@@ -37,7 +37,6 @@ import (
 	v1 "go.temporal.io/api/taskqueue/v1"
 	v10 "go.temporal.io/server/api/matchingservice/v1"
 	v11 "go.temporal.io/server/api/persistence/v1"
-	v12 "go.temporal.io/server/api/taskqueue/v1"
 )
 
 // MockphysicalTaskQueueManager is a mock of physicalTaskQueueManager interface.
@@ -119,20 +118,6 @@ func (m *MockphysicalTaskQueueManager) GetAllPollerInfo() []*v1.PollerInfo {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) GetAllPollerInfo() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllPollerInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetAllPollerInfo))
-}
-
-// GetInternalTaskQueueStatus mocks base method.
-func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() *v12.InternalTaskQueueStatus {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetInternalTaskQueueStatus")
-	ret0, _ := ret[0].(*v12.InternalTaskQueueStatus)
-	return ret0
-}
-
-// GetInternalTaskQueueStatus indicates an expected call of GetInternalTaskQueueStatus.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) GetInternalTaskQueueStatus() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInternalTaskQueueStatus", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetInternalTaskQueueStatus))
 }
 
 // GetStats mocks base method.
