@@ -41,7 +41,7 @@ func TestFindAssignmentBuildId_NoRules(t *testing.T) {
 
 func TestFindAssignmentBuildId_OneFullRule(t *testing.T) {
 	buildId := "bld"
-	b := FindAssignmentBuildId([]*persistencespb.AssignmentRule{createFullAssignmentRule(buildId)}, "")
+	b := FindAssignmentBuildId([]*persistencespb.AssignmentRule{createAssignmentRule(buildId, 100)}, "")
 	assert.Equal(t, buildId, b)
 }
 
@@ -50,8 +50,8 @@ func TestFindAssignmentBuildId_TwoFullRules(t *testing.T) {
 	buildId2 := "bld2"
 	b := FindAssignmentBuildId(
 		[]*persistencespb.AssignmentRule{
-			createFullAssignmentRule(buildId),
-			createFullAssignmentRule(buildId2),
+			createAssignmentRule(buildId, 100),
+			createAssignmentRule(buildId2, 100),
 		},
 		"",
 	)
@@ -66,11 +66,11 @@ func TestFindAssignmentBuildId_WithRamp(t *testing.T) {
 	buildId5 := "bld5"
 
 	rules := []*persistencespb.AssignmentRule{
-		createAssignmentRuleWithRamp(buildId1, 0),
-		createAssignmentRuleWithRamp(buildId2, 20),
-		createAssignmentRuleWithRamp(buildId3, 70),
-		createFullAssignmentRule(buildId4),
-		createAssignmentRuleWithRamp(buildId5, 90),
+		createAssignmentRule(buildId1, 0),
+		createAssignmentRule(buildId2, 20),
+		createAssignmentRule(buildId3, 70),
+		createAssignmentRule(buildId4, 100),
+		createAssignmentRule(buildId5, 90),
 	}
 
 	histogram := make(map[string]int)
@@ -109,11 +109,7 @@ func TestCalcRampThresholdDeterministic(t *testing.T) {
 	assert.NotEqual(t, calcRampThreshold(""), calcRampThreshold(""))
 }
 
-func createFullAssignmentRule(buildId string) *persistencespb.AssignmentRule {
-	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{TargetBuildId: buildId}}
-}
-
-func createAssignmentRuleWithRamp(buildId string, ramp float32) *persistencespb.AssignmentRule {
+func createAssignmentRule(buildId string, ramp float32) *persistencespb.AssignmentRule {
 	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{
 		TargetBuildId: buildId,
 		Ramp:          mkNewAssignmentPercentageRamp(ramp),
