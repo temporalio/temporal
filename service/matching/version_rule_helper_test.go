@@ -41,7 +41,7 @@ func TestFindAssignmentBuildId_NoRules(t *testing.T) {
 
 func TestFindAssignmentBuildId_OneFullRule(t *testing.T) {
 	buildId := "bld"
-	b := FindAssignmentBuildId([]*persistencespb.AssignmentRule{createAssignmentRule(buildId, 100)}, "")
+	b := FindAssignmentBuildId([]*persistencespb.AssignmentRule{createFullAssignmentRule(buildId)}, "")
 	assert.Equal(t, buildId, b)
 }
 
@@ -50,8 +50,8 @@ func TestFindAssignmentBuildId_TwoFullRules(t *testing.T) {
 	buildId2 := "bld2"
 	b := FindAssignmentBuildId(
 		[]*persistencespb.AssignmentRule{
-			createAssignmentRule(buildId, 100),
-			createAssignmentRule(buildId2, 100),
+			createFullAssignmentRule(buildId),
+			createFullAssignmentRule(buildId2),
 		},
 		"",
 	)
@@ -69,7 +69,7 @@ func TestFindAssignmentBuildId_WithRamp(t *testing.T) {
 		createAssignmentRule(buildId1, 0),
 		createAssignmentRule(buildId2, 20),
 		createAssignmentRule(buildId3, 70),
-		createAssignmentRule(buildId4, 100),
+		createFullAssignmentRule(buildId4),
 		createAssignmentRule(buildId5, 90),
 	}
 
@@ -107,6 +107,10 @@ func TestCalcRampThresholdDeterministic(t *testing.T) {
 
 	// unless it's an empty string which maps randomly each time
 	assert.NotEqual(t, calcRampThreshold(""), calcRampThreshold(""))
+}
+
+func createFullAssignmentRule(buildId string) *persistencespb.AssignmentRule {
+	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{TargetBuildId: buildId}}
 }
 
 func createAssignmentRule(buildId string, ramp float32) *persistencespb.AssignmentRule {
