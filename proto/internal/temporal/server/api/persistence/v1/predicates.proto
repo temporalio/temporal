@@ -40,6 +40,7 @@ message Predicate {
         TaskTypePredicateAttributes task_type_predicate_attributes = 8;
         DestinationPredicateAttributes destination_predicate_attributes = 9;
         OutboundTaskGroupPredicateAttributes outbound_task_group_predicate_attributes = 10;
+        OutboundTaskPredicateAttributes outbound_task_predicate_attributes = 11;
     }
 }
 
@@ -77,3 +78,11 @@ message OutboundTaskGroupPredicateAttributes {
     repeated string groups = 1;
 }
 
+message OutboundTaskPredicateAttributes {
+    message Group {
+        string task_group = 1;
+        string namespace_id = 2;
+        string destination = 3;
+    }
+    repeated Group groups = 1;
+}
