@@ -281,10 +281,8 @@ func CleanupRuleTombstones(versioningData *persistencespb.VersioningData,
 // CommitBuildID makes the following changes. If no worker that can accept tasks for the
 // target build ID has been seen recently, the operation will fail.
 // To override this check, set the force flag:
-//  1. Adds a fully-ramped assignment rule for the target Build ID at the
-//     end of the list. A fully-ramped assignment rule:
-//     - Has no hint filter
-//     - Has a ramp percentage of 100
+//  1. Adds a fully-ramped assignment rule for the target Build ID at the end of the list.
+//     A fully-ramped assignment rule has a ramp percentage of 100 or a ramp of nil.
 //  2. Removes all previously added assignment rules to the given target
 //     Build ID (if any).
 //  3. Removes any *fully-ramped* assignment rule for other Build IDs.
