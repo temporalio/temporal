@@ -33,9 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -51,6 +48,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (

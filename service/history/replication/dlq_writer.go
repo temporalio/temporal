@@ -27,14 +27,13 @@ package replication
 import (
 	"context"
 
-	"go.uber.org/fx"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/fx"
 )
 
 type (

@@ -32,10 +32,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc"
 )
 
 type (

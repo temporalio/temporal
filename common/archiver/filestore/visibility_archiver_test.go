@@ -39,8 +39,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
@@ -51,6 +49,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testutils"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (

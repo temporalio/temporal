@@ -25,9 +25,8 @@
 package ringpop
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/membership"
+	"go.uber.org/fx"
 )
 
 // MembershipModule provides membership objects given the types in factoryParams.

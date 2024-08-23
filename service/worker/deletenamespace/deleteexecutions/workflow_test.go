@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"

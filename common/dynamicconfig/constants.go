@@ -31,7 +31,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
-
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"

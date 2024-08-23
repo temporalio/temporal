@@ -47,8 +47,6 @@ import (
 	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.uber.org/atomic"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -56,6 +54,7 @@ import (
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests"
+	"go.uber.org/atomic"
 )
 
 type NexusStateReplicationSuite struct {

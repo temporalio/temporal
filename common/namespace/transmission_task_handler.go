@@ -30,7 +30,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"

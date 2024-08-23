@@ -35,13 +35,12 @@ import (
 	"github.com/stretchr/testify/require"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (

@@ -27,26 +27,25 @@ package history
 import (
 	"context"
 
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/quotas/calculator"
-	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 const QueueFactoryFxGroup = "queueFactory"

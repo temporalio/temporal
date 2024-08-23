@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/callbacks"

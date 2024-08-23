@@ -38,11 +38,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestContinueAsNewWorkflow() {

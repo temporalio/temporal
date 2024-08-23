@@ -27,9 +27,6 @@ package service
 import (
 	"sync/atomic"
 
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -42,6 +39,8 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
 )
 
 type (

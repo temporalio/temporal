@@ -27,7 +27,6 @@ package testvars
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 )

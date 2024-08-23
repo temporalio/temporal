@@ -43,19 +43,17 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/common/testing/historyrequire"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 /*

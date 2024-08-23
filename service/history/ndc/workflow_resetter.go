@@ -36,8 +36,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -55,6 +53,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (

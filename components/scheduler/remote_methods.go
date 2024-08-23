@@ -24,10 +24,9 @@ package scheduler
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/proto"
-
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
+	"google.golang.org/protobuf/proto"
 )
 
 type ProcessWorkflowCompletionEvent struct{}

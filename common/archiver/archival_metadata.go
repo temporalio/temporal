@@ -31,9 +31,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/common/dynamicconfig"
 )
 

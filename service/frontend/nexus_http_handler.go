@@ -34,10 +34,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/status"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
@@ -52,6 +48,9 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/frontend/configs"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 )
 
 // Small wrapper that does some pre-processing before handing requests over to the Nexus SDK's HTTP handler.

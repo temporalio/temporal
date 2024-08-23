@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
