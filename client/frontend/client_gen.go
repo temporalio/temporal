@@ -553,6 +553,16 @@ func (c *clientImpl) ScanWorkflowExecutions(
 	return c.client.ScanWorkflowExecutions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ShutdownWorker(
+	ctx context.Context,
+	request *workflowservice.ShutdownWorkerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ShutdownWorkerResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ShutdownWorker(ctx, request, opts...)
+}
+
 func (c *clientImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
