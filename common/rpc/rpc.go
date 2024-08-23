@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -68,7 +69,8 @@ type RPCFactory struct {
 	clientInterceptors []grpc.UnaryClientInterceptor
 	monitor            membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
-	localFrontendClient func() (*common.FrontendHTTPClient, error)
+	localFrontendClient      func() (*common.FrontendHTTPClient, error)
+	interNodeGrpcConnections cache.Cache
 }
 
 // NewFactory builds a new RPCFactory
@@ -99,6 +101,7 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
+	f.interNodeGrpcConnections = cache.New(1000, nil)
 	return f
 }
 
@@ -231,6 +234,10 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
+	connection := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn)
+	if connection != nil {
+		return connection
+	}
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -240,8 +247,9 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 			return nil
 		}
 	}
-
-	return d.dial(hostName, tlsClientConfig)
+	connection = d.dial(hostName, tlsClientConfig)
+	d.interNodeGrpcConnections.Put(hostName, connection)
+	return connection
 }
 
 func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
