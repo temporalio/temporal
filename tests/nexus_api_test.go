@@ -130,7 +130,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 									OperationId: "test-id",
 									Links: []*nexuspb.Link{{
 										Url:  handlerNexusLink.URL.String(),
-										Type: string(handlerLink.GetEventRef().ProtoReflect().Descriptor().FullName()),
+										Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
 									}},
 								},
 							},

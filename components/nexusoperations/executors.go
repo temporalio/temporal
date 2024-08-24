@@ -335,8 +335,8 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			if result.Pending != nil {
 				var links []*commonpb.Link
 				for _, nexusLink := range result.Links {
-					switch {
-					case strings.HasPrefix(nexusLink.Type, string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())):
+					switch nexusLink.Type {
+					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
 						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 						if err != nil {
 							// silently ignore for now

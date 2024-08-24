@@ -33,6 +33,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
+const (
+	linkWorkflowEventReferenceTypeKey = "referenceType"
+	linkEventReferenceEventIDKey      = "eventID"
+	linkEventReferenceEventTypeKey    = "eventType"
+)
+
 func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) (nexus.Link, error) {
 	u, err := url.Parse(fmt.Sprintf(
 		"temporal:///namespaces/%s/workflows/%s/%s/history",
@@ -44,23 +50,28 @@ func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) (nexus
 		return nexus.Link{}, err
 	}
 
-	linkType := ""
 	switch ref := we.GetReference().(type) {
 	case *commonpb.Link_WorkflowEvent_EventRef:
 		u.RawQuery = convertLinkWorkflowEventEventReferenceToURLQuery(ref.EventRef)
-		linkType = string(ref.EventRef.ProtoReflect().Descriptor().FullName())
 	}
-	return nexus.Link{URL: u, Type: linkType}, nil
+	return nexus.Link{
+		URL:  u,
+		Type: string(we.ProtoReflect().Descriptor().FullName()),
+	}, nil
 }
 
 func ConvertNexusLinkToLinkWorkflowEvent(link nexus.Link) (*commonpb.Link_WorkflowEvent, error) {
 	we := &commonpb.Link_WorkflowEvent{}
-	if !strings.HasPrefix(link.Type, string(we.ProtoReflect().Descriptor().FullName())+".") {
+	if link.Type != string(we.ProtoReflect().Descriptor().FullName()) {
 		return nil, fmt.Errorf(
 			"cannot parse link type %q to %q",
 			link.Type,
 			we.ProtoReflect().Descriptor().FullName(),
 		)
+	}
+
+	if link.URL.Scheme != "temporal" {
+		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent")
 	}
 
 	pathParts := strings.Split(link.URL.Path, "/")
@@ -73,9 +84,9 @@ func ConvertNexusLinkToLinkWorkflowEvent(link nexus.Link) (*commonpb.Link_Workfl
 	we.Namespace = pathParts[2]
 	we.WorkflowId = pathParts[4]
 	we.RunId = pathParts[5]
-	switch link.Type {
-	case string((&commonpb.Link_WorkflowEvent_EventReference{}).ProtoReflect().Descriptor().FullName()):
-		eventRef, err := convertURLQueryToLinkWorkflowEventEventReference(link.URL.RawQuery)
+	switch link.URL.Query().Get(linkWorkflowEventReferenceTypeKey) {
+	case string((&commonpb.Link_WorkflowEvent_EventReference{}).ProtoReflect().Descriptor().Name()):
+		eventRef, err := convertURLQueryToLinkWorkflowEventEventReference(link.URL.Query())
 		if err != nil {
 			return nil, err
 		}
@@ -89,37 +100,19 @@ func ConvertNexusLinkToLinkWorkflowEvent(link nexus.Link) (*commonpb.Link_Workfl
 
 func convertLinkWorkflowEventEventReferenceToURLQuery(eventRef *commonpb.Link_WorkflowEvent_EventReference) string {
 	values := url.Values{
-		"event_id":   []string{strconv.FormatInt(eventRef.GetEventId(), 10)},
-		"event_type": []string{eventRef.GetEventType().String()},
+		linkWorkflowEventReferenceTypeKey: []string{string(eventRef.ProtoReflect().Descriptor().Name())},
+		linkEventReferenceEventIDKey:      []string{strconv.FormatInt(eventRef.GetEventId(), 10)},
+		linkEventReferenceEventTypeKey:    []string{eventRef.GetEventType().String()},
 	}
 	return values.Encode()
 }
 
-func convertURLQueryToLinkWorkflowEventEventReference(query string) (*commonpb.Link_WorkflowEvent_EventReference, error) {
-	eventRef := &commonpb.Link_WorkflowEvent_EventReference{}
-	values, err := url.ParseQuery(query)
+func convertURLQueryToLinkWorkflowEventEventReference(queryValues url.Values) (*commonpb.Link_WorkflowEvent_EventReference, error) {
+	eventID, err := strconv.ParseInt(queryValues.Get(linkEventReferenceEventIDKey), 10, 64)
 	if err != nil {
 		return nil, err
 	}
-	if len(values["event_id"]) != 1 {
-		return nil, fmt.Errorf(
-			"invalid query values for %s: %s",
-			eventRef.ProtoReflect().Descriptor().FullName(),
-			query,
-		)
-	}
-	if len(values["event_type"]) != 1 {
-		return nil, fmt.Errorf(
-			"invalid query values for %s: %s",
-			eventRef.ProtoReflect().Descriptor().FullName(),
-			query,
-		)
-	}
-	eventID, err := strconv.ParseInt(values["event_id"][0], 10, 64)
-	if err != nil {
-		return nil, err
-	}
-	eventType, err := enumspb.EventTypeFromString(values["event_type"][0])
+	eventType, err := enumspb.EventTypeFromString(queryValues.Get(linkEventReferenceEventTypeKey))
 	if err != nil {
 		return nil, err
 	}
