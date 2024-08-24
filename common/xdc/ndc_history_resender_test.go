@@ -361,8 +361,8 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory_Batching_ApplyWi
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
 
 	eventBatch0 := []*historypb.HistoryEvent{
-		{EventId: 1, Version: 123},
-		{EventId: 2, Version: 123},
+		{EventId: 1},
+		{EventId: 2},
 	}
 	eventBatch1 := []*historypb.HistoryEvent{
 		{EventId: 3, Version: 124},
@@ -381,7 +381,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory_Batching_ApplyWi
 		{EventId: 10, Version: 127},
 	}
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		{EventId: 2, Version: 123},
+		{EventId: 2},
 		{EventId: 4, Version: 124},
 		{EventId: 6, Version: 125},
 		{EventId: 8, Version: 126},
