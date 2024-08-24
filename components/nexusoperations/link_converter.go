@@ -30,15 +30,15 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) (nexus.Link, error) {
 	u, err := url.Parse(fmt.Sprintf(
 		"temporal:///namespaces/%s/workflows/%s/%s/history",
-		we.GetNamespace(),
-		we.GetWorkflowId(),
-		we.GetRunId(),
+		url.PathEscape(we.GetNamespace()),
+		url.PathEscape(we.GetWorkflowId()),
+		url.PathEscape(we.GetRunId()),
 	))
 	if err != nil {
 		return nexus.Link{}, err
@@ -119,7 +119,7 @@ func convertURLQueryToLinkWorkflowEventEventReference(query string) (*commonpb.L
 	if err != nil {
 		return nil, err
 	}
-	eventType, err := enums.EventTypeFromString(values["event_type"][0])
+	eventType, err := enumspb.EventTypeFromString(values["event_type"][0])
 	if err != nil {
 		return nil, err
 	}
