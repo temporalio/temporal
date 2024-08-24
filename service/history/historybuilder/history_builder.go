@@ -162,6 +162,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 	if request.StartRequest.GetUserMetadata() != nil {
 		event.UserMetadata = request.StartRequest.GetUserMetadata()
 	}
+	if len(request.StartRequest.GetLinks()) > 0 {
+		event.Links = request.StartRequest.GetLinks()
+	}
 	event, _ = b.EventStore.add(event)
 	return event
 }
