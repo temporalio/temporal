@@ -117,7 +117,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadOperationArgs(ctx, env, ref)
+	args, err := e.loadOperationArgs(ctx, ns, env, ref)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
 	}
@@ -194,6 +194,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
+	nexusLink, err := ConvertLinkWorkflowEventToNexusLink(args.workflowEventLink)
+	if err != nil {
+		return err
+	}
+
 	callCtx, cancel := context.WithTimeout(
 		ctx,
 		e.Config.RequestTimeout(ns.Name().String(), task.EndpointName),
@@ -209,6 +214,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
+		Links: []nexus.Link{nexusLink},
 	})
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
@@ -226,6 +232,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 					Operation: rawResult.Pending.Operation,
 					ID:        rawResult.Pending.ID,
 				},
+				Links: rawResult.Links,
 			}
 		} else {
 			var payload *commonpb.Payload
@@ -263,10 +270,16 @@ type startArgs struct {
 	endpointID               string
 	header                   map[string]string
 	payload                  *commonpb.Payload
+	workflowEventLink        *commonpb.Link_WorkflowEvent
 	namespaceFailoverVersion int64
 }
 
-func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
+func (e taskExecutor) loadOperationArgs(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	env hsm.Environment,
+	ref hsm.Ref,
+) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
@@ -289,6 +302,17 @@ func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment
 		}
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
+		args.workflowEventLink = &commonpb.Link_WorkflowEvent{
+			Namespace:  ns.Name().String(),
+			WorkflowId: ref.WorkflowKey.WorkflowID,
+			RunId:      ref.WorkflowKey.RunID,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   event.GetEventId(),
+					EventType: event.GetEventType(),
+				},
+			},
+		}
 		args.namespaceFailoverVersion = event.Version
 		return nil
 	})
@@ -309,6 +333,25 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				return hsm.TransitionOutput{}, err
 			}
 			if result.Pending != nil {
+				var links []*commonpb.Link
+				for _, nexusLink := range result.Links {
+					switch nexusLink.Type {
+					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
+						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+						if err != nil {
+							// silently ignore for now
+							continue
+						}
+						links = append(links, &commonpb.Link{
+							Variant: &commonpb.Link_WorkflowEvent_{
+								WorkflowEvent: link,
+							},
+						})
+					default:
+						// If the link data type is unsupported, just ignore it for now.
+						e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+					}
+				}
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
 				// to allow it to complete via callback.
 				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
@@ -320,6 +363,8 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 							RequestId:        operation.RequestId,
 						},
 					}
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					e.Links = links
 				})
 				return TransitionStarted.Apply(operation, EventStarted{
 					Time:       env.Now(),
