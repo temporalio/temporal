@@ -48,16 +48,16 @@ const (
 )
 
 var (
-	errInvalidNegativeIndex                     = serviceerror.NewInvalidArgument("rule index cannot be negative")
-	errInvalidRampPercentage                    = serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
-	errTargetIsVersionSetMember                 = serviceerror.NewFailedPrecondition("update breaks requirement, target build ID is already a member of a version set")
-	errSourceIsVersionSetMember                 = serviceerror.NewFailedPrecondition("update breaks requirement, source build ID is already a member of a version set")
-	errRampedAssignmentRuleIsRedirectRuleSource = serviceerror.NewFailedPrecondition("update breaks requirement, this target build ID cannot have a ramp because it is the source of a redirect rule")
-	errAssignmentRuleIndexOutOfBounds           = func(idx, length int) error {
+	errInvalidNegativeIndex                              = serviceerror.NewInvalidArgument("rule index cannot be negative")
+	errInvalidRampPercentage                             = serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100]")
+	errTargetIsVersionSetMember                          = serviceerror.NewFailedPrecondition("update breaks requirement, target build ID is already a member of a version set")
+	errSourceIsVersionSetMember                          = serviceerror.NewFailedPrecondition("update breaks requirement, source build ID is already a member of a version set")
+	errPartiallyRampedAssignmentRuleIsRedirectRuleSource = serviceerror.NewFailedPrecondition("update breaks requirement, this build ID cannot be the target of a partially-ramped assignment rule because it is the source of a redirect rule")
+	errAssignmentRuleIndexOutOfBounds                    = func(idx, length int) error {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, length))
 	}
-	errSourceIsConditionalAssignmentRuleTarget = serviceerror.NewFailedPrecondition("redirect rule source build ID cannot be the target of any assignment rule with non-nil ramp")
-	errSourceAlreadyExists                     = func(source, target string) error {
+	errSourceIsPartiallyRampedAssignmentRuleTarget = serviceerror.NewFailedPrecondition("redirect rule source build ID cannot be the target of any partially-ramped assignment rule")
+	errSourceAlreadyExists                         = func(source, target string) error {
 		return serviceerror.NewAlreadyExist(fmt.Sprintf("source %s already redirects to target %s", source, target))
 	}
 	errSourceNotFound = func(source string) error {
@@ -69,8 +69,16 @@ var (
 	errExceedsMaxAssignmentRules = func(cnt, max int) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, max))
 	}
-	errRequireUnconditionalAssignmentRule = serviceerror.NewFailedPrecondition("there must exist at least one fully-ramped 'unconditional' assignment rule, use force=true to bypass this requirement")
-	errExceedsMaxRedirectRules            = func(cnt, max int) error {
+	// errRequireFullyRampedAssignmentRule is thrown if the task queue previously had a fully-ramped assignment rule and
+	// the requested operation would result in a list of assignment rules without a fully-ramped assigment rule, which
+	// effectively means that the task queue does not have a default version. This error is only thrown when moving from
+	// a task queue with a fully-ramped assignment rule (aka versioned with a default Build ID / default version) to a
+	// task queue without any fully-ramped assignment rules, because that operation would make the unversioned queue the
+	// default queue. It's important that users do not accidentally make the unversioned queue the default after the
+	// unversioned worker has already been decommissioned, so we throw this error. If you are intentionally reverting from
+	// a versioned default Build ID to an unversioned default Build ID, use force=true to bypass this requirement.
+	errRequireFullyRampedAssignmentRule = serviceerror.NewFailedPrecondition("at least one fully-ramped assignment rule must exist (use force=true to bypass this requirement and set the unversioned queue as the default)")
+	errExceedsMaxRedirectRules          = func(cnt, max int) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of redirect rules permitted in namespace (%v/%v)", cnt, max))
 	}
 	errIsCyclic                   = serviceerror.NewFailedPrecondition("update would break acyclic requirement")
@@ -97,16 +105,16 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	if req.GetRuleIndex() < 0 {
 		return nil, errInvalidNegativeIndex
 	}
-	rule := req.GetRule()
-	if ramp := rule.GetPercentageRamp(); !validRamp(ramp) {
+	rule := handleAssignmentRuleNilRamp(req.GetRule())
+	if !hasValidRamp(rule) {
 		return nil, errInvalidRampPercentage
 	}
 	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, errTargetIsVersionSetMember
 	}
-	if rule.GetRamp() != nil && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
-		return nil, errRampedAssignmentRuleIsRedirectRuleSource
+	if !isFullyRamped(rule) && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
+		return nil, errPartiallyRampedAssignmentRuleIsRedirectRuleSource
 	}
 	data = cloneOrMkData(data)
 	rules := data.GetAssignmentRules()
@@ -129,19 +137,19 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule,
 ) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
-	rule := req.GetRule()
-	if ramp := rule.GetPercentageRamp(); !validRamp(ramp) {
+	rule := handleAssignmentRuleNilRamp(req.GetRule())
+	if !hasValidRamp(rule) {
 		return nil, errInvalidRampPercentage
 	}
 	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, errTargetIsVersionSetMember
 	}
-	if rule.GetRamp() != nil && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
-		return nil, errRampedAssignmentRuleIsRedirectRuleSource
+	if !isFullyRamped(rule) && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
+		return nil, errPartiallyRampedAssignmentRuleIsRedirectRuleSource
 	}
 	rules := data.GetAssignmentRules()
-	hadUnconditional := containsUnconditional(rules)
+	hadFullyRamped := containsFullyRamped(rules)
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
 	if actualIdx < 0 {
@@ -153,7 +161,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	})
-	return data, checkAssignmentConditions(data, 0, hadUnconditional && !req.GetForce())
+	return data, checkAssignmentConditions(data, 0, hadFullyRamped && !req.GetForce())
 }
 
 func DeleteAssignmentRule(timestamp *hlc.Clock,
@@ -162,14 +170,14 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 ) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rules := data.GetAssignmentRules()
-	hadUnconditional := containsUnconditional(rules)
+	hadFullyRamped := containsFullyRamped(rules)
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
 	if actualIdx < 0 || actualIdx > len(rules)-1 {
 		return nil, errAssignmentRuleIndexOutOfBounds(int(idx), len(getActiveAssignmentRules(rules)))
 	}
 	rules[actualIdx].DeleteTimestamp = timestamp
-	return data, checkAssignmentConditions(data, 0, hadUnconditional && !req.GetForce())
+	return data, checkAssignmentConditions(data, 0, hadFullyRamped && !req.GetForce())
 }
 
 func AddCompatibleRedirectRule(timestamp *hlc.Clock,
@@ -190,8 +198,8 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, errTargetIsVersionSetMember
 	}
-	if isConditionalAssignmentRuleTarget(source, data.GetAssignmentRules()) {
-		return nil, errSourceIsConditionalAssignmentRuleTarget
+	if isPartiallyRampedAssignmentRuleTarget(source, data.GetAssignmentRules()) {
+		return nil, errSourceIsPartiallyRampedAssignmentRuleTarget
 	}
 	rules := data.GetRedirectRules()
 	for _, r := range rules {
@@ -273,13 +281,11 @@ func CleanupRuleTombstones(versioningData *persistencespb.VersioningData,
 // CommitBuildID makes the following changes. If no worker that can accept tasks for the
 // target build ID has been seen recently, the operation will fail.
 // To override this check, set the force flag:
-//  1. Adds an unconditional assignment rule for the target Build ID at the
-//     end of the list. An unconditional assignment rule:
-//     - Has no hint filter
-//     - Has no ramp
+//  1. Adds a fully-ramped assignment rule for the target Build ID at the end of the list.
+//     A fully-ramped assignment rule has a ramp percentage of 100 or a ramp of nil.
 //  2. Removes all previously added assignment rules to the given target
 //     Build ID (if any).
-//  3. Removes any *unconditional* assignment rule for other Build IDs.
+//  3. Removes any *fully-ramped* assignment rule for other Build IDs.
 func CommitBuildID(timestamp *hlc.Clock,
 	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId,
@@ -298,13 +304,16 @@ func CommitBuildID(timestamp *hlc.Clock,
 		if ar.GetRule().GetTargetBuildId() == target {
 			ar.DeleteTimestamp = timestamp
 		}
-		if isUnconditional(ar.GetRule()) {
+		if isFullyRamped(ar.GetRule()) {
 			ar.DeleteTimestamp = timestamp
 		}
 	}
 
 	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencespb.AssignmentRule{
-		Rule:            &taskqueue.BuildIdAssignmentRule{TargetBuildId: target},
+		Rule: &taskqueue.BuildIdAssignmentRule{
+			TargetBuildId: target,
+			Ramp:          &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100}},
+		},
 		CreateTimestamp: timestamp,
 	})
 	if err := checkAssignmentConditions(data, maxAssignmentRules, false); err != nil {
@@ -352,14 +361,14 @@ func GetTimestampedWorkerVersioningRules(
 // checkAssignmentConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
 // It returns an error if the new set of assignment rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
-// - If `requireUnconditional`, ensure at least one unconditional rule still exists
-func checkAssignmentConditions(g *persistencespb.VersioningData, maxARs int, requireUnconditional bool) error {
+// - If `requireFullyRamped`, ensure at least one fully-ramped rule still exists
+func checkAssignmentConditions(g *persistencespb.VersioningData, maxARs int, requireFullyRamped bool) error {
 	activeRules := getActiveAssignmentRules(g.GetAssignmentRules())
 	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
 		return errExceedsMaxAssignmentRules(cnt, maxARs)
 	}
-	if requireUnconditional && !containsUnconditional(activeRules) {
-		return errRequireUnconditionalAssignmentRule
+	if requireFullyRamped && !containsFullyRamped(activeRules) {
+		return errRequireFullyRampedAssignmentRule
 	}
 	return nil
 }
@@ -424,38 +433,35 @@ outer:
 	return ""
 }
 
-// isConditionalAssignmentRuleTarget checks whether the given buildID is the target of a conditional assignment rule
-// (one with a ramp). We check this for any buildID that is the source of a proposed redirect rule, because having a
-// ramped assignment rule target as the source for a redirect rule would lead to an unpredictable amount of traffic
-// being redirected vs being passed through to the next assignment rule in the chain. This would not be a sensible use
-// of redirect rules or assignment rule ramps, so it is prohibited.
+// isPartiallyRampedAssignmentRuleTarget checks whether the given buildID is the target of a partially-ramped assignment
+// rule (one with a ramp < 100). We check this for any buildID that is the source of a proposed redirect rule, because
+// having a partially-ramped assignment rule target as the source for a redirect rule would lead to an unpredictable
+// amount of traffic being redirected vs being passed through to the next assignment rule in the chain. This would not
+// be a sensible use of redirect rules or assignment rule ramps, so it is prohibited.
 //
-// e.g. Scenario in which a conditional assignment rule target is the source for a redirect rule.
+// e.g. Scenario in which a partially-ramped assignment rule target is the source for a redirect rule.
 //
 //	Assignment rules: [{target: 1, ramp: 50%}, {target: 2, ramp: nil}, {target: 3, ramp: nil}]
 //	  Redirect rules: [{1->4}]
 //	50% of tasks that start with buildID 1 would be sent on to buildID 2 per assignment rules, and the
 //	remaining 50% that "stay" on buildID 1 would be redirected to buildID 4 per the redirect rules.
 //	This doesn't make sense, so we prohibit it.
-func isConditionalAssignmentRuleTarget(buildID string, assignmentRules []*persistencespb.AssignmentRule) bool {
+func isPartiallyRampedAssignmentRuleTarget(buildID string, assignmentRules []*persistencespb.AssignmentRule) bool {
 	for _, r := range getActiveAssignmentRules(assignmentRules) {
-		if !isUnconditional(r.GetRule()) && buildID == r.GetRule().GetTargetBuildId() {
+		if !isFullyRamped(r.GetRule()) && buildID == r.GetRule().GetTargetBuildId() {
 			return true
 		}
 	}
 	return false
 }
 
-func isUnconditional(ar *taskqueue.BuildIdAssignmentRule) bool {
-	return ar.GetPercentageRamp() == nil
-}
-
-// containsUnconditional returns true if there exists an assignment rule with a nil ramp percentage
-func containsUnconditional(rules []*persistencespb.AssignmentRule) bool {
+// containsFullyRamped returns true if there exists a fully-ramped assignment rule.
+// A fully-ramped assignment rule has a ramp percentage of 100.
+func containsFullyRamped(rules []*persistencespb.AssignmentRule) bool {
 	found := false
 	for _, rule := range rules {
 		ar := rule.GetRule()
-		if isUnconditional(ar) {
+		if isFullyRamped(ar) {
 			found = true
 		}
 	}
@@ -489,12 +495,22 @@ func given2ActualIdx(idx int32, rules []*persistencespb.AssignmentRule) int {
 	return -1
 }
 
-// validRamp returns true if the percentage ramp is within [0, 100), or if the ramp is nil
-func validRamp(ramp *taskqueue.RampByPercentage) bool {
-	if ramp == nil {
-		return true
+// handleAssignmentRuleNilRamp mutates and returns rule object to convert nil ramp to 100%
+func handleAssignmentRuleNilRamp(rule *taskqueue.BuildIdAssignmentRule) *taskqueue.BuildIdAssignmentRule {
+	if rule.GetRamp() == nil {
+		rule.Ramp = &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100}}
 	}
-	return ramp.RampPercentage >= 0 && ramp.RampPercentage < 100
+	return rule
+}
+
+// hasValidRamp returns true if the rule has a ramp percentage within [0, 100] or a ramp of nil
+func hasValidRamp(rule *taskqueue.BuildIdAssignmentRule) bool {
+	return rule.GetRamp() == nil || (rule.GetPercentageRamp().GetRampPercentage() >= 0 && rule.GetPercentageRamp().GetRampPercentage() <= 100)
+}
+
+// isFullyRamped returns true if the rule has a ramp percentage of 100 or a ramp of nil
+func isFullyRamped(rule *taskqueue.BuildIdAssignmentRule) bool {
+	return rule.GetRamp() == nil || rule.GetPercentageRamp().GetRampPercentage() == 100
 }
 
 // isCyclic returns true if there is a cycle in the DAG of redirect rules.
@@ -602,11 +618,11 @@ func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string)
 		if r.GetDeleteTimestamp() != nil {
 			continue
 		}
-		if ramp := r.GetRule().GetPercentageRamp(); ramp != nil {
+		if !isFullyRamped(r.GetRule()) {
 			if rampThreshold == -1. {
 				rampThreshold = calcRampThreshold(runId)
 			}
-			if float64(ramp.GetRampPercentage()) <= rampThreshold {
+			if float64(r.GetRule().GetPercentageRamp().GetRampPercentage()) <= rampThreshold {
 				continue
 			}
 		}

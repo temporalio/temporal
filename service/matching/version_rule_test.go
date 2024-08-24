@@ -76,14 +76,17 @@ func mkAssignmentRulePersistence(rule *taskqueuepb.BuildIdAssignmentRule, create
 	}
 }
 
-func mkAssignmentRule(target string, ramp *taskqueuepb.BuildIdAssignmentRule_PercentageRamp) *taskqueuepb.BuildIdAssignmentRule {
+func mkAssignmentRuleWithoutRamp(target string) *taskqueuepb.BuildIdAssignmentRule {
 	ret := &taskqueuepb.BuildIdAssignmentRule{
 		TargetBuildId: target,
 	}
-	// if ramp == nil and is set above, there is a nil-pointer error in GetPercentageRamp()
-	// because casting Rule to (*BuildIdAssignmentRule_WorkerRatioRamp) succeeds
-	if ramp != nil {
-		ret.Ramp = ramp
+	return ret
+}
+
+func mkAssignmentRuleWithRamp(target string, rampPercentage float32) *taskqueuepb.BuildIdAssignmentRule {
+	ret := &taskqueuepb.BuildIdAssignmentRule{
+		TargetBuildId: target,
+		Ramp:          mkNewAssignmentPercentageRamp(rampPercentage),
 	}
 	return ret
 }
@@ -211,40 +214,40 @@ func TestInsertAssignmentRuleBasic(t *testing.T) {
 	maxRules := 10
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
-	assert.False(t, containsUnconditional(initialData.GetAssignmentRules()))
+	assert.False(t, containsFullyRamped(initialData.GetAssignmentRules()))
 	expected := &persistencepb.VersioningData{AssignmentRules: []*persistencepb.AssignmentRule{}}
 
 	// insert at index 0
-	rule1 := mkAssignmentRule("1", nil)
+	rule1 := mkAssignmentRuleWithoutRamp("1")
 	data, err := insertAssignmentRule(rule1, initialData, clock, 0, maxRules)
 	assert.NoError(t, err)
-	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, clock, nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 100), clock, nil))
 	protoassert.ProtoEqual(t, expected, data)
 
-	rule2 := mkAssignmentRule("2", nil)
+	rule2 := mkAssignmentRuleWithoutRamp("2")
 	data, err = insertAssignmentRule(rule2, data, clock, 0, maxRules)
 	assert.NoError(t, err)
-	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule2, clock, nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("2", 100), clock, nil))
 	protoassert.ProtoEqual(t, expected, data)
 
-	rule3 := mkAssignmentRule("3", nil)
+	rule3 := mkAssignmentRuleWithoutRamp("3")
 	data, err = insertAssignmentRule(rule3, data, clock, 0, maxRules)
 	assert.NoError(t, err)
-	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule3, clock, nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("3", 100), clock, nil))
 	protoassert.ProtoEqual(t, expected, data)
 
 	// insert into the middle
-	rule4 := mkAssignmentRule("4", nil)
+	rule4 := mkAssignmentRuleWithoutRamp("4")
 	data, err = insertAssignmentRule(rule4, data, clock, 2, maxRules)
 	assert.NoError(t, err)
-	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(rule4, clock, nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("4", 100), clock, nil))
 	protoassert.ProtoEqual(t, expected, data)
 
 	// insert with a too-big index, it should be at the back
-	rule5 := mkAssignmentRule("5", nil)
+	rule5 := mkAssignmentRuleWithoutRamp("5")
 	data, err = insertAssignmentRule(rule5, data, clock, 100, maxRules)
 	assert.NoError(t, err)
-	expected.AssignmentRules = append(expected.AssignmentRules, mkAssignmentRulePersistence(rule5, clock, nil))
+	expected.AssignmentRules = append(expected.AssignmentRules, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("5", 100), clock, nil))
 	protoassert.ProtoEqual(t, expected, data)
 
 	// initial data should be unmodified
@@ -260,12 +263,12 @@ func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 
 	// insert 3x --> success
 	for i := 0; i < 3; i++ {
-		data, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
+		data, err = insertAssignmentRule(mkAssignmentRuleWithoutRamp("1"), data, clock, 0, maxRules)
 		assert.NoError(t, err)
 	}
 
 	// insert fourth --> error
-	_, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
+	_, err = insertAssignmentRule(mkAssignmentRuleWithoutRamp("1"), data, clock, 0, maxRules)
 	assert.Error(t, err)
 	assert.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
 }
@@ -277,21 +280,21 @@ func TestInsertAssignmentRuleInVersionSet(t *testing.T) {
 	data := mkInitialData(1, clock)
 
 	// target 0 --> failure
-	_, err := insertAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, ignoreMaxRules)
+	_, err := insertAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 0, ignoreMaxRules)
 	assert.Error(t, err)
 	assert.Equal(t, errTargetIsVersionSetMember, err)
 }
 
-func TestInsertAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
+func TestInsertAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data, err := insertRedirectRule(mkRedirectRule("0", "1"), mkInitialData(0, clock), clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
 	assert.NoError(t, err)
 
 	// insert 1 --> failure
-	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, ignoreMaxRules)
+	_, err = insertAssignmentRule(mkAssignmentRuleWithRamp("0", 10), data, clock, 0, ignoreMaxRules)
 	assert.Error(t, err)
-	assert.Equal(t, errRampedAssignmentRuleIsRedirectRuleSource, err)
+	assert.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
 func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
@@ -300,7 +303,7 @@ func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
 	data := mkInitialData(0, clock)
 
 	// insert @ -1 --> failure
-	_, err := insertAssignmentRule(mkAssignmentRule("0", nil), data, clock, -1, ignoreMaxRules)
+	_, err := insertAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, -1, ignoreMaxRules)
 	assert.Error(t, err)
 	assert.Equal(t, errInvalidNegativeIndex, err)
 }
@@ -311,17 +314,12 @@ func TestInsertAssignmentRuleInvalidRampPercentage(t *testing.T) {
 	data := mkInitialData(0, clock)
 
 	// insert with ramp percent < 0 --> failure
-	_, err := insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(-1)), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
-
-	// insert with ramp percent == 100 --> failure
-	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(100)), data, clock, 0, ignoreMaxRules)
+	_, err := insertAssignmentRule(mkAssignmentRuleWithRamp("0", -1), data, clock, 0, ignoreMaxRules)
 	assert.Error(t, err)
 	assert.Equal(t, errInvalidRampPercentage, err)
 
 	// insert with ramp percent > 100 --> failure
-	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(101)), data, clock, 0, ignoreMaxRules)
+	_, err = insertAssignmentRule(mkAssignmentRuleWithRamp("0", 101), data, clock, 0, ignoreMaxRules)
 	assert.Error(t, err)
 	assert.Equal(t, errInvalidRampPercentage, err)
 }
@@ -335,7 +333,7 @@ func TestReplaceAssignmentRuleBasic(t *testing.T) {
 	var err error
 
 	// start with three rules to replace
-	rule1 := mkAssignmentRule("1", nil)
+	rule1 := mkAssignmentRuleWithoutRamp("1")
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
 		mkAssignmentRulePersistence(rule1, clock, nil),
 		mkAssignmentRulePersistence(rule1, clock, nil),
@@ -349,32 +347,32 @@ func TestReplaceAssignmentRuleBasic(t *testing.T) {
 
 	// [1, 1, 1] --> [1, 1, 2]
 	// [1A, 1A, 1A] --> [1A, 1A, 2A, 1D]
-	rule2 := mkAssignmentRule("2", nil)
+	rule2 := mkAssignmentRuleWithoutRamp("2")
 	clock = hlc.Next(clock, timesource)
 	data, err = replaceAssignmentRule(rule2, data, clock, 2, false)
 	assert.NoError(t, err)
 	expected.AssignmentRules[2].DeleteTimestamp = clock
-	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(rule2, clock, nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("2", 100), clock, nil))
 	protoassert.ProtoEqual(t, expected, data)
 
 	// [1, 1, 2] --> [0, 1, 2]
 	// [1A, 1A, 2A, 1D] --> [0A, 1D, 1A, 2A, 1D]
-	rule0 := mkAssignmentRule("0", nil)
+	rule0 := mkAssignmentRuleWithoutRamp("0")
 	clock = hlc.Next(clock, timesource)
 	data, err = replaceAssignmentRule(rule0, data, clock, 0, false)
 	assert.NoError(t, err)
 	expected.AssignmentRules[0].DeleteTimestamp = clock
-	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule0, clock, nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("0", 100), clock, nil))
 	protoassert.ProtoEqual(t, expected, data)
 
 	// [0, 1, 2] --> [0, 11, 2]
 	// [0A, 1D, 1A, 2A, 1D] --> [0A, 1D, 11A, 1D, 2A, 1D]
-	rule11 := mkAssignmentRule("11", nil)
+	rule11 := mkAssignmentRuleWithoutRamp("11")
 	clock = hlc.Next(clock, timesource)
 	data, err = replaceAssignmentRule(rule11, data, clock, 1, false)
 	assert.NoError(t, err)
 	expected.AssignmentRules[2].DeleteTimestamp = clock
-	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(rule11, clock, nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("11", 100), clock, nil))
 	protoassert.ProtoEqual(t, expected, data)
 
 	// out-of-bounds indices --> failure
@@ -391,53 +389,52 @@ func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
 	data := mkInitialData(1, clock)
 	var err error
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 
 	// replace 0 --> failure
-	_, err = replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, false)
+	_, err = replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 0, false)
 	assert.Error(t, err)
 	assert.Equal(t, errTargetIsVersionSetMember, err)
 }
 
-func TestReplaceAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
+func TestReplaceAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("9", nil), clock, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock, nil), // to avoid triggering "fully-ramped" error
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("9"), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("10"), clock, nil), // to avoid triggering "fully-ramped" error
 	}
 	data.RedirectRules = []*persistencepb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("0", "1"), clock, nil),
 	}
 
-	// replace with target isSource and ramp != nil --> failure
-	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
-	t.Log(err)
+	// replace with target isSource and ramp < 100 --> failure
+	_, err := replaceAssignmentRule(mkAssignmentRuleWithRamp("0", 10), data, clock, 0, false)
 	assert.Error(t, err)
-	assert.Equal(t, errRampedAssignmentRuleIsRedirectRuleSource, err)
+	assert.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
-func TestReplaceAssignmentRuleTestRequireUnconditional(t *testing.T) {
+func TestReplaceAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	var err error
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 10), clock, nil),
 	}
 
-	// replace unfiltered rule with filtered rule --> failure
+	// replace fully-ramped rule with partially-ramped rule --> failure
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
-	_, err = replaceAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(20)), data, clock, 0, false)
+	_, err = replaceAssignmentRule(mkAssignmentRuleWithRamp("2", 20), data, clock, 0, false)
 	assert.Error(t, err)
-	assert.Equal(t, errRequireUnconditionalAssignmentRule, err)
+	assert.Equal(t, errRequireFullyRampedAssignmentRule, err)
 
 	// same as above but with force --> success
-	_, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock, 0, true)
+	_, err = replaceAssignmentRule(mkAssignmentRuleWithRamp("4", 20), data, clock, 0, true)
 	assert.NoError(t, err)
 }
 
@@ -446,16 +443,16 @@ func TestReplaceAssignmentRuleIndexOutOfBounds(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 
 	// replace @ -1 --> failure
-	_, err := replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, -1, false)
+	_, err := replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, -1, false)
 	assert.Error(t, err)
 	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
 
 	// replace @ 1 --> failure
-	_, err = replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, 1, false)
+	_, err = replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 1, false)
 	assert.Error(t, err)
 	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
 }
@@ -465,21 +462,16 @@ func TestReplaceAssignmentRuleInvalidRampPercentage(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 
 	// replace with ramp percent < 0 --> failure
-	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(-1)), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
-
-	// replace with ramp percent == 100 --> failure
-	_, err = replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(100)), data, clock, 0, false)
+	_, err := replaceAssignmentRule(mkAssignmentRuleWithRamp("0", -1), data, clock, 0, false)
 	assert.Error(t, err)
 	assert.Equal(t, errInvalidRampPercentage, err)
 
 	// replace with ramp percent > 100 --> failure
-	_, err = replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(101)), data, clock, 0, false)
+	_, err = replaceAssignmentRule(mkAssignmentRuleWithRamp("0", 101), data, clock, 0, false)
 	assert.Error(t, err)
 	assert.Equal(t, errInvalidRampPercentage, err)
 }
@@ -500,7 +492,7 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	}
 
 	// start with three rules inserted at different times
-	rule1 := mkAssignmentRule("1", nil)
+	rule1 := mkAssignmentRuleWithoutRamp("1")
 	data.AssignmentRules = slices.Insert(data.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, clock, nil))
 	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, clock, nil))
 	data.AssignmentRules = slices.Insert(data.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, nextClock(), nil))
@@ -527,31 +519,31 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDeleteAssignmentRuleTestRequireUnconditional(t *testing.T) {
+func TestDeleteAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	var err error
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 10), clock, nil),
 	}
 
-	// delete only unfiltered rule --> failure
+	// delete only fully-ramped rule --> failure
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
 	assert.Error(t, err)
-	assert.Equal(t, errRequireUnconditionalAssignmentRule, err)
+	assert.Equal(t, errRequireFullyRampedAssignmentRule, err)
 
 	// same as above but with force --> success
 	_, err = deleteAssignmentRule(data, clock, 0, true)
 	assert.NoError(t, err)
 
-	// delete one of two unfiltered rules --> success
+	// delete one of two fully-ramped rules --> success
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
 	assert.NoError(t, err)
@@ -562,7 +554,7 @@ func TestDeleteAssignmentRuleIndexOutOfBounds(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 
 	// delete @ -1 --> failure
@@ -647,19 +639,19 @@ func TestAddRedirectRuleInVersionSet(t *testing.T) {
 	assert.Equal(t, errTargetIsVersionSetMember, err)
 }
 
-func TestAddRedirectRuleSourceIsConditionalAssignmentRuleTarget(t *testing.T) {
+func TestAddRedirectRuleSourceIsPartiallyRampedAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("2", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 10), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2"), clock, nil),
 	}
 
 	// insert redirect rule with target 1 --> failure
 	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
 	assert.Error(t, err)
-	assert.Equal(t, errSourceIsConditionalAssignmentRuleTarget, err)
+	assert.Equal(t, errSourceIsPartiallyRampedAssignmentRuleTarget, err)
 }
 
 func TestAddRedirectRuleAlreadyExists(t *testing.T) {
@@ -926,10 +918,10 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 	clock2 := hlc.Next(clock1, commonclock.NewRealTimeSource())
 	data := &persistencepb.VersioningData{
 		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock2, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock1, clock2),
-			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock2, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("10"), clock2, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("10"), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("100"), clock2, nil),
 		},
 		RedirectRules: []*persistencepb.RedirectRule{
 			mkRedirectRulePersistence(mkRedirectRule("1", "2"), clock1, nil),
@@ -948,15 +940,15 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 	assignmentRules := resp.GetResponse().GetAssignmentRules()
 	assert.Equal(t, 3, len(assignmentRules))
 	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
-		Rule:       mkAssignmentRule("1", nil),
+		Rule:       mkAssignmentRuleWithoutRamp("1"),
 		CreateTime: hlc.ProtoTimestamp(clock1),
 	}, assignmentRules[0])
 	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
-		Rule:       mkAssignmentRule("10", nil),
+		Rule:       mkAssignmentRuleWithoutRamp("10"),
 		CreateTime: hlc.ProtoTimestamp(clock2),
 	}, assignmentRules[1])
 	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
-		Rule:       mkAssignmentRule("100", nil),
+		Rule:       mkAssignmentRuleWithoutRamp("100"),
 		CreateTime: hlc.ProtoTimestamp(clock2),
 	}, assignmentRules[2])
 
@@ -1052,17 +1044,17 @@ func TestCommitBuildIDBasic(t *testing.T) {
 	clock2 := hlc.Next(clock1, timesource)
 	data := &persistencepb.VersioningData{
 		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 1), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 1), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("100", 100), clock1, nil),
 		},
 	}
 	expected := &persistencepb.VersioningData{
 		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, clock2),
-			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, clock2),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock2, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 1), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 1), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("100", 100), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 100), clock2, nil),
 		},
 	}
 	var err error
@@ -1075,11 +1067,11 @@ func TestCommitBuildIDBasic(t *testing.T) {
 	clock3 := hlc.Next(clock2, timesource)
 	expected = &persistencepb.VersioningData{
 		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, clock2),
-			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, clock2),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock2, clock3),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock3, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 1), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 1), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("100", 100), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 100), clock2, clock3),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 100), clock3, nil),
 		},
 	}
 	data, err = CommitBuildID(clock3, data, mkNewCommitBuildIdReq("10", false), true, ignoreMaxRules)
@@ -1095,9 +1087,9 @@ func TestCommitBuildIDNoRecentPoller(t *testing.T) {
 	clock2 := hlc.Next(clock1, timesource)
 	data := &persistencepb.VersioningData{
 		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 1), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 1), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("100", 100), clock1, nil),
 		},
 	}
 	var err error
@@ -1119,9 +1111,9 @@ func TestCommitBuildIDInVersionSet(t *testing.T) {
 	clock2 := hlc.Next(clock1, timesource)
 	data := mkInitialData(1, clock1)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("0", 1), clock1, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 1), clock1, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("100"), clock1, nil),
 	}
 	var err error
 
@@ -1139,9 +1131,9 @@ func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
 	clock2 := hlc.Next(clock1, timesource)
 	data := &persistencepb.VersioningData{
 		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("100", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 1), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 1), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("100", 1), clock1, nil),
 		},
 	}
 	var err error
