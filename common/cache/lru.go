@@ -31,7 +31,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 )

@@ -30,14 +30,11 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-
-	"go.temporal.io/api/serviceerror"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

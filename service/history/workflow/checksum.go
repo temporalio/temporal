@@ -27,12 +27,11 @@ package workflow
 import (
 	"fmt"
 
-	expmaps "golang.org/x/exp/maps"
-
 	checksumspb "go.temporal.io/server/api/checksum/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/util"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (

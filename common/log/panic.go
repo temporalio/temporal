@@ -29,7 +29,6 @@ import (
 	"runtime/debug"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log/tag"
 )
 

@@ -41,9 +41,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -60,6 +57,8 @@ import (
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests"
+	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (

@@ -34,11 +34,10 @@ import (
 	"os"
 
 	"cloud.google.com/go/storage"
-	"go.uber.org/multierr"
-	"google.golang.org/api/iterator"
-
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
+	"go.uber.org/multierr"
+	"google.golang.org/api/iterator"
 )
 
 var (

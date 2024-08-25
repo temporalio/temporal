@@ -35,12 +35,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/tools/tdbg/tdbgtest"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tools/tdbg"
+	"go.temporal.io/server/tools/tdbg/tdbgtest"
+	"google.golang.org/grpc"
 )
 
 type (

@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"

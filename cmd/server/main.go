@@ -34,8 +34,6 @@ import (
 	_ "time/tzdata" // embed tzdata as a fallback
 
 	"github.com/urfave/cli/v2"
-	"go.uber.org/automaxprocs/maxprocs"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/build"
 	"go.temporal.io/server/common/config"
@@ -48,6 +46,7 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
 	"go.temporal.io/server/temporal"
+	"go.uber.org/automaxprocs/maxprocs"
 )
 
 // main entry point for the temporal server

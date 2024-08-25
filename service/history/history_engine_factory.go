@@ -26,8 +26,6 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 type (
@@ -55,6 +54,7 @@ type (
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
+		ReplicationProgressCache        replication.ProgressCache
 		NewCacheFn                      wcache.NewCacheFn
 		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
@@ -93,6 +93,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.Config,
 		f.RawMatchingClient,
 		wfCache,
+		f.ReplicationProgressCache,
 		f.EventSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,

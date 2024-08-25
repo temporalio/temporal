@@ -43,11 +43,10 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/internal/temporalite"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type completionHandler struct {

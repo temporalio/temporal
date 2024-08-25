@@ -30,7 +30,6 @@ import (
 	"strings"
 
 	p "go.temporal.io/server/common/persistence"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 

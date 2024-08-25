@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/activity"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"

@@ -27,12 +27,11 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	expmaps "golang.org/x/exp/maps"
 )
 
 type (

@@ -31,7 +31,6 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 

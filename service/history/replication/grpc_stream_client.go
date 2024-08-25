@@ -27,12 +27,11 @@ package replication
 import (
 	"context"
 
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/cluster"
+	"google.golang.org/grpc/metadata"
 )
 
 type (

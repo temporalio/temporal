@@ -36,10 +36,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/zap"
 )
 
 type LogSuite struct {

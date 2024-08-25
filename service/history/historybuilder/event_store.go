@@ -27,11 +27,10 @@ package historybuilder
 import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/protobuf/proto"
 )
 
 type EventStore struct {
