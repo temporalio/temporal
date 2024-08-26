@@ -134,7 +134,7 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 	}
 	tqType := enumspb.TaskQueueType(tlTypeInt)
 	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return fmt.Errorf("missing Task Queue type")
+		return fmt.Errorf("invalid task queue type with")
 	}
 
 	// extracting the task queue partition id
@@ -190,9 +190,11 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := client.DescribeTaskQueuePartition(ctx, req)
+	if response, err := client.DescribeTaskQueuePartition(ctx, req); err != nil {
+		return fmt.Errorf("unable to describe Task Queue Partition: %w", err)
+	} else {
+		prettyPrintJSONObject(c, response)
 
-	prettyPrintJSONObject(c, response)
-
+	}
 	return nil
 }
