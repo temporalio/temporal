@@ -26,12 +26,9 @@ package rpc
 
 import (
 	"context"
-	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc/metadata"
@@ -101,20 +98,4 @@ func (s *contextSuite) TestCopyContextValue_ValueNotOverWritten() {
 	newContext = CopyContextValues(newContext, ctx)
 
 	s.Equal(newValue, newContext.Value(key))
-}
-
-func TestURL(t *testing.T) {
-	urls := []string{
-		"dns://abd.com:1099",
-		"sdhfo.net:1029",
-		"gogo.com",
-		"https://gogo.com/sdbc",
-		"gogo.com/sdbc:10293",
-	}
-
-	for _, add := range urls {
-		u, err := url.Parse(add)
-		assert.NoError(t, err)
-		fmt.Println(u.Hostname() + ":" + u.Port())
-	}
 }
