@@ -130,7 +130,7 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 
 	tlTypeInt, err := StringToEnum(tqTypeString, enumspb.TaskQueueType_value)
 	if err != nil {
-		return fmt.Errorf("invalid task queue type: %v", err)
+		return fmt.Errorf("invalid task queue type: %w", err)
 	}
 	tqType := enumspb.TaskQueueType(tlTypeInt)
 	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
