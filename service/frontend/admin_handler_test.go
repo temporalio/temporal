@@ -28,6 +28,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"math/rand"
 	"sync"
 	"testing"
@@ -90,6 +94,7 @@ type (
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
 		mockMetadata               *cluster.MockMetadata
 		mockProducer               *persistence.MockNamespaceReplicationQueue
+		mockMatchingClient         *matchingservicemock.MockMatchingServiceClient
 
 		namespace      namespace.Name
 		namespaceID    namespace.ID
@@ -131,6 +136,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockMetadata = s.mockResource.ClusterMetadata
 	s.mockVisibilityMgr = s.mockResource.VisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
+	s.mockMatchingClient = s.mockResource.MatchingClient
 
 	persistenceConfig := &config.Persistence{
 		NumHistoryShards: 1,
@@ -1651,4 +1657,111 @@ func (s *adminHandlerSuite) TestListQueues_Err() {
 	s.mockHistoryClient.EXPECT().ListQueues(gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
 	_, err := s.handler.ListQueues(context.Background(), &adminservice.ListQueuesRequest{})
 	s.ErrorIs(err, assert.AnError)
+}
+
+func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
+	handler := s.handler
+	ctx := context.Background()
+	unversioned := " "
+	buildID := "blx"
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.namespaceID, nil).AnyTimes()
+
+	type test struct {
+		Name     string
+		Request  *adminservice.DescribeTaskQueuePartitionRequest
+		Expected error
+	}
+	// request validation tests
+	errorCases := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &adminservice.DescribeTaskQueuePartitionRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
+		},
+	}
+	for _, test := range errorCases {
+		s.T().Run(test.Name, func(t *testing.T) {
+			resp, err := handler.DescribeTaskQueuePartition(ctx, test.Request)
+			s.Equal(test.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// request on a partition with buildIds
+	tqPartitionRequest := &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     "hello-world",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+	}
+	buildIdRequest := &taskqueuepb.TaskQueueVersionSelection{
+		BuildIds:    []string{unversioned, buildID},
+		Unversioned: true,
+		AllActive:   true,
+	}
+
+	// request-response structures for mocking matching
+	matchingMockRequest := &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId:                   s.namespaceID.String(),
+		TaskQueuePartition:            tqPartitionRequest,
+		Versions:                      buildIdRequest,
+		ReportStats:                   true,
+		ReportPollers:                 true,
+		ReportInternalTaskQueueStatus: true,
+	}
+	matchingMockResponse := &matchingservice.DescribeTaskQueuePartitionResponse{
+		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
+			unversioned: {
+				InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+					ReadLevel: 0,
+					AckLevel:  0,
+					TaskIdBlock: &taskqueuepb.TaskIdBlock{
+						StartId: 0,
+						EndId:   0,
+					},
+					ReadBufferLength: 0,
+				},
+			},
+			buildID: {
+				InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+					ReadLevel: 1,
+					AckLevel:  1,
+					TaskIdBlock: &taskqueuepb.TaskIdBlock{
+						StartId: 1,
+						EndId:   1000,
+					},
+					ReadBufferLength: 10,
+				},
+			},
+		},
+	}
+	s.mockMatchingClient.EXPECT().DescribeTaskQueuePartition(ctx, matchingMockRequest).Return(matchingMockResponse, nil).Times(1)
+
+	resp, err := handler.DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+		Namespace:          s.namespace.String(),
+		TaskQueuePartition: tqPartitionRequest,
+		BuildId:            buildIdRequest,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(2, len(resp.VersionsInfoInternal))
+
+	// validating the unversioned queue
+	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetReadLevel())
+	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetAckLevel())
+	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetReadBufferLength())
+	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetTaskIdBlock().GetStartId())
+	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetTaskIdBlock().GetEndId())
+
+	// validating the versioned queue
+	s.Equal(int64(1), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetReadLevel())
+	s.Equal(int64(1), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetAckLevel())
+	s.Equal(int64(10), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetReadBufferLength())
+	s.Equal(int64(1), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetTaskIdBlock().GetStartId())
+	s.Equal(int64(1000), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetTaskIdBlock().GetEndId())
 }

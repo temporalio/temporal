@@ -130,8 +130,8 @@ type (
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
-		taskCategoryRegistry  tasks.TaskCategoryRegistry
-		matchingServiceClient matchingservice.MatchingServiceClient
+		taskCategoryRegistry tasks.TaskCategoryRegistry
+		matchingClient       matchingservice.MatchingServiceClient
 	}
 
 	NewAdminHandlerArgs struct {
@@ -163,8 +163,8 @@ type (
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
-		CategoryRegistry      tasks.TaskCategoryRegistry
-		matchingServiceClient matchingservice.MatchingServiceClient
+		CategoryRegistry tasks.TaskCategoryRegistry
+		matchingClient   matchingservice.MatchingServiceClient
 	}
 )
 
@@ -230,7 +230,7 @@ func NewAdminHandler(
 		healthServer:               args.HealthServer,
 		historyHealthChecker:       historyHealthChecker,
 		taskCategoryRegistry:       args.CategoryRegistry,
-		matchingServiceClient:      args.matchingServiceClient,
+		matchingClient:             args.matchingClient,
 	}
 }
 
@@ -1616,15 +1616,20 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 ) (_ *adminservice.DescribeTaskQueuePartitionResponse, err error) {
 	defer log.CapturePanic(adh.logger, &err)
 
+	// validate request
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
 	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := adh.matchingServiceClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+	resp, err := adh.matchingClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 		NamespaceId:                   namespaceID.String(),
 		TaskQueuePartition:            request.GetTaskQueuePartition(),
 		Versions:                      request.GetBuildId(),

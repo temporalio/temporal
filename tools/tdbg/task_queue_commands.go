@@ -109,8 +109,6 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 
 // AdminDescribeTaskQueuePartition displays task queue partition information
 func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory) error {
-	// TODO Shivam - clean this up
-
 	// extracting the namespace
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {

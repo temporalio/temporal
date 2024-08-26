@@ -946,10 +946,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						TaskQueueType: taskQueueType,
 						PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
 					},
-					Versions:                      req.GetVersions(),
-					ReportStats:                   req.GetReportStats(),
-					ReportPollers:                 req.GetReportPollers(),
-					ReportInternalTaskQueueStatus: false,
+					Versions:      req.GetVersions(),
+					ReportStats:   req.GetReportStats(),
+					ReportPollers: req.GetReportPollers(),
 				})
 				if err != nil {
 					return nil, err
