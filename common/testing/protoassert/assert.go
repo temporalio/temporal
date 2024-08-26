@@ -28,10 +28,9 @@ package protoassert
 import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/api/temporalproto"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
-
-	"go.temporal.io/api/temporalproto"
 )
 
 type helper interface {

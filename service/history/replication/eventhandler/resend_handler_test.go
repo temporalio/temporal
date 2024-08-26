@@ -530,6 +530,130 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_MixedVersionHistory_R
 	s.Nil(err)
 }
 
+func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_BatchTest() {
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	endEventID := int64(13)
+	endEventVersion := int64(123)
+	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(10)
+
+	eventBatch0 := []*historypb.HistoryEvent{
+		{EventId: 1},
+		{EventId: 2},
+	}
+	eventBatch1 := []*historypb.HistoryEvent{
+		{EventId: 3, Version: 123},
+		{EventId: 4, Version: 123},
+	}
+	eventBatch2 := []*historypb.HistoryEvent{
+		{EventId: 5, Version: 123},
+		{EventId: 6, Version: 123},
+	}
+	eventBatch3 := []*historypb.HistoryEvent{
+		{EventId: 7, Version: 124},
+		{EventId: 8, Version: 124},
+	}
+	eventBatch4 := []*historypb.HistoryEvent{
+		{EventId: 9, Version: 124},
+		{EventId: 10, Version: 124},
+	}
+	eventBatch5 := []*historypb.HistoryEvent{
+		{EventId: 11, Version: 127},
+		{EventId: 12, Version: 127},
+	}
+	versionHistory := &historyspb.VersionHistory{
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 2},
+			{EventId: 6, Version: 123},
+			{EventId: 10, Version: 124},
+			{EventId: 12, Version: 127},
+		},
+	}
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1))
+	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
+
+	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
+		return []*HistoryBatch{
+			{RawEventBatch: s.serializeEvents(eventBatch0), VersionHistory: versionHistory},
+			{RawEventBatch: s.serializeEvents(eventBatch1), VersionHistory: versionHistory},
+			{RawEventBatch: s.serializeEvents(eventBatch2), VersionHistory: versionHistory},
+			{RawEventBatch: s.serializeEvents(eventBatch3), VersionHistory: versionHistory},
+			{RawEventBatch: s.serializeEvents(eventBatch4), VersionHistory: versionHistory},
+			{RawEventBatch: s.serializeEvents(eventBatch5), VersionHistory: versionHistory},
+		}, nil, nil
+	})
+
+	s.historyFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
+		gomock.Any(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		int64(13),
+		int64(123),
+	).Return(fetcher)
+
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+
+	gomock.InOrder(
+		s.engine.EXPECT().ReplicateHistoryEvents(
+			gomock.Any(),
+			workflowKey,
+			nil,
+			versionHistory.Items,
+			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch0}),
+			nil,
+			"",
+		).Times(1),
+		s.engine.EXPECT().ReplicateHistoryEvents(
+			gomock.Any(),
+			workflowKey,
+			nil,
+			versionHistory.Items,
+			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch1, eventBatch2}),
+			nil,
+			"",
+		).Times(1),
+		s.engine.EXPECT().ReplicateHistoryEvents(
+			gomock.Any(),
+			workflowKey,
+			nil,
+			versionHistory.Items,
+			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch3, eventBatch4}),
+			nil,
+			"",
+		).Times(1),
+		s.engine.EXPECT().ReplicateHistoryEvents(
+			gomock.Any(),
+			workflowKey,
+			nil,
+			versionHistory.Items,
+			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch5}),
+			nil,
+			"",
+		).Times(1),
+	)
+
+	err := s.resendHandler.ResendHistoryEvents(
+		context.Background(),
+		cluster.TestAlternativeClusterName,
+		s.namespaceID,
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		endEventID,
+		endEventVersion,
+	)
+	s.Nil(err)
+}
+
 func (s *resendHandlerSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
 	blob, err := s.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)

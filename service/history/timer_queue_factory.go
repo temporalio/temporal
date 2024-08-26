@@ -29,23 +29,22 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 const (

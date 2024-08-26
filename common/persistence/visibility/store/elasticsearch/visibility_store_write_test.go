@@ -33,7 +33,6 @@ import (
 	"github.com/golang/mock/gomock"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"

@@ -37,8 +37,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/fx"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
@@ -77,6 +75,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/fx"
 )
 
 type (

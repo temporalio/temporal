@@ -71,6 +71,7 @@ var defaultConfig = &nexusoperations.Config{
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
 	MaxOperationScheduleToCloseTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
+	EndpointNotFoundAlwaysNonRetryable: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 }
 
 func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
@@ -149,7 +150,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Equal(t, 0, len(tcx.history.Events))
 	})
 
-	t.Run("endpoint not found", func(t *testing.T) {
+	t.Run("endpoint not found - rejected by config", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
@@ -165,6 +166,23 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
 		require.Equal(t, 0, len(tcx.history.Events))
+	})
+
+	t.Run("endpoint not found - ignored by config", func(t *testing.T) {
+		cfg := *defaultConfig
+		cfg.EndpointNotFoundAlwaysNonRetryable = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		tcx := newTestContext(t, &cfg)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "not found",
+					Service:   "service",
+					Operation: "op",
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(tcx.history.Events))
 	})
 
 	t.Run("exceeds max service length", func(t *testing.T) {

@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -170,6 +169,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetSkipGenerateWorkflowTask(),
 	).Return(&history.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
+	s.currentMutableState.EXPECT().HadOrHasWorkflowTask().Return(true)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&workflow.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 

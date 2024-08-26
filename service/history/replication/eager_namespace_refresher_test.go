@@ -31,6 +31,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -49,8 +50,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
-
-	"github.com/stretchr/testify/suite"
 )
 
 const mockCurrentCuster = "current_cluster_1"

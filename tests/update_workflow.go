@@ -41,8 +41,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -53,6 +51,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {

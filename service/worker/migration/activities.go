@@ -32,15 +32,12 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -56,6 +53,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (

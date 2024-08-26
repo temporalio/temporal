@@ -29,9 +29,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
-
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"

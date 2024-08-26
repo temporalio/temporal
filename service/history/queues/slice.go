@@ -27,9 +27,8 @@ package queues
 import (
 	"fmt"
 
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/service/history/tasks"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (

@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/primitives"
 )
 

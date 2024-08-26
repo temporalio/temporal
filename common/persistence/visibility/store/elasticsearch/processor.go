@@ -39,7 +39,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic/v7"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"

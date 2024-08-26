@@ -30,8 +30,6 @@ import (
 	"fmt"
 	"slices"
 
-	"go.uber.org/multierr"
-
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.uber.org/multierr"
 )
 
 type (

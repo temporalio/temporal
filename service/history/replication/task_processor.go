@@ -34,8 +34,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -56,6 +54,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (

@@ -34,11 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
@@ -49,6 +45,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/environment"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)

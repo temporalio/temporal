@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
-
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"

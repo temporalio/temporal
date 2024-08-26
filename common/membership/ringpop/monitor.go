@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/ringpop-go/discovery/statichosts"
 	"github.com/temporalio/ringpop-go/swim"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"

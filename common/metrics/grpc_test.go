@@ -31,11 +31,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
-
 	metricspb "go.temporal.io/server/api/metrics/v1"
 	"go.temporal.io/server/common/log"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type (

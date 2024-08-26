@@ -31,9 +31,8 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/primitives"
-
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
