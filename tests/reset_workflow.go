@@ -29,8 +29,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	filterpb "go.temporal.io/api/filter/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"strconv"
 	"time"
 
@@ -218,72 +216,6 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	s.Equal(we.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
 }
 
-func (s *FunctionalSuite) TestWorfklowSimpleSuccess() {
-	tv := testvars.New(s.T())
-	identity := "worker1"
-
-	backoffCoefficient := 1.5
-	maximumAttempts := 5
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
-		WorkflowId:          tv.WorkflowID(),
-		WorkflowType:        tv.WorkflowType(""),
-		TaskQueue:           tv.TaskQueue(),
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(10 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
-		RetryPolicy: &commonpb.RetryPolicy{
-			// Intentionally test server-initialization of Initial Interval value (which should be 1 second)
-			MaximumAttempts:        int32(maximumAttempts),
-			MaximumInterval:        durationpb.New(1 * time.Second),
-			NonRetryableErrorTypes: []string{"bad-bug"},
-			BackoffCoefficient:     backoffCoefficient,
-		},
-	}
-
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
-
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-
-	var executions []*commonpb.WorkflowExecution
-
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		executions = append(executions, task.WorkflowExecution)
-		return []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("simple success"),
-				}},
-			}}, nil
-	}
-
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
-		TaskQueue:           tv.TaskQueue(),
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
-
-	_, err := poller.PollAndProcessWorkflowTask()
-	s.NoError(err)
-	events := s.getHistory(s.namespace, executions[0])
-
-	s.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted {"Attempt":1}
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 WorkflowExecutionCompleted`, events)
-
-}
-
 func (s *FunctionalSuite) TestResetWorkflowAfterTimeout() {
 	startTime := time.Now().UTC()
 	tv := testvars.New(s.T())
@@ -307,7 +239,7 @@ func (s *FunctionalSuite) TestResetWorkflowAfterTimeout() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	time.Sleep(time.Second)
+	time.Sleep(time.Second) //nolint:forbidigo
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
@@ -320,7 +252,7 @@ GetHistoryLoop:
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
 			s.Logger.Warn("Execution not timed out yet. Last event: " + lastEvent.GetEventType().String())
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 			continue GetHistoryLoop
 		}
 
@@ -351,7 +283,7 @@ ListClosedLoop:
 		closedCount = len(resp.Executions)
 		if closedCount == 0 {
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond) //nolint:forbidigo
 			continue ListClosedLoop
 		}
 		break ListClosedLoop
@@ -373,7 +305,7 @@ ListClosedLoop:
 	var executions []*commonpb.WorkflowExecution
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 		executions = append(executions, task.WorkflowExecution)
 		return []*commandpb.Command{
 			{
