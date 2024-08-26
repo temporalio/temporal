@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -498,7 +499,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 		}
 		if reportStats {
+			fmt.Println("getting stats....")
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
+			fmt.Println(vInfo.PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount, vInfo.PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogAge, vInfo.PhysicalTaskQueueInfo.TaskQueueStats.TasksAddRate, vInfo.PhysicalTaskQueueInfo.TaskQueueStats.TasksDispatchRate)
 		}
 		if internalTaskQueueStatus {
 			vInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
