@@ -945,7 +945,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.waitForChan(ctx, failedTask)
 
 	// MS should have the correct build ID
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
 
 	// v2 times out the task
@@ -1452,7 +1451,6 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		expectedStampBuildId = v1
 	}
 	// MS should have the correct build ID
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, expectedStampBuildId, "", nil)
 
 	// v11 times out the task
