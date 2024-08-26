@@ -339,7 +339,12 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
 						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 						if err != nil {
-							// silently ignore for now
+							// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+							// so ignoring the error for now; we will revisit how to handle these errors later.
+							e.Logger.Error(
+								fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+								tag.Error(err),
+							)
 							continue
 						}
 						links = append(links, &commonpb.Link{
