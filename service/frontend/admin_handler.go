@@ -28,13 +28,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"io"
 	"maps"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/api/matchingservice/v1"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
