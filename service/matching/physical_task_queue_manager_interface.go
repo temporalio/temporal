@@ -32,7 +32,6 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )

@@ -36,11 +36,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -49,10 +44,14 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -362,8 +361,8 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory_Batching_ApplyWi
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
 
 	eventBatch0 := []*historypb.HistoryEvent{
-		{EventId: 1, Version: 123},
-		{EventId: 2, Version: 123},
+		{EventId: 1},
+		{EventId: 2},
 	}
 	eventBatch1 := []*historypb.HistoryEvent{
 		{EventId: 3, Version: 124},
@@ -382,7 +381,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory_Batching_ApplyWi
 		{EventId: 10, Version: 127},
 	}
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		{EventId: 2, Version: 123},
+		{EventId: 2},
 		{EventId: 4, Version: 124},
 		{EventId: 6, Version: 125},
 		{EventId: 8, Version: 126},

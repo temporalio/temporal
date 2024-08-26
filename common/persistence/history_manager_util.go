@@ -29,7 +29,6 @@ import (
 	"sort"
 
 	historypb "go.temporal.io/api/history/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 

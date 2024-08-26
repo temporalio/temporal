@@ -35,12 +35,11 @@ import (
 
 	"github.com/dgryski/go-farm"
 	historypb "go.temporal.io/api/history/v1"
-	"go.uber.org/multierr"
-	"google.golang.org/protobuf/proto"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
+	"go.uber.org/multierr"
+	"google.golang.org/protobuf/proto"
 )
 
 var (

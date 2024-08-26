@@ -27,13 +27,12 @@ package queues
 import (
 	"fmt"
 
-	expmaps "golang.org/x/exp/maps"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
+	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func ToPersistenceQueueState(
@@ -147,6 +146,8 @@ func ToPersistencePredicate(
 		return ToPersistenceDestinationPredicate(predicate)
 	case *tasks.OutboundTaskGroupPredicate:
 		return ToPersistenceOutboundTaskGroupPredicate(predicate)
+	case *tasks.OutboundTaskPredicate:
+		return ToPersistenceOutboundTaskPredicate(predicate)
 	default:
 		panic(fmt.Sprintf("unknown task predicate type: %T", predicate))
 	}
@@ -174,6 +175,8 @@ func FromPersistencePredicate(
 		return FromPersistenceDestinationPredicate(predicate.GetDestinationPredicateAttributes())
 	case enumsspb.PREDICATE_TYPE_OUTBOUND_TASK_GROUP:
 		return FromPersistenceOutboundTaskGroupPredicate(predicate.GetOutboundTaskGroupPredicateAttributes())
+	case enumsspb.PREDICATE_TYPE_OUTBOUND_TASK:
+		return FromPersistenceOutboundTaskPredicate(predicate.GetOutboundTaskPredicateAttributes())
 	default:
 		panic(fmt.Sprintf("unknown persistence task predicate type: %v", predicate.GetPredicateType()))
 	}
@@ -360,4 +363,40 @@ func FromPersistenceOutboundTaskGroupPredicate(
 	attributes *persistencespb.OutboundTaskGroupPredicateAttributes,
 ) tasks.Predicate {
 	return tasks.NewOutboundTaskGroupPredicate(attributes.Groups)
+}
+
+func ToPersistenceOutboundTaskPredicate(
+	pred *tasks.OutboundTaskPredicate,
+) *persistencespb.Predicate {
+	groups := make([]*persistencespb.OutboundTaskPredicateAttributes_Group, 0, len(pred.Groups))
+	for g := range pred.Groups {
+		groups = append(groups, &persistencespb.OutboundTaskPredicateAttributes_Group{
+			TaskGroup:   g.TaskGroup,
+			NamespaceId: g.NamespaceID,
+			Destination: g.Destination,
+		})
+	}
+
+	return &persistencespb.Predicate{
+		PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK,
+		Attributes: &persistencespb.Predicate_OutboundTaskPredicateAttributes{
+			OutboundTaskPredicateAttributes: &persistencespb.OutboundTaskPredicateAttributes{
+				Groups: groups,
+			},
+		},
+	}
+}
+
+func FromPersistenceOutboundTaskPredicate(
+	attributes *persistencespb.OutboundTaskPredicateAttributes,
+) tasks.Predicate {
+	groups := make([]tasks.TaskGroupNamespaceIDAndDestination, len(attributes.Groups))
+	for i, g := range attributes.Groups {
+		groups[i] = tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   g.TaskGroup,
+			NamespaceID: g.NamespaceId,
+			Destination: g.Destination,
+		}
+	}
+	return tasks.NewOutboundTaskPredicate(groups)
 }

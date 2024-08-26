@@ -31,7 +31,6 @@ import (
 	metricspb "go.temporal.io/server/api/metrics/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

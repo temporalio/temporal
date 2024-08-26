@@ -474,8 +474,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
-	defer pm.versionedQueuesLock.RUnlock()
-
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
@@ -484,6 +482,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			buildIds[k] = true
 		}
 	}
+	pm.versionedQueuesLock.RUnlock()
 
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for bid := range buildIds {

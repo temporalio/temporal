@@ -29,10 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -47,6 +43,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
@@ -120,6 +119,8 @@ var (
 		enums.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:  {},
 		enums.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:         {},
 		enums.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION: {},
+		enums.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION:           {},
+		enums.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION:     {},
 	}
 )
 

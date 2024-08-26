@@ -28,7 +28,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 )

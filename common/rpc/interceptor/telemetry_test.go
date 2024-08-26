@@ -27,18 +27,14 @@ package interceptor
 import (
 	"testing"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -48,6 +44,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -115,6 +113,18 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
 			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
 			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
+			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
+			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Messages: []*protocolpb.Message{
 					{
 						Id:   "MESSAGE_ID",
@@ -141,9 +151,9 @@ func TestEmitActionMetric(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.methodName, func(t *testing.T) {
 			if tt.expectEmitMetrics {
-				metricsHandler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).Times(1)
+				metricsHandler.EXPECT().Counter(metrics.ActionCounter.Name()).Return(metrics.NoopCounterMetricFunc).Times(1)
 			} else {
-				metricsHandler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).Times(0)
+				metricsHandler.EXPECT().Counter(metrics.ActionCounter.Name()).Return(metrics.NoopCounterMetricFunc).Times(0)
 			}
 			telemetry.emitActionMetric(tt.methodName, tt.fullName, tt.req, metricsHandler, tt.resp)
 		})

@@ -43,10 +43,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -72,6 +68,9 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/metadata"
 )
 
 type (

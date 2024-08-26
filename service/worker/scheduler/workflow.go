@@ -33,10 +33,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
@@ -46,8 +42,6 @@ import (
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/encoding/protojson"
-
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
@@ -57,6 +51,10 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type SchedulerWorkflowVersion int64

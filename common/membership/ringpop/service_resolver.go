@@ -34,15 +34,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/ringpop-go"
-	"github.com/temporalio/tchannel-go"
-
 	"github.com/dgryski/go-farm"
+	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/ringpop-go/events"
 	"github.com/temporalio/ringpop-go/hashring"
 	rpmembership "github.com/temporalio/ringpop-go/membership"
 	"github.com/temporalio/ringpop-go/swim"
-
+	"github.com/temporalio/tchannel-go"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
