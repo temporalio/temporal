@@ -132,7 +132,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersi
 	s.partitionMgr.unloadPhysicalQueue(sourceQ, unloadCauseUnspecified)
 
 	// calling Describe on an unloaded physical queue
-	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, false)
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, false, false)
 	s.NoError(err)
 
 	// 1 task in the backlog
