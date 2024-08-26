@@ -535,11 +535,11 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 					Usage: "Sticky Name for a task queue partition, if present",
 					Value: "",
 				},
-				//&cli.StringSliceFlag{
-				//	Name:  FlagBuildIDs,
-				//	Value: &cli.StringSlice{},
-				//	Usage: "Build IDs",
-				//},
+				&cli.StringSliceFlag{
+					Name:  FlagBuildIDs,
+					Value: &cli.StringSlice{},
+					Usage: "Build IDs",
+				},
 				&cli.BoolFlag{
 					Name:  FlagUnversioned,
 					Usage: "Unversioned task queue partition",
