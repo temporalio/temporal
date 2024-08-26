@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
 	"time"
@@ -111,6 +112,84 @@ func (s *PartitionManagerTestSuite) TestAddTaskNoRules_AssignedTask() {
 	bld := "buildXYZ"
 	s.validateAddTask("", false, nil, worker_versioning.MakeBuildIdDirective(bld))
 	s.validatePollTask(bld, true)
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuildIds() {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// adding multiple tasks to queues with different buildId's
+	bld1 := "build1"
+	bld2 := "build2"
+	s.validateAddTask("", false, nil, worker_versioning.MakeBuildIdDirective(bld1))
+	s.validateAddTask("", false, nil, worker_versioning.MakeBuildIdDirective(bld2))
+	buildIds := make(map[string]bool)
+	buildIds[bld1] = true
+	buildIds[bld2] = true
+
+	// validating TQ Stats
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false)
+	s.NoError(err)
+	s.Equal(2, len(resp.VersionsInfoInternal))
+
+	// validate PhysicalTaskQueueInfo structures
+	s.NotNil(resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo)
+	s.NotNil(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo)
+	expectedPhysicalTQInfo := &taskqueue.PhysicalTaskQueueInfo{
+		Pollers: nil, // no pollers polling
+		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: 1,
+			TasksDispatchRate:       0,
+		},
+	}
+	s.validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld1].GetPhysicalTaskQueueInfo())
+	s.validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld2].GetPhysicalTaskQueueInfo())
+
+	// adding pollers
+	s.validatePollTask(bld1, true)
+	s.validatePollTask(bld2, true)
+
+	// fresher call of the describe API
+	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true)
+	s.NoError(err)
+
+	// validate TQ internal statistics (not exposed via public API)
+	expectedInternalStatsInfo := &taskqueue.InternalTaskQueueStatus{
+		ReadLevel: 1,
+		AckLevel:  0,
+		TaskIdBlock: &taskqueuepb.TaskIdBlock{
+			StartId: 2,
+			EndId:   1000,
+		},
+		ReadBufferLength: 0,
+	}
+
+	s.validateInternalTaskQueueStatus(expectedInternalStatsInfo, resp.VersionsInfoInternal[bld1].GetInternalTaskQueueStatus())
+	s.validateInternalTaskQueueStatus(expectedInternalStatsInfo, resp.VersionsInfoInternal[bld2].GetInternalTaskQueueStatus())
+
+}
+
+// validateTQStats is a helper to validate if the right metrics are being returned during the getStats call
+func (s *PartitionManagerTestSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo *taskqueue.PhysicalTaskQueueInfo, actualPhysicalTQInfo *taskqueue.PhysicalTaskQueueInfo) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		a.Equal(expectedPhysicalTQInfo.Pollers, actualPhysicalTQInfo.Pollers)
+		a.Equal(expectedPhysicalTQInfo.TaskQueueStats.ApproximateBacklogCount, actualPhysicalTQInfo.TaskQueueStats.ApproximateBacklogCount)
+		a.Equal(expectedPhysicalTQInfo.TaskQueueStats.TasksDispatchRate, actualPhysicalTQInfo.TaskQueueStats.TasksDispatchRate)
+		a.NotNil(actualPhysicalTQInfo.TaskQueueStats.TasksAddRate)
+		a.NotNil(actualPhysicalTQInfo.TaskQueueStats.ApproximateBacklogAge)
+	}, time.Second*10, 200*time.Millisecond)
+}
+
+// validateInternalTaskQueueStatus is a helper to validate if the right internal task queue stats are being returned during the GetInternalTaskQueueStatus call
+func (s *PartitionManagerTestSuite) validateInternalTaskQueueStatus(expectedInternalTaskQueueStatus *taskqueue.InternalTaskQueueStatus, actualInternalTaskQueueStatus *taskqueue.InternalTaskQueueStatus) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		a.Equal(expectedInternalTaskQueueStatus.ReadLevel, actualInternalTaskQueueStatus.ReadLevel)
+		a.Equal(expectedInternalTaskQueueStatus.AckLevel, actualInternalTaskQueueStatus.AckLevel)
+		a.Equal(expectedInternalTaskQueueStatus.ReadBufferLength, actualInternalTaskQueueStatus.ReadBufferLength)
+		a.NotNil(actualInternalTaskQueueStatus.TaskIdBlock)
+	}, time.Second*10, 200*time.Millisecond)
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
