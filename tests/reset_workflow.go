@@ -36,6 +36,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api/resetworkflow"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *FunctionalSuite) TestResetWorkflow() {
