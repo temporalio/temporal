@@ -172,7 +172,7 @@ func TestSimpleIterator(t *testing.T) {
 	it := cache.Iterator()
 	for it.HasNext() {
 		entry := it.Next()
-		// nolint
+		// nolint:revive
 		actual[entry.Key().(string)] = entry.Value().(string)
 	}
 	it.Close()
@@ -181,7 +181,7 @@ func TestSimpleIterator(t *testing.T) {
 	it = cache.Iterator()
 	for i := 0; i < len(expected); i++ {
 		entry := it.Next()
-		// nolint
+		// nolint:revive
 		actual[entry.Key().(string)] = entry.Value().(string)
 	}
 	it.Close()
