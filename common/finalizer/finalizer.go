@@ -144,7 +144,12 @@ func (f *Finalizer) Run(
 
 	completionChannel := make(chan struct{})
 	go func() {
+		// prevent holding on to the callbacks for longer than needed and allow garbage collection
+		// (safe since any calls to Register/Deregister will be aborted now that the finalizer ran)
+		defer func() { f.callbacks = nil }()
+
 		defer func() { f.logger.Info("finalizer loop ended") }()
+
 		for _, callback := range f.callbacks {
 			// NOTE: Once `pool.Stop` is called, any remaining calls to `pool.Do` will do nothing.
 			pool.Do(func() {
