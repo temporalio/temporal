@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
 	"go.temporal.io/server/common/clock"
 	. "go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/log"

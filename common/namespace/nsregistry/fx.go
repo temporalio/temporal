@@ -25,9 +25,8 @@
 package nsregistry
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/namespace"
+	"go.uber.org/fx"
 )
 
 var RegistryLifetimeHooksModule = fx.Options(

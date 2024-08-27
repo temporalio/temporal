@@ -30,10 +30,9 @@ import (
 	"errors"
 	"sync"
 
-	"go.temporal.io/server/common/archiver/gcloud"
-
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
+	"go.temporal.io/server/common/archiver/gcloud"
 	"go.temporal.io/server/common/archiver/s3store"
 	"go.temporal.io/server/common/config"
 )

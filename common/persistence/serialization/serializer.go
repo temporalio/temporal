@@ -33,14 +33,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"google.golang.org/protobuf/proto"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 type (

@@ -26,7 +26,6 @@ package versionhistory
 
 import (
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 )
 

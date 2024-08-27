@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"

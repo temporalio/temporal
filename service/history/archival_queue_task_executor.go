@@ -31,9 +31,6 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -46,6 +43,8 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // NewArchivalQueueTaskExecutor creates a new queue task executor for the archival queue.

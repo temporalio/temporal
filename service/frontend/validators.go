@@ -26,7 +26,6 @@ package frontend
 
 import (
 	"github.com/pborman/uuid"
-
 	commonpb "go.temporal.io/api/common/v1"
 )
 

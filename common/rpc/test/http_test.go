@@ -31,11 +31,10 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
+	"google.golang.org/grpc"
 )
 
 func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {

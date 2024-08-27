@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"

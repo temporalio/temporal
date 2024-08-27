@@ -34,8 +34,6 @@ import (
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -43,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 	sqliteschema "go.temporal.io/server/schema/sqlite"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (

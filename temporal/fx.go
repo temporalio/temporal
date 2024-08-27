@@ -40,11 +40,6 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxevent"
-	expmaps "golang.org/x/exp/maps"
-	"google.golang.org/grpc"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
@@ -78,6 +73,10 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
+	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/grpc"
 )
 
 var (

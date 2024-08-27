@@ -41,9 +41,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -52,6 +49,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -126,6 +125,20 @@ var (
 	testHeader = &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{
 			"random header key": testPayload,
+		},
+	}
+	testLink = &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "handler-ns",
+				WorkflowId: "handler-wf-id",
+				RunId:      "handler-run-id",
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
 		},
 	}
 	testFailure       = &failurepb.Failure{}
@@ -225,6 +238,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 			Memo:             testMemo,
 			SearchAttributes: testSearchAttributes,
 			Header:           testHeader,
+			Links:            []*commonpb.Link{testLink},
 		},
 	}
 
@@ -245,6 +259,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 			EventTime: timestamppb.New(s.now),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			Version:   s.version,
+			Links:     []*commonpb.Link{testLink},
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:                    testWorkflowType,
