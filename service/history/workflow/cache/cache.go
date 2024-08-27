@@ -180,7 +180,7 @@ func newCache(
 				return nil
 			})
 			if err != nil {
-				logger.Warn("cache failed to register callback in finalizer",
+				logger.Debug("cache failed to register callback in finalizer",
 					tag.Error(err), tag.ShardID(item.shardId))
 			}
 		},
@@ -193,7 +193,7 @@ func newCache(
 			wfKey := item.wfContext.GetWorkflowKey()
 			err := item.finalizer.Deregister(wfKey.String())
 			if err != nil {
-				logger.Warn("cache failed to de-register callback in finalizer",
+				logger.Debug("cache failed to de-register callback in finalizer",
 					tag.Error(err), tag.ShardID(item.shardId))
 			}
 		},
