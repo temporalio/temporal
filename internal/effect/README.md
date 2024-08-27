@@ -1,0 +1,1 @@
+See [docs/effect-package.md](../../docs/effect-package.md).

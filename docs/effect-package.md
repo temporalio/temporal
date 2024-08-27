@@ -1,7 +1,7 @@
 # `effect` package
 
 ## Motivation
-Acceptance or competition of Workflow Update involves 2 steps:
+Acceptance or completion of Workflow Update involves 2 steps:
 1. Corresponding history events need to be created together with mutable state updates (persistence operation),
 2. Caller of `UpdateWorkflowExecution` API should get be unblocked with Update results.
 

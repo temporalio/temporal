@@ -406,7 +406,7 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 
 	// Other errors go to the future of completed Update,
 	// because it means that Update exists, was found, but there is something broken in it
-	// (UpdateInfo in mutable state is invalid or Update competition event is not found).
+	// (UpdateInfo in mutable state is invalid or Update completion event is not found).
 
 	// The Update is completed and its outcome loaded from the corresponding history event.
 	return newCompleted(
