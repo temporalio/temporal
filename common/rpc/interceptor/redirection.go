@@ -125,6 +125,7 @@ var (
 		"StopBatchOperation":     func() any { return &workflowservice.StopBatchOperationResponse{} },
 		"DescribeBatchOperation": func() any { return &workflowservice.DescribeBatchOperationResponse{} },
 		"ListBatchOperations":    func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"UpdateActivityOptions":  func() any { return &workflowservice.UpdateActivityOptionsResponse{} },
 	}
 )
 

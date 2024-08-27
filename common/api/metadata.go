@@ -139,6 +139,7 @@ var (
 		"StopBatchOperation":                 {Scope: ScopeNamespace, Access: AccessWrite},
 		"DescribeBatchOperation":             {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"ListBatchOperations":                {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"UpdateActivityOptions":              {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

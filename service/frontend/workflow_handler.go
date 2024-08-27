@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"go.temporal.io/api/workflowservice/v1"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -46,7 +47,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
@@ -5026,4 +5026,8 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 		operationState = enumspb.BATCH_OPERATION_STATE_FAILED
 	}
 	return operationState
+}
+
+func (wh *WorkflowHandler) UpdateActivityOptions(context.Context, *workflowservice.UpdateActivityOptionsRequest) (*workflowservice.UpdateActivityOptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
 }

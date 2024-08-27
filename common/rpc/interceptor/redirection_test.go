@@ -184,6 +184,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"StopBatchOperation":     {},
 		"DescribeBatchOperation": {},
 		"ListBatchOperations":    {},
+		"UpdateActivityOptions":  {},
 	}, apis)
 }
 
