@@ -873,7 +873,7 @@ func (e *historyEngineImpl) ConvertReplicationTask(
 	task tasks.Task,
 	clusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
-	return e.replicationAckMgr.ConvertTaskByCluster(ctx, e, task, clusterID)
+	return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
 }
 
 func (e *historyEngineImpl) GetReplicationTasksIter(

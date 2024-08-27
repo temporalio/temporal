@@ -225,8 +225,6 @@ message VerifyVersionedTransitionTaskAttributes {
     string new_run_id = 6;
 }
 
-// (-- api-linter: core::0158::response-next-page-token-field=disabled
-//     aip.dev/not-precedent: We need to do this because current implementations. --)
 message SyncVersionedTransitionTaskAttributes {
     repeated temporal.api.common.v1.DataBlob event_batches = 1;
     NewRunInfo new_run_info = 2;
