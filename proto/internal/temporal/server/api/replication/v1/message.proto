@@ -230,18 +230,4 @@ message VerifyVersionedTransitionTaskAttributes {
 message SyncVersionedTransitionTaskAttributes {
     repeated temporal.api.common.v1.DataBlob event_batches = 1;
     NewRunInfo new_run_info = 2;
-    bytes next_page_token = 3;
-
-    message SyncStateSnapshotAttributes {
-        // TODO
-    }
-    
-    message SyncStateMutationAttributes {
-        // TODO
-    }
-
-    oneof sync_attributes {
-        SyncStateSnapshotAttributes sync_state_snapshot_attributes = 4;
-        SyncStateMutationAttributes sync_state_mutation_attributes = 5;
-    }
 }

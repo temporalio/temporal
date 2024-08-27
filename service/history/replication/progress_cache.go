@@ -209,25 +209,7 @@ func (c *ReplicationProgress) LastSyncedTransition() *persistencespb.VersionedTr
 	return transitions[len(transitions)-1]
 }
 
-// func (c *ReplicationProgress) LastSyncedEventHistoryItems() []*historyspb.VersionHistoryItem {
-// 	if c == nil ||
-// 		len(c.eventVersionHistoryItems) == 0 ||
-// 		c.lastEventVersionHistoryIndex < 0 ||
-// 		c.lastEventVersionHistoryIndex >= len(c.eventVersionHistoryItems) {
-// 		return nil
-// 	}
-// 	return c.eventVersionHistoryItems[c.lastEventVersionHistoryIndex]
-// }
-
-// func (c *ReplicationProgress) GetLastEventVersion() int64 {
-// 	items := c.LastSyncedEventHistoryItems()
-// 	if len(items) == 0 {
-// 		return 0
-// 	}
-// 	return items[len(items)-1].Version
-// }
-
-func (c *ReplicationProgress) TaskSent(versionedTransition *persistencespb.VersionedTransition) bool {
+func (c *ReplicationProgress) VersionedTransitionSent(versionedTransition *persistencespb.VersionedTransition) bool {
 	if c == nil {
 		return false
 	}

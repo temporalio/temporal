@@ -36,6 +36,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	repication "go.temporal.io/server/api/replication/v1"
 	collection "go.temporal.io/server/common/collection"
+	shard "go.temporal.io/server/service/history/shard"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -78,18 +79,18 @@ func (mr *MockAckManagerMockRecorder) ConvertTask(ctx, task interface{}) *gomock
 }
 
 // ConvertTaskByCluster mocks base method.
-func (m *MockAckManager) ConvertTaskByCluster(ctx context.Context, task tasks.Task, targetClusterID int32) (*repication.ReplicationTask, error) {
+func (m *MockAckManager) ConvertTaskByCluster(ctx context.Context, historyEngine shard.Engine, task tasks.Task, targetClusterID int32) (*repication.ReplicationTask, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConvertTaskByCluster", ctx, task, targetClusterID)
+	ret := m.ctrl.Call(m, "ConvertTaskByCluster", ctx, historyEngine, task, targetClusterID)
 	ret0, _ := ret[0].(*repication.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ConvertTaskByCluster indicates an expected call of ConvertTaskByCluster.
-func (mr *MockAckManagerMockRecorder) ConvertTaskByCluster(ctx, task, targetClusterID interface{}) *gomock.Call {
+func (mr *MockAckManagerMockRecorder) ConvertTaskByCluster(ctx, historyEngine, task, targetClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertTaskByCluster", reflect.TypeOf((*MockAckManager)(nil).ConvertTaskByCluster), ctx, task, targetClusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertTaskByCluster", reflect.TypeOf((*MockAckManager)(nil).ConvertTaskByCluster), ctx, historyEngine, task, targetClusterID)
 }
 
 // GetMaxTaskInfo mocks base method.

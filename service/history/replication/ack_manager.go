@@ -478,7 +478,6 @@ func (p *ackMgrImpl) ConvertTaskByCluster(
 		return convertSyncVersionedTransitionTask(
 			ctx,
 			p.shardContext,
-			historyEngine,
 			task,
 			p.shardContext.GetShardID(),
 			p.workflowCache,
