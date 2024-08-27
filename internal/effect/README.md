@@ -1,1 +1,1 @@
-See [docs/effect-package.md](../../docs/effect-package.md).
+See [docs/architecture/effect-package.md](../../docs/architecture/effect-package.md).

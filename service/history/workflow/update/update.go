@@ -48,7 +48,7 @@ var (
 )
 
 type (
-	// Update docs are at docs/workflow-update.md.
+	// Update docs are at /docs/architecture/workflow-update.md.
 	Update struct {
 		// These fields must be accessed only while holding workflow lock.
 		id    string
@@ -327,7 +327,7 @@ func (u *Update) Admit(
 // applied after the durable Updates are committed. If the EventStore rolls back
 // its effects, this state machine does the same.
 //
-// If you modify the state machine, please update the diagram in docs/workflow-update.md.
+// If you modify the state machine, please update the diagram in /docs/architecture/workflow-update.md.
 func (u *Update) OnProtocolMessage(
 	protocolMsg *protocolpb.Message,
 	eventStore EventStore,

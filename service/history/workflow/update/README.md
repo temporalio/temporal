@@ -1,1 +1,1 @@
-See [docs/workflow-update.md](../../../../docs/workflow-update.md).
+See [docs/architecture/workflow-update.md](../../../../docs/architecture/workflow-update.md).

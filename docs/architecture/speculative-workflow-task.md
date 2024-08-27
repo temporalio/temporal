@@ -38,7 +38,7 @@ Overall logic, is to try to do the best and allow speculative Workflow Task to g
 goes wrong, quickly give up, convert speculative Workflow Task to normal and follow normal procedures.
 
 Zero database writes also means that transfer and regular timer tasks can't be used for
-speculative Workflow Tasks. Special [in-memory-queue](in-memory-queue.md) is used for force speculative Workflow Task timeouts.
+speculative Workflow Tasks. Special [in-memory-queue](./in-memory-queue.md) is used for force speculative Workflow Task timeouts.
 
 > #### TODO
 > It is important to point out that `WorkflowTaskScheduled` and `WorkflowTaskStarted` events for transient
@@ -142,7 +142,7 @@ Speculative Workflow Task is retired the same way as normal Workflow Task, which
 2nd failed attempt is not written to the history.
 
 ## Speculative Workflow Task Timeout
-Speculative Workflow Task timeouts are enforced with special [in-memory timer queue](in-memory-queue.md).
+Speculative Workflow Task timeouts are enforced with special [in-memory timer queue](./in-memory-queue.md).
 Unlike for normal Workflow Task `SCHEDULE_TO_START` timeout timer is created if speculative Workflow Task
 is scheduled on both sticky and **normal** task queue. `START_TO_CLOSE` timer is created
  when a Workflow Task is started. There is only one timer exists for speculative Workflow Task at any given time.

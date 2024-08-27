@@ -25,10 +25,10 @@ and Workflow: it exposes API which is handled by Workflow code.
 
 To achieve this, few new internal primitives were introduced. They are not coupled directly with
 Workflow Update, but it highly depends on them:
-  - [Speculative Workflow Task](speculative-workflow-task.md)
-  - [In-memory timer queue](in-memory-queue.md)
-  - [Message protocol](message-protocol.md)
-  - [`effect` package](effect-package.md)
+  - [Speculative Workflow Task](./speculative-workflow-task.md)
+  - [In-memory timer queue](./in-memory-queue.md)
+  - [Message protocol](./message-protocol.md)
+  - [`effect` package](./effect-package.md)
 
 ## Key Requirement: Zero Persistence Writes
 There is a requirement, which is not common among Temporal APIs: Update rejections must leave
@@ -166,7 +166,7 @@ After Update is added to the Registry, the server schedules a new Workflow Task 
 This Workflow Task is always speculative, unless there is already scheduled but not started Workflow Task.
 Later, when handling worker response in `RespondWorkflowTaskCompleted` handler,
 server might write or drop events for this Workflow Task.
-Check [here](speculative-workflow-task.md) for more details.
+Check [here](./speculative-workflow-task.md) for more details.
 
 ### Lifecycle Stage
 Besides common sense parameters (like Update name and input) caller can also specify Update stage
@@ -245,7 +245,7 @@ There are two exceptions when `maxInFlightLimit` limit is ignored and can be exc
 2. Update is reapplied (see Reapply Updates below). All reapplied Updates become in-flight.
 
 ## Processing Updates in `RespondWorkflowTaskCompleted`
-Server receives Update `updatepb.Acceptance` and `updatepb.Response` as [messages](message-protocol.md) in `Messages` field
+Server receives Update `updatepb.Acceptance` and `updatepb.Response` as [messages](./message-protocol.md) in `Messages` field
 of `RespondWorkflowTaskCompletedRequest`. Handler of `RespondWorkflowTaskCompleted` is one of the most
 complicated functions in Temporal. Workflow Update handling can be extracted as:
 ```mermaid
@@ -347,7 +347,7 @@ can be accepted and completed in the same Workflow Task following state transiti
 ```
 Sent -> ProvisionalyAccepted -> ProvisionalyCompleted -> Accepted -> Completed
 ```
-Check [`effect` package doc](effect-package.md) for more details.
+Check [`effect` package doc](./effect-package.md) for more details.
 
 ### When to Apply Effects
 Because `Cancel()` method is called in `deffer` block in case of error, `Apply()` method
