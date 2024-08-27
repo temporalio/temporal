@@ -28,7 +28,6 @@ import (
 	"sync"
 
 	"github.com/jmoiron/sqlx"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
 )

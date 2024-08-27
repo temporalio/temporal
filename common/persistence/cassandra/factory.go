@@ -28,7 +28,6 @@ import (
 	"sync"
 
 	"github.com/gocql/gocql"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -108,7 +107,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 
 // NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
-	return NewExecutionStore(f.session, f.logger), nil
+	return NewExecutionStore(f.session), nil
 }
 
 // NewQueue returns a new queue backed by cassandra

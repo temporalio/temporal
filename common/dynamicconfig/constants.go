@@ -31,7 +31,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
-
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
@@ -275,7 +274,7 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 	)
 	DeadlockInterval = NewGlobalDurationSetting(
 		"system.deadlock.Interval",
-		30*time.Second,
+		60*time.Second,
 		`How often the detector checks each root.`,
 	)
 	DeadlockMaxWorkersPerRoot = NewGlobalIntSetting(
@@ -744,6 +743,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
 	)
+	HistoryHostErrorPercentage = NewGlobalFloatSetting(
+		"frontend.historyHostErrorPercentage",
+		0.5,
+		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
+	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
@@ -897,10 +901,8 @@ used when the first cache layer has a miss. Requires server restart for change t
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",
-		false,
-		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is 'false' until the
-feature gets more time in production.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
 	)
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
@@ -912,10 +914,9 @@ The API is under active development.`,
 
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
-		false,
-		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
-asynchronous workflow execution update that waits on the "Accepted"
-lifecycle stage. Default value is 'false'.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the UpdateWorkflowExecution API
+to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
@@ -1087,6 +1088,30 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		"matching.numTaskqueueReadPartitions",
 		defaultNumTaskQueuePartitions,
 		`MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue`,
+	)
+	MetricsBreakdownByTaskQueue = NewTaskQueueBoolSetting(
+		"metrics.breakdownByTaskQueue",
+		true,
+		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should 
+contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MetricsBreakdownByPartition = NewTaskQueueBoolSetting(
+		"metrics.breakdownByPartition",
+		true,
+		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should 
+contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky 
+queues will be "__sticky__". Disable this option if the partition cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
+		"metrics.breakdownByBuildID",
+		true,
+		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
+contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned 
+queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age 
+for VERSIONED queues.`,
 	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
@@ -1402,8 +1427,8 @@ before discarding the task`,
 	QueuePendingTaskCriticalCount = NewGlobalIntSetting(
 		"history.queuePendingTaskCriticalCount",
 		9000,
-		`QueuePendingTaskCriticalCount is the max number of pending task in one queue
-before triggering queue slice splitting and unloading`,
+		`Max number of pending tasks in a history queue before triggering slice splitting and unloading.
+NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskCriticalCount.`,
 	)
 	QueueReaderStuckCriticalAttempts = NewGlobalIntSetting(
 		"history.queueReaderStuckCriticalAttempts",
@@ -1421,11 +1446,12 @@ before force compacting slices`,
 	QueuePendingTaskMaxCount = NewGlobalIntSetting(
 		"history.queuePendingTasksMaxCount",
 		10000,
-		`QueuePendingTaskMaxCount is the max number of task pending tasks in one queue before stop
-loading new tasks into memory. While QueuePendingTaskCriticalCount won't stop task loading
-for the entire queue but only trigger a queue action to unload tasks. Ideally this max count
-limit should not be hit and task unloading should happen once critical count is exceeded. But
-since queue action is async, we need this hard limit.`,
+		`The max number of task pending tasks in a history queue before stopping loading new tasks into memory. This
+limit is in addition to queuePendingTaskCriticalCount which controls when to unload already loaded tasks but doesn't
+prevent loading new tasks. Ideally this max count limit should not be hit and task unloading should happen once critical
+count is exceeded. But since queue action is async, we need this hard limit.
+NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskMaxCount.
+`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
@@ -1616,6 +1642,20 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		"history.outboundTaskBatchSize",
 		100,
 		`OutboundTaskBatchSize is batch size for outboundQueueFactory`,
+	)
+	OutboundQueuePendingTaskMaxCount = NewGlobalIntSetting(
+		"history.outboundQueuePendingTasksMaxCount",
+		10000,
+		`The max number of task pending tasks in the outbound queue before stopping loading new tasks into memory. This
+limit is in addition to outboundQueuePendingTaskCriticalCount which controls when to unload already loaded tasks but
+doesn't prevent loading new tasks. Ideally this max count limit should not be hit and task unloading should happen once
+critical count is exceeded. But since queue action is async, we need this hard limit.
+`,
+	)
+	OutboundQueuePendingTaskCriticalCount = NewGlobalIntSetting(
+		"history.outboundQueuePendingTaskCriticalCount",
+		9000,
+		`Max number of pending tasks in the outbound queue before triggering slice splitting and unloading.`,
 	)
 	OutboundProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.outboundProcessorMaxPollRPS",
@@ -2182,6 +2222,16 @@ that task will be sent to DLQ.`,
 		10,
 		`Maximum number of resend events batch for a single replication request`,
 	)
+	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
+		"history.ReplicationProgressCacheMaxSize",
+		128000,
+		`ReplicationProgressCacheMaxSize is the maximum number of entries in the replication progress cache`,
+	)
+	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
+		"history.ReplicationProgressCacheTTL",
+		time.Hour,
+		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
+	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
@@ -2444,5 +2494,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+
+	LogAllReqErrors = NewNamespaceBoolSetting(
+		"system.logAllReqErrors",
+		false,
+		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
 )

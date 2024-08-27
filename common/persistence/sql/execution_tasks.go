@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"

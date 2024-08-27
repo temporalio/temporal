@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"

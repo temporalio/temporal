@@ -167,6 +167,8 @@ type Config struct {
 	OutboundProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
 	OutboundProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	OutboundProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
+	OutboundQueuePendingTaskCriticalCount               dynamicconfig.IntPropertyFn
+	OutboundQueuePendingTaskMaxCount                    dynamicconfig.IntPropertyFn
 	OutboundQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
@@ -275,8 +277,8 @@ type Config struct {
 
 	ReplicationStreamSyncStatusDuration                 dynamicconfig.DurationPropertyFn
 	ReplicationProcessorSchedulerQueueSize              dynamicconfig.IntPropertyFn
-	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.IntPropertyFn
-	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
+	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.TypedSubscribable[int]
+	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationEagerRefreshNamespace              dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
@@ -286,6 +288,8 @@ type Config struct {
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
 	ReplicationReceiverMaxOutstandingTaskCount          dynamicconfig.IntPropertyFn
 	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
+	ReplicationProgressCacheMaxSize                     dynamicconfig.IntPropertyFn
+	ReplicationProgressCacheTTL                         dynamicconfig.DurationPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -359,6 +363,10 @@ type Config struct {
 
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
+
+	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+
+	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -490,6 +498,8 @@ func NewConfig(
 		OutboundProcessorUpdateAckInterval:                  dynamicconfig.OutboundProcessorUpdateAckInterval.Get(dc),
 		OutboundProcessorUpdateAckIntervalJitterCoefficient: dynamicconfig.OutboundProcessorUpdateAckIntervalJitterCoefficient.Get(dc),
 		OutboundProcessorPollBackoffInterval:                dynamicconfig.OutboundProcessorPollBackoffInterval.Get(dc),
+		OutboundQueuePendingTaskCriticalCount:               dynamicconfig.OutboundQueuePendingTaskCriticalCount.Get(dc),
+		OutboundQueuePendingTaskMaxCount:                    dynamicconfig.OutboundQueuePendingTaskMaxCount.Get(dc),
 		OutboundQueueMaxReaderCount:                         dynamicconfig.OutboundQueueMaxReaderCount.Get(dc),
 		OutboundQueueGroupLimiterBufferSize:                 dynamicconfig.OutboundQueueGroupLimiterBufferSize.Get(dc),
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),
@@ -508,8 +518,8 @@ func NewConfig(
 		ReplicationEnableUpdateWithNewTaskMerge:             dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Get(dc),
 		ReplicationStreamSyncStatusDuration:                 dynamicconfig.ReplicationStreamSyncStatusDuration.Get(dc),
 		ReplicationProcessorSchedulerQueueSize:              dynamicconfig.ReplicationProcessorSchedulerQueueSize.Get(dc),
-		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Get(dc),
-		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Get(dc),
+		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Subscribe(dc),
+		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Subscribe(dc),
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationEagerRefreshNamespace:              dynamicconfig.EnableEagerNamespaceRefresher.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
@@ -519,6 +529,8 @@ func NewConfig(
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
 		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
 		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
+		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
+		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
@@ -654,6 +666,10 @@ func NewConfig(
 
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
+
+		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
+
+		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 
 	return cfg

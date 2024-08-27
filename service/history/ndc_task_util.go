@@ -30,7 +30,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -169,7 +168,7 @@ func loadMutableStateForTask(
 	if task.GetRunID() == mutableState.GetWorkflowKey().RunID {
 		// Task generation is scoped to a specific run, so only perform the validation if runID matches.
 		// Tasks targeting the current run (e.g. workflow execution timeout timer) should bypass the validation.
-		if err := validateTaskGeneration(mutableState, task.GetTaskID()); err != nil {
+		if err := validateTaskGeneration(ctx, shardContext, wfContext, mutableState, task.GetTaskID()); err != nil {
 			return nil, err
 		}
 	}
@@ -201,7 +200,7 @@ func loadMutableStateForTask(
 		return nil, err
 	}
 
-	if err := validateTaskGeneration(mutableState, task.GetTaskID()); err != nil {
+	if err := validateTaskGeneration(ctx, shardContext, wfContext, mutableState, task.GetTaskID()); err != nil {
 		return nil, err
 	}
 
@@ -243,9 +242,24 @@ func validateTaskByClock(
 	return nil
 }
 
-func validateTaskGeneration(mutableState workflow.MutableState, taskID int64) error {
+func validateTaskGeneration(
+	ctx context.Context,
+	shardContext shard.Context,
+	workflowContext workflow.Context,
+	mutableState workflow.MutableState,
+	taskID int64,
+) error {
 	tgClock := mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp
 	if tgClock != 0 && taskID != 0 && taskID < tgClock {
+
+		currentClock := shardContext.CurrentVectorClock().Clock
+		if tgClock > currentClock {
+			if err := workflowContext.RefreshTasks(ctx, shardContext); err != nil {
+				return err
+			}
+			return fmt.Errorf("%w: fixed task generation logic via workflow refresh", consts.ErrStaleReference)
+		}
+
 		return fmt.Errorf("%w: task was generated before mutable state rebuild", consts.ErrStaleReference)
 	}
 	return nil

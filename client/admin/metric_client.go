@@ -29,13 +29,12 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/grpc"
 )
 
 var _ adminservice.AdminServiceClient = (*metricClient)(nil)

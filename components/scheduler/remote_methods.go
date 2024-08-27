@@ -20,16 +20,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package scheduler
 
 import (
-	"fmt"
-
-	"go.temporal.io/server/common/primitives"
+	enumspb "go.temporal.io/api/enums/v1"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
+	"google.golang.org/protobuf/proto"
 )
 
-const ResolverScheme = "membership"
+type ProcessWorkflowCompletionEvent struct{}
 
-func MakeResolverURL(service primitives.ServiceName) string {
-	return fmt.Sprintf("%s://%s", ResolverScheme, string(service))
+func (p ProcessWorkflowCompletionEvent) Name() string {
+	return "scheduler.process_workflow_completion_event"
+}
+
+func (p ProcessWorkflowCompletionEvent) SerializeOutput(_ any) ([]byte, error) {
+	// ProcessWorkflowCompletionEvent outputs void and therefore does nothing for serialization.
+	return nil, nil
+}
+
+func (p ProcessWorkflowCompletionEvent) DeserializeInput(data []byte) (any, error) {
+	output := &persistencepb.HSMCompletionCallbackArg{}
+	if err := proto.Unmarshal(data, output); err != nil {
+		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return output, nil
 }

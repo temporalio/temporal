@@ -51,8 +51,12 @@ type (
 		done bool
 		// index of the timer in the parent timeSource
 		index int
+		// channel on which the current time is sent when a timer fires
+		c chan time.Time
 	}
 )
+
+var _ TimeSource = (*EventTimeSource)(nil)
 
 // NewEventTimeSource returns a EventTimeSource with the current time set to Unix zero: 1970-01-01 00:00:00 +0000 UTC.
 func NewEventTimeSource() *EventTimeSource {
@@ -69,24 +73,22 @@ func (ts *EventTimeSource) Now() time.Time {
 	return ts.now
 }
 
+func (ts *EventTimeSource) Since(t time.Time) time.Duration {
+	return ts.Now().Sub(t)
+}
+
 // AfterFunc return a timer that will fire after the specified duration. It is important to note that the timeSource is
 // locked while the callback is called. This means that you must be cautious about calling any other mutating methods on
 // the timeSource from within the callback. Doing so will probably result in a deadlock. To avoid this, you may want to
 // wrap all such calls in a goroutine. If the duration is non-positive, the callback will fire immediately before
 // AfterFunc returns.
 func (ts *EventTimeSource) AfterFunc(d time.Duration, f func()) Timer {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-
 	if d < 0 {
 		d = 0
 	}
-	t := &fakeTimer{timeSource: ts, deadline: ts.now.Add(d), callback: f}
-	t.index = len(ts.timers)
-	ts.timers = append(ts.timers, t)
-	ts.fireTimers()
-
-	return t
+	timer := &fakeTimer{timeSource: ts, deadline: ts.Now().Add(d), callback: f}
+	ts.addTimer(timer)
+	return timer
 }
 
 // NewTimer creates a Timer that will send the current time on a channel after at least
@@ -95,7 +97,22 @@ func (ts *EventTimeSource) NewTimer(d time.Duration) (<-chan time.Time, Timer) {
 	c := make(chan time.Time, 1)
 	// we can't call ts.Now() from the callback so just calculate what it should be
 	target := ts.Now().Add(d)
-	return c, ts.AfterFunc(d, func() { c <- target })
+	timer := &fakeTimer{
+		timeSource: ts,
+		deadline:   target,
+		callback:   func() { c <- target },
+		c:          c,
+	}
+	ts.addTimer(timer)
+	return c, timer
+}
+
+func (ts *EventTimeSource) addTimer(t *fakeTimer) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	t.index = len(ts.timers)
+	ts.timers = append(ts.timers, t)
+	ts.fireTimers()
 }
 
 // Update the fake current time. It returns the timeSource so that you can chain calls like this:
@@ -157,6 +174,10 @@ func (t *fakeTimer) Reset(d time.Duration) bool {
 		t.done = false
 		t.index = len(t.timeSource.timers)
 		t.timeSource.timers = append(t.timeSource.timers, t)
+		// Only reset the callback if this timer was created via NewTimer
+		if t.c != nil {
+			t.callback = func() { t.c <- t.deadline }
+		}
 	}
 	t.timeSource.fireTimers()
 	return wasActive

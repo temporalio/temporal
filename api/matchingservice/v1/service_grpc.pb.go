@@ -63,6 +63,7 @@ const (
 	MatchingService_GetWorkerVersioningRules_FullMethodName               = "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules"
 	MatchingService_ApplyTaskQueueUserDataReplicationEvent_FullMethodName = "/temporal.server.api.matchingservice.v1.MatchingService/ApplyTaskQueueUserDataReplicationEvent"
 	MatchingService_GetBuildIdTaskQueueMapping_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/GetBuildIdTaskQueueMapping"
+	MatchingService_ForceLoadTaskQueuePartition_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/ForceLoadTaskQueuePartition"
 	MatchingService_ForceUnloadTaskQueue_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue"
 	MatchingService_UpdateTaskQueueUserData_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData"
 	MatchingService_ReplicateTaskQueueUserData_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData"
@@ -148,6 +149,12 @@ type MatchingServiceClient interface {
 	ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 	// Gets all task queue names mapped to a given build ID
 	GetBuildIdTaskQueueMapping(ctx context.Context, in *GetBuildIdTaskQueueMappingRequest, opts ...grpc.CallOption) (*GetBuildIdTaskQueueMappingResponse, error)
+	// Force loading a task queue partition. Used by matching node owning root partition.
+	// When root partition is loaded this is called for all child partitions.
+	// This addresses the posibility of unloaded child partitions having backlog,
+	// but not being forwarded/synced to the root partition to find the polling
+	// worker which triggered the root partition being loaded in the first place.
+	ForceLoadTaskQueuePartition(ctx context.Context, in *ForceLoadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceLoadTaskQueuePartitionResponse, error)
 	// Force unloading a task queue. Used for testing only.
 	ForceUnloadTaskQueue(ctx context.Context, in *ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueueResponse, error)
 	// Update task queue user data in owning node for all updates in namespace.
@@ -394,6 +401,15 @@ func (c *matchingServiceClient) GetBuildIdTaskQueueMapping(ctx context.Context, 
 	return out, nil
 }
 
+func (c *matchingServiceClient) ForceLoadTaskQueuePartition(ctx context.Context, in *ForceLoadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceLoadTaskQueuePartitionResponse, error) {
+	out := new(ForceLoadTaskQueuePartitionResponse)
+	err := c.cc.Invoke(ctx, MatchingService_ForceLoadTaskQueuePartition_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchingServiceClient) ForceUnloadTaskQueue(ctx context.Context, in *ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueueResponse, error) {
 	out := new(ForceUnloadTaskQueueResponse)
 	err := c.cc.Invoke(ctx, MatchingService_ForceUnloadTaskQueue_FullMethodName, in, out, opts...)
@@ -533,6 +549,12 @@ type MatchingServiceServer interface {
 	ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 	// Gets all task queue names mapped to a given build ID
 	GetBuildIdTaskQueueMapping(context.Context, *GetBuildIdTaskQueueMappingRequest) (*GetBuildIdTaskQueueMappingResponse, error)
+	// Force loading a task queue partition. Used by matching node owning root partition.
+	// When root partition is loaded this is called for all child partitions.
+	// This addresses the posibility of unloaded child partitions having backlog,
+	// but not being forwarded/synced to the root partition to find the polling
+	// worker which triggered the root partition being loaded in the first place.
+	ForceLoadTaskQueuePartition(context.Context, *ForceLoadTaskQueuePartitionRequest) (*ForceLoadTaskQueuePartitionResponse, error)
 	// Force unloading a task queue. Used for testing only.
 	ForceUnloadTaskQueue(context.Context, *ForceUnloadTaskQueueRequest) (*ForceUnloadTaskQueueResponse, error)
 	// Update task queue user data in owning node for all updates in namespace.
@@ -649,6 +671,9 @@ func (UnimplementedMatchingServiceServer) ApplyTaskQueueUserDataReplicationEvent
 }
 func (UnimplementedMatchingServiceServer) GetBuildIdTaskQueueMapping(context.Context, *GetBuildIdTaskQueueMappingRequest) (*GetBuildIdTaskQueueMappingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBuildIdTaskQueueMapping not implemented")
+}
+func (UnimplementedMatchingServiceServer) ForceLoadTaskQueuePartition(context.Context, *ForceLoadTaskQueuePartitionRequest) (*ForceLoadTaskQueuePartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ForceLoadTaskQueuePartition not implemented")
 }
 func (UnimplementedMatchingServiceServer) ForceUnloadTaskQueue(context.Context, *ForceUnloadTaskQueueRequest) (*ForceUnloadTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForceUnloadTaskQueue not implemented")
@@ -1062,6 +1087,24 @@ func _MatchingService_GetBuildIdTaskQueueMapping_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_ForceLoadTaskQueuePartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForceLoadTaskQueuePartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).ForceLoadTaskQueuePartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_ForceLoadTaskQueuePartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).ForceLoadTaskQueuePartition(ctx, req.(*ForceLoadTaskQueuePartitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchingService_ForceUnloadTaskQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ForceUnloadTaskQueueRequest)
 	if err := dec(in); err != nil {
@@ -1278,6 +1321,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBuildIdTaskQueueMapping",
 			Handler:    _MatchingService_GetBuildIdTaskQueueMapping_Handler,
+		},
+		{
+			MethodName: "ForceLoadTaskQueuePartition",
+			Handler:    _MatchingService_ForceLoadTaskQueuePartition_Handler,
 		},
 		{
 			MethodName: "ForceUnloadTaskQueue",

@@ -161,6 +161,7 @@ func NewEngineWithShardContext(
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
+	replicationProgressCache replication.ProgressCache,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
@@ -231,6 +232,7 @@ func NewEngineWithShardContext(
 			shard,
 			workflowCache,
 			eventBlobCache,
+			replicationProgressCache,
 			executionManager,
 			logger,
 		)
@@ -836,7 +838,11 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		if len(tasksByCategory) > 0 {
 			proc, ok := e.queueProcessors[category]
 			if !ok {
-				e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
+				// On shard reload it sends fake tasks to wake up the queue processors. Only log if there are "real"
+				// tasks that can't be processed.
+				if _, ok := tasksByCategory[0].(*tasks.FakeTask); !ok {
+					e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
+				}
 				continue
 			}
 			proc.NotifyNewTasks(tasksByCategory)
@@ -865,8 +871,9 @@ func (e *historyEngineImpl) UnsubscribeReplicationNotification(subscriberID stri
 func (e *historyEngineImpl) ConvertReplicationTask(
 	ctx context.Context,
 	task tasks.Task,
+	clusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
-	return e.replicationAckMgr.ConvertTask(ctx, task)
+	return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
 }
 
 func (e *historyEngineImpl) GetReplicationTasksIter(

@@ -26,12 +26,12 @@ package metrics_test
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
+	expmaps "golang.org/x/exp/maps"
 )
 
 var (
@@ -56,7 +56,7 @@ func ExampleHandler() {
 	timer.With(handler).Record(5 * time.Second)
 
 	snapshot := capture.Snapshot()
-	keys := maps.Keys(snapshot)
+	keys := expmaps.Keys(snapshot)
 	slices.Sort(keys)
 	for _, key := range keys {
 		fmt.Printf("%s:", key)

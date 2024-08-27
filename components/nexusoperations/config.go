@@ -37,9 +37,19 @@ var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 
 var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
 	"component.nexusoperations.limit.operation.concurrency",
-	1000,
+	// Temporary limit due to a persistence limitation, this will be increased when we change persistence to accept
+	// partial sub state machine updates.
+	30,
 	`MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
 Once the limit is reached, ScheduleNexusOperation commands will be rejected.`,
+)
+
+var EndpointNotFoundAlwaysNonRetryable = dynamicconfig.NewNamespaceBoolSetting(
+	"component.nexusoperations.endpointNotFoundAlwaysNonRetryable",
+	false,
+	`When set to true, if an endpoint is not found when processing a ScheduleNexusOperation command, the command will be
+	accepted and the operation will fail on the first attempt. This defaults to false to prevent endpoint registry
+	propagation delay from failing operations.`,
 )
 
 var MaxServiceNameLength = dynamicconfig.NewNamespaceIntSetting(
@@ -95,6 +105,7 @@ type Config struct {
 	MaxOperationScheduleToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                dynamicconfig.StringPropertyFn
+	EndpointNotFoundAlwaysNonRetryable dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RetryPolicy                        func() backoff.RetryPolicy
 }
 
@@ -108,6 +119,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
+		EndpointNotFoundAlwaysNonRetryable: EndpointNotFoundAlwaysNonRetryable.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

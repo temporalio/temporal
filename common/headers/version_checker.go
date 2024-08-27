@@ -27,13 +27,12 @@ package headers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"golang.org/x/exp/slices"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/metadata"
 )
 
 const (

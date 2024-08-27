@@ -35,7 +35,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"

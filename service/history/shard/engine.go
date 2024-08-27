@@ -32,7 +32,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -132,6 +131,7 @@ type (
 		ConvertReplicationTask(
 			ctx context.Context,
 			task tasks.Task,
+			clusterID int32,
 		) (*replicationspb.ReplicationTask, error)
 		GetReplicationTasksIter(
 			ctx context.Context,

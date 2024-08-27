@@ -28,7 +28,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/maps"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -358,7 +358,7 @@ func (s *SliceImpl) shrinkPredicate() {
 		return
 	}
 
-	s.scope.Predicate = s.grouper.Predicate(maps.Keys(pendingPerKey))
+	s.scope.Predicate = s.grouper.Predicate(expmaps.Keys(pendingPerKey))
 }
 
 func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, error) {

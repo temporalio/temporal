@@ -38,7 +38,6 @@ import (
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/circuitbreaker"
@@ -400,16 +399,19 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhaustedErr) {
-		if resourceExhaustedErr.Cause != enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			if resourceExhaustedErr.Cause == enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT {
-				err = consts.ErrResourceExhaustedAPSLimit
-			}
+		switch resourceExhaustedErr.Cause { //nolint:exhaustive
+		case enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
+			err = consts.ErrResourceExhaustedBusyWorkflow
+		case enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
+			err = consts.ErrResourceExhaustedAPSLimit
 			e.resourceExhaustedCount++
-			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(1)
-			return true, err
+		default:
+			e.resourceExhaustedCount++
 		}
 
-		err = consts.ErrResourceExhaustedBusyWorkflow
+		metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(
+			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
+		return true, err
 	}
 	e.resourceExhaustedCount = 0
 
@@ -427,11 +429,6 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 	if err == consts.ErrTaskRetry {
 		metrics.TaskStandbyRetryCounter.With(e.taggedMetricsHandler).Record(1)
-		return true, err
-	}
-
-	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-		metrics.TaskWorkflowBusyCounter.With(e.taggedMetricsHandler).Record(1)
 		return true, err
 	}
 
@@ -517,6 +514,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
 		return rewrittenErr
 	}
+
 	// Unexpected errors handled below
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
@@ -824,8 +822,16 @@ func (e *CircuitBreakerExecutable) Execute() error {
 	doneCb, err := e.cb.Allow()
 	if err != nil {
 		metrics.CircuitBreakerExecutableBlocked.With(e.metricsHandler).Record(1)
-		// Return resource a exhausted error to ensure that this task is retried less aggressively and does not go to the DLQ.
-		return fmt.Errorf("%w: %w", serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "circuit breaker rejection"), err)
+		// Return a resource exhausted error to ensure that this task is retried less aggressively
+		// and does not go to the DLQ.
+		return fmt.Errorf(
+			"%w: %w",
+			serviceerror.NewResourceExhausted(
+				enums.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				"circuit breaker rejection",
+			),
+			err,
+		)
 	}
 
 	defer func() {
