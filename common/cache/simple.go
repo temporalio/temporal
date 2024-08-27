@@ -68,7 +68,7 @@ func (it *simpleItr) Next() Entry {
 		panic("Simple cache iterator Next called when there is no next item")
 	}
 
-	entry := it.nextItem.Value.(*simpleEntry)
+	entry := it.nextItem.Value.(*simpleEntry) // nolint:unchecked-type-assertion
 	it.nextItem = it.nextItem.Next()
 	// make a copy of the entry so there will be no concurrent access to this entry
 	entry = &simpleEntry{
@@ -148,7 +148,7 @@ func (c *simple) Delete(key interface{}) {
 	if element == nil {
 		return
 	}
-	entry := c.iterateList.Remove(element).(*simpleEntry)
+	entry := c.iterateList.Remove(element).(*simpleEntry) // nolint:unchecked-type-assertion
 	if c.rmFunc != nil {
 		go c.rmFunc(entry.value)
 	}
@@ -178,7 +178,7 @@ func (c *simple) Iterator() Iterator {
 func (c *simple) putInternal(key interface{}, value interface{}, allowUpdate bool) interface{} {
 	elt := c.accessMap[key]
 	if elt != nil {
-		entry := elt.Value.(*simpleEntry)
+		entry := elt.Value.(*simpleEntry) // nolint:unchecked-type-assertion
 		existing := entry.value
 		if allowUpdate {
 			entry.value = value

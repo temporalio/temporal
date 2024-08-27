@@ -172,7 +172,7 @@ func TestSimpleIterator(t *testing.T) {
 	it := cache.Iterator()
 	for it.HasNext() {
 		entry := it.Next()
-		actual[entry.Key().(string)] = entry.Value().(string)
+		actual[entry.Key().(string)] = entry.Value().(string) // nolint:unchecked-type-assertion
 	}
 	it.Close()
 	assert.Equal(t, expected, actual)
@@ -180,7 +180,7 @@ func TestSimpleIterator(t *testing.T) {
 	it = cache.Iterator()
 	for i := 0; i < len(expected); i++ {
 		entry := it.Next()
-		actual[entry.Key().(string)] = entry.Value().(string)
+		actual[entry.Key().(string)] = entry.Value().(string) // nolint:unchecked-type-assertion
 	}
 	it.Close()
 	assert.Equal(t, expected, actual)
