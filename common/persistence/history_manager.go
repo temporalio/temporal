@@ -33,6 +33,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporal"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
@@ -538,10 +540,15 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
-) (*ReadHistoryBranchByBatchResponse, error) {
+) (resp *ReadHistoryBranchByBatchResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = serviceerror.NewInternal("history service unable to process request: Recovered in ReadHistoryBranchByBatch")
+			m.logger.Error("Recovered in ReadHistoryBranchByBatch", tag.NewAnyTag("panic_arg", r))
+		}
+	}()
 
-	resp := &ReadHistoryBranchByBatchResponse{}
-	var err error
+	resp = &ReadHistoryBranchByBatchResponse{}
 	_, resp.History, resp.TransactionIDs, resp.NextPageToken, resp.Size, err = m.readHistoryBranch(ctx, true, request)
 	return resp, err
 }
@@ -748,6 +755,11 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
 ) ([]*commonpb.DataBlob, []int64, []int64, *historyPagingToken, int, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			m.logger.Error("Recovered in readRawHistoryBranchAndFilter", tag.NewAnyTag("panic_arg", r))
+		}
+	}()
 
 	shardID := request.ShardID
 	branchToken := request.BranchToken
@@ -1137,6 +1149,11 @@ func (m *executionManagerImpl) serializeToken(
 	pagingToken *historyPagingToken,
 	reverseOrder bool,
 ) ([]byte, error) {
+	if pagingToken == nil {
+		m.logger.Error("nil pagingToken in serializeToken")
+		// throwing a nonretryable in case this is being called from an activity 
+		return nil, temporal.NewNonRetryableApplicationError("nil pagingToken in serializeToken", "", nil)
+	}
 
 	if len(pagingToken.StoreToken) == 0 {
 		if pagingToken.CurrentRangeIndex == pagingToken.FinalRangeIndex {
