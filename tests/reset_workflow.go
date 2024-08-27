@@ -236,30 +236,25 @@ func (s *FunctionalSuite) TestResetWorkflowAfterTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
+	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-
+	// let workflow to timeout
 	time.Sleep(time.Second) //nolint:forbidigo
 
 	var historyEvents []*historypb.HistoryEvent
-GetHistoryLoop:
-	for i := 0; i < 10; i++ {
+	s.Eventually(func() bool {
 		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
 		})
-
 		lastEvent := historyEvents[len(historyEvents)-1]
-		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
-			s.Logger.Warn("Execution not timed out yet. Last event: " + lastEvent.GetEventType().String())
-			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
-			continue GetHistoryLoop
-		}
+		s.NotNil(historyEvents)
 
-		break GetHistoryLoop
-	}
+		return lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT
+
+	}, 2*time.Second, 200*time.Millisecond)
+
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -270,10 +265,10 @@ GetHistoryLoop:
 		LatestTime:   timestamppb.New(time.Now().UTC()),
 	}
 
+	// wait till workflow is closed
 	closedCount := 0
-ListClosedLoop:
-	for i := 0; i < 10; i++ {
-		resp, err3 := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+	s.Eventually(func() bool {
+		resp, err := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
@@ -281,18 +276,18 @@ ListClosedLoop:
 				WorkflowId: tv.WorkflowID(),
 			}},
 		})
-		s.NoError(err3)
+		s.NoError(err)
 		closedCount = len(resp.Executions)
 		if closedCount == 0 {
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
-			time.Sleep(500 * time.Millisecond) //nolint:forbidigo
-			continue ListClosedLoop
 		}
-		break ListClosedLoop
-	}
+
+		return closedCount > 0
+
+	}, 5*time.Second, 500*time.Millisecond)
 	s.Equal(1, closedCount)
 
-	_, err := s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	_, err = s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
@@ -328,11 +323,11 @@ ListClosedLoop:
 		T:                   s.T(),
 	}
 
-	_, err4 := poller.PollAndProcessWorkflowTask()
-	s.NoError(err4)
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.NoError(err)
 
 	events := s.getHistory(s.namespace, executions[0])
-	// workflow resetter will add task started/failed events.
+	// because we don't have any tasks, workflow reset will add task started/failed events.
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":1}
   2 WorkflowTaskScheduled
