@@ -39,10 +39,6 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/fx"
-	"go.uber.org/multierr"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -80,6 +76,9 @@ import (
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/temporal"
+	"go.uber.org/fx"
+	"go.uber.org/multierr"
+	"google.golang.org/grpc"
 )
 
 type (

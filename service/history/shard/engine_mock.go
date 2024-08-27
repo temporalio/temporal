@@ -101,18 +101,18 @@ func (mr *MockEngineMockRecorder) BackfillHistoryEvents(ctx, request interface{}
 }
 
 // ConvertReplicationTask mocks base method.
-func (m *MockEngine) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*v13.ReplicationTask, error) {
+func (m *MockEngine) ConvertReplicationTask(ctx context.Context, task tasks.Task, clusterID int32) (*v13.ReplicationTask, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConvertReplicationTask", ctx, task)
+	ret := m.ctrl.Call(m, "ConvertReplicationTask", ctx, task, clusterID)
 	ret0, _ := ret[0].(*v13.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ConvertReplicationTask indicates an expected call of ConvertReplicationTask.
-func (mr *MockEngineMockRecorder) ConvertReplicationTask(ctx, task interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) ConvertReplicationTask(ctx, task, clusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertReplicationTask", reflect.TypeOf((*MockEngine)(nil).ConvertReplicationTask), ctx, task)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertReplicationTask", reflect.TypeOf((*MockEngine)(nil).ConvertReplicationTask), ctx, task, clusterID)
 }
 
 // DeleteWorkflowExecution mocks base method.
@@ -1055,18 +1055,18 @@ func (m *MockReplicationStream) EXPECT() *MockReplicationStreamMockRecorder {
 }
 
 // ConvertReplicationTask mocks base method.
-func (m *MockReplicationStream) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*v13.ReplicationTask, error) {
+func (m *MockReplicationStream) ConvertReplicationTask(ctx context.Context, task tasks.Task, clusterID int32) (*v13.ReplicationTask, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConvertReplicationTask", ctx, task)
+	ret := m.ctrl.Call(m, "ConvertReplicationTask", ctx, task, clusterID)
 	ret0, _ := ret[0].(*v13.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ConvertReplicationTask indicates an expected call of ConvertReplicationTask.
-func (mr *MockReplicationStreamMockRecorder) ConvertReplicationTask(ctx, task interface{}) *gomock.Call {
+func (mr *MockReplicationStreamMockRecorder) ConvertReplicationTask(ctx, task, clusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertReplicationTask", reflect.TypeOf((*MockReplicationStream)(nil).ConvertReplicationTask), ctx, task)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertReplicationTask", reflect.TypeOf((*MockReplicationStream)(nil).ConvertReplicationTask), ctx, task, clusterID)
 }
 
 // GetMaxReplicationTaskInfo mocks base method.

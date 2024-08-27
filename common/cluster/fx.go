@@ -27,9 +27,8 @@ package cluster
 import (
 	"context"
 
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/pingable"
+	"go.uber.org/fx"
 )
 
 var MetadataLifetimeHooksModule = fx.Options(

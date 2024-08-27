@@ -57,6 +57,7 @@ message ReplicationTask {
         SyncHSMAttributes sync_hsm_attributes = 14;
         BackfillHistoryTaskAttributes backfill_history_task_attributes = 16;
         VerifyVersionedTransitionTaskAttributes verify_versioned_transition_task_attributes = 18;
+        SyncVersionedTransitionTaskAttributes sync_versioned_transition_task_attributes = 19;
     }
     // All attributes should be deprecated and replaced by this field.
     // The task_type + data provide more flexibility in future use cases.
@@ -222,4 +223,8 @@ message VerifyVersionedTransitionTaskAttributes {
     int64 next_event_id = 4;
     repeated temporal.server.api.history.v1.VersionHistoryItem event_version_history = 5;
     string new_run_id = 6;
+}
+
+message SyncVersionedTransitionTaskAttributes {
+    // TODO
 }

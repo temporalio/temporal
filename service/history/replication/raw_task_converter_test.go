@@ -37,8 +37,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -61,6 +59,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -72,6 +71,7 @@ type (
 		controller       *gomock.Controller
 		shardContext     *shard.ContextTest
 		workflowCache    *wcache.MockCache
+		progressCache    *MockProgressCache
 		executionManager *persistence.MockExecutionManager
 		logger           log.Logger
 
@@ -142,6 +142,7 @@ func (s *rawTaskConverterSuite) SetupTest() {
 		config,
 	)
 	s.workflowCache = wcache.NewMockCache(s.controller)
+	s.progressCache = NewMockProgressCache(s.controller)
 	s.executionManager = s.shardContext.Resource.ExecutionMgr
 	s.logger = s.shardContext.GetLogger()
 
@@ -1065,6 +1066,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
 func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill() {
 	ctx := context.Background()
 	shardID := int32(12)
+	targetClusterID := int32(3)
 	firstEventID := int64(999)
 	nextEventID := int64(1911)
 	version := int64(288)
@@ -1086,14 +1088,15 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		},
 	}
 
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{
+			EventId: nextEventID - 1,
+			Version: version,
+		},
+	}
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte("branch token"),
-		Items: []*historyspb.VersionHistoryItem{
-			{
-				EventId: nextEventID - 1,
-				Version: version,
-			},
-		},
+		Items:       versionHistoryItems,
 	}
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -1185,8 +1188,18 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		HistoryEventBlobs: []*commonpb.DataBlob{newEvents},
 		NextPageToken:     nil,
 	}, nil)
+	s.progressCache.EXPECT().Get(
+		s.runID,
+		targetClusterID,
+	).Return(nil)
+	s.progressCache.EXPECT().Update(
+		s.runID,
+		targetClusterID,
+		nil,
+		versionHistoryItems,
+	).Return(nil)
 
-	result, err := convertSyncVersionedTransitionTask(ctx, s.shardContext, task, shardID, s.workflowCache, nil, s.executionManager, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, s.shardContext, task, shardID, s.workflowCache, nil, s.progressCache, targetClusterID, s.executionManager, s.logger)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK,

@@ -30,7 +30,6 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/testing/testvars"
 )
 

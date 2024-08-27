@@ -32,7 +32,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/converter"
-
 	"go.temporal.io/server/common/payload"
 )
 

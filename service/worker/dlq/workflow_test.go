@@ -34,10 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -46,6 +42,9 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
+	"google.golang.org/grpc"
 )
 
 type (

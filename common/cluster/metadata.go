@@ -258,7 +258,7 @@ func (m *metadataImpl) GetPingChecks() []pingable.Check {
 			Timeout: 10 * time.Second,
 			Ping: func() []pingable.Pingable {
 				m.clusterLock.Lock()
-				//lint:ignore SA2001 just checking if we can acquire the lock
+				// nolint:staticcheck
 				m.clusterLock.Unlock()
 				return nil
 			},
@@ -271,7 +271,7 @@ func (m *metadataImpl) GetPingChecks() []pingable.Check {
 			Timeout: 10 * time.Second,
 			Ping: func() []pingable.Pingable {
 				m.clusterCallbackLock.Lock()
-				//lint:ignore SA2001 just checking if we can acquire the lock
+				// nolint:staticcheck
 				m.clusterCallbackLock.Unlock()
 				return nil
 			},

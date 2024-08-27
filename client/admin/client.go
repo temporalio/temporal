@@ -31,10 +31,9 @@ import (
 	"context"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/debug"
+	"google.golang.org/grpc"
 )
 
 var _ adminservice.AdminServiceClient = (*clientImpl)(nil)

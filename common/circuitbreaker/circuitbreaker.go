@@ -27,7 +27,6 @@ import (
 	"sync/atomic"
 
 	"github.com/sony/gobreaker"
-
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
