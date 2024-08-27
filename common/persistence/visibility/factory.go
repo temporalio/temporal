@@ -142,7 +142,7 @@ func newVisibilityManager(
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	metricsHandler metrics.Handler,
 	visibilityPluginNameTag metrics.Tag,
-	visibilityIndexTag metrics.Tag,
+	visibilityIndexNameTag metrics.Tag,
 	logger log.Logger,
 ) manager.VisibilityManager {
 	if visStore == nil {
@@ -151,7 +151,7 @@ func newVisibilityManager(
 	logger.Info(
 		"creating new visibility manager",
 		tag.NewStringTag(visibilityPluginNameTag.Key(), visibilityPluginNameTag.Value()),
-		tag.NewStringTag(visibilityIndexTag.Key(), visibilityIndexTag.Value()),
+		tag.NewStringTag(visibilityIndexNameTag.Key(), visibilityIndexNameTag.Value()),
 	)
 	var visManager manager.VisibilityManager = newVisibilityManagerImpl(visStore, logger)
 
@@ -168,7 +168,7 @@ func newVisibilityManager(
 		metricsHandler,
 		logger,
 		visibilityPluginNameTag,
-		visibilityIndexTag,
+		visibilityIndexNameTag,
 	)
 	return visManager
 }
@@ -219,7 +219,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		operatorRPSRatio,
 		metricsHandler,
 		metrics.VisibilityPluginNameTag(visStore.GetName()),
-		metrics.VisibilityIndexTag(visStore.GetIndexName()),
+		metrics.VisibilityIndexNameTag(visStore.GetIndexName()),
 		logger,
 	), nil
 }

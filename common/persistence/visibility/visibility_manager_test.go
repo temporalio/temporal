@@ -83,7 +83,7 @@ func (s *VisibilityManagerSuite) SetupTest() {
 		dynamicconfig.GetFloatPropertyFn(0.2),
 		s.metricsHandler,
 		metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-		metrics.VisibilityIndexTag(s.visibilityStore.GetIndexName()),
+		metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		log.NewNoopLogger())
 }
 
@@ -128,7 +128,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-			metrics.VisibilityIndexTag(s.visibilityStore.GetIndexName()),
+			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
@@ -181,7 +181,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-			metrics.VisibilityIndexTag(s.visibilityStore.GetIndexName()),
+			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
@@ -206,7 +206,7 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceGetWorkflowExecutionScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
-			metrics.VisibilityIndexTag(s.visibilityStore.GetIndexName()),
+			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.GetWorkflowExecution(context.Background(), request)
