@@ -22,9 +22,10 @@ operation needs to be canceled. Then `Apply()` method should be called right aft
 succeeds and `Cancel()` if it failed (usually in `deffer` block). Order of execution is the same
 as register order for `Apply()`, and reversed for `Cancel()`.
 
-It is important to point out that `effect` package doesn't provide any transaction guarantees,
-and if `effect.Buffer` is lost, entire batch can be partially completed (which is acceptable
-for a Workflow Update case).  
+> #### NOTE
+> It is important to point out that `effect` package doesn't provide any transaction guarantees.
+> For example `effect.Buffer` can be partially applied (or not applied at all) after persistence
+> operation completed successfully (which is acceptable for a Workflow Update case).  
 
 ## Usage
 This package was created for Workflow Update feature, and currently used only there. It is not coupled

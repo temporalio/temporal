@@ -23,7 +23,7 @@ This might look confusing:
 message Message {}
 ```
 but first `message` word refers to protobuf messages and second `Message` is `protocolpb.Message`
-data struct used by Temporal. It is straight forward, but some fields need explanation.
+data struct used by Temporal. Most fields are self-explanatory, but some fields need explanation.
 
 ### `protocol_instance_id`
 is an identifier of the object which this message belongs to. Because currently messages are used for
@@ -61,5 +61,5 @@ command after which message should be processed by server.
 > will be processed after all commands in the order they arrive.
 > When 1:1 limitation is removed, `command_index` might be used.
 
-
-Worth to point out that SDKs process all queries last (after events and messages).
+> #### NOTE
+> All SDKs process all queries last (after events and messages).
