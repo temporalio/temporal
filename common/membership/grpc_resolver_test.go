@@ -101,7 +101,7 @@ func TestGRPCBuilder(t *testing.T) {
 		}),
 	)
 	require.NoError(t, err)
-
+	conn.Connect()
 	require.NoError(t, <-serverErrs)
 
 	// The gRPC library calls [resolver.Resolver.Close] when the connection is closed in a background goroutine, so we
