@@ -113,6 +113,33 @@ func (s *PartitionManagerTestSuite) TestAddTaskNoRules_AssignedTask() {
 	s.validatePollTask(bld, true)
 }
 
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// adding a task to a versioned queue
+	bld := "buildXYZ"
+	s.validateAddTask("", false, nil, worker_versioning.MakeBuildIdDirective(bld))
+	buildIds := make(map[string]bool)
+	buildIds[bld] = true
+
+	// task is backlogged in the source queue so it is loaded by now
+	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", bld, false)
+	s.Assert().NoError(err)
+	s.Assert().NotNil(sourceQ)
+
+	// unload sourceQ
+	s.partitionMgr.unloadPhysicalQueue(sourceQ, unloadCauseUnspecified)
+
+	// calling Describe on an unloaded physical queue
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, false)
+	s.NoError(err)
+
+	// 1 task in the backlog
+	s.NotNil(resp.VersionsInfoInternal[bld].PhysicalTaskQueueInfo.TaskQueueStats)
+	s.Equal(int64(1), resp.VersionsInfoInternal[bld].PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount)
+}
+
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)
@@ -184,14 +211,14 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_NoVersionDirective() {
 	buildId := "bld"
-	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(buildId)}}
+	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(buildId)}}
 	s.validateAddTask("", false, versioningData, nil)
 	s.validatePollTask("", false)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_AssignedTask() {
 	ruleBld := "rule-bld"
-	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)}}
+	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
 	taskBld := "task-bld"
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(taskBld))
 	s.validatePollTask(taskBld, true)
@@ -199,14 +226,14 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_AssignedTask(
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_UnassignedTask() {
 	ruleBld := "rule-bld"
-	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)}}
+	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
 	s.validateAddTask(ruleBld, false, versioningData, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask(ruleBld, true)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_UnassignedTask_SyncMatch() {
 	ruleBld := "rule-bld"
-	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)}}
+	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
 	s.validatePollTaskSyncMatch(ruleBld, true)
 	s.validateAddTask("", true, versioningData, worker_versioning.MakeUseAssignmentRulesDirective())
 }
@@ -215,7 +242,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	ruleBld := "rule-bld"
 	vs := createVersionSet("vs-bld")
 	versioningData := &persistence.VersioningData{
-		AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)},
+		AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
 		VersionSets:     []*persistence.CompatibleVersionSet{vs},
 	}
 
@@ -229,7 +256,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	ruleBld := "rule-bld"
 	vs := createVersionSet("vs-bld")
 	versioningData := &persistence.VersioningData{
-		AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)},
+		AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
 		VersionSets:     []*persistence.CompatibleVersionSet{vs},
 	}
 
@@ -250,7 +277,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	ruleBld := "rule-bld"
 	vs := createVersionSet("vs-bld")
 	versioningData := &persistence.VersioningData{
-		AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)},
+		AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
 		VersionSets:     []*persistence.CompatibleVersionSet{vs},
 	}
 	s.validateAddTask(ruleBld, false, versioningData, worker_versioning.MakeUseAssignmentRulesDirective())

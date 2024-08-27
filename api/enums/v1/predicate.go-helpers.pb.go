@@ -41,6 +41,7 @@ var (
 		"TaskType":          7,
 		"Destination":       8,
 		"OutboundTaskGroup": 9,
+		"OutboundTask":      10,
 	}
 )
 

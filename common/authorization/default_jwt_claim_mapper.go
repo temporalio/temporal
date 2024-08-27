@@ -31,10 +31,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/primitives"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (

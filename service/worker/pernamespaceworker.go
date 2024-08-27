@@ -39,9 +39,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
-	"go.uber.org/fx"
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -57,6 +54,8 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (

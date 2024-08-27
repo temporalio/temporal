@@ -31,9 +31,8 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/metadata"
 )
 
 const (

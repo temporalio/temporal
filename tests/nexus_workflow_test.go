@@ -45,16 +45,16 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
@@ -393,14 +393,71 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 	testClusterInfo, err := s.client.GetClusterInfo(ctx, &workflowservice.GetClusterInfoRequest{})
 	s.NoError(err)
 
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
 	var callbackToken, publicCallbackUrl string
 
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	handlerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	s.NoError(err)
+
 	h := nexustest.Handler{
-		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
 			s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
+
+			s.Len(options.Links, 1)
+			var links []*commonpb.Link
+			for _, nexusLink := range options.Links {
+				link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+				s.NoError(err)
+				links = append(links, &commonpb.Link{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: link,
+					},
+				})
+			}
+			s.NotNil(links[0].GetWorkflowEvent())
+			protorequire.ProtoEqual(s.T(), &commonpb.Link_WorkflowEvent{
+				Namespace:  s.namespace,
+				WorkflowId: run.GetID(),
+				RunId:      run.GetRunID(),
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						// Event history:
+						// 1 WORKFLOW_EXECUTION_STARTED
+						// 2 WORKFLOW_TASK_SCHEDULED
+						// 3 WORKFLOW_TASK_STARTED
+						// 4 WORKFLOW_TASK_COMPLETED
+						// 5 NEXUS_OPERATION_SCHEDULED
+						EventId:   5,
+						EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+					},
+				},
+			}, links[0].GetWorkflowEvent())
+
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
-			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+			return &nexus.HandlerStartOperationResultAsync{
+				OperationID: "test",
+				Links:       []nexus.Link{handlerNexusLink},
+			}, nil
 		},
 	}
 	listenAddr := nexustest.AllocListenAddress(s.T())
@@ -418,11 +475,6 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 			},
 		},
 	})
-	s.NoError(err)
-
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		TaskQueue: taskQueue,
-	}, "workflow")
 	s.NoError(err)
 
 	pollResp, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -477,6 +529,9 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
 	s.Greater(startedEventIdx, 0)
+
+	s.Len(pollResp.History.Events[startedEventIdx].Links, 1)
+	protorequire.ProtoEqual(s.T(), handlerLink, pollResp.History.Events[startedEventIdx].Links[0].GetWorkflowEvent())
 
 	// Completion request fails if the result payload is too large.
 	largeCompletion, err := nexus.NewOperationCompletionSuccessful(
@@ -1029,6 +1084,164 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionInternalAuth() 
 
 	s.NoError(err)
 	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("result", result)
+}
+
+func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionAfterReset() {
+	ctx := NewContext()
+	taskQueue := s.randomizeStr(s.T().Name())
+	endpointName := RandomizedNexusEndpoint(s.T().Name())
+
+	var callbackToken, publicCallbackUrl string
+
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			publicCallbackUrl = options.CallbackURL
+			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+		},
+	}
+	listenAddr := nexustest.AllocListenAddress(s.T())
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
+
+	_, err := s.operatorClient.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
+	pollResp, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueue.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     s.mustToPayload("input"),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Poll and verify that the "started" event was recorded.
+	pollResp, err = s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueue.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+	})
+	s.NoError(err)
+
+	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationStartedEventAttributes() != nil
+	})
+	s.Greater(startedEventIdx, 0)
+
+	// Remember the workflow task completed event ID (next after the last WFT started), we'll use it to test reset
+	// below.
+	wftCompletedEventID := int64(len(pollResp.History.Events))
+
+	// Reset the workflow and check that the started event has been reapplied.
+	resetResp, err := s.client.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.namespace,
+		WorkflowExecution:         pollResp.WorkflowExecution,
+		Reason:                    "test",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: wftCompletedEventID,
+	})
+	s.NoError(err)
+
+	hist := s.sdkClient.GetWorkflowHistory(ctx, run.GetID(), resetResp.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+
+	seenCompletedEvent := false
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED {
+			seenCompletedEvent = true
+		}
+	}
+	s.True(seenCompletedEvent)
+	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	})
+	s.NoError(err)
+
+	res, _ := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
+	s.Equal(http.StatusOK, res.StatusCode)
+
+	// Poll again and verify the completion is recorded and triggers workflow progress.
+	pollResp, err = s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueue.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationCompletedEventAttributes() != nil
+	})
+	s.Greater(completedEventIdx, 0)
+
+	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: &commonpb.Payloads{
+							Payloads: []*commonpb.Payload{
+								pollResp.History.Events[completedEventIdx].GetNexusOperationCompletedEventAttributes().Result,
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	var result string
+	run = s.sdkClient.GetWorkflow(ctx, run.GetID(), resetResp.RunId)
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
 }
