@@ -25,6 +25,7 @@
 package tdbg
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/urfave/cli/v2"
@@ -134,7 +135,7 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 	}
 	tqType := enumspb.TaskQueueType(tlTypeInt)
 	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return fmt.Errorf("invalid task queue type")
+		return errors.New("invalid task queue type") // nolint
 	}
 
 	// extracting the task queue partition id

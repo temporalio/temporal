@@ -107,12 +107,12 @@ func (s *taskQueueCommandTestSuite) TestDescribeTaskQueuePartition() {
 		{
 			Name:       "task queue type: invalid",
 			inputFlags: []string{"--task-queue-type", "false"},
-			err:        errors.New("invalid task queue type"),
+			err:        errors.New("invalid task queue type"), // nolint
 		},
 		{
 			Name:       "task queue type: unspecified",
 			inputFlags: []string{"--task-queue-type", "TASK_QUEUE_TYPE_UNSPECIFIED"},
-			err:        errors.New("invalid task queue type"),
+			err:        errors.New("invalid task queue type"), // nolint
 		},
 		{
 			Name:       "task queue partition ID",
