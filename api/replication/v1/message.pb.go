@@ -1700,9 +1700,6 @@ func (x *VerifyVersionedTransitionTaskAttributes) GetNewRunId() string {
 	return ""
 }
 
-// (-- api-linter: core::0158::response-next-page-token-field=disabled
-//
-//	aip.dev/not-precedent: We need to do this because current implementations. --)
 type SyncVersionedTransitionTaskAttributes struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
