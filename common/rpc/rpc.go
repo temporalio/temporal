@@ -232,12 +232,7 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
-	connection := d.interNodeGrpcConnections.Get(hostName)
-	if connection != nil {
-		c, ok := connection.(*grpc.ClientConn)
-		if !ok {
-			panic("unexpected entry in interNodeGrpcConnections cache")
-		}
+	if c, ok := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn); ok {
 		return c
 	}
 	var tlsClientConfig *tls.Config
