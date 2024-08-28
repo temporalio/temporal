@@ -38,6 +38,7 @@ const (
 	QueueActionTagName          = "queue_action"
 	QueueTypeTagName            = "queue_type"
 	visibilityPluginNameTagName = "visibility_plugin_name"
+	visibilityIndexNameTagName  = "visibility_index_name"
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
