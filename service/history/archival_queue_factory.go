@@ -198,7 +198,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 				BatchSize:            f.Config.ArchivalTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.ArchivalProcessorPollBackoffInterval,
-				MaxPredicateDepth:    f.Config.QueuePredicateMaxDepth,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,

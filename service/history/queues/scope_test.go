@@ -322,7 +322,7 @@ func (s *scopeSuite) TestMergeByPredicate_SamePredicateType() {
 
 	mergeNamespaceIDs := append(slices.Clone(namespaceIDs[:rand.Intn(len(namespaceIDs))]), uuid.New(), uuid.New())
 	mergePredicate := tasks.NewNamespacePredicate(mergeNamespaceIDs)
-	mergedScope := scope.MergeByPredicate(NewScope(r, mergePredicate), 10)
+	mergedScope := scope.MergeByPredicate(NewScope(r, mergePredicate))
 	s.Equal(r, mergedScope.Range)
 
 	for _, namespaceID := range namespaceIDs {
@@ -359,7 +359,7 @@ func (s *scopeSuite) TestMergeByPredicate_DifferentPredicateType() {
 		enumsspb.TaskType(rand.Intn(10)),
 	}
 	mergePredicate := tasks.NewTypePredicate(mergeTaskTypes)
-	mergedScope := scope.MergeByPredicate(NewScope(r, mergePredicate), 10)
+	mergedScope := scope.MergeByPredicate(NewScope(r, mergePredicate))
 	s.Equal(r, mergedScope.Range)
 
 	for _, namespaceID := range namespaceIDs {

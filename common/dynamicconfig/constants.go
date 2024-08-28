@@ -1453,13 +1453,13 @@ count is exceeded. But since queue action is async, we need this hard limit.
 NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskMaxCount.
 `,
 	)
-	QueuePredicateMaxDepth = NewGlobalIntSetting(
-		"history.queuePredicateMaxDepth",
+	QueueMaxPredicateSize = NewGlobalIntSetting(
+		"history.queueMaxPredicateSize",
 		0,
-		`The max depth of the multi-cursor predicate structure stored in the shard info record. 0 is considered
-unlimited. When the predicate depth is surpassed for a given scope, the predicate is converted to a universal predicate,
+		`The max size of the multi-cursor predicate structure stored in the shard info record. 0 is considered
+unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a universal predicate,
 which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
-NOTE: The outbound queue has a separate configuration: outboundQueuePredicateMaxDepth.
+NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
 `,
 	)
 
@@ -1666,11 +1666,11 @@ critical count is exceeded. But since queue action is async, we need this hard l
 		9000,
 		`Max number of pending tasks in the outbound queue before triggering slice splitting and unloading.`,
 	)
-	OutboundQueuePredicateMaxDepth = NewGlobalIntSetting(
-		"history.outboundQueuePredicateMaxDepth",
-		5,
-		`The max depth of the multi-cursor predicate structure stored in the shard info record for the outbound queue. 0
-is considered unlimited. When the predicate depth is surpassed for a given scope, the predicate is converted to a
+	OutboundQueueMaxPredicateSize = NewGlobalIntSetting(
+		"history.outboundQueueMaxPredicateSize",
+		10*1024,
+		`The max size of the multi-cursor predicate structure stored in the shard info record for the outbound queue. 0
+is considered unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a
 universal predicate, which causes all tasks in the scope's range to eventually be reprocessed without applying any
 filtering logic.
 `,

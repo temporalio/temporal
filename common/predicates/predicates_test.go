@@ -26,6 +26,7 @@ package predicates
 
 import (
 	"maps"
+	"strconv"
 )
 
 var _ Predicate[int] = (*testPredicate)(nil)
@@ -60,6 +61,6 @@ func (p *testPredicate) Equals(predicate Predicate[int]) bool {
 	return maps.Equal(p.nums, testPrediate.nums)
 }
 
-func (p *testPredicate) Depth() int {
-	return 1
+func (p *testPredicate) Size() int {
+	return strconv.IntSize / 8 * len(p.nums)
 }

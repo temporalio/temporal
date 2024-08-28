@@ -89,13 +89,13 @@ func (a *AndImpl[T]) Equals(
 	return predicatesEqual(a.Predicates, andPredicate.Predicates)
 }
 
-func (o *AndImpl[T]) Depth() int {
-	depth := 0
+func (o *AndImpl[T]) Size() int {
+	size := EmptyPredicateProtoSize
 	for _, p := range o.Predicates {
-		depth = max(depth, p.Depth())
+		size += p.Size()
 	}
 
-	return depth + 1
+	return size
 }
 
 // appendPredicates adds new predicates to the slice of existing predicates

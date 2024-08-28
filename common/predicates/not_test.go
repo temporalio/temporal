@@ -99,8 +99,9 @@ func (s *notSuite) TestNot_Equals() {
 	s.False(p.Equals(Universal[int]()))
 }
 
-func (s *notSuite) TestNot_Depth() {
+func (s *notSuite) TestNot_Size() {
 	p1 := newTestPredicate(1, 2, 3)
-	p := Not[int](p1)
-	s.Equal(2, p.Depth())
+	p := Not(p1)
+
+	s.Equal(28, p.Size()) // 8 bytes per int64 * 3 ints + 4 bytes of overhead.
 }

@@ -69,7 +69,7 @@ type (
 		BatchSize            dynamicconfig.IntPropertyFn
 		MaxPendingTasksCount dynamicconfig.IntPropertyFn
 		PollBackoffInterval  dynamicconfig.DurationPropertyFn
-		MaxPredicateDepth    dynamicconfig.IntPropertyFn
+		MaxPredicateSize     dynamicconfig.IntPropertyFn
 	}
 
 	SliceIterator func(s Slice)
@@ -269,19 +269,19 @@ func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
 		incomingSlice := incomingSlices[incomingSliceIdx]
 
 		if currentSlice.Scope().Range.InclusiveMin.CompareTo(incomingSlice.Scope().Range.InclusiveMin) < 0 {
-			mergeOrAppendSlice(mergedSlices, currentSlice, r.options.MaxPredicateDepth())
+			mergeOrAppendSlice(mergedSlices, currentSlice, r.options.MaxPredicateSize())
 			currentSliceElement = currentSliceElement.Next()
 		} else {
-			mergeOrAppendSlice(mergedSlices, incomingSlice, r.options.MaxPredicateDepth())
+			mergeOrAppendSlice(mergedSlices, incomingSlice, r.options.MaxPredicateSize())
 			incomingSliceIdx++
 		}
 	}
 
 	for ; currentSliceElement != nil; currentSliceElement = currentSliceElement.Next() {
-		mergeOrAppendSlice(mergedSlices, currentSliceElement.Value.(Slice), r.options.MaxPredicateDepth())
+		mergeOrAppendSlice(mergedSlices, currentSliceElement.Value.(Slice), r.options.MaxPredicateSize())
 	}
 	for _, slice := range incomingSlices[incomingSliceIdx:] {
-		mergeOrAppendSlice(mergedSlices, slice, r.options.MaxPredicateDepth())
+		mergeOrAppendSlice(mergedSlices, slice, r.options.MaxPredicateSize())
 	}
 
 	// clear existing list
@@ -566,7 +566,7 @@ func mergeOrAppendSlice(
 		return
 	}
 
-	mergedSlices := lastSlice.MergeWithSlice(incomingSlice, maxPredicateDepth)
+	mergedSlices := lastSlice.MergeWithSlice(incomingSlice)
 	slices.Remove(lastElement)
 	for _, mergedSlice := range mergedSlices {
 		slices.PushBack(mergedSlice)

@@ -143,12 +143,10 @@ func (s *andSuite) TestAnd_Equals() {
 	s.False(p.Equals(Universal[int]()))
 }
 
-func (s *andSuite) TestAnd_Depth() {
+func (s *andSuite) TestAnd_Size() {
 	p1 := newTestPredicate(1, 2, 3)
 	p2 := newTestPredicate(2, 3, 4)
 	p := And(p1, p2)
 
-	s.Equal(2, p.Depth())
-	p = And(Or(p1, p2), p1)
-	s.Equal(3, p.Depth())
+	s.Equal(52, p.Size()) // 8 bytes per int64 * 6 ints + 4 bytes of overhead.
 }

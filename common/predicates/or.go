@@ -89,11 +89,11 @@ func (o *OrImpl[T]) Equals(
 	return predicatesEqual(o.Predicates, orPredicate.Predicates)
 }
 
-func (o *OrImpl[T]) Depth() int {
-	depth := 0
+func (o *OrImpl[T]) Size() int {
+	size := EmptyPredicateProtoSize
 	for _, p := range o.Predicates {
-		depth = max(depth, p.Depth())
+		size += p.Size()
 	}
 
-	return depth + 1
+	return size
 }

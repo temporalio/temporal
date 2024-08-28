@@ -111,7 +111,7 @@ type Config struct {
 	QueueReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
 	QueueCriticalSlicesCount         dynamicconfig.IntPropertyFn
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
-	QueuePredicateMaxDepth           dynamicconfig.IntPropertyFn
+	QueueMaxPredicateSize            dynamicconfig.IntPropertyFn
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -170,7 +170,7 @@ type Config struct {
 	OutboundProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	OutboundQueuePendingTaskCriticalCount               dynamicconfig.IntPropertyFn
 	OutboundQueuePendingTaskMaxCount                    dynamicconfig.IntPropertyFn
-	OutboundQueuePredicateMaxDepth                      dynamicconfig.IntPropertyFn
+	OutboundQueueMaxPredicateSize                       dynamicconfig.IntPropertyFn
 	OutboundQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
@@ -447,7 +447,7 @@ func NewConfig(
 		QueueReaderStuckCriticalAttempts: dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
 		QueueCriticalSlicesCount:         dynamicconfig.QueueCriticalSlicesCount.Get(dc),
 		QueuePendingTaskMaxCount:         dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
-		QueuePredicateMaxDepth:           dynamicconfig.QueuePredicateMaxDepth.Get(dc),
+		QueueMaxPredicateSize:            dynamicconfig.QueueMaxPredicateSize.Get(dc),
 
 		TaskDLQEnabled:                 dynamicconfig.HistoryTaskDLQEnabled.Get(dc),
 		TaskDLQUnexpectedErrorAttempts: dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts.Get(dc),
@@ -503,7 +503,7 @@ func NewConfig(
 		OutboundProcessorPollBackoffInterval:                dynamicconfig.OutboundProcessorPollBackoffInterval.Get(dc),
 		OutboundQueuePendingTaskCriticalCount:               dynamicconfig.OutboundQueuePendingTaskCriticalCount.Get(dc),
 		OutboundQueuePendingTaskMaxCount:                    dynamicconfig.OutboundQueuePendingTaskMaxCount.Get(dc),
-		OutboundQueuePredicateMaxDepth:                      dynamicconfig.OutboundQueuePredicateMaxDepth.Get(dc),
+		OutboundQueueMaxPredicateSize:                       dynamicconfig.OutboundQueueMaxPredicateSize.Get(dc),
 		OutboundQueueMaxReaderCount:                         dynamicconfig.OutboundQueueMaxReaderCount.Get(dc),
 		OutboundQueueGroupLimiterBufferSize:                 dynamicconfig.OutboundQueueGroupLimiterBufferSize.Get(dc),
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),

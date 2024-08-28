@@ -43,6 +43,6 @@ func (a *UniversalImpl[T]) Equals(
 	return ok
 }
 
-func (a *UniversalImpl[T]) Depth() int {
-	return 1
+func (a *UniversalImpl[T]) Size() int {
+	return EmptyPredicateProtoSize
 }

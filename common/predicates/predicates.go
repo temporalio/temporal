@@ -36,6 +36,9 @@ type (
 		// return false.
 		Equals(Predicate[T]) bool
 
-		Depth() int
+		// Size gets the estimated size in bytes of this predicate.
+		// Implementation may keep this estimate rough and mostly account for elements that may take up considerable
+		// space such as strings and slices.
+		Size() int
 	}
 )
