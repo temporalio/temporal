@@ -36,12 +36,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -161,6 +160,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 	)
 	if request.StartRequest.GetUserMetadata() != nil {
 		event.UserMetadata = request.StartRequest.GetUserMetadata()
+	}
+	if len(request.StartRequest.GetLinks()) > 0 {
+		event.Links = request.StartRequest.GetLinks()
 	}
 	event, _ = b.EventStore.add(event)
 	return event

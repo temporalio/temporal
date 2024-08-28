@@ -34,12 +34,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -85,6 +83,7 @@ func (s *VisibilityManagerSuite) SetupTest() {
 		dynamicconfig.GetFloatPropertyFn(0.2),
 		s.metricsHandler,
 		metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
+		metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		log.NewNoopLogger())
 }
 
@@ -129,6 +128,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
+			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
@@ -181,6 +181,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
+			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
@@ -205,6 +206,7 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceGetWorkflowExecutionScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
+			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.GetWorkflowExecution(context.Background(), request)

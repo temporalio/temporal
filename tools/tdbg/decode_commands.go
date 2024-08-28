@@ -32,11 +32,10 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v2"
+	"go.temporal.io/server/common/codec"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-
-	"go.temporal.io/server/common/codec"
 )
 
 func AdminDecodeProto(c *cli.Context) error {

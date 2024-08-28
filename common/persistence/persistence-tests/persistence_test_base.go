@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"

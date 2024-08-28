@@ -40,8 +40,6 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -51,6 +49,7 @@ import (
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const localBroadcastAddress = "127.0.0.1"

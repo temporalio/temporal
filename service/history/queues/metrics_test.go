@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 	"go.temporal.io/server/service/history/tasks"
 )
 

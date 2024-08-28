@@ -29,9 +29,8 @@ import (
 	"strconv"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/server/common/headers"
+	"google.golang.org/grpc/metadata"
 )
 
 const (

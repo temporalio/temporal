@@ -34,9 +34,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/dynamicconfig"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (

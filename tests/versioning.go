@@ -36,12 +36,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/tqid"
-	"go.temporal.io/server/common/worker_versioning"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -53,12 +47,15 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type VersioningIntegSuite struct {
@@ -242,7 +239,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 	res := s.getVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 
-	// failure due to requirement that once an unconditional rule exists, at least one must always exist
+	// failure due to requirement that once a fully-ramped rule exists, at least one must always exist
 	s.deleteAssignmentRule(ctx, tq, 0, cT, false)
 	s.Equal(res, s.getVersioningRules(ctx, tq))
 
@@ -342,7 +339,7 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
+	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 
 	// recent versioned poller on wrong build ID --> failure
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "3", true)
@@ -359,7 +356,7 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
+	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 }
 
 func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
@@ -948,7 +945,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.waitForChan(ctx, failedTask)
 
 	// MS should have the correct build ID
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
 
 	// v2 times out the task
@@ -1455,7 +1451,6 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		expectedStampBuildId = v1
 	}
 	// MS should have the correct build ID
-	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, expectedStampBuildId, "", nil)
 
 	// v11 times out the task
@@ -4676,12 +4671,11 @@ func (s *VersioningIntegSuite) commitBuildId(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
-		// 1. Adds an assignment rule (with full ramp) for the target Build ID at the end of the list.
+		// 1. Adds a fully-ramped assignment rule for the target Build ID at the end of the list.
 		endIdx := len(res.GetAssignmentRules()) - 1
 		addedRule := res.GetAssignmentRules()[endIdx].GetRule()
 		s.Assert().Equal(targetBuildId, addedRule.GetTargetBuildId())
-		s.Assert().Nil(addedRule.GetRamp())
-		s.Assert().Nil(addedRule.GetPercentageRamp())
+		s.Assert().Equal(float32(100), addedRule.GetPercentageRamp().GetRampPercentage())
 
 		foundOtherAssignmentRuleForTarget := false
 		foundFullyRampedAssignmentRuleForOtherTarget := false
@@ -4689,7 +4683,7 @@ func (s *VersioningIntegSuite) commitBuildId(
 			if r.GetRule().GetTargetBuildId() == targetBuildId && i != endIdx {
 				foundOtherAssignmentRuleForTarget = true
 			}
-			if r.GetRule().GetRamp() == nil && r.GetRule().GetTargetBuildId() != targetBuildId {
+			if r.GetRule().GetPercentageRamp().GetRampPercentage() == 100 && r.GetRule().GetTargetBuildId() != targetBuildId {
 				foundFullyRampedAssignmentRuleForOtherTarget = true
 			}
 		}
@@ -4792,10 +4786,7 @@ func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, new
 }
 
 func (s *VersioningIntegSuite) addAssignmentRule(ctx context.Context, tq, buildId string) *taskqueuepb.BuildIdAssignmentRule {
-	rule := &taskqueuepb.BuildIdAssignmentRule{
-		TargetBuildId: buildId,
-	}
-	return s.doAddAssignmentRule(ctx, tq, rule)
+	return s.addAssignmentRuleWithRamp(ctx, tq, buildId, 100)
 }
 
 func (s *VersioningIntegSuite) addAssignmentRuleWithRamp(ctx context.Context, tq, buildId string, ramp float32) *taskqueuepb.BuildIdAssignmentRule {

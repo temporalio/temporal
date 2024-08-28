@@ -37,9 +37,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/testsuite"
-
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/client"
@@ -48,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/grpc"
 )
 
 type parentClosePolicyWorkflowSuite struct {
