@@ -99,7 +99,7 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
-	f.interNodeGrpcConnections = cache.New(1000, nil)
+	f.interNodeGrpcConnections = cache.NewSimple(nil)
 	return f
 }
 
