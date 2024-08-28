@@ -29,8 +29,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/internal/nettest"
 	"google.golang.org/grpc"
+
+	"go.temporal.io/server/internal/nettest"
 )
 
 func TestRPCFactory_GetFrontendGRPCServerOptions(t *testing.T) {
@@ -54,8 +55,8 @@ func TestRPCFactory_GetInternodeGRPCServerOptions(t *testing.T) {
 func TestRPCFactory_CreateInternodeGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, "test-addr", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateInternodeGRPCConnection("test-addr")
+	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
+		return rpcFactory.CreateInternodeGRPCConnection("localhost")
 	})
 }
 
@@ -70,8 +71,8 @@ func TestRPCFactory_CreateLocalFrontendGRPCConnection(t *testing.T) {
 func TestRPCFactory_CreateRemoteFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, "test-addr", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateRemoteFrontendGRPCConnection("test-addr")
+	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
+		return rpcFactory.CreateRemoteFrontendGRPCConnection("localhost")
 	})
 }
 
@@ -90,7 +91,7 @@ func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest.RPCFa
 		}()
 
 		conn := dial(rpcFactory)
-
+		conn.Connect()
 		require.NoError(t, <-errs)
 		assert.Equal(t, target, conn.Target())
 		assert.NoError(t, conn.Close())
