@@ -210,18 +210,16 @@ func (s *xdcBaseSuite) tearDownSuite() {
 	s.NoError(s.cluster2.TearDownCluster())
 }
 
-func (s *xdcBaseSuite) setupTest(waitForClusterConnected bool) {
+func (s *xdcBaseSuite) setupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 
-	if waitForClusterConnected {
-		if !s.clusterConnected {
-			s.waitForClusterConnected(s.cluster1, s.clusterNames[0], s.clusterNames[1])
-			s.waitForClusterConnected(s.cluster2, s.clusterNames[1], s.clusterNames[0])
-			s.clusterConnected = true
-		}
+	if !s.clusterConnected {
+		s.waitForClusterConnected(s.cluster1, s.clusterNames[0], s.clusterNames[1])
+		s.waitForClusterConnected(s.cluster2, s.clusterNames[1], s.clusterNames[0])
+		s.clusterConnected = true
 	}
 }
 

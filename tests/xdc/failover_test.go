@@ -85,7 +85,7 @@ func (s *FunctionalClustersTestSuite) SetupSuite() {
 }
 
 func (s *FunctionalClustersTestSuite) SetupTest() {
-	s.setupTest(true)
+	s.setupTest()
 }
 
 func (s *FunctionalClustersTestSuite) TearDownSuite() {

@@ -86,7 +86,7 @@ func (s *UserDataReplicationTestSuite) SetupSuite() {
 }
 
 func (s *UserDataReplicationTestSuite) SetupTest() {
-	s.setupTest(true)
+	s.setupTest()
 }
 
 func (s *UserDataReplicationTestSuite) TearDownSuite() {

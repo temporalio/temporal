@@ -224,7 +224,7 @@ func (s *historyReplicationDLQSuite) TearDownSuite() {
 }
 
 func (s *historyReplicationDLQSuite) SetupTest() {
-	s.setupTest(true)
+	s.setupTest()
 }
 
 // This test executes a workflow on the active cluster, verifies that its replication tasks all appear in the DLQ, re-
