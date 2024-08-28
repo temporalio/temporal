@@ -184,11 +184,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
-	nexusLink, err := ConvertLinkWorkflowEventToNexusLink(args.workflowEventLink)
-	if err != nil {
-		return err
-	}
-
 	callCtx, cancel := context.WithTimeout(
 		ctx,
 		e.Config.RequestTimeout(ns.Name().String(), task.EndpointName),
@@ -204,7 +199,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
-		Links: []nexus.Link{nexusLink},
+		Links: []nexus.Link{args.nexusLink},
 	})
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
@@ -260,7 +255,7 @@ type startArgs struct {
 	endpointID               string
 	header                   map[string]string
 	payload                  *commonpb.Payload
-	workflowEventLink        *commonpb.Link_WorkflowEvent
+	nexusLink                nexus.Link
 	namespaceFailoverVersion int64
 }
 
@@ -292,7 +287,7 @@ func (e taskExecutor) loadOperationArgs(
 		}
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
-		args.workflowEventLink = &commonpb.Link_WorkflowEvent{
+		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
 			RunId:      ref.WorkflowKey.RunID,
@@ -302,7 +297,7 @@ func (e taskExecutor) loadOperationArgs(
 					EventType: event.GetEventType(),
 				},
 			},
-		}
+		})
 		args.namespaceFailoverVersion = event.Version
 		return nil
 	})
