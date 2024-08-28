@@ -410,8 +410,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 			},
 		},
 	}
-	handlerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
-	s.NoError(err)
+	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(
