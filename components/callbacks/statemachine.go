@@ -27,10 +27,10 @@ import (
 	"net/url"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -39,15 +39,18 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Unique type identifier for this state machine.
-var StateMachineType = hsm.MachineType{
-	ID:   2,
-	Name: "callbacks.Callback",
-}
+const (
+	// StateMachineType is a unique type identifier for this state machine.
+	StateMachineType = "callbacks.Callback"
+
+	// A marker for the first return value from a progress() that indicates the machine is in a terminal state.
+	// TODO: Remove this once transition history is fully implemented.
+	terminalStage = 3
+)
 
 // MachineCollection creates a new typed [statemachines.Collection] for callbacks.
 func MachineCollection(tree *hsm.Node) hsm.Collection[Callback] {
-	return hsm.NewCollection[Callback](tree, StateMachineType.ID)
+	return hsm.NewCollection[Callback](tree, StateMachineType)
 }
 
 // Callback state machine.
@@ -56,57 +59,57 @@ type Callback struct {
 }
 
 // NewWorkflowClosedTrigger creates a WorkflowClosed trigger variant.
-func NewWorkflowClosedTrigger() *workflowpb.CallbackInfo_Trigger {
-	return &workflowpb.CallbackInfo_Trigger{
-		Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
+func NewWorkflowClosedTrigger() *persistencespb.CallbackInfo_Trigger {
+	return &persistencespb.CallbackInfo_Trigger{
+		Variant: &persistencespb.CallbackInfo_Trigger_WorkflowClosed{},
 	}
 }
 
 // NewCallback creates a new callback in the STANDBY state from given params.
-func NewCallback(registrationTime *timestamppb.Timestamp, trigger *workflowpb.CallbackInfo_Trigger, cb *commonpb.Callback) Callback {
+func NewCallback(registrationTime *timestamppb.Timestamp, trigger *persistencespb.CallbackInfo_Trigger, cb *persistencespb.Callback) Callback {
 	return Callback{
 		&persistencespb.CallbackInfo{
-			PublicInfo: &workflowpb.CallbackInfo{
-				Trigger:          trigger,
-				Callback:         cb,
-				State:            enumspb.CALLBACK_STATE_STANDBY,
-				RegistrationTime: registrationTime,
-			},
+			Trigger:          trigger,
+			Callback:         cb,
+			State:            enumsspb.CALLBACK_STATE_STANDBY,
+			RegistrationTime: registrationTime,
 		},
 	}
 }
 
-func (c Callback) State() enumspb.CallbackState {
-	return c.PublicInfo.State
+func (c Callback) State() enumsspb.CallbackState {
+	return c.CallbackInfo.State
 }
 
-func (c Callback) SetState(state enumspb.CallbackState) {
-	c.PublicInfo.State = state
+func (c Callback) SetState(state enumsspb.CallbackState) {
+	c.CallbackInfo.State = state
 }
 
 func (c Callback) recordAttempt(ts time.Time) {
-	c.PublicInfo.Attempt++
-	c.PublicInfo.LastAttemptCompleteTime = timestamppb.New(ts)
+	c.CallbackInfo.Attempt++
+	c.CallbackInfo.LastAttemptCompleteTime = timestamppb.New(ts)
 }
 
 func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
-	switch c.PublicInfo.State {
-	case enumspb.CALLBACK_STATE_BACKING_OFF:
-		return []hsm.Task{BackoffTask{Deadline: c.PublicInfo.NextAttemptScheduleTime.AsTime()}}, nil
-	case enumspb.CALLBACK_STATE_SCHEDULED:
-		var destination string
-		switch v := c.PublicInfo.Callback.GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
-			u, err := url.Parse(c.PublicInfo.Callback.GetNexus().Url)
+	switch c.CallbackInfo.State {
+	case enumsspb.CALLBACK_STATE_BACKING_OFF:
+		return []hsm.Task{BackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
+	case enumsspb.CALLBACK_STATE_SCHEDULED:
+		switch v := c.Callback.GetVariant().(type) {
+		case *persistencespb.Callback_Nexus_:
+			var baseURL string
+			u, err := url.Parse(c.Callback.GetNexus().Url)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse URL: %v: %w", &c, err)
 			}
-			destination = u.Scheme + "://" + u.Host
+			baseURL = u.Scheme + "://" + u.Host
+			return []hsm.Task{InvocationTask{Destination: baseURL}}, nil
+		case *persistencespb.Callback_Hsm:
+			return []hsm.Task{InvocationTask{Destination: ""}}, nil
+
 		default:
 			return nil, fmt.Errorf("unsupported callback variant %v", v) // nolint:goerr113
 		}
-
-		return []hsm.Task{InvocationTask{Destination: destination}}, nil
 	}
 	return nil, nil
 }
@@ -118,9 +121,30 @@ func (c Callback) output() (hsm.TransitionOutput, error) {
 	return hsm.TransitionOutput{Tasks: tasks}, err
 }
 
+// TODO: Remove this implementation once transition history is fully implemented.
+func (c Callback) progress() (int, int32, error) {
+	switch c.State() {
+	case enumsspb.CALLBACK_STATE_UNSPECIFIED:
+		return 0, 0, serviceerror.NewInvalidArgument("uninitialized callback state")
+	case enumsspb.CALLBACK_STATE_STANDBY:
+		return 1, 0, nil
+	case enumsspb.CALLBACK_STATE_BACKING_OFF:
+		return 2, c.GetAttempt() * 2, nil
+	case enumsspb.CALLBACK_STATE_SCHEDULED:
+		// We've made slightly more progress if we transitioned from backing off to scheduled.
+		return 2, c.GetAttempt()*2 + 1, nil
+	case enumsspb.CALLBACK_STATE_FAILED, enumsspb.CALLBACK_STATE_SUCCEEDED:
+		// Consider any terminal state as "max progress", we'll rely on last update namespace failover version to break
+		// the tie when comparing two states.
+		return terminalStage, 0, nil
+	default:
+		return 0, 0, serviceerror.NewInvalidArgument("unknown callback state")
+	}
+}
+
 type stateMachineDefinition struct{}
 
-func (stateMachineDefinition) Type() hsm.MachineType {
+func (stateMachineDefinition) Type() string {
 	return StateMachineType
 }
 
@@ -139,6 +163,36 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	return nil, fmt.Errorf("invalid callback provided: %v", state) // nolint:goerr113
 }
 
+// CompareState compares the progress of two Callback state machines to determine whether to sync machine state while
+// processing a replication task.
+// TODO: Remove this implementation once transition history is fully implemented.
+func (stateMachineDefinition) CompareState(state1, state2 any) (int, error) {
+	cb1, ok := state1.(Callback)
+	if !ok {
+		return 0, fmt.Errorf("%w: expected state1 to be a Callback instance, got %v", hsm.ErrIncompatibleType, state1)
+	}
+	cb2, ok := state2.(Callback)
+	if !ok {
+		return 0, fmt.Errorf("%w: expected state2 to be a Callback instance, got %v", hsm.ErrIncompatibleType, state2)
+	}
+
+	stage1, attempts1, err := cb1.progress()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get progress for state1: %w", err)
+	}
+	stage2, attempts2, err := cb2.progress()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get progress for state2: %w", err)
+	}
+	if stage1 != stage2 {
+		return stage1 - stage2, nil
+	}
+	if stage1 == terminalStage && cb1.State() != cb2.State() {
+		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", cb1.State(), cb2.State()))
+	}
+	return int(attempts1 - attempts2), nil
+}
+
 func RegisterStateMachine(r *hsm.Registry) error {
 	return r.RegisterMachine(stateMachineDefinition{})
 }
@@ -148,8 +202,8 @@ func RegisterStateMachine(r *hsm.Registry) error {
 type EventScheduled struct{}
 
 var TransitionScheduled = hsm.NewTransition(
-	[]enumspb.CallbackState{enumspb.CALLBACK_STATE_STANDBY},
-	enumspb.CALLBACK_STATE_SCHEDULED,
+	[]enumsspb.CallbackState{enumsspb.CALLBACK_STATE_STANDBY},
+	enumsspb.CALLBACK_STATE_SCHEDULED,
 	func(cb Callback, event EventScheduled) (hsm.TransitionOutput, error) {
 		return cb.output()
 	},
@@ -159,10 +213,10 @@ var TransitionScheduled = hsm.NewTransition(
 type EventRescheduled struct{}
 
 var TransitionRescheduled = hsm.NewTransition(
-	[]enumspb.CallbackState{enumspb.CALLBACK_STATE_BACKING_OFF},
-	enumspb.CALLBACK_STATE_SCHEDULED,
+	[]enumsspb.CallbackState{enumsspb.CALLBACK_STATE_BACKING_OFF},
+	enumsspb.CALLBACK_STATE_SCHEDULED,
 	func(cb Callback, event EventRescheduled) (hsm.TransitionOutput, error) {
-		cb.PublicInfo.NextAttemptScheduleTime = nil
+		cb.CallbackInfo.NextAttemptScheduleTime = nil
 		return cb.output()
 	},
 )
@@ -175,15 +229,15 @@ type EventAttemptFailed struct {
 }
 
 var TransitionAttemptFailed = hsm.NewTransition(
-	[]enumspb.CallbackState{enumspb.CALLBACK_STATE_SCHEDULED},
-	enumspb.CALLBACK_STATE_BACKING_OFF,
+	[]enumsspb.CallbackState{enumsspb.CALLBACK_STATE_SCHEDULED},
+	enumsspb.CALLBACK_STATE_BACKING_OFF,
 	func(cb Callback, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		cb.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.PublicInfo.Attempt))
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
-		cb.PublicInfo.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
-		cb.PublicInfo.LastAttemptFailure = &failurepb.Failure{
+		cb.CallbackInfo.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
+		cb.CallbackInfo.LastAttemptFailure = &failurepb.Failure{
 			Message: event.Err.Error(),
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
@@ -202,11 +256,11 @@ type EventFailed struct {
 }
 
 var TransitionFailed = hsm.NewTransition(
-	[]enumspb.CallbackState{enumspb.CALLBACK_STATE_SCHEDULED},
-	enumspb.CALLBACK_STATE_FAILED,
+	[]enumsspb.CallbackState{enumsspb.CALLBACK_STATE_SCHEDULED},
+	enumsspb.CALLBACK_STATE_FAILED,
 	func(cb Callback, event EventFailed) (hsm.TransitionOutput, error) {
 		cb.recordAttempt(event.Time)
-		cb.PublicInfo.LastAttemptFailure = &failurepb.Failure{
+		cb.CallbackInfo.LastAttemptFailure = &failurepb.Failure{
 			Message: event.Err.Error(),
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
@@ -224,11 +278,11 @@ type EventSucceeded struct {
 }
 
 var TransitionSucceeded = hsm.NewTransition(
-	[]enumspb.CallbackState{enumspb.CALLBACK_STATE_SCHEDULED},
-	enumspb.CALLBACK_STATE_SUCCEEDED,
+	[]enumsspb.CallbackState{enumsspb.CALLBACK_STATE_SCHEDULED},
+	enumsspb.CALLBACK_STATE_SUCCEEDED,
 	func(cb Callback, event EventSucceeded) (hsm.TransitionOutput, error) {
 		cb.recordAttempt(event.Time)
-		cb.PublicInfo.LastAttemptFailure = nil
+		cb.CallbackInfo.LastAttemptFailure = nil
 		return cb.output()
 	},
 )

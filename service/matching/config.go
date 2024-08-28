@@ -62,6 +62,9 @@ type (
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		NumTaskqueueReadPartitions               dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		BreakdownMetricsByTaskQueue              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingPolls             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingTasks             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxRatePerSecond                dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -107,6 +110,8 @@ type (
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
+
+		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	forwarderConfig struct {
@@ -149,6 +154,10 @@ type (
 		// Retry policy for fetching user data from root partition. Should retry forever.
 		GetUserDataRetryPolicy backoff.RetryPolicy
 
+		BreakdownMetricsByTaskQueue func() bool
+		BreakdownMetricsByPartition func() bool
+		BreakdownMetricsByBuildID   func() bool
+
 		loadCause loadCause
 	}
 
@@ -166,6 +175,7 @@ const (
 	loadCausePoll
 	loadCauseOtherRead  // any other read-only rpc
 	loadCauseOtherWrite // any other mutating rpc
+	loadCauseForce      // root partition loaded, force load to ensure matching with back logged partitions
 )
 
 const (
@@ -209,6 +219,9 @@ func NewConfig(
 		ThrottledLogRPS:                          dynamicconfig.MatchingThrottledLogRPS.Get(dc),
 		NumTaskqueueWritePartitions:              dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
 		NumTaskqueueReadPartitions:               dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		BreakdownMetricsByTaskQueue:              dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
+		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
+		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
 		ForwarderMaxOutstandingPolls:             dynamicconfig.MatchingForwarderMaxOutstandingPolls.Get(dc),
 		ForwarderMaxOutstandingTasks:             dynamicconfig.MatchingForwarderMaxOutstandingTasks.Get(dc),
 		ForwarderMaxRatePerSecond:                dynamicconfig.MatchingForwarderMaxRatePerSecond.Get(dc),
@@ -243,6 +256,8 @@ func NewConfig(
 		VisibilityEnableManualPagination:  dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
+
+		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 }
 
@@ -294,6 +309,15 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		NumReadPartitions: func() int {
 			return max(1, config.NumTaskqueueReadPartitions(ns.String(), taskQueueName, taskType))
+		},
+		BreakdownMetricsByTaskQueue: func() bool {
+			return config.BreakdownMetricsByTaskQueue(ns.String(), taskQueueName, taskType)
+		},
+		BreakdownMetricsByPartition: func() bool {
+			return config.BreakdownMetricsByPartition(ns.String(), taskQueueName, taskType)
+		},
+		BreakdownMetricsByBuildID: func() bool {
+			return config.BreakdownMetricsByBuildID(ns.String(), taskQueueName, taskType)
 		},
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(ns.String())

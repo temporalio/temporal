@@ -33,17 +33,14 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historypb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -52,6 +49,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -60,17 +58,22 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/components/dummy"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -88,9 +91,11 @@ type (
 		mockClusterMetadata    *cluster.MockMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
+		mockResendHandler      *eventhandler.MockResendHandler
 		mockDeleteManager      *deletemanager.MockDeleteManager
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
+		config               *configs.Config
 		workflowCache        wcache.Cache
 		logger               log.Logger
 		namespaceID          namespace.ID
@@ -118,7 +123,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 
-	config := tests.NewDynamicConfig()
+	s.config = tests.NewDynamicConfig()
 	s.namespaceEntry = tests.GlobalStandbyNamespaceEntry
 	s.namespaceID = s.namespaceEntry.ID()
 	s.version = s.namespaceEntry.FailoverVersion()
@@ -136,6 +141,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockResendHandler = eventhandler.NewMockResendHandler(s.controller)
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
@@ -143,7 +149,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 			ShardId: 1,
 			RangeId: 1,
 		},
-		config,
+		s.config,
 		s.timeSource,
 	)
 
@@ -174,7 +180,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.clusterName).AnyTimes()
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 
 	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
@@ -199,11 +205,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.workflowCache,
 		s.mockDeleteManager,
 		s.mockNDCHistoryResender,
+		s.mockResendHandler,
 		s.mockMatchingClient,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,
-		config,
+		s.config,
 	).(*timerQueueStandbyTaskExecutor)
 }
 
@@ -266,7 +273,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: task.(*tasks.UserTimerTask).VisibilityTimestamp,
 		EventID:             event.EventId,
 	}
@@ -349,7 +356,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: task.(*tasks.UserTimerTask).VisibilityTimestamp,
 		EventID:             event.EventId,
 	}
@@ -416,7 +423,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: task.(*tasks.UserTimerTask).VisibilityTimestamp,
 		EventID:             event.EventId,
 	}
@@ -484,7 +491,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 			execution.GetRunId(),
 		),
 		Attempt:             1,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             event.EventId,
@@ -569,7 +576,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 			execution.GetRunId(),
 		),
 		Attempt:             1,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             event.GetEventId(),
@@ -643,7 +650,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 			execution.GetRunId(),
 		),
 		Attempt:             1,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		VisibilityTimestamp: time.Unix(946684800, 0).Add(-100 * time.Second), // see pendingActivityTimerHeartbeats from mutable state
 		EventID:             scheduledEvent.GetEventId(),
@@ -718,7 +725,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			execution.GetRunId(),
 		),
 		Attempt:             1,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		VisibilityTimestamp: activityInfo2.LastHeartbeatUpdateTime.AsTime().Add(-5 * time.Second),
 		EventID:             scheduledEvent2.GetEventId(),
@@ -817,7 +824,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 		),
 		ScheduleAttempt:     1,
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: s.now,
 		EventID:             wt.ScheduledEventID,
@@ -866,7 +873,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Sche
 		),
 		ScheduleAttempt:     1,
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		VisibilityTimestamp: s.now,
 		EventID:             workflowTaskScheduledEventID,
@@ -916,7 +923,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 		),
 		ScheduleAttempt:     1,
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: s.now,
 		EventID:             wt.ScheduledEventID,
@@ -965,7 +972,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 			execution.GetRunId(),
 		),
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now,
 		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY,
 	}
@@ -1032,7 +1039,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 			execution.GetRunId(),
 		),
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now,
 		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_CRON,
 	}
@@ -1084,7 +1091,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowRunTimeout_Pendi
 			execution.GetRunId(),
 		),
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now,
 	}
 
@@ -1154,7 +1161,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowRunTimeout_Succe
 			execution.GetRunId(),
 		),
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now,
 	}
 
@@ -1203,7 +1210,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowExecutionTimeout
 		WorkflowID:          execution.GetWorkflowId(),
 		FirstRunID:          firstRunID,
 		VisibilityTimestamp: s.now,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
@@ -1276,7 +1283,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowExecutionTimeout
 		WorkflowID:          execution.GetWorkflowId(),
 		FirstRunID:          uuid.New(), // does not match the firsrt runID of the execution
 		VisibilityTimestamp: s.now,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
@@ -1331,7 +1338,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 		),
 		Attempt:             1,
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now,
 		EventID:             int64(16384),
 	}
@@ -1401,7 +1408,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop(
 		),
 		Attempt:             2,
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
@@ -1416,7 +1423,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop(
 		),
 		Attempt:             2,
 		Version:             s.version - 1,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
@@ -1431,7 +1438,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop(
 		),
 		Attempt:             0,
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
@@ -1500,7 +1507,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Activ
 		),
 		Attempt:             2,
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
@@ -1561,7 +1568,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 		),
 		Attempt:             2,
 		Version:             s.version,
-		TaskID:              int64(100),
+		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
@@ -1613,6 +1620,266 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	s.Nil(resp.ExecutionErr)
 }
 
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_ExecutesAllAvailableTimers() {
+	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterStateMachine(reg))
+	s.NoError(dummy.RegisterTaskSerializers(reg))
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	ms := workflow.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{}
+
+	root, err := hsm.NewRoot(
+		reg,
+		workflow.StateMachineType,
+		ms,
+		make(map[string]*persistencespb.StateMachineMap),
+		ms,
+	)
+	s.NoError(err)
+
+	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().GetNextEventID().Return(int64(2))
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(
+		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	).AnyTimes()
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+
+	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
+	s.NoError(err)
+
+	dummyRoot, err := root.Child([]hsm.Key{
+		{Type: dummy.StateMachineType, ID: "dummy"},
+	})
+	s.NoError(err)
+	err = hsm.MachineTransition(dummyRoot, func(sm *dummy.Dummy) (hsm.TransitionOutput, error) {
+		return dummy.Transition0.Apply(sm, dummy.Event0{})
+	})
+	s.NoError(err)
+	err = hsm.MachineTransition(dummyRoot, func(sm *dummy.Dummy) (hsm.TransitionOutput, error) {
+		return dummy.Transition0.Apply(sm, dummy.Event0{})
+	})
+	s.NoError(err)
+
+	// Track some tasks.
+
+	// Invalid reference, should be dropped.
+	invalidTask := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 1,
+			},
+		},
+		Type: dummy.TaskTypeTimer,
+	}
+	staleTask := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{Type: dummy.StateMachineType, Id: "dummy"},
+			},
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineTransitionCount: 1,
+		},
+		Type: dummy.TaskTypeTimer,
+	}
+
+	// Past deadline, should get executed.
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(-time.Hour), invalidTask)
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(-time.Hour), staleTask)
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(-time.Minute), staleTask)
+	// Future deadline, new task should be scheduled.
+	futureDeadline := s.mockShard.GetTimeSource().Now().Add(time.Hour)
+	workflow.TrackStateMachineTimer(ms, futureDeadline, staleTask)
+
+	wfCtx := workflow.NewMockContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
+	wfCtx.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), gomock.Any())
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, locks.PriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	task := &tasks.StateMachineTimerTask{
+		WorkflowKey: tests.WorkflowKey,
+		Version:     2,
+	}
+
+	//nolint:revive // unchecked-type-assertion
+	timerQueueStandbyTaskExecutor := newTimerQueueStandbyTaskExecutor(
+		s.mockShard,
+		mockCache,
+		s.mockDeleteManager,
+		s.mockNDCHistoryResender,
+		s.mockResendHandler,
+		s.mockMatchingClient,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		s.clusterName,
+		s.config,
+	).(*timerQueueStandbyTaskExecutor)
+
+	err = timerQueueStandbyTaskExecutor.executeStateMachineTimerTask(context.Background(), task)
+	s.NoError(err)
+	s.Equal(1, len(info.StateMachineTimers))
+	s.Equal(futureDeadline, info.StateMachineTimers[0].Deadline.AsTime())
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_StaleStateMachine() {
+	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterStateMachine(reg))
+	s.NoError(dummy.RegisterTaskSerializers(reg))
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	ms := workflow.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 2, TransitionCount: 2},
+		},
+		VersionHistories: &historypb.VersionHistories{
+			CurrentVersionHistoryIndex: 0,
+			Histories: []*historypb.VersionHistory{
+				{
+					Items: []*historypb.VersionHistoryItem{
+						{EventId: 1, Version: 2},
+					},
+				},
+			},
+		},
+	}
+	root, err := hsm.NewRoot(
+		reg,
+		workflow.StateMachineType,
+		ms,
+		make(map[string]*persistencespb.StateMachineMap),
+		ms,
+	)
+	s.NoError(err)
+
+	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes()
+	ms.EXPECT().GetNextEventID().Return(int64(2))
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(
+		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	).AnyTimes()
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+
+	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
+	s.NoError(err)
+
+	// Track some tasks.
+
+	validTask := &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{Type: dummy.StateMachineType, Id: "dummy"},
+			},
+			MutableStateVersionedTransition: nil,
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 1,
+				TransitionCount:          0,
+			},
+			MachineLastUpdateVersionedTransition: nil,
+			MachineTransitionCount:               0,
+		},
+		Type: dummy.TaskTypeTimer,
+	}
+
+	// Past deadline, still valid task
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(-time.Hour), validTask)
+	// Future deadline, new task should be scheduled.
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(time.Hour), validTask)
+
+	wfCtx := workflow.NewMockContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, locks.PriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	task := &tasks.StateMachineTimerTask{
+		WorkflowKey: tests.WorkflowKey,
+		Version:     2,
+	}
+
+	//nolint:revive // unchecked-type-assertion
+	timerQueueStandbyTaskExecutor := newTimerQueueStandbyTaskExecutor(
+		s.mockShard,
+		mockCache,
+		s.mockDeleteManager,
+		s.mockNDCHistoryResender,
+		s.mockResendHandler,
+		s.mockMatchingClient,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		s.clusterName,
+		s.config,
+	).(*timerQueueStandbyTaskExecutor)
+
+	err = timerQueueStandbyTaskExecutor.executeStateMachineTimerTask(context.Background(), task)
+	s.ErrorIs(err, consts.ErrTaskRetry)
+	s.Equal(2, len(info.StateMachineTimers))
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_ZombieWorkflow() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	startedEvent, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId:  s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{},
+		},
+	)
+	s.Nil(err)
+	mutableState.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+
+	timerTask := &tasks.StateMachineTimerTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: s.now,
+		TaskID:              s.mustGenerateTaskID(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.ErrorIs(resp.ExecutionErr, consts.ErrWorkflowZombie)
+}
+
 func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 	ms workflow.MutableState,
 	lastEventID int64,
@@ -1643,4 +1910,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		nil,
 		metrics.NoopMetricsHandler,
 	)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) mustGenerateTaskID() int64 {
+	taskID, err := s.mockShard.GenerateTaskID()
+	s.NoError(err)
+	return taskID
 }

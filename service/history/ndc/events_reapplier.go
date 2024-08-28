@@ -32,10 +32,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
@@ -52,19 +52,22 @@ type (
 	}
 
 	EventsReapplierImpl struct {
-		metricsHandler metrics.Handler
-		logger         log.Logger
+		stateMachineRegistry *hsm.Registry
+		metricsHandler       metrics.Handler
+		logger               log.Logger
 	}
 )
 
 func NewEventsReapplier(
+	stateMachineRegistry *hsm.Registry,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *EventsReapplierImpl {
 
 	return &EventsReapplierImpl{
-		metricsHandler: metricsHandler,
-		logger:         logger,
+		stateMachineRegistry: stateMachineRegistry,
+		metricsHandler:       metricsHandler,
+		logger:               logger,
 	}
 }
 
@@ -79,7 +82,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
-	reappliedEvents, err := reapplyEvents(ms, updateRegistry, historyEvents, nil, runID)
+	reappliedEvents, err := reapplyEvents(ms, updateRegistry, r.stateMachineRegistry, historyEvents, nil, runID)
 	if err != nil {
 		return nil, err
 	}

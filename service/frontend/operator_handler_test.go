@@ -41,9 +41,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/health"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -59,6 +56,8 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
+	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/grpc/health"
 )
 
 var (
@@ -816,7 +815,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 						opts ...any,
 					) (*workflowservice.UpdateNamespaceResponse, error) {
 						s.Len(r.Config.CustomSearchAttributeAliases, len(tc.customSearchAttributesToAdd))
-						aliases := maps.Values(r.Config.CustomSearchAttributeAliases)
+						aliases := expmaps.Values(r.Config.CustomSearchAttributeAliases)
 						for _, saName := range tc.customSearchAttributesToAdd {
 							s.Contains(aliases, saName)
 						}
@@ -1263,6 +1262,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1285,8 +1285,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 		Version: recordVersion,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
 }
@@ -1307,6 +1306,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1329,8 +1329,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 		Version: 0,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
 }
@@ -1419,6 +1418,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        16,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1441,8 +1441,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 		Version: recordVersion,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
 }
@@ -1553,6 +1552,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1575,8 +1575,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 		Version: 0,
 	}).Return(false, fmt.Errorf("test error"))
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.Error(err)
 }
@@ -1597,6 +1596,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1619,8 +1619,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 		Version: 0,
 	}).Return(false, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)

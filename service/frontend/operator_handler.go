@@ -27,13 +27,8 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync/atomic"
-
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -42,7 +37,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	svc "go.temporal.io/server/client"
@@ -67,6 +61,10 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -710,7 +708,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
-			HttpAddress:              request.GetFrontendHttpAddress(),
+			HttpAddress:              resp.GetHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -759,7 +757,6 @@ func (h *OperatorHandlerImpl) ListClusters(
 	request *operatorservice.ListClustersRequest,
 ) (_ *operatorservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -781,6 +778,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 			ClusterName:            clusterResp.GetClusterName(),
 			ClusterId:              clusterResp.GetClusterId(),
 			Address:                clusterResp.GetClusterAddress(),
+			HttpAddress:            clusterResp.GetHttpAddress(),
 			InitialFailoverVersion: clusterResp.GetInitialFailoverVersion(),
 			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
 			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),

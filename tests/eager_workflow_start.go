@@ -73,7 +73,7 @@ func (s *FunctionalSuite) startEagerWorkflow(baseOptions *workflowservice.StartW
 		options.RequestId = uuid.New()
 	}
 
-	response, err := s.engine.StartWorkflowExecution(NewContext(), options)
+	response, err := s.client.StartWorkflowExecution(NewContext(), options)
 	s.Require().NoError(err)
 
 	return response
@@ -93,12 +93,12 @@ func (s *FunctionalSuite) respondWorkflowTaskCompleted(task *workflowservice.Pol
 			},
 		}}},
 	}
-	_, err = s.engine.RespondWorkflowTaskCompleted(NewContext(), &completion)
+	_, err = s.client.RespondWorkflowTaskCompleted(NewContext(), &completion)
 	s.Require().NoError(err)
 }
 
 func (s *FunctionalSuite) pollWorkflowTaskQueue() *workflowservice.PollWorkflowTaskQueueResponse {
-	task, err := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: s.defaultTaskQueue(),
 		Identity:  "test",
@@ -201,7 +201,7 @@ func (s *FunctionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
 func (s *FunctionalSuite) TestEagerWorkflowStart_TerminateDuplicate() {
 
 	// reset reuse minimal interval to allow workflow termination
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,

@@ -83,7 +83,7 @@ func getCommands(
 				&cli.StringFlag{
 					Name:  FlagDLQVersion,
 					Usage: "Version of DLQ to manage, options: v1, v2",
-					Value: "v1",
+					Value: "v2",
 				},
 			},
 		},
@@ -242,13 +242,14 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 }
 
 func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
-	// There are two different flags for the task type, and they have slightly different semantics. The first is the
-	// task type for the list-tasks command, which is required and does not have a default. The second is the task type
+	// There are two different categories for the task type, and they have slightly
+	// different semantics. The first is the task category for the list-tasks command,
+	// which is required and does not have a default. The second is the task category
 	// for the remove-task command, which is optional and defaults to transfer.
-	taskTypeFlag := getTaskTypeFlag(taskCategoryRegistry)
-	listTasksCategory := *taskTypeFlag
+	taskCategoryFlag := getTaskCategoryFlag(taskCategoryRegistry)
+	listTasksCategory := *taskCategoryFlag
 	listTasksCategory.Required = true
-	removeTaskCategory := *taskTypeFlag
+	removeTaskCategory := *taskCategoryFlag
 	removeTaskCategory.Value = tasks.CategoryTransfer.Name()
 
 	return []*cli.Command{
@@ -268,7 +269,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 		},
 		{
 			Name:  "list-tasks",
-			Usage: "List tasks for given shard ID and task type",
+			Usage: "List tasks for given shard ID and task category",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  FlagMore,
@@ -333,7 +334,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 		{
 			Name:    "remove-task",
 			Aliases: []string{"rmtk"},
-			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
+			Usage:   "remove a task based on shardId, task category, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
 					Name:  FlagShardID,
@@ -356,15 +357,15 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 	}
 }
 
-func getTaskTypeFlag(taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.StringFlag {
+func getTaskCategoryFlag(taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.StringFlag {
 	categories := taskCategoryRegistry.GetCategories()
 	options := make([]string, 0, len(categories))
 	for _, category := range categories {
 		options = append(options, category.Name())
 	}
 	flag := &cli.StringFlag{
-		Name:  FlagTaskType,
-		Usage: "Task type: " + strings.Join(options, ", "),
+		Name:  FlagTaskCategory,
+		Usage: "Task category: " + strings.Join(options, ", "),
 	}
 	return flag
 }

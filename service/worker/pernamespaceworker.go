@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -38,9 +39,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
-	"go.uber.org/fx"
-	"golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -56,6 +54,8 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -196,8 +196,8 @@ func (wm *perNamespaceWorkerManager) Stop() {
 	close(wm.membershipChangedCh)
 
 	wm.lock.Lock()
-	workers := maps.Values(wm.workers)
-	maps.Clear(wm.workers)
+	workers := expmaps.Values(wm.workers)
+	maps.DeleteFunc(wm.workers, func(_ namespace.ID, _ *perNamespaceWorker) bool { return true })
 	wm.lock.Unlock()
 
 	for _, worker := range workers {
@@ -361,7 +361,7 @@ func (w *perNamespaceWorker) handleError(err error) {
 		// asked for an explicit delay due to rate limit, use that
 		sleep = time.Duration(retryAfter)
 	} else {
-		sleep = w.retrier.NextBackOff()
+		sleep = w.retrier.NextBackOff(err)
 		if sleep < 0 {
 			w.logger.Error("Failed to start sdk worker, out of retries", tag.Error(err))
 			return

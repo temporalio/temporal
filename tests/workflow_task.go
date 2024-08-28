@@ -34,9 +34,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
@@ -62,7 +61,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	resp0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -75,7 +74,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
   2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	// start workflow task
-	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
 		Identity:  identity,
@@ -91,7 +90,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	taskToken := resp1.GetTaskToken()
 	hbTimeout := 0
 	for i := 0; i < 12; i++ {
-		resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		resp2, err2 := s.client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: s.namespace,
 			TaskToken: taskToken,
 			Commands:  []*commandpb.Command{},
@@ -106,7 +105,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			hbTimeout++
 			s.IsType(&workflowservice.RespondWorkflowTaskCompletedResponse{}, resp2)
 
-			resp, err := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+			resp, err := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 				Namespace: s.namespace,
 				TaskQueue: taskQueue,
 				Identity:  identity,
@@ -122,7 +121,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 
 	s.Equal(2, hbTimeout)
 
-	resp5, err5 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp5, err5 := s.client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: taskToken,
 		Commands: []*commandpb.Command{
@@ -216,7 +215,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	resp0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -229,7 +228,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
   2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	// start workflow task
-	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
 		Identity:  identity,
@@ -242,7 +241,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
-	resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp2, err2 := s.client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: resp1.GetTaskToken(),
 		Commands:  []*commandpb.Command{},
@@ -255,7 +254,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 	})
 	s.NoError(err2)
 
-	resp3, err3 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp3, err3 := s.client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: resp2.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
@@ -277,7 +276,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 	})
 	s.NoError(err3)
 
-	resp4, err4 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp4, err4 := s.client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: resp3.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
@@ -299,7 +298,7 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 	})
 	s.NoError(err4)
 
-	resp5, err5 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp5, err5 := s.client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: resp4.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
@@ -362,7 +361,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	resp0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -374,7 +373,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
-	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
@@ -389,7 +388,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
   3 WorkflowExecutionSignaled`, s.getHistory(s.namespace, we))
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
-	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
 		Identity:  identity,
@@ -404,7 +403,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
   4 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// then terminate the workflow
-	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		Reason:            "test-reason",
@@ -442,7 +441,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	resp0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -455,7 +454,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
   2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	// start workflow task to make signals into bufferedEvents
-	_, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	_, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
 		Identity:  identity,
@@ -468,7 +467,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
   3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// this signal should be buffered
-	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
@@ -483,7 +482,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
   3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// then terminate the workflow
-	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		Reason:            "test-reason",
@@ -522,7 +521,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	resp0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -537,7 +536,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 
 	// start workflow task to make signals into bufferedEvents
-	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
 		Identity:  identity,
@@ -550,7 +549,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
   3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// this signal should be buffered
-	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
@@ -565,7 +564,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
   3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// fail this workflow task to flush buffer, and then another workflow task will be scheduled
-	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+	_, err2 := s.client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 		Namespace: s.namespace,
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
@@ -581,7 +580,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
   6 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	// then terminate the workflow
-	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		Reason:            "test-reason",
@@ -620,7 +619,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	resp0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -634,7 +633,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
-		resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.namespace,
 			TaskQueue: taskQueue,
 			Identity:  identity,
@@ -649,7 +648,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		_, err2 := s.client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 			Namespace: s.namespace,
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
@@ -664,7 +663,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
-	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
@@ -681,7 +680,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
   5 WorkflowExecutionSignaled`, s.getHistory(s.namespace, we))
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
-	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
 		Identity:  identity,
@@ -699,7 +698,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
   7 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// then terminate the workflow
-	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		Reason:            "test-reason",
@@ -740,7 +739,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	resp0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -754,7 +753,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
-		resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.namespace,
 			TaskQueue: taskQueue,
 			Identity:  identity,
@@ -769,7 +768,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		_, err2 := s.client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 			Namespace: s.namespace,
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
@@ -785,7 +784,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
   4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// start workflow task to make signals into bufferedEvents
-	_, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	_, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
 		Identity:  identity,
@@ -799,7 +798,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
   4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// this signal should be buffered
-	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
@@ -815,7 +814,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
   4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// then terminate the workflow
-	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		Reason:            "test-reason",
@@ -853,7 +852,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	resp0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -867,7 +866,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
-		resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.namespace,
 			TaskQueue: taskQueue,
 			Identity:  identity,
@@ -882,7 +881,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		_, err2 := s.client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 			Namespace: s.namespace,
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
@@ -898,7 +897,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
   4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// start workflow task to make signals into bufferedEvents
-	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
 		Identity:  identity,
@@ -912,7 +911,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
   4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// this signal should be buffered
-	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
@@ -928,7 +927,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
   4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// fail this workflow task to flush buffer
-	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+	_, err2 := s.client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 		Namespace: s.namespace,
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
@@ -944,7 +943,7 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
   6 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	// then terminate the workflow
-	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		Reason:            "test-reason",

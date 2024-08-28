@@ -256,10 +256,10 @@ func (m *MockHasStateMachineTaskType) EXPECT() *MockHasStateMachineTaskTypeMockR
 }
 
 // StateMachineTaskType mocks base method.
-func (m *MockHasStateMachineTaskType) StateMachineTaskType() int32 {
+func (m *MockHasStateMachineTaskType) StateMachineTaskType() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StateMachineTaskType")
-	ret0, _ := ret[0].(int32)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 

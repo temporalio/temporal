@@ -33,9 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/namespace"
 )
 
 const (
@@ -49,7 +47,7 @@ type (
 	// when starting a worker or a workflow. A task queue family consists of separate TaskQueues for different types of
 	// task (e.g. Workflow, Activity).
 	TaskQueueFamily struct {
-		namespaceId namespace.ID
+		namespaceId string
 		// this can be any string as long as it does not start with /_sys/.
 		name string
 	}
@@ -65,7 +63,7 @@ type (
 	// Each Partition has a distinct task queue partition manager in memory in Matching service.
 	// Normal partition with `partitionId=0` is called the "root". Sticky queues are not considered root.
 	Partition interface {
-		NamespaceId() namespace.ID
+		NamespaceId() string
 		TaskQueue() *TaskQueue
 		TaskType() enumspb.TaskQueueType
 		// IsRoot always returns false for Sticky partitions
@@ -133,14 +131,33 @@ func NewTaskQueueFamily(namespaceId string, name string) (*TaskQueueFamily, erro
 		return nil, serviceerror.NewInvalidArgument("task queue family name cannot have prefix /_sys/ " + name)
 	}
 	return &TaskQueueFamily{
-		namespaceId: namespace.ID(namespaceId),
+		namespaceId: namespaceId,
 		name:        name,
 	}, nil
 }
 
 // UnsafeTaskQueueFamily should be avoided as much as possible. Use NewTaskQueueFamily instead as it validates the tq name.
 func UnsafeTaskQueueFamily(namespaceId string, name string) *TaskQueueFamily {
-	return &TaskQueueFamily{namespace.ID(namespaceId), name}
+	return &TaskQueueFamily{namespaceId, name}
+}
+
+// UnsafePartitionFromProto tries parsing proto using PartitionFromProto but if it fails still returns a Partition
+// object using the raw values in the proto.
+// This method should only be used in logs/metrics, not in the server logic.
+func UnsafePartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumspb.TaskQueueType) Partition {
+	p, err := PartitionFromProto(proto, namespaceId, taskType)
+	if err == nil {
+		return p
+	}
+	kind := proto.GetKind()
+	switch kind { //nolint:exhaustive
+	case enumspb.TASK_QUEUE_KIND_STICKY:
+		tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetNormalName()}, taskType}
+		return tq.StickyPartition(proto.GetName())
+	default:
+		tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetName()}, taskType}
+		return tq.RootPartition()
+	}
 }
 
 func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumspb.TaskQueueType) (Partition, error) {
@@ -160,16 +177,16 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 		if partition != 0 {
 			return nil, fmt.Errorf("%w. base name: %s, normal name: %s", ErrNonZeroSticky, baseName, normalName)
 		}
-		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), normalName}, taskType}
+		tq := &TaskQueue{TaskQueueFamily{namespaceId, normalName}, taskType}
 		return tq.StickyPartition(baseName), nil
 	default:
-		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), baseName}, taskType}
+		tq := &TaskQueue{TaskQueueFamily{namespaceId, baseName}, taskType}
 		return tq.NormalPartition(partition), nil
 	}
 }
 
 func PartitionFromPartitionProto(proto *taskqueuespb.TaskQueuePartition, namespaceId string) Partition {
-	tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), proto.GetTaskQueue()}, proto.GetTaskQueueType()}
+	tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetTaskQueue()}, proto.GetTaskQueueType()}
 	switch proto.GetPartitionId().(type) {
 	case *taskqueuespb.TaskQueuePartition_StickyName:
 		return tq.StickyPartition(proto.GetStickyName())
@@ -183,15 +200,23 @@ func NormalPartitionFromRpcName(rpcName string, namespaceId string, taskType enu
 	if err != nil {
 		return nil, err
 	}
-	tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), baseName}, taskType}
+	tq := &TaskQueue{TaskQueueFamily{namespaceId, baseName}, taskType}
 	return tq.NormalPartition(partition), nil
+}
+
+func MustNormalPartitionFromRpcName(rpcName string, namespaceId string, taskType enumspb.TaskQueueType) *NormalPartition {
+	p, err := NormalPartitionFromRpcName(rpcName, namespaceId, taskType)
+	if err != nil {
+		panic(err)
+	}
+	return p
 }
 
 func (n *TaskQueueFamily) Name() string {
 	return n.name
 }
 
-func (n *TaskQueueFamily) NamespaceId() namespace.ID {
+func (n *TaskQueueFamily) NamespaceId() string {
 	return n.namespaceId
 }
 
@@ -210,7 +235,7 @@ func (n *TaskQueue) Family() *TaskQueueFamily {
 	return &n.family
 }
 
-func (n *TaskQueue) NamespaceId() namespace.ID {
+func (n *TaskQueue) NamespaceId() string {
 	return n.family.NamespaceId()
 }
 
@@ -245,7 +270,7 @@ func (s *StickyPartition) Kind() enumspb.TaskQueueKind {
 	return enumspb.TASK_QUEUE_KIND_STICKY
 }
 
-func (s *StickyPartition) NamespaceId() namespace.ID {
+func (s *StickyPartition) NamespaceId() string {
 	return s.taskQueue.family.NamespaceId()
 }
 
@@ -267,14 +292,14 @@ func (s *StickyPartition) RpcName() string {
 
 func (s *StickyPartition) Key() PartitionKey {
 	return PartitionKey{
-		namespaceId: s.NamespaceId().String(),
+		namespaceId: s.NamespaceId(),
 		name:        s.StickyName(),
 		taskType:    s.TaskType(),
 	}
 }
 
 func (s *StickyPartition) RoutingKey() string {
-	return fmt.Sprintf("%s:%s:%d", s.NamespaceId().String(), s.RpcName(), s.TaskType())
+	return fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType())
 }
 
 func (p *NormalPartition) TaskQueue() *TaskQueue {
@@ -293,7 +318,7 @@ func (p *NormalPartition) PartitionId() int {
 	return p.partitionId
 }
 
-func (p *NormalPartition) NamespaceId() namespace.ID {
+func (p *NormalPartition) NamespaceId() string {
 	return p.taskQueue.family.namespaceId
 }
 
@@ -321,7 +346,7 @@ func (p *NormalPartition) RpcName() string {
 
 func (p *NormalPartition) Key() PartitionKey {
 	return PartitionKey{
-		namespaceId: p.NamespaceId().String(),
+		namespaceId: p.NamespaceId(),
 		name:        p.TaskQueue().Name(),
 		partitionId: p.partitionId,
 		taskType:    p.TaskType(),
@@ -329,7 +354,7 @@ func (p *NormalPartition) Key() PartitionKey {
 }
 
 func (p *NormalPartition) RoutingKey() string {
-	return fmt.Sprintf("%s:%s:%d", p.NamespaceId().String(), p.RpcName(), p.TaskType())
+	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
 }
 
 // parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.

@@ -9,20 +9,19 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto bins shell-check copyright-check go-generate gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto buf-breaking bins temporal-server-debug shell-check copyright-check go-generate goimports-all gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
 	rm -rf $(STAMPDIR)
 	rm -rf $(TEST_OUTPUT_ROOT)
-	rm -rf $(PROTO_OUT)
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: clean-proto lint-protos lint-api protoc service-clients goimports-proto proto-mocks copyright-proto
+proto: lint-protos lint-api protoc service-clients
 ########################################################################
 
-.PHONY: proto proto-mocks protoc install bins ci-build-misc clean
+.PHONY: proto protoc install bins ci-build-misc clean
 
 ##### Arguments ######
 GOOS        ?= $(shell go env GOOS)
@@ -65,15 +64,16 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT := 30m
+TEST_TIMEOUT := 25m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 API_BINPB := $(PROTO_ROOT)/api.binpb
+# Note: If you change the value of INTERNAL_BINPB, you'll have to add logic to
+# develop/buf-breaking.sh to handle the old and new values at once.
+INTERNAL_BINPB := $(PROTO_ROOT)/image.bin
 PROTO_OUT := api
-PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
-PROTO_PATHS = paths=source_relative:$(PROTO_OUT)
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
@@ -137,7 +137,7 @@ $(LOCALBIN):
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v1.57.2
+GOLANGCI_LINT_VERSION := v1.59.1
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
@@ -229,38 +229,19 @@ rm -rf $${tmpdir} ;\
 endef
 
 ##### Proto #####
-$(PROTO_OUT):
-	@mkdir -p $(PROTO_OUT)
-
-# We depend on gomodtidy to ensure that go.mod is up to date before we delete the generated files
-# in case protogen fails, and we need to rerun it.
-clean-proto: gomodtidy
-	@rm -rf $(PROTO_OUT)/*
-
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
-	@printf $(COLOR) "Generate api.binpb..."
+	@printf $(COLOR) "Generating proto dependencies image..."
 	@./cmd/tools/getproto/run.sh --out $@
 
-protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
-	@$(PROTOGEN) \
-		--descriptor_set_in=$(API_BINPB) \
-		--root=proto/internal \
-		--rewrite-enum=BuildId_State:BuildId \
-		-p go-grpc_out=$(PROTO_PATHS) \
-		-p go-helpers_out=$(PROTO_PATHS)
-	@mv -f "$(PROTO_OUT)/temporal/server/api/"* "$(PROTO_OUT)"
+$(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
+	@printf $(COLOR) "Generate proto image..."
+	@protoc --descriptor_set_in=$(API_BINPB) -I=$(PROTO_ROOT)/internal $(PROTO_FILES) -o $@
 
-# All gRPC generated service files paths relative to PROTO_OUT.
-PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go" -o -name "service_grpc.pb.go"))
-service_name = $(firstword $(subst /, ,$(1)))
-mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
-
-proto-mocks: protoc $(MOCKGEN)
-	@printf $(COLOR) "Generate proto mocks..."
-	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
-		@cd $(PROTO_OUT) && \
-		$(ROOT)/$(MOCKGEN) -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
-	$(NEWLINE))
+protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
+	@env \
+		PROTOGEN=$(PROTOGEN) MOCKGEN=$(MOCKGEN) GOIMPORTS=$(GOIMPORTS) \
+		API_BINPB=$(API_BINPB) PROTO_ROOT=$(PROTO_ROOT) PROTO_OUT=$(PROTO_OUT) \
+		./develop/protoc.sh
 
 service-clients:
 	@printf $(COLOR) "Generate service clients..."
@@ -270,18 +251,11 @@ update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
 	@go get -u go.temporal.io/api@master
 
-goimports-proto: $(GOIMPORTS)
-	@printf $(COLOR) "Run goimports for proto files..."
-	@$(GOIMPORTS) -w $(PROTO_OUT)
-
-copyright-proto:
-	@printf $(COLOR) "Update license headers for proto files..."
-	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT)
-
 ##### Binaries #####
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f temporal-server
+	@rm -f temporal-server-debug
 	@rm -f temporal-cassandra-tool
 	@rm -f tdbg
 	@rm -f temporal-sql-tool
@@ -315,13 +289,18 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
-goimports: MERGE_BASE ?= $(shell test -d .git && git merge-base $(MAIN_BRANCH) HEAD)
-goimports: MODIFIED_FILES := $(shell test -d .git && git diff --name-status $(MERGE_BASE) -- | cut -f2)
 goimports:
 	@printf $(COLOR) "Run goimports for modified files..."
-	@printf "Merge base: $(MERGE_BASE)\n"
-	@printf "Modified files: $(MODIFIED_FILES)\n"
-	@$(GOIMPORTS_BIN) -w $(filter %.go, $(MODIFIED_FILES))
+	@MERGE_BASE=$$(git merge-base $(MAIN_BRANCH) HEAD) && \
+		MODIFIED_FILES=$$(git diff --name-status $$MERGE_BASE -- | cut -f2 | grep '.go$$' || true) && \
+		echo "Merge base: $$MERGE_BASE" && \
+		echo "Modified files: $$MODIFIED_FILES" && \
+		if [ -n "$$MODIFIED_FILES" ]; then $(GOIMPORTS) -w $$MODIFIED_FILES; fi
+
+goimports-all:
+	@printf $(COLOR) "Run goimports for all files..."
+	@UNGENERATED_FILES=$$(find . -type f -name '*.go' -print0 | xargs -0 grep -L -e "Code generated by .* DO NOT EDIT." || true) && \
+		$(GOIMPORTS) -w $$UNGENERATED_FILES
 
 lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
@@ -338,18 +317,14 @@ lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
 	$(call silent_exec, $(API_LINTER) --set-exit-status -I=$(PROTO_ROOT)/internal --descriptor-set-in $(API_BINPB) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
-lint-protos: $(BUF) $(API_BINPB)
+lint-protos: $(BUF) $(INTERNAL_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
-	@protoc --descriptor_set_in=$(API_BINPB) -I=proto/internal $(PROTO_FILES) -o /dev/stdout | (cd proto/internal && $(ROOT)/$(BUF) lint -)
+	@$(BUF) lint $(INTERNAL_BINPB)
 
-# TODO: fix this to work with getproto + API_BINPB
-# buf-build: $(BUF)
-# 	@printf $(COLOR) "Build image.bin with buf..."
-# 	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) build -o image.bin)
-#
-# buf-breaking: $(BUF)
-# 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
-# 	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) breaking --against image.bin)
+buf-breaking: $(BUF) $(API_BINPB) $(INTERNAL_BINPB)
+	@printf $(COLOR) "Run buf breaking proto changes check..."
+	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
+		./develop/buf-breaking.sh
 
 shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
@@ -368,28 +343,28 @@ build-tests:
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	@go test $(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
+	@go test $(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
+	@go test $(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-test: clean-test-results
 	@printf $(COLOR) "Run functional tests..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 test: unit-test integration-test functional-test
@@ -403,12 +378,12 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) -coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 # This should use the same build flags as functional-test-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
@@ -417,17 +392,17 @@ pre-build-functional-test-coverage: prepare-coverage-test
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) --debug -- \
-		$(FUNCTIONAL_TEST_XDC_ROOT) -v -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -v -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE):
@@ -540,6 +515,9 @@ start: start-sqlite
 
 start-cass-es: temporal-server
 	./temporal-server --env development-cass-es --allow-no-auth start
+
+start-cass-es-custom: temporal-server
+	./temporal-server --env development-cass-es-custom --allow-no-auth start
 
 start-es-fi: temporal-server
 	./temporal-server --env development-cass-es-fi --allow-no-auth start

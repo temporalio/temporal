@@ -27,6 +27,7 @@ package queues
 import (
 	"errors"
 	"math/rand"
+	"slices"
 	"testing"
 	"time"
 
@@ -34,8 +35,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/slices"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"

@@ -33,9 +33,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/sync/semaphore"
-	"golang.org/x/time/rate"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -44,8 +41,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/pingable"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -151,15 +151,15 @@ func (c *ControllerImpl) Stop() {
 	c.contextTaggedLogger.Info("", tag.LifeCycleStopped)
 }
 
-func (c *ControllerImpl) GetPingChecks() []common.PingCheck {
-	return []common.PingCheck{{
+func (c *ControllerImpl) GetPingChecks() []pingable.Check {
+	return []pingable.Check{{
 		Name:    "shard controller",
 		Timeout: 10 * time.Second,
-		Ping: func() []common.Pingable {
+		Ping: func() []pingable.Pingable {
 			// we only need to read but get write lock to make sure we can
 			c.Lock()
 			defer c.Unlock()
-			out := make([]common.Pingable, 0, len(c.historyShards))
+			out := make([]pingable.Pingable, 0, len(c.historyShards))
 			for _, shard := range c.historyShards {
 				out = append(out, shard)
 			}

@@ -33,7 +33,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	schedpb "go.temporal.io/api/schedule/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -47,7 +46,7 @@ type (
 		excludes []*compiledCalendar
 	}
 
-	getNextTimeResult struct {
+	GetNextTimeResult struct {
 		Nominal time.Time // scheduled time before adding jitter
 		Next    time.Time // scheduled time after adding jitter
 	}
@@ -290,7 +289,7 @@ func (cs *CompiledSpec) CanonicalForm() *schedpb.ScheduleSpec {
 // Returns the earliest time that matches the schedule spec that is after the given time.
 // Returns: Nominal is the time that matches, pre-jitter. Next is the nominal time with
 // jitter applied. If there is no matching time, Nominal and Next will be the zero time.
-func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextTimeResult {
+func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextTimeResult {
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
 	if cs.spec.StartTime != nil && after.Before(timestamp.TimeValue(cs.spec.StartTime)) {
@@ -306,7 +305,7 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 		after = nominal
 
 		if nominal.IsZero() || pastEndTime(nominal) {
-			return getNextTimeResult{}
+			return GetNextTimeResult{}
 		}
 	}
 
@@ -317,7 +316,7 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 	}
 	next := cs.addJitter(jitterSeed, nominal, maxJitter)
 
-	return getNextTimeResult{Nominal: nominal, Next: next}
+	return GetNextTimeResult{Nominal: nominal, Next: next}
 }
 
 // Returns the next matching time (without jitter), or the zero value if no time matches.

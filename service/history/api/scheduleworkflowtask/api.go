@@ -50,7 +50,6 @@ func Invoke(
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		req.ChildClock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.WorkflowExecution.WorkflowId,

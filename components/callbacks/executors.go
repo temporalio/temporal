@@ -25,162 +25,140 @@ package callbacks
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
-	"slices"
-	"time"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
-	commonpb "go.temporal.io/api/common/v1"
-
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	"go.uber.org/fx"
 )
-
-var retryable4xxErrorTypes = []int{
-	http.StatusRequestTimeout,
-	http.StatusTooManyRequests,
-}
-
-type CanGetNexusCompletion interface {
-	GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error)
-}
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
+type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
 func RegisterExecutor(
 	registry *hsm.Registry,
-	activeExecutorOptions ActiveExecutorOptions,
-	standbyExecutorOptions StandbyExecutorOptions,
-	config *Config,
+	executorOptions TaskExecutorOptions,
 ) error {
-	activeExec := activeExecutor{options: activeExecutorOptions, config: config}
-	standbyExec := standbyExecutor{options: standbyExecutorOptions}
+	exec := taskExecutor{executorOptions}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,
-		activeExec.executeInvocationTask,
+		exec.executeInvocationTask,
 	); err != nil {
 		return err
 	}
-	return hsm.RegisterTimerExecutors(
+	return hsm.RegisterTimerExecutor(
 		registry,
-		activeExec.executeBackoffTask,
-		standbyExec.executeBackoffTask,
+		exec.executeBackoffTask,
 	)
 }
 
 type (
-	ActiveExecutorOptions struct {
-		NamespaceRegistry namespace.Registry
-		MetricsHandler    metrics.Handler
-		CallerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
+	TaskExecutorOptions struct {
+		fx.In
+
+		Config             *Config
+		NamespaceRegistry  namespace.Registry
+		MetricsHandler     metrics.Handler
+		Logger             log.Logger
+		HTTPCallerProvider HTTPCallerProvider
+		HistoryClient      resource.HistoryClient
 	}
 
-	activeExecutor struct {
-		options ActiveExecutorOptions
-		config  *Config
+	taskExecutor struct {
+		TaskExecutorOptions
+	}
+
+	invocationResult int
+
+	callbackInvokable interface {
+		// Invoke executes the callback logic and returns a result, and the error to be logged in the state machine.
+		Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error)
+		// WrapError provides each variant the opportunity to return a different error up the call stack than the one logged.
+		WrapError(result invocationResult, err error) error
 	}
 )
 
-func (e activeExecutor) executeInvocationTask(
+const (
+	ok invocationResult = iota
+	retry
+	failed
+)
+
+func (e taskExecutor) executeInvocationTask(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
 	task InvocationTask,
 ) error {
-	ns, err := e.options.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
+	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadInvocationArgs(ctx, env, ref)
+	invokable, err := e.loadInvocationArgs(ctx, env, ref)
 	if err != nil {
 		return err
 	}
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.config.RequestTimeout(ns.Name().String(), task.Destination),
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
 	)
 	defer cancel()
 
-	request, err := nexus.NewCompletionHTTPRequest(callCtx, args.url, args.completion)
-	if request.Header == nil {
-		request.Header = make(http.Header)
-	}
-	for k, v := range args.header {
-		request.Header.Set(k, v)
-	}
-	if err != nil {
-		return queues.NewUnprocessableTaskError(
-			fmt.Sprintf("failed to construct Nexus request: %v", err),
-		)
-	}
+	result, err := invokable.Invoke(callCtx, ns, e, task)
 
-	caller := e.options.CallerProvider(queues.NamespaceIDAndDestination{
-		NamespaceID: ref.WorkflowKey.GetNamespaceID(),
-		Destination: task.Destination,
-	})
-	// Make the call and record metrics.
-	startTime := time.Now()
-	response, callErr := caller(request)
-
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(task.Destination)
-	statusCodeTag := metrics.NexusOutcomeTag(outcomeTag(callCtx, response, callErr))
-	e.options.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
-	e.options.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
-
-	if callErr == nil {
-		// Body is not read but should be discarded to keep the underlying TCP connection alive.
-		// Just in case something unexpected happens while discarding or closing the body,
-		// propagate errors to the machine.
-		if _, callErr = io.Copy(io.Discard, response.Body); callErr == nil {
-			callErr = response.Body.Close()
-		}
+	saveErr := e.saveResult(callCtx, env, ref, result, err)
+	if saveErr != nil {
+		return saveErr
 	}
-
-	err = e.saveResult(ctx, env, ref, response, callErr)
-
-	if callErr != nil {
-		err = queues.NewDestinationDownError(callErr.Error(), err)
-	} else if isRetryableHTTPResponse(response) {
-		err = queues.NewDestinationDownError(
-			fmt.Sprintf("response returned retryable status code %d", response.StatusCode),
-			err,
-		)
-	}
-	return err
+	return invokable.WrapError(result, err)
 }
 
-type invocationArgs struct {
-	url        string
-	header     map[string]string
-	completion nexus.OperationCompletion
-}
-
-func (e activeExecutor) loadInvocationArgs(
+func (e taskExecutor) loadInvocationArgs(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-) (args invocationArgs, err error) {
+) (invokable callbackInvokable, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		callback, err := hsm.MachineData[Callback](node)
 		if err != nil {
 			return err
 		}
-		target, err := hsm.MachineData[CanGetNexusCompletion](node.Parent)
-		if err != nil {
-			return err
-		}
-		switch variant := callback.PublicInfo.GetCallback().GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
-			args.url = variant.Nexus.GetUrl()
-			args.header = variant.Nexus.GetHeader()
-			args.completion, err = target.GetNexusCompletion(ctx)
+
+		switch variant := callback.GetCallback().GetVariant().(type) {
+		case *persistencespb.Callback_Nexus_:
+			target, err := hsm.MachineData[CanGetNexusCompletion](node.Parent)
+			if err != nil {
+				return err
+			}
+			// variant struct is immutable and ok to reference without copying
+			nexusInvokable := nexusInvocation{}
+			nexusInvokable.nexus = variant.Nexus
+			nexusInvokable.completion, err = target.GetNexusCompletion(ctx)
+			invokable = nexusInvokable
+			if err != nil {
+				return err
+			}
+		case *persistencespb.Callback_Hsm:
+			target, err := hsm.MachineData[CanGetHSMCompletionCallbackArg](node.Parent)
+			if err != nil {
+				return err
+			}
+			// variant struct is immutable and ok to reference without copying
+			hsmInvokable := hsmInvocation{}
+			hsmInvokable.hsm = variant.Hsm
+			hsmInvokable.callbackArg, err = target.GetHSMCompletionCallbackArg(ctx)
+			if err != nil {
+				return err
+			}
+			invokable = hsmInvokable
 			if err != nil {
 				return err
 			}
@@ -194,37 +172,37 @@ func (e activeExecutor) loadInvocationArgs(
 	return
 }
 
-func (e activeExecutor) saveResult(
+func (e taskExecutor) saveResult(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
-	response *http.Response,
+	result invocationResult,
 	callErr error,
 ) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
-			if callErr == nil {
-				if response.StatusCode >= 200 && response.StatusCode < 300 {
-					return TransitionSucceeded.Apply(callback, EventSucceeded{})
-				}
-				callErr = fmt.Errorf("request failed with: %v", response.Status) // nolint:goerr113
-				if !isRetryableHTTPResponse(response) {
-					return TransitionFailed.Apply(callback, EventFailed{
-						Time: env.Now(),
-						Err:  callErr,
-					})
-				}
+			switch result {
+			case ok:
+				return TransitionSucceeded.Apply(callback, EventSucceeded{})
+			case retry:
+				return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
+					Time:        env.Now(),
+					Err:         callErr,
+					RetryPolicy: e.Config.RetryPolicy(),
+				})
+			case failed:
+				return TransitionFailed.Apply(callback, EventFailed{
+					Time: env.Now(),
+					Err:  callErr,
+				})
+			default:
+				return hsm.TransitionOutput{}, queues.NewUnprocessableTaskError(fmt.Sprintf("unrecognized callback result %v", result))
 			}
-			return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
-				Time:        env.Now(),
-				Err:         callErr,
-				RetryPolicy: e.config.RetryPolicy(),
-			})
 		})
 	})
 }
 
-func (e activeExecutor) executeBackoffTask(
+func (e taskExecutor) executeBackoffTask(
 	env hsm.Environment,
 	node *hsm.Node,
 	task BackoffTask,
@@ -232,34 +210,4 @@ func (e activeExecutor) executeBackoffTask(
 	return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
 		return TransitionRescheduled.Apply(callback, EventRescheduled{})
 	})
-}
-
-type (
-	StandbyExecutorOptions struct{}
-
-	standbyExecutor struct {
-		options StandbyExecutorOptions
-	}
-)
-
-func (e standbyExecutor) executeBackoffTask(
-	env hsm.Environment,
-	node *hsm.Node,
-	task BackoffTask,
-) error {
-	panic("unimplemented")
-}
-
-func isRetryableHTTPResponse(response *http.Response) bool {
-	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
-}
-
-func outcomeTag(callCtx context.Context, response *http.Response, callErr error) string {
-	if callErr != nil {
-		if callCtx.Err() != nil {
-			return "request-timeout"
-		}
-		return "unknown-error"
-	}
-	return fmt.Sprintf("status:%d", response.StatusCode)
 }

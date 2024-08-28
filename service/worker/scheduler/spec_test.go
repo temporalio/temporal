@@ -29,12 +29,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	schedpb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	schedpb "go.temporal.io/api/schedule/v1"
-
-	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type specSuite struct {
@@ -69,7 +67,7 @@ func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleS
 	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
-		result := cs.getNextTime(jitterSeed, start)
+		result := cs.GetNextTime(jitterSeed, start)
 		if exp.IsZero() {
 			s.Require().True(
 				result.Nominal.IsZero(),

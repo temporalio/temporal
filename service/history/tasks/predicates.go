@@ -25,7 +25,7 @@
 package tasks
 
 import (
-	"golang.org/x/exp/maps"
+	"maps"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/predicates"
@@ -49,8 +49,8 @@ type (
 		Destinations map[string]struct{}
 	}
 
-	StateMachineTaskTypePredicate struct {
-		Types map[int32]struct{}
+	OutboundTaskGroupPredicate struct {
+		Groups map[string]struct{}
 	}
 
 	TypePredicate struct {
@@ -116,35 +116,35 @@ func (n *DestinationPredicate) Equals(predicate Predicate) bool {
 	return maps.Equal(n.Destinations, dPredicate.Destinations)
 }
 
-func NewStateMachineTaskTypePredicate(
-	types []int32,
-) *StateMachineTaskTypePredicate {
-	typesMap := make(map[int32]struct{}, len(types))
-	for _, id := range types {
-		typesMap[id] = struct{}{}
+func NewOutboundTaskGroupPredicate(
+	groups []string,
+) *OutboundTaskGroupPredicate {
+	groupsMap := make(map[string]struct{}, len(groups))
+	for _, id := range groups {
+		groupsMap[id] = struct{}{}
 	}
 
-	return &StateMachineTaskTypePredicate{
-		Types: typesMap,
+	return &OutboundTaskGroupPredicate{
+		Groups: groupsMap,
 	}
 }
 
-func (n *StateMachineTaskTypePredicate) Test(task Task) bool {
+func (n *OutboundTaskGroupPredicate) Test(task Task) bool {
 	smTask, ok := task.(HasStateMachineTaskType)
 	if !ok {
 		return false
 	}
-	_, ok = n.Types[smTask.StateMachineTaskType()]
+	_, ok = n.Groups[smTask.StateMachineTaskType()]
 	return ok
 }
 
-func (n *StateMachineTaskTypePredicate) Equals(predicate Predicate) bool {
-	smPredicate, ok := predicate.(*StateMachineTaskTypePredicate)
+func (n *OutboundTaskGroupPredicate) Equals(predicate Predicate) bool {
+	smPredicate, ok := predicate.(*OutboundTaskGroupPredicate)
 	if !ok {
 		return false
 	}
 
-	return maps.Equal(n.Types, smPredicate.Types)
+	return maps.Equal(n.Groups, smPredicate.Groups)
 }
 
 func NewTypePredicate(
@@ -172,6 +172,52 @@ func (t *TypePredicate) Equals(predicate Predicate) bool {
 	}
 
 	return maps.Equal(t.Types, typePrediate.Types)
+}
+
+// TaskGroupNamespaceIDAndDestination is the key for grouping tasks by task type namespace ID and destination.
+type TaskGroupNamespaceIDAndDestination struct {
+	TaskGroup   string
+	NamespaceID string
+	Destination string
+}
+
+type OutboundTaskPredicate struct {
+	Groups map[TaskGroupNamespaceIDAndDestination]struct{}
+}
+
+func NewOutboundTaskPredicate(groups []TaskGroupNamespaceIDAndDestination) *OutboundTaskPredicate {
+	m := make(map[TaskGroupNamespaceIDAndDestination]struct{}, len(groups))
+	for _, g := range groups {
+		m[g] = struct{}{}
+	}
+
+	return &OutboundTaskPredicate{
+		Groups: m,
+	}
+}
+
+func (t *OutboundTaskPredicate) Test(task Task) bool {
+	group := TaskGroupNamespaceIDAndDestination{
+		NamespaceID: task.GetNamespaceID(),
+	}
+	if smTask, ok := task.(HasStateMachineTaskType); ok {
+		group.TaskGroup = smTask.StateMachineTaskType()
+	}
+	if dTask, ok := task.(HasDestination); ok {
+		group.Destination = dTask.GetDestination()
+	}
+
+	_, ok := t.Groups[group]
+	return ok
+}
+
+func (t *OutboundTaskPredicate) Equals(predicate Predicate) bool {
+	outboundPredicate, ok := predicate.(*OutboundTaskPredicate)
+	if !ok {
+		return false
+	}
+
+	return maps.Equal(t.Groups, outboundPredicate.Groups)
 }
 
 func AndPredicates(a Predicate, b Predicate) Predicate {
@@ -206,6 +252,26 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 				Destinations: intersection,
 			}
 		}
+	case *OutboundTaskGroupPredicate:
+		if b, ok := b.(*OutboundTaskGroupPredicate); ok {
+			intersection := intersect(a.Groups, b.Groups)
+			if len(intersection) == 0 {
+				return predicates.Empty[Task]()
+			}
+			return &OutboundTaskGroupPredicate{
+				Groups: intersection,
+			}
+		}
+	case *OutboundTaskPredicate:
+		if b, ok := b.(*OutboundTaskPredicate); ok {
+			intersection := intersect(a.Groups, b.Groups)
+			if len(intersection) == 0 {
+				return predicates.Empty[Task]()
+			}
+			return &OutboundTaskPredicate{
+				Groups: intersection,
+			}
+		}
 	}
 
 	return predicates.And(a, b)
@@ -229,6 +295,18 @@ func OrPredicates(a Predicate, b Predicate) Predicate {
 		if b, ok := b.(*DestinationPredicate); ok {
 			return &DestinationPredicate{
 				Destinations: union(a.Destinations, b.Destinations),
+			}
+		}
+	case *OutboundTaskGroupPredicate:
+		if b, ok := b.(*OutboundTaskGroupPredicate); ok {
+			return &OutboundTaskGroupPredicate{
+				Groups: union(a.Groups, b.Groups),
+			}
+		}
+	case *OutboundTaskPredicate:
+		if b, ok := b.(*OutboundTaskPredicate); ok {
+			return &OutboundTaskPredicate{
+				Groups: union(a.Groups, b.Groups),
 			}
 		}
 	}

@@ -114,7 +114,7 @@ func NewTaskProcessorManager(
 				namespaceId namespace.ID,
 				workflowId string,
 				runId string,
-				events []*historypb.HistoryEvent,
+				events [][]*historypb.HistoryEvent,
 				versionHistory []*historyspb.VersionHistoryItem,
 			) error {
 				return engine.ReplicateHistoryEvents(
@@ -126,7 +126,7 @@ func NewTaskProcessorManager(
 					},
 					nil,
 					versionHistory,
-					[][]*historypb.HistoryEvent{events},
+					events,
 					nil,
 					"",
 				)
@@ -134,6 +134,7 @@ func NewTaskProcessorManager(
 			shard.GetPayloadSerializer(),
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 			shard.GetLogger(),
+			config,
 		),
 		logger:         shard.GetLogger(),
 		metricsHandler: shard.GetMetricsHandler(),

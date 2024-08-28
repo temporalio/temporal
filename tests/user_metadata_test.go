@@ -30,13 +30,12 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/testing/testvars"
 )
 
 func (s *FunctionalSuite) TestUserMetadata() {
-	getDescribeWorkflowExecutionInfo := func(engine FrontendClient, namespace string, workflowID string, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	getDescribeWorkflowExecutionInfo := func(client FrontendClient, namespace string, workflowID string, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+		return client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -70,11 +69,11 @@ func (s *FunctionalSuite) TestUserMetadata() {
 			UserMetadata: metadata,
 		}
 
-		we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		we, err := s.client.StartWorkflowExecution(NewContext(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.engine, s.namespace, id, we.RunId)
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.client, s.namespace, id, we.RunId)
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
@@ -93,11 +92,11 @@ func (s *FunctionalSuite) TestUserMetadata() {
 			UserMetadata: metadata,
 		}
 
-		we, err := s.engine.SignalWithStartWorkflowExecution(NewContext(), request)
+		we, err := s.client.SignalWithStartWorkflowExecution(NewContext(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.engine, s.namespace, id, we.RunId)
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.client, s.namespace, id, we.RunId)
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
@@ -138,11 +137,11 @@ func (s *FunctionalSuite) TestUserMetadata() {
 			},
 		}
 
-		_, err := s.engine.ExecuteMultiOperation(NewContext(), request)
+		_, err := s.client.ExecuteMultiOperation(NewContext(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.engine, s.namespace, id, "")
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.client, s.namespace, id, "")
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})

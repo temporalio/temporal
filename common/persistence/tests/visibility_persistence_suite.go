@@ -36,7 +36,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -61,6 +60,7 @@ type (
 		controller *gomock.Controller
 
 		*persistencetests.TestBase
+		NamespaceRegistry              namespace.Registry
 		VisibilityMgr                  manager.VisibilityManager
 		SearchAttributesProvider       searchattribute.Provider
 		SearchAttributesMapperProvider searchattribute.MapperProvider
@@ -80,6 +80,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
 	s.SearchAttributesProvider = searchattribute.NewTestProvider()
 	s.SearchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
+	s.NamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.VisibilityMgr, err = visibility.NewManager(
 		cfg,
 		resolver.NewNoopResolver(),
@@ -87,6 +88,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		nil,
 		s.SearchAttributesProvider,
 		s.SearchAttributesMapperProvider,
+		s.NamespaceRegistry,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetFloatPropertyFn(0.2),

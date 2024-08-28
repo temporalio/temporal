@@ -63,22 +63,27 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	var taskType string
-	ref, smt, err := stateMachineTask(e.shardContext, task)
-	if err != nil {
-		taskType = "ActiveUnknownOutbound"
-	} else {
-		taskType = "Active." + smt.Type().Name
-	}
-
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
 	)
-	metricsTags := []metrics.Tag{
-		namespaceTag,
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType),
+	taskType := queues.GetOutboundTaskTypeTagValue(task, true)
+	respond := func(err error) queues.ExecuteResponse {
+		metricsTags := []metrics.Tag{
+			namespaceTag,
+			metrics.TaskTypeTag(taskType),
+			metrics.OperationTag(taskType),
+		}
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        err,
+		}
+	}
+
+	ref, smt, err := stateMachineTask(e.shardContext, task)
+	if err != nil {
+		return respond(err)
 	}
 
 	// We don't want to execute outbound tasks when handing over a namespace to avoid starting work that may not be
@@ -89,21 +94,14 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
 		// TODO: Move this logic to queues.Executable when metrics tags don't need
 		// to be returned from task executor. Also check the standby queue logic.
-		return queues.ExecuteResponse{
-			ExecutionMetricTags: metricsTags,
-			ExecutedAsActive:    true,
-			ExecutionErr:        consts.ErrNamespaceHandover,
-		}
+		return respond(consts.ErrNamespaceHandover)
 	}
 
-	if err == nil {
-		smRegistry := e.shardContext.StateMachineRegistry()
-		err = smRegistry.ExecuteActiveImmediateTask(ctx, e, ref, smt)
+	if err := validateTaskByClock(e.shardContext, task); err != nil {
+		return respond(err)
 	}
 
-	return queues.ExecuteResponse{
-		ExecutionMetricTags: metricsTags,
-		ExecutedAsActive:    true,
-		ExecutionErr:        err,
-	}
+	smRegistry := e.shardContext.StateMachineRegistry()
+	err = smRegistry.ExecuteImmediateTask(ctx, e, ref, smt)
+	return respond(err)
 }

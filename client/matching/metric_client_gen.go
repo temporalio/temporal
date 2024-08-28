@@ -131,6 +131,20 @@ func (c *metricClient) DispatchNexusTask(
 	return c.client.DispatchNexusTask(ctx, request, opts...)
 }
 
+func (c *metricClient) ForceLoadTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.ForceLoadTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ForceLoadTaskQueuePartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientForceLoadTaskQueuePartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ForceLoadTaskQueuePartition(ctx, request, opts...)
+}
+
 func (c *metricClient) ForceUnloadTaskQueue(
 	ctx context.Context,
 	request *matchingservice.ForceUnloadTaskQueueRequest,

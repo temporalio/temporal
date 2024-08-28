@@ -282,6 +282,7 @@ message DescribeClusterResponse {
   int64 initial_failover_version = 11;
   bool is_global_namespace_enabled = 12;
   map<string, string> tags = 13;
+  string http_address = 14;
 }
 
 message ListClustersRequest {
@@ -297,7 +298,7 @@ message ListClustersResponse {
 message AddOrUpdateRemoteClusterRequest {
   string frontend_address = 1;
   bool enable_remote_cluster_connection = 2;
-  string frontend_http_address = 3;
+  string frontend_http_address = 3 [deprecated = true];
 }
 
 message AddOrUpdateRemoteClusterResponse {
@@ -551,4 +552,11 @@ message ListQueuesResponse {
   }
   repeated QueueInfo queues = 1;
   bytes next_page_token = 2;
+}
+
+message DeepHealthCheckRequest {
+}
+
+message DeepHealthCheckResponse {
+  temporal.server.api.enums.v1.HealthState state = 1;
 }

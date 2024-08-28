@@ -34,7 +34,6 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
@@ -173,6 +172,18 @@ func TestNewCassandraCluster(t *testing.T) {
 				assert.Equal(t, time.Duration(123), cluster.ConnectTimeout)
 				assert.Equal(t, time.Duration(456), cluster.Timeout)
 				assert.Equal(t, time.Duration(789), cluster.WriteTimeout)
+			},
+		},
+		"set_allowed_authenticators": {
+			cfg: config.Cassandra{
+				User:                  "TestUser",
+				Password:              "TestPassword",
+				AllowedAuthenticators: []string{"org.apache.cassandra.auth.LDAPAuthenticator"},
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				authenticator := cluster.Authenticator
+				_, _, err := authenticator.Challenge([]byte("org.apache.cassandra.auth.LDAPAuthenticator"))
+				assert.NoError(t, err)
 			},
 		},
 	}

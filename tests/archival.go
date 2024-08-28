@@ -40,8 +40,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -53,6 +51,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -81,6 +80,8 @@ func (s *ArchivalSuite) TearDownSuite() {
 }
 
 func (s *ArchivalSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
@@ -160,7 +161,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 			Query:     fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
 		}
 		for len(executions) == 0 || request.NextPageToken != nil {
-			response, err := s.engine.ListArchivedWorkflowExecutions(NewContext(), request)
+			response, err := s.client.ListArchivedWorkflowExecutions(NewContext(), request)
 			s.NoError(err)
 			s.NotNil(response)
 			executions = append(executions, response.GetExecutions()...)
@@ -187,7 +188,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 }
 
 func (s *FunctionalTestBase) getNamespaceID(namespace string) string {
-	namespaceResp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+	namespaceResp, err := s.client.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	})
 	s.NoError(err)
@@ -331,7 +332,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	startResp, err := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(startResp.RunId))
 	workflowInfos := make([]archivalWorkflowInfo, numRuns)
@@ -406,7 +407,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,

@@ -33,14 +33,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"google.golang.org/protobuf/proto"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -109,6 +108,9 @@ type (
 		// ParseReplicationTask is unique among these methods in that it does not serialize or deserialize a type to or
 		// from a byte array. Instead, it takes a proto and "parses" it into a more structured type.
 		ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
+		// ParseReplicationTaskInfo is unique among these methods in that it does not serialize or deserialize a type to or
+		// from a byte array. Instead, it takes a structured type and "parses" it into proto
+		ParseReplicationTaskInfo(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error)
 
 		SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
 		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
@@ -429,7 +431,7 @@ func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) 
 	}
 	// Proto serialization replaces empty maps with nils, ensure this map is never nil.
 	if result.SubStateMachinesByType == nil {
-		result.SubStateMachinesByType = make(map[int32]*persistencespb.StateMachineMap)
+		result.SubStateMachinesByType = make(map[string]*persistencespb.StateMachineMap)
 	}
 	return result, nil
 }

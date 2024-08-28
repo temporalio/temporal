@@ -32,9 +32,9 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -64,6 +65,7 @@ type (
 		matchingRawClient  resource.MatchingRawClient
 		config             *configs.Config
 		metricHandler      metrics.Handler
+		isActive           bool
 	}
 )
 
@@ -75,6 +77,7 @@ func newTimerQueueTaskExecutorBase(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
+	isActive bool,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
 		stateMachineEnvironment: stateMachineEnvironment{
@@ -89,6 +92,7 @@ func newTimerQueueTaskExecutorBase(
 		matchingRawClient:  matchingRawClient,
 		config:             config,
 		metricHandler:      metricsHandler,
+		isActive:           isActive,
 	}
 }
 
@@ -109,7 +113,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
@@ -200,6 +204,8 @@ func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
 }
 
 func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
+	ctx context.Context,
+	workflowContext workflow.Context,
 	ms workflow.MutableState,
 	deadline time.Time,
 	timer *persistencespb.StateMachineTaskInfo,
@@ -221,7 +227,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 		WorkflowKey:     ms.GetWorkflowKey(),
 		StateMachineRef: timer.Ref,
 	}
-	if err := t.validateStateMachineRef(ms, ref); err != nil {
+	if err := t.validateStateMachineRef(ctx, workflowContext, ms, ref, false); err != nil {
 		return err
 	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())
@@ -235,69 +241,60 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	return nil
 }
 
-func (t *timerQueueTaskExecutorBase) executeStateMachineTimerTask(
+// executeStateMachineTimers gets the state machine timers, processed the expired timers,
+// and return a slice of unprocessed timers.
+func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	ctx context.Context,
-	task *tasks.StateMachineTimerTask,
+	workflowContext workflow.Context,
+	ms workflow.MutableState,
 	execute func(node *hsm.Node, task hsm.Task) error,
-) (retError error) {
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
-	defer cancel()
+) (int, error) {
 
-	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
-	if err != nil {
-		return err
-	}
-	defer func() { release(retError) }()
-
-	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
-	if err != nil {
-		return err
-	}
-	if ms == nil {
-		return nil
+	// need to specifically check for zombie workflows here instead of workflow running
+	// or not since zombie workflows are considered as not running but state machine timers
+	// can target closed workflows.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return 0, consts.ErrWorkflowZombie
 	}
 
 	timers := ms.GetExecutionInfo().StateMachineTimers
-
+	processedTimers := 0
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
-		if !queues.IsTimeExpired(t.shardContext.GetTimeSource().Now(), group.Deadline.AsTime()) {
+		if !queues.IsTimeExpired(t.Now(), group.Deadline.AsTime()) {
 			break
 		}
 
 		for _, timer := range group.Infos {
-			err := t.executeSingleStateMachineTimer(ms, group.Deadline.AsTime(), timer, execute)
+			err := t.executeSingleStateMachineTimer(ctx, workflowContext, ms, group.Deadline.AsTime(), timer, execute)
 			if err != nil {
 				if !errors.As(err, new(*serviceerror.NotFound)) {
+					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(
+						1,
+						metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
+						metrics.ServiceErrorTypeTag(err),
+					)
 					// Return on first error as we don't want to duplicate the Executable's error handling logic.
 					// This implies that a single bad task in the mutable state timer sequence will cause all other
 					// tasks to be stuck. We'll accept this limitation for now.
-					return err
+					return 0, err
 				}
-				// TODO(bergundy): Metric?
+				metrics.StateMachineTimerSkipsCounter.With(t.metricHandler).Record(
+					1,
+					metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
+				)
 				t.logger.Warn("Skipped state machine timer", tag.Error(err))
 			}
 		}
 		// Remove the processed timer group.
 		timers = timers[1:]
+		processedTimers++
 	}
 
-	// We haven't done any work, return without committing.
-	if len(timers) == len(ms.GetExecutionInfo().StateMachineTimers) {
-		return nil
+	if processedTimers > 0 {
+		// Update processed timers.
+		ms.GetExecutionInfo().StateMachineTimers = timers
 	}
-
-	// Update processed timers and ensure the next timer task is scheduled.
-	ms.GetExecutionInfo().StateMachineTimers = timers
-	// TODO(bergundy): Right now there's an early return in task_generator.go GenerateDirtySubStateMachineTasks because
-	// transition history may be disabled. Remove this line from here once that early return is gone.
-	workflow.AddNextStateMachineTimerTask(ms)
-
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
-		// closed workflow.
-		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
-	}
-	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	return processedTimers, nil
 }

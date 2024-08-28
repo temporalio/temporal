@@ -28,6 +28,7 @@ package ndc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -35,23 +36,24 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -156,6 +158,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				ctx,
 				resetMutableState,
 				currentUpdateRegistry,
+				currentWorkflow,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -183,6 +186,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				ctx,
 				resetMutableState,
 				currentUpdateRegistry,
+				currentWorkflow,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -467,10 +471,10 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			workflowTask.RequestID,
 			workflowTask.TaskQueue,
 			consts.IdentityHistoryService,
-			// Passing nil versioning stamp means we want to skip versioning considerations because this task
-			// is not actually dispatched but will fail immediately.
 			nil,
 			nil,
+			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
+			true,
 		)
 		if err != nil {
 			return err
@@ -571,6 +575,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
 	currentUpdateRegistry update.Registry,
+	currentWorkflow Workflow,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
@@ -606,22 +611,30 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	}
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
-		context, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
-			ctx,
-			r.shardContext,
-			namespaceID,
-			&commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			workflow.LockPriorityHigh,
-		)
-		if err != nil {
-			return 0, nil, err
-		}
-		defer func() { release(retError) }()
+		var wfCtx workflow.Context
+		var err error
 
-		mutableState, err := context.LoadMutableState(ctx, r.shardContext)
+		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
+			wfCtx = currentWorkflow.GetContext()
+		} else {
+			var release wcache.ReleaseCacheFunc
+			wfCtx, release, err = r.workflowCache.GetOrCreateWorkflowExecution(
+				ctx,
+				r.shardContext,
+				namespaceID,
+				&commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				locks.PriorityHigh,
+			)
+			if err != nil {
+				return 0, nil, err
+			}
+			defer func() { release(retError) }()
+		}
+
+		mutableState, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 		if err != nil {
 			// no matter what error happen, we need to retry
 			return 0, nil, err
@@ -716,12 +729,13 @@ func (r *workflowResetterImpl) reapplyEvents(
 	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
 	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
 	// did, before the refactoring that unified two code paths; see comment below.)
-	return reapplyEvents(mutableState, nil, events, resetReapplyExcludeTypes, "")
+	return reapplyEvents(mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "")
 }
 
 func reapplyEvents(
 	mutableState workflow.MutableState,
 	targetBranchUpdateRegistry update.Registry,
+	stateMachineRegistry *hsm.Registry,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 	runIdForDeduplication string,
@@ -794,8 +808,22 @@ func reapplyEvents(
 			}
 			reappliedEvents = append(reappliedEvents, event)
 		default:
-			// Other event types are not reapplied.
-			continue
+			root := mutableState.HSM()
+			def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
+			if !ok {
+				// Only reapply hardcoded events above or ones registered and are cherry-pickable in the HSM framework.
+				continue
+			}
+			if err := def.CherryPick(root, event); err != nil {
+				if errors.Is(err, hsm.ErrNotCherryPickable) || errors.Is(err, hsm.ErrStateMachineNotFound) || errors.Is(err, hsm.ErrInvalidTransition) {
+					continue
+				}
+				return reappliedEvents, err
+			}
+			mutableState.AddHistoryEvent(event.EventType, func(he *historypb.HistoryEvent) {
+				he.Attributes = event.Attributes
+			})
+			reappliedEvents = append(reappliedEvents, event)
 		}
 		if runIdForDeduplication != "" {
 			deDupResource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())

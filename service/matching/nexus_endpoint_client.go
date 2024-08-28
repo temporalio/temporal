@@ -33,13 +33,12 @@ import (
 
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	p "go.temporal.io/server/common/persistence"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -346,7 +345,7 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 			m.endpointsByName[entry.Endpoint.Spec.Name] = entry
 		}
 
-		if pageToken == nil {
+		if len(pageToken) == 0 {
 			break
 		}
 	}

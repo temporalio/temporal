@@ -29,14 +29,13 @@ package ndc
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -84,6 +84,7 @@ func NewWorkflowStateReplicator(
 	logger log.Logger,
 ) *WorkflowStateReplicatorImpl {
 
+	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
 	return &WorkflowStateReplicatorImpl{
 		shardContext:      shardContext,
 		namespaceRegistry: shardContext.GetNamespaceRegistry(),
@@ -92,7 +93,7 @@ func NewWorkflowStateReplicator(
 		executionMgr:      shardContext.GetExecutionManager(),
 		historySerializer: eventSerializer,
 		transactionMgr:    NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
-		logger:            log.With(logger, tag.ComponentHistoryReplicator),
+		logger:            logger,
 	}
 }
 
@@ -117,7 +118,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
@@ -166,7 +167,23 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 				common.EmptyVersion,
 			)
 		}
-		return nil
+
+		// release the workflow lock here otherwise SyncHSM will deadlock
+		releaseFn(nil)
+
+		engine, err := r.shardContext.GetEngine(ctx)
+		if err != nil {
+			return err
+		}
+
+		// we don't care about activity state here as activity can't run after workflow is closed.
+		return engine.SyncHSM(ctx, &shard.SyncHSMRequest{
+			WorkflowKey: ms.GetWorkflowKey(),
+			StateMachineNode: &persistencespb.StateMachineNode{
+				Children: executionInfo.SubStateMachinesByType,
+			},
+			EventVersionHistory: incomingVersionHistory,
+		})
 	default:
 		return err
 	}
@@ -240,8 +257,8 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 
-	taskRefresh := workflow.NewTaskRefresher(r.shardContext, r.logger)
-	err = taskRefresh.RefreshTasks(ctx, mutableState)
+	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
+	err = taskRefresher.Refresh(ctx, mutableState)
 	if err != nil {
 		return err
 	}
@@ -265,7 +282,26 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
-) (int64, error) {
+) (taskID int64, retError error) {
+
+	// Get the current run lock to make sure no concurrent backfill history across multiple runs.
+	currentRunReleaseFn, err := r.workflowCache.GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		r.shardContext,
+		namespaceID,
+		workflowID,
+		locks.PriorityLow,
+	)
+	if err != nil {
+		return common.EmptyEventTaskID, err
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			currentRunReleaseFn(errPanic)
+			panic(rec)
+		}
+		currentRunReleaseFn(retError)
+	}()
 
 	// Get the last batch node id to check if the history data is already in DB.
 	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
@@ -317,11 +353,14 @@ BackfillLoop:
 
 		if historyBlob.nodeID <= lastBatchNodeID {
 			// The history batch already in DB.
-			currentAncestor := sortedAncestors[sortedAncestorsIdx]
-			if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
-				// update ancestor
-				ancestors = append(ancestors, currentAncestor)
-				sortedAncestorsIdx++
+			if len(sortedAncestors) > sortedAncestorsIdx {
+				currentAncestor := sortedAncestors[sortedAncestorsIdx]
+
+				if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
+					// Update ancestor.
+					ancestors = append(ancestors, currentAncestor)
+					sortedAncestorsIdx++
+				}
 			}
 			continue BackfillLoop
 		}

@@ -29,22 +29,22 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/namespace"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 const (
@@ -100,10 +100,10 @@ func NewTransferQueueFactory(
 }
 
 func (f *transferQueueFactory) CreateQueue(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 ) queues.Queue {
-	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
+	logger := log.With(shardContext.GetLogger(), tag.ComponentTransferQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope))
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
@@ -127,13 +127,13 @@ func (f *transferQueueFactory) CreateQueue(
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
-		shard.GetTimeSource(),
+		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
 	)
 
 	activeExecutor := newTransferQueueActiveTaskExecutor(
-		shard,
+		shardContext,
 		workflowCache,
 		f.SdkClientFactory,
 		logger,
@@ -143,9 +143,30 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MatchingRawClient,
 		f.VisibilityManager,
 	)
+	eventImporter := eventhandler.NewEventImporter(
+		f.RemoteHistoryFetcher,
+		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
+			return shardContext.GetEngine(ctx)
+		},
+		f.Serializer,
+		logger,
+	)
+	resendHandler := eventhandler.NewResendHandler(
+		f.NamespaceRegistry,
+		f.ClientBean,
+		f.Serializer,
+		f.ClusterMetadata,
+		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
+			return shardContext.GetEngine(ctx)
+		},
+		f.RemoteHistoryFetcher,
+		eventImporter,
+		logger,
+		f.Config,
+	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
-		shard,
+		shardContext,
 		workflowCache,
 		xdc.NewNDCHistoryResender(
 			f.NamespaceRegistry,
@@ -156,10 +177,10 @@ func (f *transferQueueFactory) CreateQueue(
 				namespaceId namespace.ID,
 				workflowId string,
 				runId string,
-				events []*historypb.HistoryEvent,
+				events [][]*historypb.HistoryEvent,
 				versionHistory []*historyspb.VersionHistoryItem,
 			) error {
-				engine, err := shard.GetEngine(ctx)
+				engine, err := shardContext.GetEngine(ctx)
 				if err != nil {
 					return err
 				}
@@ -172,15 +193,17 @@ func (f *transferQueueFactory) CreateQueue(
 					},
 					nil,
 					versionHistory,
-					[][]*historypb.HistoryEvent{events},
+					events,
 					nil,
 					"",
 				)
 			},
-			shard.GetPayloadSerializer(),
+			shardContext.GetPayloadSerializer(),
 			f.Config.StandbyTaskReReplicationContextTimeout,
 			logger,
+			f.Config,
 		),
+		resendHandler,
 		logger,
 		f.MetricsHandler,
 		currentClusterName,
@@ -205,9 +228,9 @@ func (f *transferQueueFactory) CreateQueue(
 		shardScheduler,
 		rescheduler,
 		f.HostPriorityAssigner,
-		shard.GetTimeSource(),
-		shard.GetNamespaceRegistry(),
-		shard.GetClusterMetadata(),
+		shardContext.GetTimeSource(),
+		shardContext.GetNamespaceRegistry(),
+		shardContext.GetClusterMetadata(),
 		logger,
 		metricsHandler,
 		f.DLQWriter,
@@ -217,7 +240,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewImmediateQueue(
-		shard,
+		shardContext,
 		tasks.CategoryTransfer,
 		shardScheduler,
 		rescheduler,

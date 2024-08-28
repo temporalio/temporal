@@ -31,19 +31,18 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/rpc/interceptor"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -203,7 +202,7 @@ func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err 
 			ResourceExhaustedScopeHeader, reErr.Scope.String(),
 		))
 		if headerErr != nil {
-			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))
+			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(headerErr))
 		}
 	}
 }

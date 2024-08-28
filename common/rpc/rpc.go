@@ -26,20 +26,26 @@ package rpc
 
 import (
 	"crypto/tls"
+	"fmt"
+	"math/rand"
 	"net"
+	"net/http"
+	"net/url"
 	"sync"
+	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/environment"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
@@ -51,12 +57,16 @@ type RPCFactory struct {
 	logger      log.Logger
 
 	frontendURL       string
+	frontendHTTPURL   string
+	frontendHTTPPort  int
 	frontendTLSConfig *tls.Config
 
-	initListener       sync.Once
-	grpcListener       net.Listener
+	grpcListener       func() net.Listener
 	tlsFactory         encryption.TLSConfigProvider
 	clientInterceptors []grpc.UnaryClientInterceptor
+	monitor            membership.Monitor
+	// A OnceValues wrapper for createLocalFrontendHTTPClient.
+	localFrontendClient func() (*common.FrontendHTTPClient, error)
 }
 
 // NewFactory builds a new RPCFactory
@@ -67,18 +77,27 @@ func NewFactory(
 	logger log.Logger,
 	tlsProvider encryption.TLSConfigProvider,
 	frontendURL string,
+	frontendHTTPURL string,
+	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
 	clientInterceptors []grpc.UnaryClientInterceptor,
+	monitor membership.Monitor,
 ) *RPCFactory {
-	return &RPCFactory{
+	f := &RPCFactory{
 		config:             cfg,
 		serviceName:        sName,
 		logger:             logger,
 		frontendURL:        frontendURL,
+		frontendHTTPURL:    frontendHTTPURL,
+		frontendHTTPPort:   frontendHTTPPort,
 		frontendTLSConfig:  frontendTLSConfig,
 		tlsFactory:         tlsProvider,
 		clientInterceptors: clientInterceptors,
+		monitor:            monitor,
 	}
+	f.grpcListener = sync.OnceValue(f.createGRPCListener)
+	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
+	return f
 }
 
 func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
@@ -141,19 +160,20 @@ func (d *RPCFactory) GetInternodeClientTlsConfig() (*tls.Config, error) {
 
 // GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
 func (d *RPCFactory) GetGRPCListener() net.Listener {
-	d.initListener.Do(func() {
-		hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
-		var err error
-		d.grpcListener, err = net.Listen("tcp", hostAddress)
+	return d.grpcListener()
+}
 
-		if err != nil {
-			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
-		}
+func (d *RPCFactory) createGRPCListener() net.Listener {
+	hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
+	var err error
+	grpcListener, err := net.Listen("tcp", hostAddress)
 
-		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
-	})
+	if err != nil || grpcListener == nil || grpcListener.Addr() == nil {
+		d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
+	}
 
-	return d.grpcListener
+	d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
+	return grpcListener
 }
 
 func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
@@ -234,4 +254,98 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.Cl
 
 func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	return d.tlsFactory
+}
+
+// CreateLocalFrontendHTTPClient gets or creates a cached frontend client.
+func (d *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient, error) {
+	return d.localFrontendClient()
+}
+
+// createLocalFrontendHTTPClient creates an HTTP client for communicating with the frontend.
+// It uses either the provided frontendURL or membership to resolve the frontend address.
+func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient, error) {
+	// dialer and transport field values copied from http.DefaultTransport.
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	client := http.Client{}
+
+	// Default to http unless TLS is configured.
+	scheme := "http"
+	if d.frontendTLSConfig != nil {
+		transport.TLSClientConfig = d.frontendTLSConfig
+		scheme = "https"
+	}
+
+	var address string
+	if r := serviceResolverFromGRPCURL(d.frontendHTTPURL); r != nil {
+		client.Transport = &roundTripper{
+			resolver:   r,
+			underlying: transport,
+			httpPort:   d.frontendHTTPPort,
+		}
+		address = "internal" // This will be replaced by the roundTripper
+	} else {
+		// Use the URL as-is and leave the transport unmodified.
+		client.Transport = transport
+		address = d.frontendHTTPURL
+	}
+
+	return &common.FrontendHTTPClient{
+		Client:  client,
+		Address: address,
+		Scheme:  scheme,
+	}, nil
+}
+
+type roundTripper struct {
+	resolver   membership.ServiceResolver
+	underlying http.RoundTripper
+	httpPort   int
+}
+
+func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Pick a frontend host at random.
+	members := rt.resolver.AvailableMembers()
+	if len(members) == 0 {
+		return nil, serviceerror.NewUnavailable("no frontend host to route request to")
+	}
+	idx := rand.Intn(len(members))
+	member := members[idx]
+
+	// Replace port with the HTTP port.
+	host, _, err := net.SplitHostPort(member.Identity())
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract port from frontend member: %w", err)
+	}
+	address := fmt.Sprintf("%s:%d", host, rt.httpPort)
+
+	// Replace request's host.
+	req.URL.Host = address
+	req.Host = address
+	return rt.underlying.RoundTrip(req)
+}
+
+// serviceResolverFromGRPCURL returns a ServiceResolver if ustr corresponds to a
+// membership url, otherwise nil.
+func serviceResolverFromGRPCURL(ustr string) membership.ServiceResolver {
+	u, err := url.Parse(ustr)
+	if err != nil {
+		return nil
+	}
+	res, err := membership.GetServiceResolverFromURL(u)
+	if err != nil {
+		return nil
+	}
+	return res
 }

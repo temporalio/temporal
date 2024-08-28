@@ -90,14 +90,12 @@ func GetActiveTimerTaskTypeTagValue(
 	executable Executable,
 ) string {
 	task := executable.GetTask()
-	switch task.(type) {
+	switch t := task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
-		switch executable.(type) {
-		case *speculativeWorkflowTaskTimeoutExecutable:
-			return metrics.TaskTypeMemoryScheduledTaskWorkflowTaskTimeout
-		default:
-			return metrics.TaskTypeTimerActiveTaskWorkflowTaskTimeout
+		if t.InMemory {
+			return metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout
 		}
+		return metrics.TaskTypeTimerActiveTaskWorkflowTaskTimeout
 	case *tasks.ActivityTimeoutTask:
 		return metrics.TaskTypeTimerActiveTaskActivityTimeout
 	case *tasks.UserTimerTask:
@@ -170,6 +168,32 @@ func GetArchivalTaskTypeTagValue(
 	}
 }
 
+func GetOutboundTaskTypeTagValue(task tasks.Task, isActive bool) string {
+	var prefix string
+	if isActive {
+		prefix = "OutboundActive"
+	} else {
+		prefix = "OutboundStandby"
+	}
+
+	outbound, ok := task.(*tasks.StateMachineOutboundTask)
+	if !ok {
+		return prefix + "Unknown"
+	}
+	return prefix + "." + outbound.StateMachineTaskType()
+}
+
+func GetTimerStateMachineTaskTypeTagValue(taskType string, isActive bool) string {
+	var prefix string
+	if isActive {
+		prefix = "TimerActive"
+	} else {
+		prefix = "TimerStandby"
+	}
+
+	return prefix + "." + taskType
+}
+
 func getTaskTypeTagValue(
 	executable Executable,
 	isActive bool,
@@ -190,6 +214,8 @@ func getTaskTypeTagValue(
 		return GetVisibilityTaskTypeTagValue(task)
 	case tasks.CategoryArchival:
 		return GetArchivalTaskTypeTagValue(task)
+	case tasks.CategoryOutbound:
+		return GetOutboundTaskTypeTagValue(task, isActive)
 	default:
 		return task.GetType().String()
 	}

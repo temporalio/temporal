@@ -24,6 +24,7 @@ package nexus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -34,16 +35,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type testMocks struct {
@@ -75,7 +76,7 @@ func TestGet(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -83,7 +84,7 @@ func TestGet(t *testing.T) {
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry, endpoint)
 
-	endpoint, err = reg.GetByName(context.Background(), testEntry.Endpoint.Spec.Name)
+	endpoint, err = reg.GetByName(context.Background(), "ignored", testEntry.Endpoint.Spec.Name)
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry, endpoint)
 
@@ -100,7 +101,7 @@ func TestGetNotFound(t *testing.T) {
 
 	// initial load
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
-		Entries:       []*persistencepb.NexusEndpointEntry{testEntry},
+		Entries:       []*persistencepb.NexusEndpointEntry{},
 		TableVersion:  1,
 		NextPageToken: nil,
 	}, nil)
@@ -115,23 +116,39 @@ func TestGetNotFound(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	// readthrough
+	mocks.persistence.EXPECT().GetNexusEndpoint(gomock.Any(), &persistence.GetNexusEndpointRequest{ID: testEntry.Id}).Return(testEntry, nil)
+	sentinelErr := errors.New("sentinel")
+	mocks.persistence.EXPECT().GetNexusEndpoint(gomock.Any(), gomock.Any()).Return(nil, sentinelErr)
+
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
-	endpoint, err := reg.GetByID(context.Background(), uuid.NewString())
 	var notFound *serviceerror.NotFound
-	assert.ErrorAs(t, err, &notFound)
+
+	// Readthrough success
+	endpoint, err := reg.GetByID(context.Background(), testEntry.Id)
+	assert.NoError(t, err)
+	assert.Equal(t, testEntry, endpoint)
+
+	// Readthrough is cached (mock will verify only one call)
+	endpoint, err = reg.GetByID(context.Background(), testEntry.Id)
+	assert.NoError(t, err)
+	assert.Equal(t, testEntry, endpoint)
+
+	// Readthrough fail
+	endpoint, err = reg.GetByID(context.Background(), uuid.NewString())
+	assert.Equal(t, sentinelErr, err)
 	assert.Nil(t, endpoint)
 
-	endpoint, err = reg.GetByName(context.Background(), uuid.NewString())
+	endpoint, err = reg.GetByName(context.Background(), "ignored", uuid.NewString())
 	assert.ErrorAs(t, err, &notFound)
 	assert.Nil(t, endpoint)
 
 	reg.dataLock.RLock()
 	defer reg.dataLock.RUnlock()
 	assert.Equal(t, int64(1), reg.tableVersion)
-	assert.NotEmpty(t, reg.endpointsByID)
 }
 
 func TestInitializationFallback(t *testing.T) {
@@ -147,7 +164,7 @@ func TestInitializationFallback(t *testing.T) {
 		Entries:       []*persistencepb.NexusEndpointEntry{testEndpoint},
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -221,7 +238,7 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -288,7 +305,7 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 		NextPageToken: nil,
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -308,7 +325,9 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 func newTestMocks(t *testing.T) *testMocks {
 	ctrl := gomock.NewController(t)
 	testConfig := NewEndpointRegistryConfig(dynamicconfig.NewNoopCollection())
-	testConfig.refreshEnabled = dynamicconfig.GetBoolPropertyFn(true)
+	testConfig.refreshEnabled = func(func(bool)) (bool, func()) {
+		return true, func() {}
+	}
 	return &testMocks{
 		config:         testConfig,
 		matchingClient: matchingservicemock.NewMockMatchingServiceClient(ctrl),

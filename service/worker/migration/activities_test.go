@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservicemock/v1"
@@ -50,9 +52,6 @@ import (
 	"go.temporal.io/server/common/testing/protomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/suite"
 )
 
 type activitiesSuite struct {

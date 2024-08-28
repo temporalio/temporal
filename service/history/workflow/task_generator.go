@@ -33,7 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -77,7 +76,7 @@ type (
 		GenerateActivityTasks(
 			activityScheduledEventID int64,
 		) error
-		GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error
+		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
 		GenerateChildWorkflowTasks(
 			event *historypb.HistoryEvent,
 		) error
@@ -96,12 +95,13 @@ type (
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
-			events []*historypb.HistoryEvent,
+			eventBatches [][]*historypb.HistoryEvent,
 		) error
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 
 		// Generate tasks for any updated state machines on mutable state.
 		// Looks up machine definition in the provided registry.
+		// Must be called **after** updating transition history for the current transition
 		GenerateDirtySubStateMachineTasks(stateMachineRegistry *hsm.Registry) error
 	}
 
@@ -296,29 +296,25 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	stateMachineRegistry *hsm.Registry,
 ) error {
 	tree := r.mutableState.HSM()
-	// Early return here to avoid accessing the transition history. It may be disabled via dynamic config.
-	outputs := tree.Outputs()
-	if len(outputs) == 0 {
-		return nil
-	}
-	transitionHistory := r.mutableState.GetExecutionInfo().TransitionHistory
-	versionedTransition := transitionHistory[len(transitionHistory)-1]
-	for _, pao := range outputs {
+	for _, pao := range tree.Outputs() {
 		node, err := tree.Child(pao.Path)
 		if err != nil {
 			return err
 		}
 		for _, output := range pao.Outputs {
 			for _, task := range output.Tasks {
+				// since this method is called after transition history is updated for the current transition,
+				// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
+				// to the last versioned transition in StateMachineRef
 				if err := generateSubStateMachineTask(
 					r.mutableState,
 					stateMachineRegistry,
 					node,
 					pao.Path,
+					output.TransitionCount,
 					task,
-					versionedTransition,
 				); err != nil {
-					return nil
+					return err
 				}
 			}
 		}
@@ -479,6 +475,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 		scheduleToStartTimeout = tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
 	}
 
+	isSpeculative := workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -487,9 +484,10 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
+		InMemory:            isSpeculative,
 	}
 
-	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+	if isSpeculative {
 		// If WT is still speculative, create task in in-memory task queue.
 		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
 	}
@@ -507,7 +505,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
 ) error {
-
 	workflowTask := r.mutableState.GetWorkflowTaskByID(
 		workflowTaskScheduledEventID,
 	)
@@ -515,6 +512,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
+	isSpeculative := workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -523,11 +521,13 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
-	}
-	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+		InMemory:            isSpeculative,
 	}
 
+	if isSpeculative {
+		// If WT is speculative, create task in in-memory task queue.
+		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+	}
 	r.mutableState.AddTasks(wttt)
 
 	return nil
@@ -552,14 +552,14 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
+func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error {
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		Version:             r.mutableState.GetCurrentVersion(),
-		VisibilityTimestamp: visibilityTimestamp,
-		EventID:             eventID,
-		Attempt:             nextAttempt,
+		Version:             activityInfo.GetVersion(),
+		VisibilityTimestamp: activityInfo.GetScheduledTime().AsTime(),
+		EventID:             activityInfo.GetScheduledEventId(),
+		Attempt:             activityInfo.GetAttempt(),
 	})
 	return nil
 }
@@ -695,18 +695,27 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 }
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
-	events []*historypb.HistoryEvent,
+	eventBatches [][]*historypb.HistoryEvent,
 ) error {
-	if len(events) == 0 {
+	if len(eventBatches) == 0 {
 		return nil
 	}
-
-	firstEvent := events[0]
-	lastEvent := events[len(events)-1]
-	if firstEvent.GetVersion() != lastEvent.GetVersion() {
-		return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
+	for _, events := range eventBatches {
+		if len(events) == 0 {
+			return serviceerror.NewInternal("TaskGeneratorImpl encountered empty event batch")
+		}
 	}
+
+	firstBatch := eventBatches[0]
+	firstEvent := firstBatch[0]
+	lastBatch := eventBatches[len(eventBatches)-1]
+	lastEvent := lastBatch[len(lastBatch)-1]
 	version := firstEvent.GetVersion()
+	for _, events := range eventBatches {
+		if events[0].GetVersion() != version || events[len(events)-1].GetVersion() != version {
+			return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
+		}
+	}
 
 	r.mutableState.AddTasks(&tasks.HistoryReplicationTask{
 		// TaskID, VisibilityTimestamp is set by shard
@@ -759,6 +768,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		r.mutableState.GetPendingActivityInfos(),
 		activityIDs,
 	)...)
+	if r.config.EnableNexus() {
+		replicationTasks = append(replicationTasks, &tasks.SyncHSMTask{
+			WorkflowKey: workflowKey,
+			// TaskID and VisibilityTimestamp are set by shard
+		})
+	}
 	return replicationTasks, executionInfo.StateTransitionCount, nil
 
 }
@@ -802,10 +817,10 @@ func generateSubStateMachineTask(
 	stateMachineRegistry *hsm.Registry,
 	node *hsm.Node,
 	subStateMachinePath []hsm.Key,
+	transitionCount int64,
 	task hsm.Task,
-	versionedTransition *persistencespb.VersionedTransition,
 ) error {
-	ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
+	ser, ok := stateMachineRegistry.TaskSerializer(task.Type())
 	if !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
 	}
@@ -821,19 +836,33 @@ func generateSubStateMachineTask(
 		}
 	}
 	// Only set transition count if a task is non-concurrent.
-	transitionCount := int64(0)
-	if !task.Concurrent() {
-		transitionCount = node.TransitionCount()
+	var machineLastUpdateVersionedTransition *persistencespb.VersionedTransition
+	if task.Concurrent() {
+		transitionCount = 0
+	} else {
+		// An already outdated concurrent task.
+		// This happens during replication when multiple event batches are applied in a single transaction.
+		if node.InternalRepr().TransitionCount != transitionCount {
+			return nil
+		}
+		machineLastUpdateVersionedTransition = node.InternalRepr().GetLastUpdateVersionedTransition()
+	}
+
+	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+	var currentVersionedTransition *persistencespb.VersionedTransition
+	if len(transitionHistory) > 0 {
+		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
 	}
 
 	taskInfo := &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path:                                 ppath,
-			MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
-			MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
+			MutableStateVersionedTransition:      currentVersionedTransition,
+			MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
+			MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
 			MachineTransitionCount:               transitionCount,
 		},
-		Type: task.Type().ID,
+		Type: task.Type(),
 		Data: data,
 	}
 	switch kind := task.Kind().(type) {

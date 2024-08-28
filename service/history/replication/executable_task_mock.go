@@ -34,6 +34,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	repication "go.temporal.io/server/api/replication/v1"
 	backoff "go.temporal.io/server/common/backoff"
 	definition "go.temporal.io/server/common/definition"
 	serviceerror "go.temporal.io/server/common/serviceerror"
@@ -157,6 +158,20 @@ func (mr *MockExecutableTaskMockRecorder) IsRetryableError(err interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockExecutableTask)(nil).IsRetryableError), err)
 }
 
+// MarkPoisonPill mocks base method.
+func (m *MockExecutableTask) MarkPoisonPill() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkPoisonPill")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkPoisonPill indicates an expected call of MarkPoisonPill.
+func (mr *MockExecutableTaskMockRecorder) MarkPoisonPill() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPoisonPill", reflect.TypeOf((*MockExecutableTask)(nil).MarkPoisonPill))
+}
+
 // Nack mocks base method.
 func (m *MockExecutableTask) Nack(err error) {
 	m.ctrl.T.Helper()
@@ -167,6 +182,20 @@ func (m *MockExecutableTask) Nack(err error) {
 func (mr *MockExecutableTaskMockRecorder) Nack(err interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockExecutableTask)(nil).Nack), err)
+}
+
+// ReplicationTask mocks base method.
+func (m *MockExecutableTask) ReplicationTask() *repication.ReplicationTask {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicationTask")
+	ret0, _ := ret[0].(*repication.ReplicationTask)
+	return ret0
+}
+
+// ReplicationTask indicates an expected call of ReplicationTask.
+func (mr *MockExecutableTaskMockRecorder) ReplicationTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicationTask", reflect.TypeOf((*MockExecutableTask)(nil).ReplicationTask))
 }
 
 // Reschedule mocks base method.
@@ -236,6 +265,21 @@ func (m *MockExecutableTask) State() tasks.State {
 func (mr *MockExecutableTaskMockRecorder) State() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "State", reflect.TypeOf((*MockExecutableTask)(nil).State))
+}
+
+// SyncState mocks base method.
+func (m *MockExecutableTask) SyncState(ctx context.Context, remoteCluster string, syncStateErr *serviceerror.SyncState, remainingAttempt int) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncState", ctx, remoteCluster, syncStateErr, remainingAttempt)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncState indicates an expected call of SyncState.
+func (mr *MockExecutableTaskMockRecorder) SyncState(ctx, remoteCluster, syncStateErr, remainingAttempt interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncState", reflect.TypeOf((*MockExecutableTask)(nil).SyncState), ctx, remoteCluster, syncStateErr, remainingAttempt)
 }
 
 // TaskCreationTime mocks base method.

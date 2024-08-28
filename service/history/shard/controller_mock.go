@@ -32,8 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/server/common"
 	namespace "go.temporal.io/server/common/namespace"
+	pingable "go.temporal.io/server/common/pingable"
 )
 
 // MockController is a mock of Controller interface.
@@ -72,10 +72,10 @@ func (mr *MockControllerMockRecorder) CloseShardByID(shardID interface{}) *gomoc
 }
 
 // GetPingChecks mocks base method.
-func (m *MockController) GetPingChecks() []common.PingCheck {
+func (m *MockController) GetPingChecks() []pingable.Check {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPingChecks")
-	ret0, _ := ret[0].([]common.PingCheck)
+	ret0, _ := ret[0].([]pingable.Check)
 	return ret0
 }
 

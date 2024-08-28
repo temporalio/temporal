@@ -26,11 +26,11 @@ package payload
 
 import (
 	"bytes"
+	"maps"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/util"
-	"golang.org/x/exp/maps"
 )
 
 var (

@@ -36,11 +36,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
@@ -62,7 +61,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -99,7 +98,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -151,7 +150,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -161,7 +160,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	// start with 2mb limit
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.HistorySizeSuggestContinueAsNew, 2*1024*1024)
+	s.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 2*1024*1024)
 
 	// workflow logic
 	stage := 0
@@ -246,7 +245,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -279,7 +278,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 
 	// change the dynamic config so that SuggestContinueAsNew should now be false. the current
 	// workflow task should still see true, but the next one will see false.
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
+	s.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
 
 	// stage 4
 	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
@@ -354,7 +353,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -366,7 +365,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		if !continueAsNewAndSignal {
 			continueAsNewAndSignal = true
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
-			_, err := s.engine.SignalWorkflowExecution(NewContext(),
+			_, err := s.client.SignalWorkflowExecution(NewContext(),
 				&workflowservice.SignalWorkflowExecutionRequest{
 					Namespace: s.namespace,
 					WorkflowExecution: &commonpb.WorkflowExecution{
@@ -400,7 +399,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,

@@ -34,10 +34,9 @@ import (
 	filterpb "go.temporal.io/api/filter/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/payloads"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/common/payloads"
 )
 
 func (s *FunctionalSuite) TestVisibility() {
@@ -62,7 +61,7 @@ func (s *FunctionalSuite) TestVisibility() {
 		Identity:            identity,
 	}
 
-	startResponse, err0 := s.engine.StartWorkflowExecution(NewContext(), startRequest)
+	startResponse, err0 := s.client.StartWorkflowExecution(NewContext(), startRequest)
 	s.NoError(err0)
 
 	// Now complete one of the executions
@@ -76,7 +75,7 @@ func (s *FunctionalSuite) TestVisibility() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -93,7 +92,7 @@ func (s *FunctionalSuite) TestVisibility() {
 	var nextToken []byte
 	historyEventFilterType := enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	for {
-		historyResponse, historyErr := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, historyErr := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: startRequest.Namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: startRequest.WorkflowId,
@@ -123,7 +122,7 @@ func (s *FunctionalSuite) TestVisibility() {
 		Identity:            identity,
 	}
 
-	_, err2 := s.engine.StartWorkflowExecution(NewContext(), startRequest)
+	_, err2 := s.client.StartWorkflowExecution(NewContext(), startRequest)
 	s.NoError(err2)
 
 	startFilter := &filterpb.StartTimeFilter{}
@@ -136,7 +135,7 @@ func (s *FunctionalSuite) TestVisibility() {
 	var historyLength int64
 	s.Eventually(
 		func() bool {
-			resp, err3 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			resp, err3 := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 				Namespace:       s.namespace,
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
@@ -164,7 +163,7 @@ func (s *FunctionalSuite) TestVisibility() {
 
 	s.Eventually(
 		func() bool {
-			resp, err4 := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			resp, err4 := s.client.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 				Namespace:       s.namespace,
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,

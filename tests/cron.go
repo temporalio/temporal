@@ -41,15 +41,13 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/payloads"
-
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
@@ -77,7 +75,7 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 		},
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -112,7 +110,7 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -175,7 +173,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	}
 
 	startWorkflowTS := time.Now().UTC()
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -219,7 +217,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -235,7 +233,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	// Sleep some time before checking the open executions.
 	// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
 	time.Sleep(2 * time.Second)
-	resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+	resp, err := s.client.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: startFilter,
@@ -265,7 +263,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 
 	s.Equal(3, len(executions))
 
-	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, terminateErr := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -298,7 +296,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
-		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+		resp, err := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
@@ -314,7 +312,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 		time.Sleep(200 * time.Millisecond)
 	}
 	s.NotNil(closedExecutions)
-	dweResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	dweResponse, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -347,6 +345,15 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 			(expectedBackoff - executionTimeDiff).Round(time.Second).Seconds(),
 			targetBackoffDuration.Seconds())
 		lastExecution = executionInfo
+
+		// TODO: Remove the describeWorkflowExecution call when firstRunID in WorkflowExecutionInfo
+		// is populated by Visibility api as well.
+		dweResponse, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			Execution: executionInfo.GetExecution(),
+		})
+		s.NoError(err)
+		s.Equal(we.RunId, dweResponse.WorkflowExecutionInfo.GetFirstRunId())
 	}
 }
 

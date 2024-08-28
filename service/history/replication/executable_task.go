@@ -33,9 +33,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/service/history/shard"
-
 	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -99,6 +98,14 @@ type (
 			ctx context.Context,
 			namespaceID string,
 		) (string, bool, error)
+		SyncState(
+			ctx context.Context,
+			remoteCluster string,
+			syncStateErr *serviceerrors.SyncState,
+			remainingAttempt int,
+		) (bool, error)
+		ReplicationTask() *replicationspb.ReplicationTask
+		MarkPoisonPill() error
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -110,11 +117,13 @@ type (
 		taskReceivedTime  time.Time
 		sourceClusterName string
 		taskPriority      enumsspb.TaskPriority
+		replicationTask   *replicationspb.ReplicationTask
 
 		// mutable data
-		taskState int32
-		attempt   int32
-		namespace atomic.Value
+		taskState              int32
+		attempt                int32
+		namespace              atomic.Value
+		markPoisonPillAttempts int
 	}
 )
 
@@ -126,18 +135,20 @@ func NewExecutableTask(
 	taskReceivedTime time.Time,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
+	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
-		ProcessToolBox:    processToolBox,
-		taskID:            taskID,
-		metricsTag:        metricsTag,
-		taskCreationTime:  taskCreationTime,
-		taskReceivedTime:  taskReceivedTime,
-		sourceClusterName: sourceClusterName,
-		taskPriority:      priority,
-
-		taskState: taskStatePending,
-		attempt:   1,
+		ProcessToolBox:         processToolBox,
+		taskID:                 taskID,
+		metricsTag:             metricsTag,
+		taskCreationTime:       taskCreationTime,
+		taskReceivedTime:       taskReceivedTime,
+		sourceClusterName:      sourceClusterName,
+		taskPriority:           priority,
+		replicationTask:        replicationTask,
+		taskState:              taskStatePending,
+		attempt:                1,
+		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -151,6 +162,10 @@ func (e *ExecutableTaskImpl) TaskCreationTime() time.Time {
 
 func (e *ExecutableTaskImpl) SourceClusterName() string {
 	return e.sourceClusterName
+}
+
+func (e *ExecutableTaskImpl) ReplicationTask() *replicationspb.ReplicationTask {
+	return e.replicationTask
 }
 
 func (e *ExecutableTaskImpl) Ack() {
@@ -236,9 +251,6 @@ func (e *ExecutableTaskImpl) Reschedule() {
 }
 
 func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
-	if shard.IsShardOwnershipLostError(err) {
-		return false
-	}
 	switch err.(type) {
 	case *serviceerror.InvalidArgument, *serviceerror.DataLoss:
 		return false
@@ -283,11 +295,13 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 			now.Sub(e.taskCreationTime),
 			metrics.OperationTag(e.metricsTag),
 			nsTag,
+			metrics.SourceClusterTag(e.sourceClusterName),
 		)
 		metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
 			e.taskReceivedTime.Sub(e.taskCreationTime),
 			metrics.OperationTag(e.metricsTag),
 			nsTag,
+			metrics.SourceClusterTag(e.sourceClusterName),
 		)
 	}
 	// TODO consider emit attempt metrics
@@ -322,18 +336,33 @@ func (e *ExecutableTaskImpl) Resend(
 			metrics.OperationTag(e.metricsTag+"Resend"),
 		)
 	}()
-
-	switch resendErr := e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
-		ctx,
-		remoteCluster,
-		namespace.ID(retryErr.NamespaceId),
-		retryErr.WorkflowId,
-		retryErr.RunId,
-		retryErr.StartEventId,
-		retryErr.StartEventVersion,
-		retryErr.EndEventId,
-		retryErr.EndEventVersion,
-	).(type) {
+	var resendErr error
+	if e.Config.EnableReplicateLocalGeneratedEvent() {
+		resendErr = e.ProcessToolBox.ResendHandler.ResendHistoryEvents(
+			ctx,
+			remoteCluster,
+			namespace.ID(retryErr.NamespaceId),
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
+		)
+	} else {
+		resendErr = e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			remoteCluster,
+			namespace.ID(retryErr.NamespaceId),
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
+		)
+	}
+	switch resendErr := resendErr.(type) {
 	case nil:
 		// no-op
 		return true, nil
@@ -400,6 +429,15 @@ func (e *ExecutableTaskImpl) Resend(
 	}
 }
 
+func (e *ExecutableTaskImpl) SyncState(
+	ctx context.Context,
+	remoteCluster string,
+	syncStateErr *serviceerrors.SyncState,
+	remainingAttempt int,
+) (bool, error) {
+	return false, serviceerror.NewUnimplemented("not implemented") // TODO
+}
+
 func (e *ExecutableTaskImpl) DeleteWorkflow(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
@@ -433,18 +471,34 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
+		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
+			if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
+				return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
+			}
+			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+			if err != nil {
+				return "", false, err
+			}
+		}
 	case *serviceerror.NamespaceNotFound:
 		if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
 			return "", false, nil
 		}
-
-		namespaceEntry, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+		_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
 			e.Logger.Info("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
 			return "", false, nil
 		}
 	default:
 		return "", false, err
+	}
+	namespaceEntry, err = e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		return "", false, err
+	}
+	// need to make sure ns in cache is up-to-date
+	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion() < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
+		return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
@@ -457,6 +511,43 @@ FilterLoop:
 		}
 	}
 	return namespaceEntry.Name().String(), shouldProcessTask, nil
+}
+
+func (e *ExecutableTaskImpl) MarkPoisonPill() error {
+	taskInfo := e.ReplicationTask().GetRawTaskInfo()
+
+	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
+		e.Logger.Error("MarkPoisonPill reached max attempts",
+			tag.SourceCluster(e.SourceClusterName()),
+			tag.ReplicationTask(taskInfo),
+		)
+		return nil
+	}
+	e.markPoisonPillAttempts++
+
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
+		e.replicationTask.RawTaskInfo.WorkflowId,
+	)
+	if err != nil {
+		return err
+	}
+
+	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+	e.Logger.Error("enqueue sync versioned transition replication task to DLQ",
+		tag.ShardID(shardContext.GetShardID()),
+		tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
+		tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
+		tag.WorkflowRunID(e.replicationTask.RawTaskInfo.NamespaceId),
+		tag.TaskID(e.taskID),
+		tag.SourceCluster(e.SourceClusterName()),
+		tag.ReplicationTask(taskInfo),
+	)
+
+	ctx, cancel := newTaskContext(e.replicationTask.RawTaskInfo.NamespaceId, e.Config.ReplicationTaskApplyTimeout())
+	defer cancel()
+
+	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
 }
 
 func newTaskContext(

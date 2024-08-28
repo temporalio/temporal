@@ -41,6 +41,8 @@ var ErrConcurrentTaskNotImplemented = errors.New("concurrent task not implemente
 // ErrNotRegistered is returned by a [Registry] when trying to get a type that is not registered.
 var ErrNotRegistered error = notRegisteredError{"not registered"}
 
+var ErrSerializationFailed = errors.New("serialization failed")
+
 // notRegisteredError is returned by a [Registry] when trying to get a type that is not registered.
 type notRegisteredError struct {
 	Message string
@@ -58,33 +60,33 @@ func (notRegisteredError) IsTerminalTaskError() bool {
 // Registry methods are **not** protected by a lock and all registration is expected to happen in a single thread on
 // startup for performance reasons.
 type Registry struct {
-	machines map[int32]StateMachineDefinition
-	tasks    map[int32]TaskSerializer
+	machines map[string]StateMachineDefinition
+	tasks    map[string]TaskSerializer
 	// The executor maps are mapped to any because of Go's limited generics support.
 	// The actual value is ImmediateExecutor[T].
-	immediateExecutors map[int32]any
+	immediateExecutors map[string]any
 	// The actual value is TimerExecutor[T].
-	activeTimerExecutors  map[int32]any
-	standbyTimerExecutors map[int32]any
-	events                map[enumspb.EventType]EventDefinition
+	timerExecutors  map[string]any
+	remoteExecutors map[string]remoteMethodDefinition
+	events          map[enumspb.EventType]EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
 func NewRegistry() *Registry {
 	return &Registry{
-		machines:              make(map[int32]StateMachineDefinition),
-		tasks:                 make(map[int32]TaskSerializer),
-		immediateExecutors:    make(map[int32]any),
-		activeTimerExecutors:  make(map[int32]any),
-		standbyTimerExecutors: make(map[int32]any),
-		events:                make(map[enumspb.EventType]EventDefinition),
+		machines:           make(map[string]StateMachineDefinition),
+		tasks:              make(map[string]TaskSerializer),
+		immediateExecutors: make(map[string]any),
+		timerExecutors:     make(map[string]any),
+		remoteExecutors:    make(map[string]remoteMethodDefinition),
+		events:             make(map[enumspb.EventType]EventDefinition),
 	}
 }
 
 // RegisterMachine registers a [StateMachineDefinition] by its type.
 // Returns an [ErrDuplicateRegistration] if the state machine type has already been registered.
 func (r *Registry) RegisterMachine(sm StateMachineDefinition) error {
-	t := sm.Type().ID
+	t := sm.Type()
 	if existing, ok := r.machines[t]; ok {
 		return fmt.Errorf("%w: state machine already registered for %v - %v", ErrDuplicateRegistration, sm.Type(), existing.Type())
 	}
@@ -93,14 +95,14 @@ func (r *Registry) RegisterMachine(sm StateMachineDefinition) error {
 }
 
 // Machine returns a [StateMachineDefinition] for a given type and a boolean indicating whether it was found.
-func (r *Registry) Machine(t int32) (def StateMachineDefinition, ok bool) {
+func (r *Registry) Machine(t string) (def StateMachineDefinition, ok bool) {
 	def, ok = r.machines[t]
 	return
 }
 
 // RegisterTaskSerializer registers a [TaskSerializer] for a given type.
 // Returns an [ErrDuplicateRegistration] if a serializer for this task type has already been registered.
-func (r *Registry) RegisterTaskSerializer(t int32, def TaskSerializer) error {
+func (r *Registry) RegisterTaskSerializer(t string, def TaskSerializer) error {
 	if exising, ok := r.tasks[t]; ok {
 		return fmt.Errorf("%w: task already registered for %v: %v", ErrDuplicateRegistration, t, exising)
 	}
@@ -109,25 +111,22 @@ func (r *Registry) RegisterTaskSerializer(t int32, def TaskSerializer) error {
 }
 
 // TaskSerializer returns a [TaskSerializer] for a given type and a boolean indicating whether it was found.
-func (r *Registry) TaskSerializer(t int32) (d TaskSerializer, ok bool) {
+func (r *Registry) TaskSerializer(t string) (d TaskSerializer, ok bool) {
 	d, ok = r.tasks[t]
 	return
 }
 
-// RegisterImmediateExecutor registers an active [ImmediateExecutor] for the given task type.
+// RegisterImmediateExecutor registers an [ImmediateExecutor] for the given task type.
 // Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
-func RegisterImmediateExecutor[T Task](
-	r *Registry,
-	executor ImmediateExecutor[T],
-) error {
+func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T]) error {
 	var task T
 	taskType := task.Type()
 	// The executors are registered in pairs, so only need to check in one map.
-	if existing, ok := r.immediateExecutors[taskType.ID]; ok {
+	if existing, ok := r.immediateExecutors[taskType]; ok {
 		return fmt.Errorf(
-			"%w: executor already registered for task type id %v: %v",
+			"%w: executor already registered for task type %v: %v",
 			ErrDuplicateRegistration,
-			taskType.ID,
+			taskType,
 			existing,
 		)
 	}
@@ -137,29 +136,45 @@ func RegisterImmediateExecutor[T Task](
 			return fmt.Errorf(
 				"%w: %q does not implement ConcurrentTask interface",
 				ErrConcurrentTaskNotImplemented,
-				taskType.Name,
+				taskType,
 			)
 		}
 	}
-	r.immediateExecutors[taskType.ID] = executor
+	r.immediateExecutors[taskType] = executor
 	return nil
 }
 
-// RegisterExecutors registers an active and a standby [ImmediateExecutor] for the given task type.
+// RegisterRemoteMethod registers an [RemoteExecutor] for the given remote method definition.
 // Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
-func RegisterTimerExecutors[T Task](
-	r *Registry,
-	activeExecutor TimerExecutor[T],
-	standbyExecutor TimerExecutor[T],
-) error {
+func RegisterRemoteMethod(r *Registry, method RemoteMethod, executor RemoteExecutor) error {
+	methodName := method.Name()
+	if existing, ok := r.remoteExecutors[methodName]; ok {
+		return fmt.Errorf(
+			"%w: executor already registered for method %v: %v",
+			ErrDuplicateRegistration,
+			methodName,
+			existing,
+		)
+	}
+
+	r.remoteExecutors[methodName] = remoteMethodDefinition{
+		method:   method,
+		executor: executor,
+	}
+	return nil
+}
+
+// RegisterTimerExecutor registers a [TimerExecutor] for the given task type.
+// Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
+func RegisterTimerExecutor[T Task](r *Registry, executor TimerExecutor[T]) error {
 	var task T
 	taskType := task.Type()
 	// The executors are registered in pairs, so only need to check in one map.
-	if existing, ok := r.activeTimerExecutors[taskType.ID]; ok {
+	if existing, ok := r.timerExecutors[taskType]; ok {
 		return fmt.Errorf(
-			"%w: executor already registered for task type id %v: %v",
+			"%w: executor already registered for task type %v: %v",
 			ErrDuplicateRegistration,
-			taskType.ID,
+			taskType,
 			existing,
 		)
 	}
@@ -168,24 +183,23 @@ func RegisterTimerExecutors[T Task](
 			return fmt.Errorf(
 				"%w: concurrent task type %q does not implement ConcurrentTask interface",
 				ErrConcurrentTaskNotImplemented,
-				taskType.Name,
+				taskType,
 			)
 		}
 	}
-	r.activeTimerExecutors[taskType.ID] = activeExecutor
-	r.standbyTimerExecutors[taskType.ID] = standbyExecutor
+	r.timerExecutors[taskType] = executor
 	return nil
 }
 
-// ExecuteActiveImmediateTask gets an [ImmediateExecutor] from the registry and invokes it.
+// ExecuteImmediateTask gets an [ImmediateExecutor] from the registry and invokes it.
 // Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
-func (r *Registry) ExecuteActiveImmediateTask(
+func (r *Registry) ExecuteImmediateTask(
 	ctx context.Context,
 	env Environment,
 	ref Ref,
 	task Task,
 ) error {
-	executor, ok := r.immediateExecutors[task.Type().ID]
+	executor, ok := r.immediateExecutors[task.Type()]
 	if !ok {
 		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
 	}
@@ -219,28 +233,46 @@ func (r *Registry) execute(
 	return nil
 }
 
-// ExecuteActiveTimerTask gets a [TimerExecutor] from the registry and invokes it.
+// ExecuteRemoteMethod gets an [RemoteExecutor] from the registry and invokes it.
 // Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
-func (r *Registry) ExecuteActiveTimerTask(
+func (r *Registry) ExecuteRemoteMethod(
+	ctx context.Context,
 	env Environment,
-	node *Node,
-	task Task,
-) error {
-	executor, ok := r.activeTimerExecutors[task.Type().ID]
+	ref Ref,
+	methodName string,
+	serializedInput []byte,
+) ([]byte, error) {
+	defn, ok := r.remoteExecutors[methodName]
 	if !ok {
-		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
+		return nil, fmt.Errorf("executor for remote method %v: %w", methodName, ErrNotRegistered)
 	}
-	return r.executeTimer(executor, env, node, task)
+
+	input, err := defn.method.DeserializeInput(serializedInput)
+	if err != nil {
+		return nil, fmt.Errorf("executor for remote method %v failed to deserialize input: %w", methodName, err)
+	}
+
+	output, err := defn.executor(ctx, env, ref, input)
+
+	if err != nil {
+		return nil, err
+	}
+
+	serializedOutput, err := defn.method.SerializeOutput(output)
+	if err != nil {
+		return nil, fmt.Errorf("executor for remote method %v failed to serialize output: %w", methodName, err)
+	}
+	return serializedOutput, nil
 }
 
-// ExecuteStandbyTimerTask gets a [TimerExecutor] from the registry and invokes it.
+// ExecuteTimerTask gets a [TimerExecutor] from the registry and invokes it.
 // Returns [ErrNotRegistered] if an executor is not registered for the given task's type.
-func (r *Registry) ExecuteStandbyTimerTask(
+func (r *Registry) ExecuteTimerTask(
 	env Environment,
 	node *Node,
 	task Task,
 ) error {
-	executor, ok := r.standbyTimerExecutors[task.Type().ID]
+	executor, ok := r.timerExecutors[task.Type()]
 	if !ok {
 		return fmt.Errorf("%w: executor for task type %v", ErrNotRegistered, task.Type())
 	}

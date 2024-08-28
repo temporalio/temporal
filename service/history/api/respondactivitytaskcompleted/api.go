@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -67,7 +68,6 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			token.NamespaceId,
 			token.WorkflowId,
@@ -140,14 +140,14 @@ func Invoke(
 	)
 
 	if err == nil && !activityStartedTime.IsZero() && !fabricateStartedEvent {
-		metrics.ActivityE2ELatency.With(shard.GetMetricsHandler()).Record(
-			time.Since(activityStartedTime),
-			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
-			metrics.NamespaceTag(namespace.String()),
-			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
-			metrics.TaskQueueTag(taskQueue),
-		)
+		metrics.ActivityE2ELatency.With(
+			workflow.GetPerTaskQueueFamilyScope(
+				shard.GetMetricsHandler(), namespace, taskQueue, shard.GetConfig(),
+				metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
+				metrics.WorkflowTypeTag(workflowTypeName),
+				metrics.ActivityTypeTag(token.ActivityType),
+			),
+		).Record(time.Since(activityStartedTime))
 	}
 	return &historyservice.RespondActivityTaskCompletedResponse{}, err
 }

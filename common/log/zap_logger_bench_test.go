@@ -27,9 +27,8 @@ package log
 import (
 	"testing"
 
-	"go.uber.org/zap"
-
 	"go.temporal.io/server/common/log/tag"
+	"go.uber.org/zap"
 )
 
 /**

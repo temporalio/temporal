@@ -36,15 +36,13 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"google.golang.org/protobuf/types/known/anypb"
-
-	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/service/history/consts"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	. "go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestNewRegistry(t *testing.T) {
@@ -614,7 +612,8 @@ func TestClear(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, err := upd.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
+		_, err := upd.WaitLifecycleStage(
+			context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 2*time.Second)
 		require.Equal(t, update.WorkflowUpdateAbortedErr, err)
 	}()
 

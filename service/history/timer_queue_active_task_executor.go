@@ -33,8 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -58,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -84,6 +83,7 @@ func newTimerQueueActiveTaskExecutor(
 			logger,
 			metricProvider,
 			config,
+			true,
 		),
 	}
 }
@@ -135,9 +135,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	case *tasks.StateMachineTimerTask:
-		err = t.executeStateMachineTimerTask(ctx, task, func(node *hsm.Node, task hsm.Task) error {
-			return t.shardContext.StateMachineRegistry().ExecuteActiveTimerTask(t, node, task)
-		})
+		err = t.executeStateMachineTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -338,12 +336,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		return nil
 	}
 
+	var operationMetricsTag string
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		// Check if mutable state still points to this task.
 		// Mutable state can lost speculative WT or even has another one there if, for example, workflow was evicted from cache.
 		if !mutableState.CheckSpeculativeWorkflowTaskTimeoutTask(task) {
 			return nil
 		}
+		operationMetricsTag = metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout
 	} else {
 		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
 		if err != nil {
@@ -353,6 +353,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		if workflowTask.Attempt != task.ScheduleAttempt {
 			return nil
 		}
+		operationMetricsTag = metrics.TimerActiveTaskWorkflowTaskTimeoutScope
 	}
 
 	scheduleWorkflowTask := false
@@ -360,7 +361,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
-			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
+			operationMetricsTag,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
 		if _, err := mutableState.AddWorkflowTaskTimedOutEvent(
@@ -378,7 +379,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
-			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
+			operationMetricsTag,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		)
 		_, err := mutableState.AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask)
@@ -612,7 +613,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState := workflow.NewMutableStateInChain(
+	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
 		t.shardContext.GetLogger(),
@@ -622,6 +623,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		t.shardContext.GetTimeSource().Now(),
 		mutableState,
 	)
+	if err != nil {
+		return err
+	}
+
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		mutableState,
@@ -709,6 +714,52 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 
 	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
 	return nil
+}
+
+func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
+	ctx context.Context,
+	task *tasks.StateMachineTimerTask,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return nil
+	}
+
+	processedTimers, err := t.executeStateMachineTimers(
+		ctx,
+		wfCtx,
+		ms,
+		func(node *hsm.Node, task hsm.Task) error {
+			return t.shardContext.StateMachineRegistry().ExecuteTimerTask(t, node, task)
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// We haven't done any work, return without committing.
+	if processedTimers == 0 {
+		return nil
+	}
+
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
+		// closed workflow.
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
+	}
+	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
 
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(

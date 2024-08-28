@@ -36,8 +36,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -45,11 +43,13 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/internal/goro"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var rpsInf = math.Inf(1)
@@ -119,9 +119,13 @@ func TestAddTasksRate(t *testing.T) {
 	// mini windows will have the following format : (start time, end time)
 	// (0 - 4), (5 - 9), (10 - 14), (15 - 19), (20 - 24), (25 - 29), (30 - 34), ...
 
-	// tasks should be placed in the first mini-window
-	timeSource.Advance(1 * time.Second) // time: 1 second
+	// rate should be zero when no time is passed
+	require.Equal(t, float32(0), tr.rate()) // time: 0
 	trackTasksHelper(tr, 100)
+	require.Equal(t, float32(0), tr.rate()) // still zero because no time is passed
+
+	// tasks should be placed in the first mini-window
+	timeSource.Advance(1 * time.Second)                  // time: 1 second
 	require.InEpsilon(t, float32(100), tr.rate(), 0.001) // 100 tasks added in 1 second = 100 / 1 = 100
 
 	// tasks should be placed in the second mini-window with 6 total seconds elapsed
@@ -273,6 +277,7 @@ func createTestTaskQueueManagerWithConfig(
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(controller, nsName)
 	me := createTestMatchingEngine(controller, testOpts.config, testOpts.matchingClientMock, registry)
+	me.metricsHandler = metricstest.NewCaptureHandler()
 	partition := testOpts.dbq.Partition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, nsName)
 	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, partition, tqConfig, me.logger, me.namespaceRegistry)
@@ -287,14 +292,14 @@ func createTestTaskQueueManagerWithConfig(
 
 func createTestTaskQueuePartitionManager(ns *namespace.Namespace, partition tqid.Partition, tqConfig *taskQueueConfig, me *matchingEngineImpl, userDataManager userDataManager) *taskQueuePartitionManagerImpl {
 	pm := &taskQueuePartitionManagerImpl{
-		engine:               me,
-		partition:            partition,
-		config:               tqConfig,
-		ns:                   ns,
-		logger:               me.logger,
-		matchingClient:       me.matchingRawClient,
-		taggedMetricsHandler: me.metricsHandler,
-		userDataManager:      userDataManager,
+		engine:          me,
+		partition:       partition,
+		config:          tqConfig,
+		ns:              ns,
+		logger:          me.logger,
+		matchingClient:  me.matchingRawClient,
+		metricsHandler:  me.metricsHandler,
+		userDataManager: userDataManager,
 	}
 
 	me.partitions[partition.Key()] = pm

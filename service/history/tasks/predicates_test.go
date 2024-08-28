@@ -25,17 +25,17 @@
 package tasks
 
 import (
+	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/rand"
-	"golang.org/x/exp/slices"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/predicates"
 )
 
@@ -183,35 +183,106 @@ func (s *predicatesSuite) TestDestinationPredicate_Equals() {
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
-func (s *predicatesSuite) TestStateMachineTaskTypePredicate_Test() {
-	types := []int32{1, 2}
+func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Test() {
+	groups := []string{"1", "2"}
 
-	p := NewStateMachineTaskTypePredicate(types)
-	for _, t := range types {
+	p := NewOutboundTaskGroupPredicate(groups)
+	for _, t := range groups {
 		mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: t}}}
 		s.True(p.Test(mockTask))
 	}
 
-	mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: 3}}}
+	mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: "3"}}}
 	s.False(p.Test(mockTask))
 }
 
-func (s *predicatesSuite) TestStateMachineTaskTypePredicate_Equals() {
-	types := []int32{1, 2}
+func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Equals() {
+	groups := []string{"1", "2"}
 
-	p := NewStateMachineTaskTypePredicate(types)
+	p := NewOutboundTaskGroupPredicate(groups)
 
 	s.True(p.Equals(p))
-	s.True(p.Equals(NewStateMachineTaskTypePredicate(types)))
+	s.True(p.Equals(NewOutboundTaskGroupPredicate(groups)))
 	rand.Shuffle(
-		len(types),
+		len(groups),
 		func(i, j int) {
-			types[i], types[j] = types[j], types[i]
+			groups[i], groups[j] = groups[j], groups[i]
 		},
 	)
-	s.True(p.Equals(NewStateMachineTaskTypePredicate(types)))
+	s.True(p.Equals(NewOutboundTaskGroupPredicate(groups)))
 
-	s.False(p.Equals(NewStateMachineTaskTypePredicate([]int32{3, 4})))
+	s.False(p.Equals(NewOutboundTaskGroupPredicate([]string{"3", "4"})))
+	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(predicates.Universal[Task]()))
+}
+
+func (s *predicatesSuite) TestOutboundTaskPredicate_Test() {
+	groups := []TaskGroupNamespaceIDAndDestination{
+		{"g1", "n1", "d1"},
+		{"g2", "n2", "d2"},
+	}
+
+	p := NewOutboundTaskPredicate(groups)
+	for _, g := range groups {
+		mockTask := &StateMachineOutboundTask{
+			StateMachineTask: StateMachineTask{
+				Info:        &persistence.StateMachineTaskInfo{Type: g.TaskGroup},
+				WorkflowKey: definition.NewWorkflowKey(g.NamespaceID, "", ""),
+			},
+			Destination: g.Destination,
+		}
+		s.True(p.Test(mockTask))
+	}
+
+	// Verify any field mismatch fails Test().
+	mockTask := &StateMachineOutboundTask{
+		StateMachineTask: StateMachineTask{
+			Info:        &persistence.StateMachineTaskInfo{Type: "g1"},
+			WorkflowKey: definition.NewWorkflowKey("n1", "", ""),
+		},
+		Destination: "d3",
+	}
+	s.False(p.Test(mockTask))
+	mockTask = &StateMachineOutboundTask{
+		StateMachineTask: StateMachineTask{
+			Info:        &persistence.StateMachineTaskInfo{Type: "g3"},
+			WorkflowKey: definition.NewWorkflowKey("n1", "", ""),
+		},
+		Destination: "d1",
+	}
+	s.False(p.Test(mockTask))
+	mockTask = &StateMachineOutboundTask{
+		StateMachineTask: StateMachineTask{
+			Info:        &persistence.StateMachineTaskInfo{Type: "g1"},
+			WorkflowKey: definition.NewWorkflowKey("n3", "", ""),
+		},
+		Destination: "d1",
+	}
+	s.False(p.Test(mockTask))
+}
+
+func (s *predicatesSuite) TestOutboundTaskPredicate_Equals() {
+	groups := []TaskGroupNamespaceIDAndDestination{
+		{"g1", "n1", "d1"},
+		{"g2", "n2", "d2"},
+	}
+
+	p := NewOutboundTaskPredicate(groups)
+
+	s.True(p.Equals(p))
+	s.True(p.Equals(NewOutboundTaskPredicate(groups)))
+	rand.Shuffle(
+		len(groups),
+		func(i, j int) {
+			groups[i], groups[j] = groups[j], groups[i]
+		},
+	)
+	s.True(p.Equals(NewOutboundTaskPredicate(groups)))
+
+	s.False(p.Equals(NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+		{"g1", "n1", "d3"},
+		{"g2", "n2", "d4"},
+	})))
 	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
@@ -247,6 +318,21 @@ func (s *predicatesSuite) TestAndPredicates() {
 		{
 			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
 			predicateB:     NewNamespacePredicate([]string{"namespace3"}),
+			expectedResult: predicates.Empty[Task](),
+		},
+		{
+			predicateA:     NewOutboundTaskGroupPredicate([]string{"g1", "g2"}),
+			predicateB:     NewOutboundTaskGroupPredicate([]string{"g3"}),
+			expectedResult: predicates.Empty[Task](),
+		},
+		{
+			predicateA: NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+				{"g1", "n1", "d1"},
+				{"g2", "n2", "d2"},
+			}),
+			predicateB: NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+				{"g3", "n3", "d3"},
+			}),
 			expectedResult: predicates.Empty[Task](),
 		},
 		{
@@ -298,9 +384,23 @@ func (s *predicatesSuite) TestOrPredicates() {
 			expectedResult: NewDestinationPredicate([]string{"dest1", "dest2", "dest3"}),
 		},
 		{
-			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
-			predicateB:     NewNamespacePredicate([]string{"namespace3"}),
-			expectedResult: NewNamespacePredicate([]string{"namespace1", "namespace2", "namespace3"}),
+			predicateA:     NewOutboundTaskGroupPredicate([]string{"g1", "g2"}),
+			predicateB:     NewOutboundTaskGroupPredicate([]string{"g2", "g3"}),
+			expectedResult: NewOutboundTaskGroupPredicate([]string{"g1", "g2", "g3"}),
+		},
+		{
+			predicateA: NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+				{"g1", "n1", "d1"},
+				{"g2", "n2", "d2"},
+			}),
+			predicateB: NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+				{"g3", "n3", "d3"},
+			}),
+			expectedResult: NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+				{"g1", "n1", "d1"},
+				{"g2", "n2", "d2"},
+				{"g3", "n3", "d3"},
+			}),
 		},
 		{
 			predicateA: NewNamespacePredicate([]string{"namespace1"}),

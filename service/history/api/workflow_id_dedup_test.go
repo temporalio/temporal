@@ -29,12 +29,14 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -66,6 +68,7 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 	}
 
 	config := tests.NewDynamicConfig()
+
 	mockShard := shard.NewTestContextWithTimeSource(
 		gomock.NewController(t),
 		&persistencespb.ShardInfo{RangeId: 1},
@@ -73,12 +76,20 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 		timeSource,
 	)
 
-	for _, tc := range testCases {
-		config.WorkflowIdReuseMinimalInterval = dynamicconfig.GetDurationPropertyFn(tc.gracePeriod)
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{},
+		&persistencespb.NamespaceConfig{},
+		"target_cluster",
+	)
 
-		_, err := resolveDuplicateWorkflowStart(
-			mockShard, tc.currentWorkflowStart, "newRunID", "workflowID",
-		)
+	for _, tc := range testCases {
+		config.WorkflowIdReuseMinimalInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.gracePeriod)
+		workflowKey := definition.WorkflowKey{
+			NamespaceID: uuid.NewUUID().String(),
+			WorkflowID:  "workflowID",
+			RunID:       "oldRunID",
+		}
+		_, err := resolveDuplicateWorkflowStart(mockShard, tc.currentWorkflowStart, workflowKey, namespaceEntry, "newRunID")
 
 		if tc.expectError {
 			assert.Error(t, err)

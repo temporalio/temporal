@@ -25,6 +25,7 @@ package nexusoperations_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -34,11 +35,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/persistence/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/workflow"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -66,32 +66,20 @@ func newRegistry(t *testing.T) *hsm.Registry {
 	return reg
 }
 
-func newRoot(t *testing.T, backend *nodeBackend) *hsm.Node {
+func newRoot(t *testing.T, backend *hsmtest.NodeBackend) *hsm.Node {
 	reg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, root{}, make(map[int32]*persistence.StateMachineMap), backend)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, root{}, make(map[string]*persistence.StateMachineMap), backend)
 	require.NoError(t, err)
 	return root
 }
 
-func newOperationNode(t *testing.T, backend *nodeBackend, schedTime time.Time, timeout time.Duration) *hsm.Node {
+func newOperationNode(t *testing.T, backend *hsmtest.NodeBackend, event *historypb.HistoryEvent) *hsm.Node {
 	root := newRoot(t, backend)
-	event := &historypb.HistoryEvent{
-		EventId:   1,
-		EventTime: timestamppb.New(schedTime),
-		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-				Endpoint:               "endpoint",
-				Service:                "service",
-				Operation:              "operation",
-				ScheduleToCloseTimeout: durationpb.New(timeout),
-			},
-		},
-	}
 	token, err := hsm.GenerateEventLoadToken(event)
 	require.NoError(t, err)
-	node, err := nexusoperations.AddChild(root, "test-id", event, token, false)
+	node, err := nexusoperations.AddChild(root, fmt.Sprintf("%d", event.EventId), event, token, false)
 	require.NoError(t, err)
 	return node
 }
@@ -102,43 +90,27 @@ func (root) IsWorkflowExecutionRunning() bool {
 	return true
 }
 
-type nodeBackend struct {
-	events []*historypb.HistoryEvent
-}
-
-func (n *nodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
-	event := &historypb.HistoryEvent{EventType: t, EventId: 2}
-	setAttributes(event)
-	n.events = append(n.events, event)
-	return event
-}
-
-func (n *nodeBackend) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
-	token := &tokenspb.HistoryEventRef{
-		EventId:      event.EventId,
-		EventBatchId: event.EventId,
-	}
-	return proto.Marshal(token)
-}
-
-func (n *nodeBackend) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historypb.HistoryEvent {
 	conv := converter.GetDefaultDataConverter()
 	payload, err := conv.ToPayload("input")
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	event := &historypb.HistoryEvent{
+	return &historypb.HistoryEvent{
 		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-		EventId:   2,
+		EventId:   1,
+		EventTime: timestamppb.New(schedTime),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-				Service:   "service",
-				Operation: "operation",
-				Input:     payload,
-				RequestId: uuid.NewString(),
+				EndpointId:             "endpoint-id",
+				Endpoint:               "endpoint",
+				Service:                "service",
+				Operation:              "operation",
+				Input:                  payload,
+				RequestId:              uuid.NewString(),
+				ScheduleToCloseTimeout: durationpb.New(timeout),
 			},
 		},
 	}
-	return event, nil
 }

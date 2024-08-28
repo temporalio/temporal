@@ -28,13 +28,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/service/history/hsm"
 )
 
 func TestValidTransitions(t *testing.T) {
@@ -42,16 +41,14 @@ func TestValidTransitions(t *testing.T) {
 	currentTime := time.Now().UTC()
 	callback := callbacks.Callback{
 		&persistencespb.CallbackInfo{
-			PublicInfo: &workflowpb.CallbackInfo{
-				Callback: &commonpb.Callback{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://address:666/path/to/callback?query=string",
-						},
+			Callback: &persistencespb.Callback{
+				Variant: &persistencespb.Callback_Nexus_{
+					Nexus: &persistencespb.Callback_Nexus{
+						Url: "http://address:666/path/to/callback?query=string",
 					},
 				},
-				State: enumspb.CALLBACK_STATE_SCHEDULED,
 			},
+			State: enumsspb.CALLBACK_STATE_SCHEDULED,
 		},
 	}
 	// AttemptFailed
@@ -63,30 +60,30 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated
-	require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, callback.PublicInfo.State)
-	require.Equal(t, int32(1), callback.PublicInfo.Attempt)
-	require.Equal(t, "test", callback.PublicInfo.LastAttemptFailure.Message)
-	require.False(t, callback.PublicInfo.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
-	require.Equal(t, currentTime, callback.PublicInfo.LastAttemptCompleteTime.AsTime())
-	dt := currentTime.Add(time.Second).Sub(callback.PublicInfo.NextAttemptScheduleTime.AsTime())
+	require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, callback.State())
+	require.Equal(t, int32(1), callback.Attempt)
+	require.Equal(t, "test", callback.LastAttemptFailure.Message)
+	require.False(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
+	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
+	dt := currentTime.Add(time.Second).Sub(callback.NextAttemptScheduleTime.AsTime())
 	require.True(t, dt < time.Millisecond*200)
 
 	// Assert backoff task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	boTask := out.Tasks[0].(callbacks.BackoffTask)
-	require.Equal(t, callback.PublicInfo.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
+	require.Equal(t, callback.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
 
 	// Rescheduled
 	out, err = callbacks.TransitionRescheduled.Apply(callback, callbacks.EventRescheduled{})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, enumspb.CALLBACK_STATE_SCHEDULED, callback.PublicInfo.State)
-	require.Equal(t, int32(1), callback.PublicInfo.Attempt)
-	require.Equal(t, "test", callback.PublicInfo.LastAttemptFailure.Message)
+	require.Equal(t, enumsspb.CALLBACK_STATE_SCHEDULED, callback.State())
+	require.Equal(t, int32(1), callback.Attempt)
+	require.Equal(t, "test", callback.LastAttemptFailure.Message)
 	// Remains unmodified
-	require.Equal(t, currentTime, callback.PublicInfo.LastAttemptCompleteTime.AsTime())
-	require.Nil(t, callback.PublicInfo.NextAttemptScheduleTime)
+	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
+	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert callback task is generated
 	require.Equal(t, 1, len(out.Tasks))
@@ -102,11 +99,11 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callback.PublicInfo.State)
-	require.Equal(t, int32(2), callback.PublicInfo.Attempt)
-	require.Nil(t, callback.PublicInfo.LastAttemptFailure)
-	require.Equal(t, currentTime, callback.PublicInfo.LastAttemptCompleteTime.AsTime())
-	require.Nil(t, callback.PublicInfo.NextAttemptScheduleTime)
+	require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, callback.State())
+	require.Equal(t, int32(2), callback.Attempt)
+	require.Nil(t, callback.LastAttemptFailure)
+	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
+	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert no additional tasks are generated
 	require.Equal(t, 0, len(out.Tasks))
@@ -116,18 +113,104 @@ func TestValidTransitions(t *testing.T) {
 	// Increment the time to ensure it's updated in the transition
 	currentTime = currentTime.Add(time.Second)
 
-	// Failed
+	// failed
 	out, err = callbacks.TransitionFailed.Apply(callback, callbacks.EventFailed{Time: currentTime, Err: fmt.Errorf("failed")})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, enumspb.CALLBACK_STATE_FAILED, callback.PublicInfo.State)
-	require.Equal(t, int32(2), callback.PublicInfo.Attempt)
-	require.Equal(t, "failed", callback.PublicInfo.LastAttemptFailure.Message)
-	require.True(t, callback.PublicInfo.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
-	require.Equal(t, currentTime, callback.PublicInfo.LastAttemptCompleteTime.AsTime())
-	require.Nil(t, callback.PublicInfo.NextAttemptScheduleTime)
+	require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, callback.State())
+	require.Equal(t, int32(2), callback.Attempt)
+	require.Equal(t, "failed", callback.LastAttemptFailure.Message)
+	require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
+	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
+	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert no additional tasks are generated
 	require.Equal(t, 0, len(out.Tasks))
+}
+
+func TestCompareState(t *testing.T) {
+	reg := hsm.NewRegistry()
+	require.NoError(t, callbacks.RegisterStateMachine(reg))
+	def, ok := reg.Machine(callbacks.StateMachineType)
+	require.True(t, ok)
+
+	cases := []struct {
+		name                 string
+		s1, s2               enumsspb.CallbackState
+		attempts1, attempts2 int32
+		sign                 int
+		expectError          bool
+	}{
+		{
+			name: "standby < scheduled",
+			s1:   enumsspb.CALLBACK_STATE_STANDBY,
+			s2:   enumsspb.CALLBACK_STATE_SCHEDULED,
+			sign: -1,
+		},
+		{
+			name:      "scheduled = scheduled",
+			s1:        enumsspb.CALLBACK_STATE_SCHEDULED,
+			s2:        enumsspb.CALLBACK_STATE_SCHEDULED,
+			attempts1: 2,
+			attempts2: 2,
+			sign:      0,
+		},
+		{
+			name:        "succeeded not comparable to failed",
+			s1:          enumsspb.CALLBACK_STATE_SUCCEEDED,
+			s2:          enumsspb.CALLBACK_STATE_FAILED,
+			expectError: true,
+		},
+		{
+			name: "backing off < failed",
+			s1:   enumsspb.CALLBACK_STATE_BACKING_OFF,
+			s2:   enumsspb.CALLBACK_STATE_FAILED,
+			sign: -1,
+		},
+		{
+			name: "scheduled > backing off",
+			s1:   enumsspb.CALLBACK_STATE_SCHEDULED,
+			s2:   enumsspb.CALLBACK_STATE_BACKING_OFF,
+			sign: 1,
+		},
+		{
+			name:      "backing off < scheduled with greater attempt",
+			s1:        enumsspb.CALLBACK_STATE_BACKING_OFF,
+			s2:        enumsspb.CALLBACK_STATE_SCHEDULED,
+			attempts2: 1,
+			sign:      -1,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			s1 := callbacks.Callback{
+				CallbackInfo: &persistencespb.CallbackInfo{
+					State:   tc.s1,
+					Attempt: tc.attempts1,
+				},
+			}
+			s2 := callbacks.Callback{
+				CallbackInfo: &persistencespb.CallbackInfo{
+					State:   tc.s2,
+					Attempt: tc.attempts2,
+				},
+			}
+			res, err := def.CompareState(s1, s2)
+			if tc.expectError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if tc.sign == 0 {
+				require.Equal(t, 0, res)
+			} else if tc.sign > 0 {
+				require.Greater(t, res, 0)
+			} else {
+				require.Greater(t, 0, res)
+			}
+		})
+	}
 }

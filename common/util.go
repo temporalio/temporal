@@ -39,11 +39,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/encoding/prototext"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -53,6 +48,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protopath"
+	"google.golang.org/protobuf/reflect/protorange"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -170,16 +172,6 @@ func BlockWithTimeout(fn func(), timeout time.Duration) bool {
 		return true
 	case <-timer.C:
 		return false
-	}
-}
-
-// InterruptibleSleep is like time.Sleep but can be interrupted by a context.
-func InterruptibleSleep(ctx context.Context, timeout time.Duration) {
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
 	}
 }
 
@@ -709,4 +701,15 @@ func ValidateUTF8String(fieldName string, strValue string) error {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%s %v is not a valid UTF-8 string", fieldName, strValue))
 	}
 	return nil
+}
+
+// DiscardUnknownProto discards unknown fields in a proto message.
+func DiscardUnknownProto(m proto.Message) error {
+	return protorange.Range(m.ProtoReflect(), func(values protopath.Values) error {
+		m, ok := values.Index(-1).Value.Interface().(protoreflect.Message)
+		if ok && len(m.GetUnknown()) > 0 {
+			m.SetUnknown(nil)
+		}
+		return nil
+	})
 }

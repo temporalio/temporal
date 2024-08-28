@@ -31,8 +31,6 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"gopkg.in/yaml.v3"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -338,6 +337,8 @@ type (
 		User string `yaml:"user"`
 		// Password is the cassandra password used for authentication by gocql client
 		Password string `yaml:"password"`
+		// AllowedAuthenticators is the optional list of authenticators the gocql client checks before approving the challenge request from the server.
+		AllowedAuthenticators []string `yaml:"allowedAuthenticators"`
 		// keyspace is the cassandra keyspace
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
 		// Datacenter is the data center filter arg for cassandra
@@ -519,6 +520,9 @@ type (
 		// HostPort is the host port to connect on. Host can be DNS name. See the above
 		// comment: in many situations you can leave this empty.
 		HostPort string `yaml:"hostPort"`
+		// HTTPHostPort is the HTTP host port to connect on. Host can be DNS name. See the above
+		// comment: in many situations you can leave this empty.
+		HTTPHostPort string `yaml:"httpHostPort"`
 		// Force selection of either the "internode" or "frontend" TLS configs for these
 		// connections (only those two strings are valid).
 		ForceTLSConfig string `yaml:"forceTLSConfig"`
@@ -605,7 +609,7 @@ func (c *Config) Validate() error {
 	}
 
 	_, hasIFE := c.Services[string(primitives.InternalFrontendService)]
-	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "") {
+	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "" || c.PublicClient.HTTPHostPort != "") {
 		return fmt.Errorf("when using internal-frontend, publicClient must be empty")
 	}
 

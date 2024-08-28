@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -160,7 +161,7 @@ dispatchLoop:
 					// Don't log here if encounters missing user data error when dispatch a versioned task.
 					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
-				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
+				util.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
 			return ctx.Err()
 		case <-ctx.Done():
@@ -202,7 +203,7 @@ Loop:
 				if common.IsResourceExhausted(err) {
 					tr.reEnqueueAfterDelay(taskReaderThrottleRetryDelay)
 				} else {
-					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff())
+					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff(err))
 				}
 				continue Loop
 			}
@@ -324,7 +325,6 @@ func (tr *taskReader) addSingleTaskToBuffer(
 
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	tr.emitTaskLagMetric(ackLevel)
 	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
 }
 
@@ -338,13 +338,6 @@ func (tr *taskReader) throttledLogger() log.ThrottledLogger {
 
 func (tr *taskReader) taggedMetricsHandler() metrics.Handler {
 	return tr.backlogMgr.metricsHandler
-}
-
-func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
-	// note: this metric is only an estimation for the lag.
-	// taskID in DB may not be continuous, especially when task list ownership changes.
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
-	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(maxReadLevel - ackLevel))
 }
 
 func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {

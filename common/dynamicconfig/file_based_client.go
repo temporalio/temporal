@@ -32,28 +32,29 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"gopkg.in/yaml.v3"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	expmaps "golang.org/x/exp/maps"
+	"gopkg.in/yaml.v3"
 )
 
 var _ Client = (*fileBasedClient)(nil)
+var _ NotifyingClient = (*fileBasedClient)(nil)
 
 const (
 	minPollInterval = time.Second * 5
-	fileMode        = 0644 // used for update config file
 )
 
 type (
-	fileReader interface {
-		Stat(src string) (os.FileInfo, error)
-		ReadFile(src string) ([]byte, error)
+	FileReader interface {
+		GetModTime() (time.Time, error)
+		ReadFile() ([]byte, error)
 	}
 
 	// FileBasedClientConfig is the config for the file based dynamic config client.
@@ -69,13 +70,18 @@ type (
 	fileBasedClient struct {
 		values          atomic.Value // configValueMap
 		logger          log.Logger
-		reader          fileReader
+		reader          FileReader
 		lastUpdatedTime time.Time
 		config          *FileBasedClientConfig
 		doneCh          <-chan interface{}
+
+		subscriptionLock sync.Mutex
+		subscriptionIdx  int
+		subscriptions    map[int]ClientUpdateFunc
 	}
 
 	osReader struct {
+		path string
 	}
 
 	// Results of processing and loading dynamic config file contents.
@@ -94,15 +100,20 @@ func ValidateFile(contents []byte) *LoadResult {
 
 // NewFileBasedClient creates a file based client.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
-	return NewFileBasedClientWithReader(&osReader{}, config, logger, doneCh)
+	if config == nil {
+		return nil, errors.New("configuration for dynamic config client is nil")
+	}
+	reader := &osReader{path: config.Filepath}
+	return NewFileBasedClientWithReader(reader, config, logger, doneCh)
 }
 
-func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
+func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
-		logger: logger,
-		reader: reader,
-		config: config,
-		doneCh: doneCh,
+		logger:        logger,
+		reader:        reader,
+		config:        config,
+		doneCh:        doneCh,
+		subscriptions: make(map[int]ClientUpdateFunc),
 	}
 
 	err := client.init()
@@ -116,6 +127,21 @@ func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConf
 func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
 	values := fc.values.Load().(configValueMap)
 	return values[strings.ToLower(key.String())]
+}
+
+func (fc *fileBasedClient) Subscribe(f ClientUpdateFunc) (cancel func()) {
+	fc.subscriptionLock.Lock()
+	defer fc.subscriptionLock.Unlock()
+
+	fc.subscriptionIdx++
+	id := fc.subscriptionIdx
+	fc.subscriptions[id] = f
+
+	return func() {
+		fc.subscriptionLock.Lock()
+		defer fc.subscriptionLock.Unlock()
+		delete(fc.subscriptions, id)
+	}
 }
 
 func (fc *fileBasedClient) init() error {
@@ -149,16 +175,16 @@ func (fc *fileBasedClient) init() error {
 // This is public mainly for testing. The update loop will call this periodically, you don't
 // have to call it explicitly.
 func (fc *fileBasedClient) Update() error {
-	info, err := fc.reader.Stat(fc.config.Filepath)
+	modtime, err := fc.reader.GetModTime()
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
-	if !info.ModTime().After(fc.lastUpdatedTime) {
+	if !modtime.After(fc.lastUpdatedTime) {
 		return nil
 	}
-	fc.lastUpdatedTime = info.ModTime()
+	fc.lastUpdatedTime = modtime
 
-	contents, err := fc.reader.ReadFile(fc.config.Filepath)
+	contents, err := fc.reader.ReadFile()
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
@@ -177,8 +203,20 @@ func (fc *fileBasedClient) Update() error {
 
 	prev := fc.values.Swap(newValues)
 	oldValues, _ := prev.(configValueMap)
-	fc.logDiff(oldValues, newValues)
+	changedMap := fc.diffAndLog(oldValues, newValues)
 	fc.logger.Info("Updated dynamic config")
+
+	if len(changedMap) == 0 {
+		return nil
+	}
+
+	fc.subscriptionLock.Lock()
+	subscriptions := expmaps.Values(fc.subscriptions)
+	fc.subscriptionLock.Unlock()
+
+	for _, update := range subscriptions {
+		update(changedMap)
+	}
 
 	return nil
 }
@@ -235,7 +273,7 @@ func (fc *fileBasedClient) validateStaticConfig(config *FileBasedClientConfig) e
 	if config == nil {
 		return errors.New("configuration for dynamic config client is nil")
 	}
-	if _, err := fc.reader.Stat(config.Filepath); err != nil {
+	if _, err := fc.reader.GetModTime(); err != nil {
 		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)
 	}
 	if config.PollInterval < minPollInterval {
@@ -244,17 +282,23 @@ func (fc *fileBasedClient) validateStaticConfig(config *FileBasedClientConfig) e
 	return nil
 }
 
-func (fc *fileBasedClient) logDiff(old configValueMap, new configValueMap) {
+func (fc *fileBasedClient) diffAndLog(old configValueMap, new configValueMap) map[Key][]ConstrainedValue {
+	changedMap := make(map[Key][]ConstrainedValue)
+
 	for key, newValues := range new {
 		oldValues, ok := old[key]
 		if !ok {
 			for _, newValue := range newValues {
 				// new key added
-				fc.logValueDiff(key, nil, &newValue)
+				fc.diffAndLogValue(key, nil, &newValue)
 			}
+			changedMap[Key(key)] = newValues
 		} else {
 			// compare existing keys
-			fc.logConstraintsDiff(key, oldValues, newValues)
+			changed := fc.diffAndLogConstraints(key, oldValues, newValues)
+			if changed {
+				changedMap[Key(key)] = newValues
+			}
 		}
 	}
 
@@ -262,25 +306,31 @@ func (fc *fileBasedClient) logDiff(old configValueMap, new configValueMap) {
 	for key, oldValues := range old {
 		if _, ok := new[key]; !ok {
 			for _, oldValue := range oldValues {
-				fc.logValueDiff(key, &oldValue, nil)
+				fc.diffAndLogValue(key, &oldValue, nil)
 			}
+			changedMap[Key(key)] = nil
 		}
 	}
+
+	return changedMap
 }
 
-func (fc *fileBasedClient) logConstraintsDiff(key string, oldValues []ConstrainedValue, newValues []ConstrainedValue) {
+func (fc *fileBasedClient) diffAndLogConstraints(key string, oldValues []ConstrainedValue, newValues []ConstrainedValue) bool {
+	changed := false
 	for _, oldValue := range oldValues {
 		matchFound := false
 		for _, newValue := range newValues {
 			if oldValue.Constraints == newValue.Constraints {
 				matchFound = true
 				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
-					fc.logValueDiff(key, &oldValue, &newValue)
+					fc.diffAndLogValue(key, &oldValue, &newValue)
+					changed = true
 				}
 			}
 		}
 		if !matchFound {
-			fc.logValueDiff(key, &oldValue, nil)
+			fc.diffAndLogValue(key, &oldValue, nil)
+			changed = true
 		}
 	}
 
@@ -292,12 +342,14 @@ func (fc *fileBasedClient) logConstraintsDiff(key string, oldValues []Constraine
 			}
 		}
 		if !matchFound {
-			fc.logValueDiff(key, nil, &newValue)
+			fc.diffAndLogValue(key, nil, &newValue)
+			changed = true
 		}
 	}
+	return changed
 }
 
-func (fc *fileBasedClient) logValueDiff(key string, oldValue *ConstrainedValue, newValue *ConstrainedValue) {
+func (fc *fileBasedClient) diffAndLogValue(key string, oldValue *ConstrainedValue, newValue *ConstrainedValue) {
 	logLine := &strings.Builder{}
 	logLine.Grow(128)
 	logLine.WriteString("dynamic config changed for the key: ")
@@ -468,12 +520,16 @@ func convertYamlConstraints(key string, m map[string]any, precedence Precedence,
 	return cs
 }
 
-func (r *osReader) ReadFile(src string) ([]byte, error) {
-	return os.ReadFile(src)
+func (r *osReader) ReadFile() ([]byte, error) {
+	return os.ReadFile(r.path)
 }
 
-func (r *osReader) Stat(src string) (os.FileInfo, error) {
-	return os.Stat(src)
+func (r *osReader) GetModTime() (time.Time, error) {
+	fi, err := os.Stat(r.path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return fi.ModTime(), nil
 }
 
 func (lr *LoadResult) warn(err error) *LoadResult {

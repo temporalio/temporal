@@ -43,18 +43,16 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/testing/testvars"
-
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/testvars"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestStartWorkflowExecution() {
@@ -76,7 +74,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 
 	s.Run("start", func() {
 		request := makeRequest()
-		we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		we, err := s.client.StartWorkflowExecution(NewContext(), request)
 		s.NoError(err)
 		s.True(we.Started)
 
@@ -93,11 +91,11 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 	s.Run("start twice - same request", func() {
 		request := makeRequest()
 
-		we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+		we0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 		s.NoError(err0)
 		s.True(we0.Started)
 
-		we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
+		we1, err1 := s.client.StartWorkflowExecution(NewContext(), request)
 		s.NoError(err1)
 		s.True(we1.Started)
 
@@ -106,13 +104,13 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 
 	s.Run("fail when already started", func() {
 		request := makeRequest()
-		we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		we, err := s.client.StartWorkflowExecution(NewContext(), request)
 		s.NoError(err)
 		s.True(we.Started)
 
 		request.RequestId = uuid.New()
 
-		we2, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		we2, err := s.client.StartWorkflowExecution(NewContext(), request)
 		s.Error(err)
 		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 		s.ErrorAs(err, &alreadyStarted)
@@ -123,7 +121,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 
 	// setting this to 0 to be sure we are terminating old workflow
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	testCases := []struct {
 		name                     string
@@ -157,17 +155,17 @@ func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 				Identity:           "worker1",
 			}
 
-			we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+			we0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 			s.NoError(err0)
 
 			request.RequestId = uuid.New()
 			request.WorkflowIdReusePolicy = tc.WorkflowIdReusePolicy
 			request.WorkflowIdConflictPolicy = tc.WorkflowIdConflictPolicy
-			we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
+			we1, err1 := s.client.StartWorkflowExecution(NewContext(), request)
 			s.NoError(err1)
 			s.NotEqual(we0.RunId, we1.RunId)
 
-			descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			descResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.namespace,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
@@ -177,7 +175,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
 			s.NoError(err)
 			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
 
-			descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			descResp, err = s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.namespace,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
@@ -212,7 +210,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {
 	}
 
 	reqStartTime := time.Now()
-	we0, startErr := s.engine.StartWorkflowExecution(NewContext(), request)
+	we0, startErr := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(startErr)
 
 	delayEndTime := time.Now()
@@ -227,7 +225,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: stickyTq, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl},
@@ -241,7 +239,7 @@ func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {
 	s.NoError(pollErr)
 	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
 
-	descResp, descErr := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, descErr := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -271,7 +269,7 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -313,7 +311,7 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Identity:            identity,
@@ -327,7 +325,7 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -379,7 +377,7 @@ StartNewExecutionLoop:
 			Identity:            identity,
 		}
 
-		newExecution, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		newExecution, err := s.client.StartWorkflowExecution(NewContext(), request)
 		if err != nil {
 			s.Logger.Warn("Start New Execution failed. Error", tag.Error(err))
 			time.Sleep(100 * time.Millisecond)
@@ -414,7 +412,7 @@ func (s *FunctionalSuite) TestSequentialWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -465,7 +463,7 @@ func (s *FunctionalSuite) TestSequentialWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -512,7 +510,7 @@ func (s *FunctionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -539,7 +537,7 @@ func (s *FunctionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -582,7 +580,7 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -631,7 +629,7 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -700,7 +698,7 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 		},
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -731,7 +729,7 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -741,7 +739,7 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 	}
 
 	describeWorkflowExecution := func(execution *commonpb.WorkflowExecution) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			Execution: execution,
 		})
@@ -779,6 +777,7 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 		}
 		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().AsTime().Add(backoff)
 		s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
+		s.Equal(we.RunId, dweResponse.WorkflowExecutionInfo.GetFirstRunId())
 	}
 
 	// Check run id links
@@ -812,7 +811,7 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 		// See comment in workflowHandler.go:GetWorkflowExecutionHistory
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		oldSDKCtx := headers.SetVersionsForTests(ctx, "1.3.1", headers.ClientNameJavaSDK, headers.SupportedServerVersions, "")
-		resp, err := s.engine.GetWorkflowExecutionHistory(oldSDKCtx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		resp, err := s.client.GetWorkflowExecutionHistory(oldSDKCtx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:              s.namespace,
 			Execution:              executions[i],
 			MaximumPageSize:        5,
@@ -885,7 +884,7 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 		},
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -893,7 +892,7 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 	var executions []*commonpb.WorkflowExecution
 	wtHandler := workflowImpl(5, "retryable-error", false, &executions)
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -952,7 +951,7 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 		},
 	}
 
-	we, err0 = s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 = s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -960,7 +959,7 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 	executions = []*commonpb.WorkflowExecution{}
 	wtHandler = workflowImpl(5, "bad-bug", true, &executions)
 	poller = &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -982,7 +981,7 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
 	// reset reuse minimal interval to allow workflow termination
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	runMultiOp := func(
 		tv *testvars.TestVars,
@@ -992,7 +991,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 		poller := &TaskPoller{
-			Engine:    s.engine,
+			Client:    s.client,
 			Namespace: s.namespace,
 			TaskQueue: tv.TaskQueue(),
 			Identity:  tv.WorkerIdentity(),
@@ -1013,7 +1012,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		// issue multi operation request
 		done := make(chan struct{})
 		go func() {
-			resp, retErr = s.engine.ExecuteMultiOperation(NewContext(), request)
+			resp, retErr = s.client.ExecuteMultiOperation(NewContext(), request)
 			done <- struct{}{}
 		}()
 
@@ -1097,59 +1096,58 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		s.Run("workflow is not running", func() {
 			tv := testvars.New(s.T())
 
-			_, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
+			resp, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
 			s.NoError(err)
+			s.True(resp.Responses[0].GetStartWorkflow().Started)
 		})
 
 		s.Run("workflow is running", func() {
 
-			s.Run("workflow id reuse policy use-existing: only send update", func() {
+			s.Run("workflow id conflict policy use-existing: only send update", func() {
 				tv := testvars.New(s.T())
 
-				_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
+				_, err := s.client.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
 				s.NoError(err)
 
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
+				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
 				s.NoError(err)
+				s.False(resp.Responses[0].GetStartWorkflow().Started)
 			})
 
-			s.Run("workflow id reuse policy terminate-existing: terminate workflow first, then start and update", func() {
+			s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
 				tv := testvars.New(s.T())
 
 				initReq := startWorkflowReq(tv)
 				initReq.TaskQueue.Name = initReq.TaskQueue.Name + "-init" // avoid race condition with poller
-				initWF, err := s.engine.StartWorkflowExecution(NewContext(), initReq)
+				initWF, err := s.client.StartWorkflowExecution(NewContext(), initReq)
 				s.NoError(err)
 
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
+				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
 				s.NoError(err)
+				s.True(resp.Responses[0].GetStartWorkflow().Started)
 
-				descResp, err := s.engine.DescribeWorkflowExecution(NewContext(),
+				descResp, err := s.client.DescribeWorkflowExecution(NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.namespace,
 						Execution: &commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: initWF.RunId},
 					})
-
 				s.NoError(err)
 				s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
 			})
 
-			s.Run("workflow id reuse policy fail: abort multi operation", func() {
+			s.Run("workflow id conflict policy fail: abort multi operation", func() {
 				tv := testvars.New(s.T())
 
-				_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
+				_, err := s.client.StartWorkflowExecution(NewContext(), startWorkflowReq(tv))
 				s.NoError(err)
 
 				req := startWorkflowReq(tv)
 				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
 				_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-
 				s.NotNil(err)
 				s.Equal(err.Error(), "MultiOperation could not be executed.")
 				errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()

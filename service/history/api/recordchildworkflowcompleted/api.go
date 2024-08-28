@@ -28,7 +28,6 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -53,7 +52,7 @@ func Invoke(
 	parentInitiatedID := request.ParentInitiatedId
 	parentInitiatedVersion := request.ParentInitiatedVersion
 
-	err = api.GetAndUpdateWorkflowWithNew(
+	err = api.GetAndUpdateWorkflowWithConsistencyCheck(
 		ctx,
 		request.Clock,
 		func(mutableState workflow.MutableState) bool {

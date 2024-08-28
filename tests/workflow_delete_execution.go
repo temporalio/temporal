@@ -35,7 +35,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
 )
@@ -59,7 +58,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
-		we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		we, err := s.client.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.namespace,
 			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
@@ -83,7 +82,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           tv.TaskQueue(),
 		Identity:            tv.WorkerIdentity(),
@@ -101,7 +100,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 	for _, we := range wes {
 		s.Eventually(
 			func() bool {
-				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+				visibilityResponse, err := s.client.ListWorkflowExecutions(
 					NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     s.namespace,
@@ -124,7 +123,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 
 	// Delete workflow executions.
 	for _, we := range wes {
-		_, err := s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+		_, err := s.client.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
@@ -138,7 +137,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 		s.Eventually(
 			func() bool {
 				// Check execution is deleted.
-				describeResponse, err := s.engine.DescribeWorkflowExecution(
+				describeResponse, err := s.client.DescribeWorkflowExecution(
 					NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.namespace,
@@ -159,7 +158,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 		)
 
 		// Check history is deleted.
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(
+		historyResponse, err := s.client.GetWorkflowExecutionHistory(
 			NewContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
@@ -173,7 +172,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 		s.Eventually(
 			func() bool {
 				// Check visibility is updated.
-				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+				visibilityResponse, err := s.client.ListWorkflowExecutions(
 					NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     s.namespace,
@@ -203,7 +202,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
-		we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		we, err := s.client.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.namespace,
 			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
@@ -222,7 +221,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 	for _, we := range wes {
 		s.Eventually(
 			func() bool {
-				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+				visibilityResponse, err := s.client.ListWorkflowExecutions(
 					NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     s.namespace,
@@ -242,7 +241,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 
 	// Delete workflow executions.
 	for _, we := range wes {
-		_, err := s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+		_, err := s.client.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 			Namespace:         s.namespace,
 			WorkflowExecution: we,
 		})
@@ -253,7 +252,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 		s.Eventually(
 			func() bool {
 				// Check execution is deleted.
-				describeResponse, err := s.engine.DescribeWorkflowExecution(
+				describeResponse, err := s.client.DescribeWorkflowExecution(
 					NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.namespace,
@@ -274,7 +273,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 		)
 
 		// Check history is deleted.
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(
+		historyResponse, err := s.client.GetWorkflowExecutionHistory(
 			NewContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
@@ -288,7 +287,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
 		s.Eventually(
 			func() bool {
 				// Check visibility is updated.
-				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+				visibilityResponse, err := s.client.ListWorkflowExecutions(
 					NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     s.namespace,
@@ -318,7 +317,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
-		we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		we, err := s.client.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.namespace,
 			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
@@ -337,7 +336,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
 	for _, we := range wes {
 		s.Eventually(
 			func() bool {
-				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+				visibilityResponse, err := s.client.ListWorkflowExecutions(
 					NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     s.namespace,
@@ -364,13 +363,13 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
 	// two types of tasks and make sure that they are executed in correct order.
 
 	for i, we := range wes {
-		_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		_, err := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         s.namespace,
 			WorkflowExecution: we,
 		})
 		s.NoError(err)
 		s.Logger.Warn("Execution is terminated", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
-		_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+		_, err = s.client.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 			Namespace:         s.namespace,
 			WorkflowExecution: we,
 		})
@@ -382,7 +381,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
 		s.Eventually(
 			func() bool {
 				// Check execution is deleted.
-				describeResponse, err := s.engine.DescribeWorkflowExecution(
+				describeResponse, err := s.client.DescribeWorkflowExecution(
 					NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.namespace,
@@ -403,7 +402,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
 		)
 
 		// Check history is deleted.
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(
+		historyResponse, err := s.client.GetWorkflowExecutionHistory(
 			NewContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
@@ -417,7 +416,7 @@ func (s *FunctionalSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
 		s.Eventually(
 			func() bool {
 				// Check visibility is updated.
-				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+				visibilityResponse, err := s.client.ListWorkflowExecutions(
 					NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     s.namespace,

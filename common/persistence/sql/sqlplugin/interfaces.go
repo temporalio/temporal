@@ -29,7 +29,6 @@ import (
 	"database/sql"
 
 	"github.com/jmoiron/sqlx"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"

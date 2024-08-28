@@ -29,7 +29,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
 	"go.temporal.io/server/common/log/tag"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"

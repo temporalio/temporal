@@ -38,11 +38,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
@@ -85,7 +84,7 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -94,10 +93,12 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
 	var previousRunID string
+	var currentRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		currentRunID = task.WorkflowExecution.GetRunId()
 		if continueAsNewCounter < continueAsNewCount {
-			previousRunID = task.WorkflowExecution.GetRunId()
+			previousRunID = currentRunID
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
@@ -132,7 +133,7 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -168,12 +169,23 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 		"Keyword",
 		string(lastRunStartedEventSearchAttrs.GetIndexedFields()[saName].GetMetadata()["type"]),
 	)
+	s.Equal(we.RunId, lastRunStartedEventAttrs.GetFirstExecutionRunId())
+
+	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+	})
+	s.NoError(err)
+	s.Equal(currentRunID, descResp.WorkflowExecutionInfo.Execution.GetRunId())
+	s.Equal(we.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
 }
 
-func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
-	id := "functional-continue-as-new-workflow-timeout-test"
-	wt := "functional-continue-as-new-workflow-timeout-test-type"
-	tl := "functional-continue-as-new-workflow-timeout-test-taskqueue"
+func (s *FunctionalSuite) TestContinueAsNewRun_RunTimeout() {
+	id := "functional-continue-as-new-workflow-run-timeout-test"
+	wt := "functional-continue-as-new-workflow-run-timeout-test-type"
+	tl := "functional-continue-as-new-workflow-run-timeout-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -192,7 +204,7 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -232,7 +244,7 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -272,6 +284,94 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
   3 WorkflowExecutionTimedOut`, historyEvents)
 }
 
+func (s *FunctionalSuite) TestContinueAsNewRun_ExecutionTimeout() {
+	id := "functional-continue-as-new-workflow-execution-timeout-test"
+	wt := "functional-continue-as-new-workflow-execution-timeout-test-type"
+	tl := "functional-continue-as-new-workflow-execution-timeout-test-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.New(),
+		Namespace:                s.namespace,
+		WorkflowId:               id,
+		WorkflowType:             workflowType,
+		TaskQueue:                taskQueue,
+		Input:                    nil,
+		WorkflowExecutionTimeout: durationpb.New(3 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		Identity:                 identity,
+	}
+
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+				ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType:        workflowType,
+					TaskQueue:           taskQueue,
+					WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+				},
+			},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Client:              s.client,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	testCompleted := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-testCompleted:
+				return
+			default:
+				// process the workflow task and continue as new
+				_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+
+				// rely on WorkflowIdReuseMinimalInterval to prevent tight loop of continue as new
+			}
+		}
+	}()
+
+	s.Eventually(
+		func() bool {
+			descResp, err := s.client.DescribeWorkflowExecution(
+				NewContext(),
+				&workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: s.namespace,
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: id,
+					},
+				},
+			)
+			s.NoError(err)
+			return descResp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT &&
+				descResp.GetWorkflowExecutionInfo().Execution.GetRunId() != we.RunId // validate that workflow did continue as new
+		},
+		time.Second*10,
+		time.Millisecond*50,
+	)
+
+	close(testCompleted)
+}
+
 func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 	id := "functional-wf-continue-as-new-task-id-test"
 	wt := "functional-wf-continue-as-new-task-id-type"
@@ -294,7 +394,7 @@ func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -333,7 +433,7 @@ func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -527,12 +627,12 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNew() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -641,12 +741,12 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -673,7 +773,7 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	s.NotNil(definition.startedEvent)
 
 	// Terminate parent workflow execution which should also trigger terminate of child due to parent close policy
-	_, err = s.engine.TerminateWorkflowExecution(
+	_, err = s.client.TerminateWorkflowExecution(
 		NewContext(),
 		&workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace: s.namespace,
@@ -684,7 +784,7 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	)
 	s.NoError(err)
 
-	parentDescribeResp, err := s.engine.DescribeWorkflowExecution(
+	parentDescribeResp, err := s.client.DescribeWorkflowExecution(
 		NewContext(),
 		&workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
@@ -701,7 +801,7 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	var childDescribeResp *workflowservice.DescribeWorkflowExecutionResponse
 	// Retry 10 times to wait for child to be terminated due to transfer task processing to enforce parent close policy
 	for i := 0; i < 10; i++ {
-		childDescribeResp, err = s.engine.DescribeWorkflowExecution(
+		childDescribeResp, err = s.client.DescribeWorkflowExecution(
 			NewContext(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.namespace,

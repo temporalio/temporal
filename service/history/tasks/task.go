@@ -62,7 +62,7 @@ type (
 
 	// HasStateMachineTaskType must be implemented by all HSM state machine tasks.
 	HasStateMachineTaskType interface {
-		StateMachineTaskType() int32
+		StateMachineTaskType() string
 	}
 	// HasDestination must be implemented by all tasks used in the outbound queue.
 	HasDestination interface {

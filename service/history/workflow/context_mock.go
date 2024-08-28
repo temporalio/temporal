@@ -35,6 +35,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/server/api/persistence/v1"
 	definition "go.temporal.io/server/common/definition"
+	locks "go.temporal.io/server/common/locks"
 	persistence "go.temporal.io/server/common/persistence"
 	shard "go.temporal.io/server/service/history/shard"
 	update "go.temporal.io/server/service/history/workflow/update"
@@ -162,7 +163,7 @@ func (mr *MockContextMockRecorder) LoadMutableState(ctx, shardContext interface{
 }
 
 // Lock mocks base method.
-func (m *MockContext) Lock(ctx context.Context, lockPriority LockPriority) error {
+func (m *MockContext) Lock(ctx context.Context, lockPriority locks.Priority) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lock", ctx, lockPriority)
 	ret0, _ := ret[0].(error)
@@ -209,6 +210,20 @@ func (mr *MockContextMockRecorder) ReapplyEvents(ctx, shardContext, eventBatches
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockContext)(nil).ReapplyEvents), ctx, shardContext, eventBatches)
 }
 
+// RefreshTasks mocks base method.
+func (m *MockContext) RefreshTasks(ctx context.Context, shardContext shard.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshTasks", ctx, shardContext)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshTasks indicates an expected call of RefreshTasks.
+func (mr *MockContextMockRecorder) RefreshTasks(ctx, shardContext interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockContext)(nil).RefreshTasks), ctx, shardContext)
+}
+
 // SetWorkflowExecution mocks base method.
 func (m *MockContext) SetWorkflowExecution(ctx context.Context, shardContext shard.Context) error {
 	m.ctrl.T.Helper()
@@ -238,15 +253,15 @@ func (mr *MockContextMockRecorder) SubmitClosedWorkflowSnapshot(ctx, shardContex
 }
 
 // Unlock mocks base method.
-func (m *MockContext) Unlock(lockPriority LockPriority) {
+func (m *MockContext) Unlock() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Unlock", lockPriority)
+	m.ctrl.Call(m, "Unlock")
 }
 
 // Unlock indicates an expected call of Unlock.
-func (mr *MockContextMockRecorder) Unlock(lockPriority interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) Unlock() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockContext)(nil).Unlock), lockPriority)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockContext)(nil).Unlock))
 }
 
 // UpdateRegistry mocks base method.

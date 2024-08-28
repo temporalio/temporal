@@ -34,19 +34,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -100,6 +99,10 @@ func NewClient(
 		timeout:         timeout,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 	}
+}
+
+func (c *clientImpl) DeepHealthCheck(ctx context.Context, request *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
+	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).historyClient.DeepHealthCheck(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(
@@ -247,7 +250,7 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
 	}
-	_, targetClusterShardID, err := DecodeClusterShardMD(ctxMetadata)
+	_, targetClusterShardID, err := DecodeClusterShardMD(headers.NewGRPCHeaderGetter(ctx))
 	if err != nil {
 		return nil, err
 	}

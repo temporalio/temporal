@@ -45,6 +45,7 @@ var (
 	maxNanos   = int32(MaxAllowedTimer.Nanoseconds() - maxSeconds*1e9)
 )
 
+// TODO: remove this logic, rely on scheduled task dropping logic in mutableState for long duration timers
 func ValidateAndCapTimer(delay *durationpb.Duration) error {
 	duration := timestamp.DurationValue(delay)
 	if duration < 0 {

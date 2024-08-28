@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -1309,7 +1308,8 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 			// no-op
 
 		case *serviceerror.ResourceExhausted:
-			metrics.PersistenceErrResourceExhaustedCounter.With(handler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+			metrics.PersistenceErrResourceExhaustedCounter.With(handler).Record(
+				1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
 		default:
 			logger.Error("Operation failed with internal error.", tag.Error(err), tag.ErrorType(err), tag.Operation(operation))
 			metrics.PersistenceFailures.With(handler).Record(1)

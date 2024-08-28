@@ -43,12 +43,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 )
 
@@ -62,6 +62,34 @@ func (s *ClientFunctionalSuite) mustToPayload(v any) *commonpb.Payload {
 }
 
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
+	callerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "caller-ns",
+		WorkflowId: "caller-wf-id",
+		RunId:      "caller-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   5,
+				EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+			},
+		},
+	}
+	callerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(callerLink)
+	s.NoError(err)
+
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   5,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	handlerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	s.NoError(err)
+
 	type testcase struct {
 		outcome   string
 		endpoint  *nexuspb.Endpoint
@@ -91,12 +119,19 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				s.Equal("http://localhost/callback", start.Callback)
 				s.Equal("request-id", start.RequestId)
 				s.Equal("value", res.Request.Header["key"])
+				s.Len(start.GetLinks(), 1)
+				s.Equal(callerNexusLink.URL.String(), start.Links[0].GetUrl())
+				s.Equal(callerNexusLink.Type, start.Links[0].Type)
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_StartOperation{
 						StartOperation: &nexuspb.StartOperationResponse{
 							Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
 								AsyncSuccess: &nexuspb.StartOperationResponse_Async{
 									OperationId: "test-id",
+									Links: []*nexuspb.Link{{
+										Url:  handlerNexusLink.URL.String(),
+										Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
+									}},
 								},
 							},
 						},
@@ -106,6 +141,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				require.NoError(t, err)
 				require.Equal(t, "test-id", res.Pending.ID)
+				require.Len(t, res.Links, 1)
+				require.Equal(t, handlerNexusLink, res.Links[0])
 			},
 		},
 		{
@@ -153,7 +190,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+				require.Equal(t, "worker", unexpectedError.Response.Header.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
@@ -204,6 +242,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				CallbackURL: "http://localhost/callback",
 				RequestID:   "request-id",
 				Header:      header,
+				Links:       []nexus.Link{callerNexusLink},
 			})
 			var unexpectedResponseErr *nexus.UnexpectedResponseError
 			return err == nil || !(errors.As(err, &unexpectedResponseErr) && unexpectedResponseErr.Response.StatusCode == http.StatusNotFound)
@@ -214,15 +253,24 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
 		require.Equal(t, 1, len(snap["nexus_latency"]))
-		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
-		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+
+		// Ensure that StartOperation request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "StartNexusOperation" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	for _, tc := range testCases {
@@ -256,7 +304,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	snap := capture.Snapshot()
 
 	s.Equal(1, len(snap["nexus_requests"]))
-	s.Equal(map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, snap["nexus_requests"][0].Tags)
+	s.Equal(map[string]string{"namespace": namespace, "method": "StartNexusOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, snap["nexus_requests"][0].Tags)
 	s.Equal(int64(1), snap["nexus_requests"][0].Value)
 }
 
@@ -369,7 +417,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": "unauthorized"})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartNexusOperation", "outcome": "unauthorized"})
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 	}
 
@@ -584,7 +632,8 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 			assertion: func(t *testing.T, err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamError, unexpectedError.Response.StatusCode)
+				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+				require.Equal(t, "worker", unexpectedError.Response.Header.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
@@ -642,15 +691,24 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
 		require.Equal(t, 1, len(snap["nexus_latency"]))
-		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
-		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+
+		// Ensure that CancelOperation request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "CancelNexusOperation" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	for _, tc := range testCases {

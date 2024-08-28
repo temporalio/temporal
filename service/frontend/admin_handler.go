@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -44,12 +45,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -88,6 +83,9 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/dlq"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -127,6 +125,7 @@ type (
 		saManager                  searchattribute.Manager
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
+		historyHealthChecker       HealthChecker
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -182,6 +181,20 @@ func NewAdminHandler(
 		args.Logger,
 	)
 
+	historyHealthChecker := NewHealthChecker(
+		primitives.HistoryService,
+		args.MembershipMonitor,
+		args.Config.HistoryHostErrorPercentage,
+		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
+			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
+			if err != nil {
+				return enumsspb.HEALTH_STATE_UNSPECIFIED, err
+			}
+			return resp.GetState(), nil
+		},
+		args.Logger,
+	)
+
 	return &AdminHandler{
 		logger:                args.Logger,
 		status:                common.DaemonStatusInitialized,
@@ -212,6 +225,7 @@ func NewAdminHandler(
 		saManager:                  args.SaManager,
 		clusterMetadata:            args.ClusterMetadata,
 		healthServer:               args.HealthServer,
+		historyHealthChecker:       historyHealthChecker,
 		taskCategoryRegistry:       args.CategoryRegistry,
 	}
 }
@@ -225,10 +239,6 @@ func (adh *AdminHandler) Start() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
-
-	// Start namespace replication queue cleanup
-	// If the queue does not start, we can still call stop()
-	adh.namespaceReplicationQueue.Start()
 }
 
 // Stop stops the handler
@@ -240,9 +250,17 @@ func (adh *AdminHandler) Stop() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
+}
 
-	// Calling stop if the queue does not start is ok
-	adh.namespaceReplicationQueue.Stop()
+func (adh *AdminHandler) DeepHealthCheck(
+	ctx context.Context,
+	_ *adminservice.DeepHealthCheckRequest,
+) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+	healthStatus, err := adh.historyHealthChecker.Check(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.
@@ -1018,6 +1036,7 @@ func (adh *AdminHandler) DescribeCluster(
 		InitialFailoverVersion:   metadata.GetInitialFailoverVersion(),
 		IsGlobalNamespaceEnabled: metadata.GetIsGlobalNamespaceEnabled(),
 		Tags:                     metadata.GetTags(),
+		HttpAddress:              metadata.GetHttpAddress(),
 	}, nil
 }
 
@@ -1028,7 +1047,6 @@ func (adh *AdminHandler) ListClusters(
 	request *adminservice.ListClustersRequest,
 ) (_ *adminservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1157,7 +1175,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
-			HttpAddress:              request.GetFrontendHttpAddress(),
+			HttpAddress:              resp.GetHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -1507,28 +1525,34 @@ func (adh *AdminHandler) ResendReplicationTasks(
 			namespaceId namespace.ID,
 			workflowId string,
 			runId string,
-			events []*historypb.HistoryEvent,
+			events [][]*historypb.HistoryEvent,
 			versionHistory []*historyspb.VersionHistoryItem,
 		) error {
-			historyBlob, err1 := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
-			if err1 != nil {
-				return err1
+			for _, event := range events {
+				historyBlob, err1 := adh.eventSerializer.SerializeEvents(event, enumspb.ENCODING_TYPE_PROTO3)
+				if err1 != nil {
+					return err1
+				}
+				replicateRequest := &historyservice.ReplicateEventsV2Request{
+					NamespaceId: namespaceId.String(),
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: workflowId,
+						RunId:      runId,
+					},
+					Events:              historyBlob,
+					VersionHistoryItems: versionHistory,
+				}
+				_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
+				if err1 != nil {
+					return err1
+				}
 			}
-			replicateRequest := &historyservice.ReplicateEventsV2Request{
-				NamespaceId: namespaceId.String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowId,
-					RunId:      runId,
-				},
-				Events:              historyBlob,
-				VersionHistoryItems: versionHistory,
-			}
-			_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
-			return err1
+			return nil
 		},
 		adh.eventSerializer,
 		nil,
 		adh.logger,
+		nil,
 	)
 	if err := resender.SendSingleWorkflowHistory(
 		ctx,
@@ -1652,11 +1676,7 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 ) (retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	ctxMetadata, ok := metadata.FromIncomingContext(clientCluster.Context())
-	if !ok {
-		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
-	}
-	_, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	_, serverClusterShardID, err := history.DecodeClusterShardMD(headers.NewGRPCHeaderGetter(clientCluster.Context()))
 	if err != nil {
 		return err
 	}

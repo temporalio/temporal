@@ -35,12 +35,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type RunIdGetter interface {
@@ -74,7 +73,7 @@ func (s *FunctionalSuite) TestStartWithMemo() {
 	}
 
 	fn := func() (RunIdGetter, error) {
-		return s.engine.StartWorkflowExecution(NewContext(), request)
+		return s.client.StartWorkflowExecution(NewContext(), request)
 	}
 	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
@@ -114,7 +113,7 @@ func (s *FunctionalSuite) TestSignalWithStartWithMemo() {
 	}
 
 	fn := func() (RunIdGetter, error) {
-		return s.engine.SignalWithStartWorkflowExecution(NewContext(), request)
+		return s.client.SignalWithStartWorkflowExecution(NewContext(), request)
 	}
 	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
@@ -144,7 +143,7 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -157,7 +156,7 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	var openExecutionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			resp, err1 := s.client.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 				Namespace:       s.namespace,
 				MaximumPageSize: 100,
 				StartTimeFilter: &filterpb.StartTimeFilter{
@@ -192,7 +191,7 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 		Namespace: s.namespace,
 		Execution: execution,
 	}
-	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 
@@ -206,7 +205,7 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	s.EqualHistoryEvents(expectedHistory, historyEvents)
 
 	// verify DescribeWorkflowExecution result: workflow closed, but close visibility task not completed
-	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err = s.client.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 
@@ -214,7 +213,7 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			resp, err1 := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 				Namespace:       s.namespace,
 				MaximumPageSize: 100,
 				StartTimeFilter: &filterpb.StartTimeFilter{
@@ -240,7 +239,7 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	s.ProtoEqual(memo, closedExecutionInfo.Memo)
 
 	// verify DescribeWorkflowExecution result: workflow closed and close visibility task completed
-	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err = s.client.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 }

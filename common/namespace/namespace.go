@@ -26,14 +26,13 @@ package namespace
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
-
-	"golang.org/x/exp/maps"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -82,11 +81,21 @@ type (
 		fieldToAlias map[string]string
 		aliasToField map[string]string
 	}
+
+	// ReplicationPolicy is the namespace's replication policy,
+	// derived from namespace's replication config
+	ReplicationPolicy int
 )
 
 const (
 	EmptyName Name = ""
 	EmptyID   ID   = ""
+
+	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
+	// applicable to local namespace & global namespace with one cluster
+	ReplicationPolicyOneCluster ReplicationPolicy = 0
+	// ReplicationPolicyMultiCluster indicate that workflows need to be replicated
+	ReplicationPolicyMultiCluster ReplicationPolicy = 1
 )
 
 func NewID() ID {
@@ -251,6 +260,13 @@ func (ns *Namespace) IsOnCluster(clusterName string) bool {
 		}
 	}
 	return false
+}
+
+// FailoverHistory returns the a copy of failover history for this namespace.
+func (ns *Namespace) FailoverHistory() []*replication.FailoverStatus {
+	return convertFailoverHistoryToReplicationProto(
+		ns.replicationConfig.GetFailoverHistory(),
+	)
 }
 
 // ConfigVersion return the namespace config version

@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -51,29 +50,31 @@ func TestGrouperStateMachineNamespaceIDAndDestination_Key(t *testing.T) {
 		StateMachineTask: tasks.StateMachineTask{
 			WorkflowKey: definition.NewWorkflowKey("nid", "", ""),
 			Info: &persistence.StateMachineTaskInfo{
-				Type: 3,
+				Type: "3",
 			},
 		},
 		Destination: "dest",
 	}
 	k := g.Key(task)
-	require.Equal(t, StateMachineTaskTypeNamespaceIDAndDestination{3, "nid", "dest"}, k)
+	require.Equal(t, tasks.TaskGroupNamespaceIDAndDestination{
+		TaskGroup:   "3",
+		NamespaceID: "nid",
+		Destination: "dest",
+	}, k)
 }
 
 func TestGrouperStateMachineNamespaceIDAndDestination_Predicate(t *testing.T) {
 	g := GrouperStateMachineNamespaceIDAndDestination{}
-	p := g.Predicate([]any{StateMachineTaskTypeNamespaceIDAndDestination{1, "n1", "d1"}, StateMachineTaskTypeNamespaceIDAndDestination{2, "n2", "d2"}})
-	expected := predicates.Or(
-		predicates.And(
-			tasks.NewStateMachineTaskTypePredicate([]int32{1}),
-			tasks.NewNamespacePredicate([]string{"n1"}),
-			tasks.NewDestinationPredicate([]string{"d1"}),
-		),
-		predicates.And(
-			tasks.NewStateMachineTaskTypePredicate([]int32{2}),
-			tasks.NewNamespacePredicate([]string{"n2"}),
-			tasks.NewDestinationPredicate([]string{"d2"}),
-		),
-	)
+	groups := []tasks.TaskGroupNamespaceIDAndDestination{
+		{TaskGroup: "1", NamespaceID: "n1", Destination: "d1"},
+		{TaskGroup: "2", NamespaceID: "n2", Destination: "d2"},
+	}
+	untypedGroups := []any{}
+	for _, g := range groups {
+		untypedGroups = append(untypedGroups, g)
+	}
+	p := g.Predicate(untypedGroups)
+
+	expected := tasks.NewOutboundTaskPredicate(groups)
 	require.Equal(t, expected, p)
 }

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
@@ -96,9 +97,8 @@ func Invoke(
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(req.NamespaceId, startReq.StartRequest.WorkflowId, ""),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	var notFound *serviceerror.NotFound
 	if errors.As(err, &notFound) {

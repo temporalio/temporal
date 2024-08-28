@@ -28,18 +28,17 @@ import (
 	"context"
 	"testing"
 
-	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/common/cluster/clustertest"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/cluster/clustertest"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -108,7 +107,7 @@ func (s *signalWorkflowSuite) SetupTest() {
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil).AnyTimes()
 
 	s.workflowCache = wcache.NewMockCache(s.controller)
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).
 		Return(s.currentContext, wcache.NoopReleaseFn, nil).AnyTimes()
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(

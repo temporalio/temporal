@@ -25,18 +25,35 @@
 package dynamicconfig
 
 import (
+	"math"
 	"os"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
-
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 )
 
 var (
+	// keys for dynamic config itself
+	DynamicConfigSubscriptionCallback = NewGlobalTypedSetting(
+		"dynamicconfig.subscriptionCallback",
+		subscriptionCallbackSettings{
+			MinWorkers:   10,
+			MaxWorkers:   100,
+			TargetDelay:  10 * time.Millisecond,
+			ShrinkFactor: 1000, // 10 seconds
+		},
+		`Settings for dynamic config subscription dispatch. Requires server restart.`,
+	)
+	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
+		"dynamicconfig.subscriptionPollInterval",
+		time.Minute,
+		`Poll interval for emulating subscriptions on non-subscribable Client.`,
+	)
+
 	// keys for admin
 
 	AdminEnableListHistoryTasks = NewGlobalBoolSetting(
@@ -257,7 +274,7 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 	)
 	DeadlockInterval = NewGlobalDurationSetting(
 		"system.deadlock.Interval",
-		30*time.Second,
+		60*time.Second,
 		`How often the detector checks each root.`,
 	)
 	DeadlockMaxWorkersPerRoot = NewGlobalIntSetting(
@@ -514,6 +531,11 @@ is currently processing a task.
 		4*1024,
 		`NexusEndpointExternalURLMaxLength is the maximum length of a Nexus endpoint external target URL.`,
 	)
+	NexusEndpointDescriptionMaxSize = NewNamespaceIntSetting(
+		"limit.endpointDescriptionMaxSize",
+		20000,
+		`Maximum size of Nexus Endpoint description payload in bytes including data and metadata.`,
+	)
 	NexusEndpointListDefaultPageSize = NewGlobalIntSetting(
 		"limit.endpointListDefaultPageSize",
 		100,
@@ -721,6 +743,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
 	)
+	HistoryHostErrorPercentage = NewGlobalFloatSetting(
+		"frontend.historyHostErrorPercentage",
+		0.5,
+		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
+	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
@@ -829,6 +856,18 @@ server hosts for it to take effect.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
+	NexusReadThroughCacheSize = NewGlobalIntSetting(
+		"system.nexusReadThroughCacheSize",
+		100,
+		`The size of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
+used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
+	NexusReadThroughCacheTTL = NewGlobalDurationSetting(
+		"system.nexusReadThroughCacheTTL",
+		30*time.Second,
+		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
+used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
@@ -862,10 +901,8 @@ server hosts for it to take effect.`,
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",
-		false,
-		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is 'false' until the
-feature gets more time in production.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
 	)
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
@@ -877,10 +914,9 @@ The API is under active development.`,
 
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
-		false,
-		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
-asynchronous workflow execution update that waits on the "Accepted"
-lifecycle stage. Default value is 'false'.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the UpdateWorkflowExecution API
+to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
@@ -1053,6 +1089,30 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		defaultNumTaskQueuePartitions,
 		`MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue`,
 	)
+	MetricsBreakdownByTaskQueue = NewTaskQueueBoolSetting(
+		"metrics.breakdownByTaskQueue",
+		true,
+		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should 
+contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MetricsBreakdownByPartition = NewTaskQueueBoolSetting(
+		"metrics.breakdownByPartition",
+		true,
+		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should 
+contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky 
+queues will be "__sticky__". Disable this option if the partition cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
+		"metrics.breakdownByBuildID",
+		true,
+		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
+contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned 
+queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age 
+for VERSIONED queues.`,
+	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
 		1,
@@ -1091,7 +1151,7 @@ This can help reduce effects of task queue movement.`,
 	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
-		24*365*10*time.Hour,
+		5*time.Second,
 		`MatchingBacklogNegligibleAge if the head of backlog gets older than this we stop sync match and
 forwarding to ensure more equal dispatch order among partitions.`,
 	)
@@ -1257,6 +1317,12 @@ timeout timer when execution timeout is specified when starting a workflow.
 For backward compatibility, this feature is disabled by default and should only be enabled after server version
 containing this flag is deployed to all history service nodes in the cluster.`,
 	)
+	EnableTransitionHistory = NewGlobalBoolSetting(
+		"history.enableTransitionHistory",
+		false,
+		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.
+This feature is still under development and should NOT be enabled.`,
+	)
 	HistoryStartupMembershipJoinDelay = NewGlobalDurationSetting(
 		"history.startupMembershipJoinDelay",
 		0*time.Second,
@@ -1317,6 +1383,12 @@ will temporarily delay closing shards after a membership update, awaiting a
 shard ownership lost error from persistence. If set to zero, shards will not delay closing.
 Do NOT use non-zero value with persistence layers that are missing AssertShardOwnership support.`,
 	)
+	ShardFinalizerTimeout = NewGlobalDurationSetting(
+		"history.shardFinalizerTimeout",
+		2*time.Second,
+		`ShardFinalizerTimeout configures if and for how long the shard will attempt
+to cleanup any of its associated data, such as workflow contexts. If set to zero, the finalizer is disabled.`,
+	)
 	HistoryClientOwnershipCachingEnabled = NewGlobalBoolSetting(
 		"history.clientOwnershipCachingEnabled",
 		false,
@@ -1355,8 +1427,8 @@ before discarding the task`,
 	QueuePendingTaskCriticalCount = NewGlobalIntSetting(
 		"history.queuePendingTaskCriticalCount",
 		9000,
-		`QueuePendingTaskCriticalCount is the max number of pending task in one queue
-before triggering queue slice splitting and unloading`,
+		`Max number of pending tasks in a history queue before triggering slice splitting and unloading.
+NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskCriticalCount.`,
 	)
 	QueueReaderStuckCriticalAttempts = NewGlobalIntSetting(
 		"history.queueReaderStuckCriticalAttempts",
@@ -1374,17 +1446,12 @@ before force compacting slices`,
 	QueuePendingTaskMaxCount = NewGlobalIntSetting(
 		"history.queuePendingTasksMaxCount",
 		10000,
-		`QueuePendingTaskMaxCount is the max number of task pending tasks in one queue before stop
-loading new tasks into memory. While QueuePendingTaskCriticalCount won't stop task loading
-for the entire queue but only trigger a queue action to unload tasks. Ideally this max count
-limit should not be hit and task unloading should happen once critical count is exceeded. But
-since queue action is async, we need this hard limit.`,
-	)
-	ContinueAsNewMinInterval = NewNamespaceDurationSetting(
-		"history.continueAsNewMinInterval",
-		time.Second,
-		`ContinueAsNewMinInterval is the minimal interval between continue_as_new executions.
-This is needed to prevent tight loop continue_as_new spin. Default is 1s.`,
+		`The max number of task pending tasks in a history queue before stopping loading new tasks into memory. This
+limit is in addition to queuePendingTaskCriticalCount which controls when to unload already loaded tasks but doesn't
+prevent loading new tasks. Ideally this max count limit should not be hit and task unloading should happen once critical
+count is exceeded. But since queue action is async, we need this hard limit.
+NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskMaxCount.
+`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
@@ -1576,6 +1643,20 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		100,
 		`OutboundTaskBatchSize is batch size for outboundQueueFactory`,
 	)
+	OutboundQueuePendingTaskMaxCount = NewGlobalIntSetting(
+		"history.outboundQueuePendingTasksMaxCount",
+		10000,
+		`The max number of task pending tasks in the outbound queue before stopping loading new tasks into memory. This
+limit is in addition to outboundQueuePendingTaskCriticalCount which controls when to unload already loaded tasks but
+doesn't prevent loading new tasks. Ideally this max count limit should not be hit and task unloading should happen once
+critical count is exceeded. But since queue action is async, we need this hard limit.
+`,
+	)
+	OutboundQueuePendingTaskCriticalCount = NewGlobalIntSetting(
+		"history.outboundQueuePendingTaskCriticalCount",
+		9000,
+		`Max number of pending tasks in the outbound queue before triggering slice splitting and unloading.`,
+	)
 	OutboundProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.outboundProcessorMaxPollRPS",
 		20,
@@ -1640,6 +1721,19 @@ Fields (see gobreaker reference for more details):
 - Interval (duration): Cyclic period in closed state to clear the internal counts;
   if interval is 0, then it never clears the internal counts (default 0).
 - Timeout (duration): Period of open state before changing to half-open state (default 60s).`,
+	)
+	OutboundStandbyTaskMissingEventsDiscardDelay = NewDestinationDurationSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDiscardDelay",
+		// This is effectively equivalent to never discarding outbound tasks since it's 290+ years.
+		time.Duration(math.MaxInt64),
+		`OutboundStandbyTaskMissingEventsDiscardDelay is the equivalent of
+StandbyTaskMissingEventsDiscardDelay for outbound standby task processor.`,
+	)
+	OutboundStandbyTaskMissingEventsDestinationDownErr = NewDestinationBoolSetting(
+		"history.outboundQueue.standbyTaskMissingEventsDestinationDownErr",
+		true,
+		`OutboundStandbyTaskMissingEventsDestinationDownErr enables returning DestinationDownError when
+the outbound standby task failed to be processed due to missing events.`,
 	)
 
 	VisibilityTaskBatchSize = NewGlobalIntSetting(
@@ -1829,6 +1923,12 @@ state. The total size is determined by the sum of the size, in bytes, of each Hi
 		"history.shardUpdateMinInterval",
 		5*time.Minute,
 		`ShardUpdateMinInterval is the minimal time interval which the shard info can be updated`,
+	)
+	ShardFirstUpdateInterval = NewGlobalDurationSetting(
+		"history.shardFirstUpdateInterval",
+		10*time.Second,
+		`ShardFirstUpdateInterval is the time interval after which the first shard info update will happen.
+		It should be smaller than ShardUpdateMinInterval`,
 	)
 	ShardUpdateMinTasksCompleted = NewGlobalIntSetting(
 		"history.shardUpdateMinTasksCompleted",
@@ -2027,6 +2127,11 @@ the number of children greater than or equal to this threshold`,
 		`ReplicationEnableUpdateWithNewTaskMerge is the flag controlling whether replication task merging logic
 should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 	)
+	ReplicationMultipleBatches = NewGlobalBoolSetting(
+		"history.ReplicationMultipleBatches",
+		false,
+		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
+	)
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",
 		true,
@@ -2109,8 +2214,43 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
-		50,
+		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
+	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
+		"history.ReplicationResendMaxBatchCount",
+		10,
+		`Maximum number of resend events batch for a single replication request`,
+	)
+	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
+		"history.ReplicationProgressCacheMaxSize",
+		128000,
+		`ReplicationProgressCacheMaxSize is the maximum number of entries in the replication progress cache`,
+	)
+	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
+		"history.ReplicationProgressCacheTTL",
+		time.Hour,
+		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
+	)
+	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
+		"history.workflowIdReuseMinimalInterval",
+		1*time.Second,
+		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
+	)
+	EnableWorkflowIdReuseStartTimeValidation = NewNamespaceBoolSetting(
+		"history.enableWorkflowIdReuseStartTimeValidation",
+		false,
+		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
+	)
+	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
+		"history.healthPersistenceLatencyFailure",
+		500,
+		"History service health check on persistence average latency (millisecond) threshold",
+	)
+	HealthPersistenceErrorRatio = NewGlobalFloatSetting(
+		"history.healthPersistenceErrorRatio",
+		0.90,
+		"History service health check on persistence error ratio",
 	)
 
 	// keys for worker
@@ -2355,9 +2495,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
-	WorkflowIdReuseMinimalInterval = NewGlobalDurationSetting(
-		"system.workflowIdReuseMinimalInterval",
-		1*time.Second,
-		`WorkflowIdReuseMinimalInterval is used for timing how soon users can create new workflow with the same workflow ID.`,
+
+	LogAllReqErrors = NewNamespaceBoolSetting(
+		"system.logAllReqErrors",
+		false,
+		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
 )

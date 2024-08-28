@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -56,6 +55,7 @@ type (
 		Port                     int
 		User                     string
 		Password                 string
+		AllowedAuthenticators    []string
 		Keyspace                 string
 		Timeout                  int
 		numReplicas              int
@@ -140,6 +140,7 @@ func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 		Port:                     cfg.Port,
 		User:                     cfg.User,
 		Password:                 cfg.Password,
+		AllowedAuthenticators:    cfg.AllowedAuthenticators,
 		Keyspace:                 cfg.Keyspace,
 		TLS:                      cfg.TLS,
 		Datacenter:               cfg.Datacenter,

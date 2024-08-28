@@ -26,6 +26,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -33,7 +34,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -396,6 +396,13 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
 	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
+
+	var notFound *serviceerror.NotFound
+	if errors.As(respErr, &notFound) {
+		// strip persistence-specific error message
+		respErr = serviceerror.NewNotFound(fmt.Sprintf(
+			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID))
+	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
 		return nil, respErr
@@ -475,7 +482,7 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 		)] = NewXDCCacheValue(
 			baseWorkflowInfo,
 			versionHistoryItems,
-			newEvents.Node.Events,
+			[]*commonpb.DataBlob{newEvents.Node.Events},
 		)
 		newEvents.ShardID = shardID
 		workflowNewEvents = append(workflowNewEvents, newEvents)
@@ -764,6 +771,12 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
 	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
+
+	var notFound *serviceerror.NotFound
+	if errors.As(respErr, &notFound) {
+		// strip persistence-specific error message
+		respErr = serviceerror.NewNotFound(fmt.Sprintf("workflow not found for ID: %v", request.WorkflowID))
+	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
 		return nil, respErr

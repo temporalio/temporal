@@ -23,10 +23,9 @@
 package serviceerror
 
 import (
+	"go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"go.temporal.io/server/api/errordetails/v1"
 )
 
 type (
@@ -41,9 +40,9 @@ type (
 	}
 )
 
-func NewObsoleteDispatchBuildId() error {
+func NewObsoleteDispatchBuildId(msg string) error {
 	return &ObsoleteDispatchBuildId{
-		Message: "dispatch build ID is not the workflow's current build ID",
+		Message: msg,
 	}
 }
 

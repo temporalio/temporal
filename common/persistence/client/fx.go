@@ -27,8 +27,6 @@ package client
 import (
 	"time"
 
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
+	"go.uber.org/fx"
 )
 
 type (
@@ -91,6 +90,7 @@ var Module = fx.Options(
 
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
+	fx.Provide(persistence.NewDLQMetricsEmitter),
 	fx.Provide(EventBlobCacheProvider),
 )
 

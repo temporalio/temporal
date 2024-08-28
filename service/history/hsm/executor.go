@@ -31,11 +31,15 @@ import (
 )
 
 // Ref is a reference to a statemachine on a specific workflow.
-// It contains the workflow key and the key of the statemachine in the state machine [Store] as well as the namespace
-// failover version and transition count that is expected to match on the referenced state machine.
+// It contains the workflow key and the key of the statemachine in the state machine [Environment] as well as the
+// information to perform staleness checks for itself or the state that it is referencing.
 type Ref struct {
 	WorkflowKey     definition.WorkflowKey
 	StateMachineRef *persistencespb.StateMachineRef
+	// If non-zero, this field represents the ID of the task this Ref came from. Used for stale task detection and
+	// serves as an indicator whether this Ref can reference stale state. This should be set during task processing
+	// where we can validate the task that embeds this reference against shard clock.
+	TaskID int64
 }
 
 // StateMachinePath gets the state machine path for from this reference.
@@ -77,3 +81,7 @@ type ImmediateExecutor[T Task] func(ctx context.Context, env Environment, ref Re
 // Timers tasks are collapsed into a single task which will execute all timers that have hit their deadline while
 // holding a lock on the workflow.
 type TimerExecutor[T Task] func(env Environment, node *Node, task T) error
+
+// RemoteExecutor is responsible for executing remote methods.
+// // Implementations should be registered via [RegisterRemoteExecutors] to handle specific methods.
+type RemoteExecutor func(ctx context.Context, env Environment, ref Ref, input any) (any, error)

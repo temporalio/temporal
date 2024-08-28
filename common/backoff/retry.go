@@ -90,7 +90,7 @@ func ThrottleRetryContext(
 			return nil
 		}
 
-		if next = r.NextBackOff(); next == done {
+		if next = r.NextBackOff(err); next == done {
 			return err
 		}
 
@@ -99,7 +99,7 @@ func ThrottleRetryContext(
 		}
 
 		if _, ok := err.(*serviceerror.ResourceExhausted); ok {
-			next = max(next, t.NextBackOff())
+			next = max(next, t.NextBackOff(err))
 		}
 
 		if hasDeadline && timeSrc.Now().Add(next).After(deadline) {

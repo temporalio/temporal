@@ -30,14 +30,14 @@ import (
 	"sync"
 
 	"github.com/golang/mock/gomock"
-	"go.temporal.io/server/common/log"
-	"golang.org/x/sync/semaphore"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
@@ -144,6 +144,8 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	if executionManager == nil {
 		executionManager = t.ExecutionMgr
 	}
+	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
+	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
 
 	ctx := &ContextImpl{
 		shardID:             config.ShardInfo.GetShardId(),
@@ -168,6 +170,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		clusterMetadata:         clusterMetadata,
 		timeSource:              t.TimeSource,
 		namespaceRegistry:       registry,
+		stateMachineRegistry:    hsm.NewRegistry(),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),
@@ -176,8 +179,8 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		payloadSerializer:       t.GetPayloadSerializer(),
 		archivalMetadata:        t.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,
-		taskCategoryRegistry:    tasks.NewDefaultTaskCategoryRegistry(),
-		ioSemaphore:             semaphore.NewWeighted(1),
+		taskCategoryRegistry:    taskCategoryRegistry,
+		ioSemaphore:             locks.NewPrioritySemaphore(1),
 	}
 	ctx.taskKeyManager = newTaskKeyManager(
 		ctx.taskCategoryRegistry,
@@ -207,6 +210,11 @@ func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 func (s *ContextTest) SetLoggers(l log.Logger) {
 	s.throttledLogger = l
 	s.contextTaggedLogger = l
+}
+
+// SetMetricsHandler sets  s.metricsHandler. Only used by tests.
+func (s *ContextTest) SetMetricsHandler(h metrics.Handler) {
+	s.metricsHandler = h
 }
 
 // SetHistoryClientForTesting sets history client. Only used by tests.

@@ -31,15 +31,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/urfave/cli/v2"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/temporalio/tctl-kit/pkg/color"
+	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -52,6 +48,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -390,7 +388,7 @@ func getCategory(registry tasks.TaskCategoryRegistry, key string) (tasks.Categor
 // AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
 func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry tasks.TaskCategoryRegistry) error {
 	sid := int32(c.Int(FlagShardID))
-	categoryStr := c.String(FlagTaskType)
+	categoryStr := c.String(FlagTaskCategory)
 	category, err := getCategory(registry, categoryStr)
 	if err != nil {
 		return err
@@ -457,7 +455,7 @@ func AdminRemoveTask(
 	adminClient := clientFactory.AdminClient(c)
 	shardID := c.Int(FlagShardID)
 	taskID := c.Int64(FlagTaskID)
-	category, err := getCategory(taskCategoryRegistry, c.String(FlagTaskType))
+	category, err := getCategory(taskCategoryRegistry, c.String(FlagTaskCategory))
 	if err != nil {
 		return err
 	}

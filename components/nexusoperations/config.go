@@ -37,9 +37,19 @@ var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 
 var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
 	"component.nexusoperations.limit.operation.concurrency",
-	1000,
+	// Temporary limit due to a persistence limitation, this will be increased when we change persistence to accept
+	// partial sub state machine updates.
+	30,
 	`MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
 Once the limit is reached, ScheduleNexusOperation commands will be rejected.`,
+)
+
+var EndpointNotFoundAlwaysNonRetryable = dynamicconfig.NewNamespaceBoolSetting(
+	"component.nexusoperations.endpointNotFoundAlwaysNonRetryable",
+	false,
+	`When set to true, if an endpoint is not found when processing a ScheduleNexusOperation command, the command will be
+	accepted and the operation will fail on the first attempt. This defaults to false to prevent endpoint registry
+	propagation delay from failing operations.`,
 )
 
 var MaxServiceNameLength = dynamicconfig.NewNamespaceIntSetting(
@@ -58,6 +68,14 @@ ScheduleNexusOperation commands with an operation name that exceeds this limit w
 Uses Go's len() function to determine the length.`,
 )
 
+var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"component.nexusoperations.limit.scheduleToCloseTimeout",
+	0,
+	`MaxOperationScheduleToCloseTimeout limits the maximum allowed duration of a Nexus Operation. ScheduleOperation
+commands that specify no schedule-to-close timeout or a longer timeout than permitted will have their
+schedule-to-close timeout capped to this value. 0 implies no limit.`,
+)
+
 var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
 	"component.nexusoperations.callback.endpoint.template",
 	"unset",
@@ -74,30 +92,34 @@ var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
 
 var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	"component.nexusoperations.retryPolicy.maxInterval",
-	time.Second,
+	time.Hour,
 	`The maximum backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
 )
 
 type Config struct {
-	Enabled                 dynamicconfig.BoolPropertyFn
-	RequestTimeout          dynamicconfig.DurationPropertyFnWithDestinationFilter
-	MaxConcurrentOperations dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxServiceNameLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationNameLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PayloadSizeLimit        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackURLTemplate     dynamicconfig.StringPropertyFn
-	RetryPolicy             func() backoff.RetryPolicy
+	Enabled                            dynamicconfig.BoolPropertyFn
+	RequestTimeout                     dynamicconfig.DurationPropertyFnWithDestinationFilter
+	MaxConcurrentOperations            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxServiceNameLength               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationNameLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationScheduleToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	PayloadSizeLimit                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackURLTemplate                dynamicconfig.StringPropertyFn
+	EndpointNotFoundAlwaysNonRetryable dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	RetryPolicy                        func() backoff.RetryPolicy
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled:                 dynamicconfig.EnableNexus.Get(dc),
-		RequestTimeout:          RequestTimeout.Get(dc),
-		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
-		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:  MaxOperationNameLength.Get(dc),
-		PayloadSizeLimit:        dynamicconfig.BlobSizeLimitError.Get(dc),
-		CallbackURLTemplate:     CallbackURLTemplate.Get(dc),
+		Enabled:                            dynamicconfig.EnableNexus.Get(dc),
+		RequestTimeout:                     RequestTimeout.Get(dc),
+		MaxConcurrentOperations:            MaxConcurrentOperations.Get(dc),
+		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),
+		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
+		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
+		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
+		EndpointNotFoundAlwaysNonRetryable: EndpointNotFoundAlwaysNonRetryable.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

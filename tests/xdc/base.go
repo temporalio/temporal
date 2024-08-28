@@ -34,23 +34,27 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
-	"gopkg.in/yaml.v3"
-
-	"go.temporal.io/server/common/testing/historyrequire"
-
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -219,4 +223,59 @@ func (s *xdcBaseSuite) setupTest(waitForClusterConnected bool) {
 			s.clusterConnected = true
 		}
 	}
+}
+
+func (s *xdcBaseSuite) createGlobalNamespace() string {
+	ctx := tests.NewContext()
+	ns := "test-namespace-" + uuid.NewString()
+
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        ns,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, regReq)
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Wait for namespace record to be replicated and loaded into memory.
+		_, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
+		assert.NoError(t, err)
+	}, 15*time.Second, 500*time.Millisecond)
+
+	return ns
+}
+
+func (s *xdcBaseSuite) failover(
+	namespace string,
+	targetCluster string,
+	targetFailoverVersion int64,
+	client tests.FrontendClient,
+) {
+	// wait for replication task propagation
+	time.Sleep(4 * time.Second)
+
+	// update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: targetCluster,
+		},
+	}
+	updateResp, err := client.UpdateNamespace(tests.NewContext(), updateReq)
+	s.NoError(err)
+	s.Equal(targetCluster, updateResp.ReplicationConfig.GetActiveClusterName())
+	s.Equal(targetFailoverVersion, updateResp.GetFailoverVersion())
+
+	// wait till failover completed
+	time.Sleep(cacheRefreshInterval)
+}
+
+func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {
+	conv := converter.GetDefaultDataConverter()
+	payload, err := conv.ToPayload(v)
+	s.NoError(err)
+	return payload
 }

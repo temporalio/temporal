@@ -32,7 +32,6 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )

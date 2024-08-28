@@ -40,8 +40,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -49,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -72,8 +71,6 @@ type (
 const invalidUTF8 = "\n\x8f\x01\n\x0ejunk\x12data"
 
 func (s *namespaceTestSuite) SetupSuite() {
-	checkTestShard(s.T())
-
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = NewTestClusterFactory()
 
@@ -107,16 +104,17 @@ func (s *namespaceTestSuite) TearDownSuite() {
 }
 
 func (s *namespaceTestSuite) SetupTest() {
+	checkTestShard(s.T())
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
-	dc := s.cluster.host.dcClient
 	// don't fail for this test, we're testing this behavior specifically
-	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailRPCRequest, false)
-	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
-	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailRPCRequest, false)
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
 
 	capture := s.cluster.host.captureMetricsHandler.StartCapture()
 	defer s.cluster.host.captureMetricsHandler.StopCapture(capture)
@@ -216,11 +214,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
 
-	dc := s.cluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
-	defer func() {
-		dc.RemoveOverride(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay)
-	}()
+	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
 
 	retention := 24 * time.Hour
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{

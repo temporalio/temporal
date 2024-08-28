@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -196,8 +197,8 @@ func initializeWorkflowAssignedBuildId(
 		return err
 	}
 
-	if mutableState.HasCompletedAnyWorkflowTask() {
-		// workflow has already completed a wft. buildId is stale and useless.
+	if mutableState.HasCompletedAnyWorkflowTask() || workflowTask.StartedEventID != common.EmptyEventID {
+		// workflow task is running or already completed. buildId is potentially stale and useless.
 		// workflow's assigned build ID should be already updated via RecordWorkflowTaskStarted
 		return nil
 	}

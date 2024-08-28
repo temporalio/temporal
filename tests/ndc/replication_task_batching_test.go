@@ -42,26 +42,25 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/service/history/replication/eventhandler"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
-
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -219,11 +218,10 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 		nil,
 		mockClientBean,
 		serializer,
-		nil,
 		s.logger,
 	)
 
-	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx, s.passiveClusterName, namespace.ID(namespaceId), execution.ID, execution.RunID, 0, 1, 0, 0)
 
 	index := 0

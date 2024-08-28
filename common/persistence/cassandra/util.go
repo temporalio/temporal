@@ -27,7 +27,6 @@ package cassandra
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
@@ -36,7 +35,7 @@ import (
 )
 
 func applyWorkflowMutationBatch(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	shardID int32,
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
@@ -154,7 +153,7 @@ func applyWorkflowMutationBatch(
 }
 
 func applyWorkflowSnapshotBatchAsReset(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
@@ -264,7 +263,7 @@ func applyWorkflowSnapshotBatchAsReset(
 }
 
 func applyWorkflowSnapshotBatchAsNew(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
@@ -359,7 +358,7 @@ func applyWorkflowSnapshotBatchAsNew(
 }
 
 func createExecution(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	shardID int32,
 	snapshot *p.InternalWorkflowSnapshot,
 ) error {
@@ -393,7 +392,7 @@ func createExecution(
 }
 
 func updateExecution(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -458,7 +457,7 @@ func updateExecution(
 }
 
 func applyTasks(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	shardID int32,
 	insertTasks map[tasks.Category][]p.InternalHistoryTask,
 ) error {
@@ -487,7 +486,7 @@ func applyTasks(
 }
 
 func createTransferTasks(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	transferTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
@@ -508,7 +507,7 @@ func createTransferTasks(
 }
 
 func createTimerTasks(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	timerTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
@@ -529,7 +528,7 @@ func createTimerTasks(
 }
 
 func createReplicationTasks(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	replicationTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
@@ -550,7 +549,7 @@ func createReplicationTasks(
 }
 
 func createVisibilityTasks(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	visibilityTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
@@ -571,7 +570,7 @@ func createVisibilityTasks(
 }
 
 func createHistoryTasks(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	category tasks.Category,
 	historyTasks []p.InternalHistoryTask,
 	shardID int32,
@@ -598,7 +597,7 @@ func createHistoryTasks(
 }
 
 func updateActivityInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	activityInfos map[int64]*commonpb.DataBlob,
 	deleteIDs map[int64]struct{},
 	shardID int32,
@@ -636,7 +635,7 @@ func updateActivityInfos(
 }
 
 func deleteBufferedEvents(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -654,7 +653,7 @@ func deleteBufferedEvents(
 }
 
 func resetActivityInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	activityInfos map[int64]*commonpb.DataBlob,
 	shardID int32,
 	namespaceID string,
@@ -681,7 +680,7 @@ func resetActivityInfos(
 }
 
 func updateTimerInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	timerInfos map[string]*commonpb.DataBlob,
 	deleteInfos map[string]struct{},
 	shardID int32,
@@ -719,7 +718,7 @@ func updateTimerInfos(
 }
 
 func resetTimerInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	timerInfos map[string]*commonpb.DataBlob,
 	shardID int32,
 	namespaceID string,
@@ -747,7 +746,7 @@ func resetTimerInfos(
 }
 
 func updateChildExecutionInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	childExecutionInfos map[int64]*commonpb.DataBlob,
 	deleteIDs map[int64]struct{},
 	shardID int32,
@@ -785,7 +784,7 @@ func updateChildExecutionInfos(
 }
 
 func resetChildExecutionInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	childExecutionInfos map[int64]*commonpb.DataBlob,
 	shardID int32,
 	namespaceID string,
@@ -811,7 +810,7 @@ func resetChildExecutionInfos(
 }
 
 func updateRequestCancelInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	requestCancelInfos map[int64]*commonpb.DataBlob,
 	deleteIDs map[int64]struct{},
 	shardID int32,
@@ -849,7 +848,7 @@ func updateRequestCancelInfos(
 }
 
 func resetRequestCancelInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	requestCancelInfos map[int64]*commonpb.DataBlob,
 	shardID int32,
 	namespaceID string,
@@ -878,7 +877,7 @@ func resetRequestCancelInfos(
 }
 
 func updateSignalInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	signalInfos map[int64]*commonpb.DataBlob,
 	deleteIDs map[int64]struct{},
 	shardID int32,
@@ -916,7 +915,7 @@ func updateSignalInfos(
 }
 
 func resetSignalInfos(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	signalInfos map[int64]*commonpb.DataBlob,
 	shardID int32,
 	namespaceID string,
@@ -944,7 +943,7 @@ func resetSignalInfos(
 }
 
 func updateSignalsRequested(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	signalReqIDs map[string]struct{},
 	deleteSignalReqIDs map[string]struct{},
 	shardID int32,
@@ -979,7 +978,7 @@ func updateSignalsRequested(
 }
 
 func resetSignalRequested(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	signalRequested map[string]struct{},
 	shardID int32,
 	namespaceID string,
@@ -999,7 +998,7 @@ func resetSignalRequested(
 }
 
 func updateBufferedEvents(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	newBufferedEvents *commonpb.DataBlob,
 	clearBufferedEvents bool,
 	shardID int32,

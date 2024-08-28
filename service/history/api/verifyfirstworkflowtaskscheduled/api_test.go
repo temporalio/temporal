@@ -39,26 +39,25 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/service/history/api"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: primitives.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
@@ -105,13 +104,14 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) SetupTest() {
 	mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 	s.mockExecutionMgr = s.shardContext.Resource.ExecutionMgr
 	mockClusterMetadata := s.shardContext.Resource.ClusterMetadata
+	mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(
 		s.shardContext,
-		wcache.NewHostLevelCache(s.shardContext.GetConfig(), metrics.NoopMetricsHandler))
+		wcache.NewHostLevelCache(s.shardContext.GetConfig(), s.shardContext.GetLogger(), metrics.NoopMetricsHandler))
 	s.mockEventsCache = s.shardContext.MockEventsCache
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = s.shardContext.GetLogger()
@@ -250,7 +250,15 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	wt, _ := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 
 	// Start WFT
-	workflowTasksStartEvent, _, _ := ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, tests.RunID, &taskqueuepb.TaskQueue{Name: "testTaskQueue"}, uuid.New(), nil, nil)
+	workflowTasksStartEvent, _, _ := ms.AddWorkflowTaskStartedEvent(
+		wt.ScheduledEventID,
+		tests.RunID,
+		&taskqueuepb.TaskQueue{Name: "testTaskQueue"},
+		uuid.New(),
+		nil,
+		nil,
+		false,
+	)
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 
 	// Complete WFT

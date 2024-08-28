@@ -26,7 +26,6 @@ package dynamicconfig
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
@@ -50,6 +49,19 @@ type (
 		// periodically or when notified, and only do in-memory lookups inside of GetValue.
 		GetValue(key Key) []ConstrainedValue
 	}
+
+	// NotifyingClient is an optional interface that a Client can also implement, that adds
+	// support for faster notifications of dynamic config changes.
+	NotifyingClient interface {
+		// Adds a subscription to all updates from this Client. `update` will be called on any
+		// change to the current value set. The caller should call `cancel` to cancel the
+		// subscription. Calls to `update` will not be made concurrently.
+		Subscribe(update ClientUpdateFunc) (cancel func())
+	}
+
+	// Called with modified keys on any change to the current value set.
+	// Deleted keys/constraints will get a nil value.
+	ClientUpdateFunc func(map[Key][]ConstrainedValue)
 
 	// Key is a key/property stored in dynamic config. For convenience, it is recommended that
 	// you treat keys as case-insensitive.

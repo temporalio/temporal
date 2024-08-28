@@ -60,3 +60,22 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-status:
+    name: Tests Status
+    needs:
+      - feature-tests-ts
+      - feature-tests-go
+      - feature-tests-python
+      - feature-tests-java
+      - feature-tests-dotnet
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      RESULTS: ${{ toJSON(needs.*.result) }}
+    steps:
+      - name: Check results
+        run: |
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
+          fi

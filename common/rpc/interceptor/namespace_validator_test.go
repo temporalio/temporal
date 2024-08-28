@@ -37,15 +37,15 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -173,121 +173,226 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotFoun
 	s.False(handlerCalled)
 }
 
+type nexusRequest struct{}
+
+func (*nexusRequest) GetNamespace() string {
+	return "test-namespace"
+}
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamespace() {
+
 	testCases := []struct {
 		state            enumspb.NamespaceState
 		replicationState enumspb.ReplicationState
 		expectedErr      error
 		method           string
-		req              interface{}
+		req              any
 	}{
 		// StartWorkflowExecution
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
+			method:      api.WorkflowServicePrefix + "StartWorkflowExecution",
 			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
+			method:      api.WorkflowServicePrefix + "StartWorkflowExecution",
 			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
+			method:      api.WorkflowServicePrefix + "StartWorkflowExecution",
 			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:            enumspb.NAMESPACE_STATE_REGISTERED,
 			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
 			expectedErr:      common.ErrNamespaceHandover,
-			method:           "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
+			method:           api.WorkflowServicePrefix + "StartWorkflowExecution",
 			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
+		// SignalWithStartWorkflowExecution
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution",
+			req:         &workflowservice.SignalWithStartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution",
+			req:         &workflowservice.SignalWithStartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution",
+			req:         &workflowservice.SignalWithStartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		// DeleteNamespace
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "DeleteNamespace",
+			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "DeleteNamespace",
+			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "DeleteNamespace",
+			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
+		},
+		// AdminService APIs
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DescribeMutableState",
+			req:         &adminservice.DescribeMutableStateRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DescribeMutableState",
+			req:         &adminservice.DescribeMutableStateRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DescribeMutableState",
+			req:         &adminservice.DescribeMutableStateRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DeleteWorkflowExecution",
+			req:         &adminservice.DeleteWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DeleteWorkflowExecution",
+			req:         &adminservice.DeleteWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DeleteWorkflowExecution",
+			req:         &adminservice.DeleteWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		// DispatchNexusTask
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.NexusServicePrefix + "DispatchNexusTask",
+			req:         &nexusRequest{},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.NexusServicePrefix + "DispatchNexusTask",
+			req:         &nexusRequest{},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.NexusServicePrefix + "DispatchNexusTask",
+			req:         &nexusRequest{},
+		},
+
+		// =====================================================================
+		//                       Default Allowed States
+		// =====================================================================
+
 		// DescribeNamespace
 		{
 			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
 			expectedErr: errNamespaceNotSet,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
+			method:      api.WorkflowServicePrefix + "DescribeNamespace",
 			req:         &workflowservice.DescribeNamespaceRequest{},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
+			method:      api.WorkflowServicePrefix + "DescribeNamespace",
 			req:         &workflowservice.DescribeNamespaceRequest{Id: "test-namespace-id"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
+			method:      api.WorkflowServicePrefix + "DescribeNamespace",
 			req:         &workflowservice.DescribeNamespaceRequest{Namespace: "test-namespace"},
 		},
 		// RegisterNamespace
 		{
 			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace",
+			method:      api.WorkflowServicePrefix + "RegisterNamespace",
 			req:         &workflowservice.RegisterNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
 			expectedErr: errNamespaceNotSet,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace",
+			method:      api.WorkflowServicePrefix + "RegisterNamespace",
 			req:         &workflowservice.RegisterNamespaceRequest{},
 		},
 		// PollWorkflowTaskQueue (default)
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue",
+			method:      api.WorkflowServicePrefix + "PollWorkflowTaskQueue",
 			req:         &workflowservice.PollWorkflowTaskQueueRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue",
+			method:      api.WorkflowServicePrefix + "PollWorkflowTaskQueue",
 			req:         &workflowservice.PollWorkflowTaskQueueRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue",
+			method:      api.WorkflowServicePrefix + "PollWorkflowTaskQueue",
 			req:         &workflowservice.PollWorkflowTaskQueueRequest{Namespace: "test-namespace"},
 		},
 		// UpdateNamespace
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace",
+			method:      api.WorkflowServicePrefix + "UpdateNamespace",
 			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace",
+			method:      api.WorkflowServicePrefix + "UpdateNamespace",
 			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:            enumspb.NAMESPACE_STATE_REGISTERED,
 			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
 			expectedErr:      nil,
-			method:           "/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace",
+			method:           api.WorkflowServicePrefix + "UpdateNamespace",
 			req:              &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace",
+			method:      api.WorkflowServicePrefix + "UpdateNamespace",
 			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
 		},
 	}
 
-	for i, testCase := range testCases {
-		s.T().Run(fmt.Sprintf("test-case-%v", i), func(t *testing.T) {
+	for _, testCase := range testCases {
+		s.T().Run(fmt.Sprintf("%s-%s", testCase.method, testCase.state.String()), func(t *testing.T) {
 			_, isDescribeNamespace := testCase.req.(*workflowservice.DescribeNamespaceRequest)
 			_, isRegisterNamespace := testCase.req.(*workflowservice.RegisterNamespaceRequest)
 			if !isDescribeNamespace && !isRegisterNamespace {
@@ -345,7 +450,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
+			method:      api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
 			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: taskToken,
 			},
@@ -353,7 +458,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
 			expectedErr: nil,
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
+			method:      api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
 			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: taskToken,
 			},
@@ -361,7 +466,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
-			method:      "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
+			method:      api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
 			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: taskToken,
 			},
@@ -575,7 +680,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 			dynamicconfig.GetBoolPropertyFn(testCase.enableTokenNamespaceEnforcement),
 			dynamicconfig.GetIntPropertyFn(100))
 		serverInfo := &grpc.UnaryServerInfo{
-			FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RandomMethod",
+			FullMethod: api.WorkflowServicePrefix + "RandomMethod",
 		}
 
 		handlerCalled := false
@@ -620,7 +725,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_DescribeHistoryHostRequests() {
 			dynamicconfig.GetIntPropertyFn(100),
 		)
 		serverInfo := &grpc.UnaryServerInfo{
-			FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/random",
+			FullMethod: api.WorkflowServicePrefix + "random",
 		}
 
 		handlerCalled := false
@@ -705,7 +810,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 			dynamicconfig.GetIntPropertyFn(100),
 		)
 		serverInfo := &grpc.UnaryServerInfo{
-			FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/random",
+			FullMethod: api.WorkflowServicePrefix + "random",
 		}
 
 		handlerCalled := false
@@ -729,7 +834,7 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 		dynamicconfig.GetBoolPropertyFn(false),
 		dynamicconfig.GetIntPropertyFn(10))
 	serverInfo := &grpc.UnaryServerInfo{
-		FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/random",
+		FullMethod: api.WorkflowServicePrefix + "random",
 	}
 	requestNamespace := namespace.FromPersistentState(
 		&persistence.GetNamespaceResponse{

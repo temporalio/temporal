@@ -38,8 +38,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
@@ -47,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -191,7 +190,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
-	m.Equal(badBinaries, resp1.Namespace.Config.BadBinaries)
+	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
@@ -270,7 +269,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
-	m.Equal(badBinaries, resp1.Namespace.Config.BadBinaries)
+	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
@@ -394,7 +393,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
-	m.Equal(badBinaries, resp1.Namespace.Config.BadBinaries)
+	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
@@ -705,7 +704,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 
 	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
-	m.Equal(badBinaries, resp2.Namespace.Config.BadBinaries)
+	m.ProtoEqual(badBinaries, resp2.Namespace.Config.BadBinaries)
 	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
 	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion

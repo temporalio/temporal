@@ -85,11 +85,8 @@ func TestGRPCBuilder(t *testing.T) {
 
 	// This is where we invoke the code under test. We dial the frontend service. The URL should use our custom
 	// protocol, and then our resolver should resolve this to the localhost:1234 address.
-	resolverBuilder := &grpcBuilder{}
-	resolverBuilder.monitor.Store(monitor)
-
-	url := (&GRPCResolver{}).MakeURL(primitives.FrontendService)
-	assert.Equal(t, "membership://frontend", url)
+	url := GRPCResolverURLForTesting(monitor, primitives.FrontendService)
+	assert.Regexp(t, "membership://frontend~0x[[:xdigit:]]*", url)
 
 	// dialedAddress is the actual address that the gRPC framework dialed after resolving the URL using our resolver.
 	var dialedAddress string
@@ -97,7 +94,6 @@ func TestGRPCBuilder(t *testing.T) {
 	conn, err := grpc.Dial(
 		url,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithResolvers(resolverBuilder),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			dialedAddress = s
 			return p.Connect(ctx.Done())

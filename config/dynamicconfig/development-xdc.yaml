@@ -32,10 +32,6 @@
 #  - value: true
 system.enableEagerWorkflowStart:
   - value: true
-frontend.enableUpdateWorkflowExecution:
-  - value: true
-frontend.enableUpdateWorkflowExecutionAsyncAccepted:
-  - value: true
 frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
@@ -45,6 +41,10 @@ system.enableNexus:
   - value: false 
 component.nexusoperations.callback.endpoint.template:
   - value: http://localhost:7243/api/v1/namespaces/{{.NamespaceName}}/nexus/callback
+component.callbacks.allowedAddresses:
+  - value:
+      - Pattern: "*"
+        AllowInsecure: true
 matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:

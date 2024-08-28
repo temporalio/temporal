@@ -56,8 +56,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -68,6 +66,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -291,7 +290,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 
 	poller := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -303,7 +302,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -564,7 +563,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	}
 
 	poller1 := &tests.TaskPoller{
-		Engine:                       client1,
+		Client:                       client1,
 		Namespace:                    namespace,
 		TaskQueue:                    taskQueue,
 		StickyTaskQueue:              stickyTaskQueue1,
@@ -576,7 +575,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	}
 
 	poller2 := &tests.TaskPoller{
-		Engine:                       client2,
+		Client:                       client2,
 		Namespace:                    namespace,
 		TaskQueue:                    taskQueue,
 		StickyTaskQueue:              stickyTaskQueue2,
@@ -699,7 +698,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	}
 
 	poller := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -710,7 +709,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -840,7 +839,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	}
 
 	poller := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1023,7 +1022,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	}
 
 	poller := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1034,7 +1033,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1197,7 +1196,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	}
 
 	poller := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1207,7 +1206,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1310,7 +1309,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	}
 
 	poller := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1320,7 +1319,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	}
 
 	poller2 := &tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1581,7 +1580,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 	}
 
 	poller1 := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1591,7 +1590,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 	}
 
 	poller2 := &tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1689,7 +1688,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	}
 
 	poller1 := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1850,7 +1849,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	}
 
 	poller1 := &tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1860,7 +1859,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	}
 
 	poller2 := &tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -1945,7 +1944,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2040,7 +2039,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	}
 
 	poller1 := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2050,7 +2049,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2163,7 +2162,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2271,7 +2270,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	}
 
 	poller1 := tests.TaskPoller{
-		Engine:              client1,
+		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -2281,7 +2280,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	}
 
 	poller2 := tests.TaskPoller{
-		Engine:              client2,
+		Client:              client2,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -3055,40 +3054,6 @@ func (s *FunctionalClustersTestSuite) getHistory(client tests.FrontendClient, na
 	}
 
 	return events
-}
-
-func (s *FunctionalClustersTestSuite) failover(
-	namespace string,
-	targetCluster string,
-	targetFailoverVersion int64,
-	client tests.FrontendClient,
-) {
-	s.logger.Debug("Failover namespace", tag.WorkflowNamespace(namespace), tag.ClusterName(targetCluster))
-
-	// wait for replication task propagation
-	time.Sleep(4 * time.Second)
-	// s.waitForClusterConnected()
-
-	s.logger.Debug("Failover namespace: start")
-
-	// update namespace to fail over
-	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			ActiveClusterName: targetCluster,
-		},
-	}
-	updateResp, err := client.UpdateNamespace(tests.NewContext(), updateReq)
-	s.NoError(err)
-	s.Equal(targetCluster, updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(targetFailoverVersion, updateResp.GetFailoverVersion())
-
-	s.logger.Debug("Failover namespace: done")
-
-	// wait till failover completed
-	time.Sleep(cacheRefreshInterval)
-
-	s.logger.Debug("Failover namespace: finished")
 }
 
 func (s *FunctionalClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {

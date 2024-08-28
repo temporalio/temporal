@@ -36,11 +36,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.uber.org/fx"
-	"go.uber.org/multierr"
-
 	"go.temporal.io/api/operatorservice/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -67,6 +63,8 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/fx"
+	"go.uber.org/multierr"
 )
 
 type (
@@ -223,8 +221,10 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 			return nil, err
 		}
 
-		// Disable standard to elasticsearch dual visibility
-		pConfig.VisibilityStore = ""
+		pConfig.VisibilityStore = "test-es-visibility"
+		pConfig.DataStores[pConfig.VisibilityStore] = config.DataStore{
+			Elasticsearch: options.ESConfig,
+		}
 		indexName = options.ESConfig.GetVisibilityIndex()
 		esClient, err = esclient.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
@@ -241,12 +241,13 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
 	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
 		clusterInfo.ShardCount = options.HistoryConfig.NumHistoryShards
+		clusterInfo.ClusterID = uuid.New()
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
 				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
 				ClusterName:              clusterName,
-				ClusterId:                uuid.New(),
+				ClusterId:                clusterInfo.ClusterID,
 				IsConnectionEnabled:      clusterInfo.Enabled,
 				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
 				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
@@ -278,9 +279,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		}
 	}
 
-	dcClient := dynamicconfig.StaticClient(options.DynamicConfigOverrides)
-	dcc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
-	taskCategoryRegistry := temporal.TaskCategoryRegistryProvider(archiverBase.metadata, dcc)
+	taskCategoryRegistry := temporal.TaskCategoryRegistryProvider(archiverBase.metadata)
 
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
@@ -327,6 +326,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
+	ctx := context.Background()
 	var esClient esclient.IntegrationTestsClient
 	op := func() error {
 		var err error
@@ -335,7 +335,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 			return err
 		}
 
-		return esClient.Ping(context.TODO())
+		return esClient.Ping(ctx)
 	}
 
 	err := backoff.ThrottleRetry(
@@ -347,7 +347,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 		logger.Fatal("Failed to connect to elasticsearch", tag.Error(err))
 	}
 
-	exists, err := esClient.IndexExists(context.Background(), esConfig.GetVisibilityIndex())
+	exists, err := esClient.IndexExists(ctx, esConfig.GetVisibilityIndex())
 	if err != nil {
 		return err
 	}
@@ -367,26 +367,53 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	}
 	// Template name doesn't matter.
 	// This operation is idempotent and won't return an error even if template already exists.
-	_, err = esClient.IndexPutTemplate(context.Background(), "temporal_visibility_v1_template", string(template))
+	_, err = esClient.IndexPutTemplate(ctx, "temporal_visibility_v1_template", string(template))
 	if err != nil {
 		return err
 	}
 	logger.Info("Index template created.")
 
 	logger.Info("Creating index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	_, err = esClient.CreateIndex(context.Background(), esConfig.GetVisibilityIndex())
+	_, err = esClient.CreateIndex(
+		ctx,
+		esConfig.GetVisibilityIndex(),
+		map[string]any{
+			"settings": map[string]any{
+				"index": map[string]any{
+					"number_of_replicas": 0,
+				},
+			},
+		},
+	)
 	if err != nil {
+		return err
+	}
+	if err := waitForYellowStatus(esClient, esConfig.GetVisibilityIndex()); err != nil {
 		return err
 	}
 	logger.Info("Index created.", tag.ESIndex(esConfig.GetVisibilityIndex()))
 
 	logger.Info("Add custom search attributes for tests.")
-	_, err = esClient.PutMapping(context.Background(), esConfig.GetVisibilityIndex(), searchattribute.TestNameTypeMap.Custom())
+	_, err = esClient.PutMapping(ctx, esConfig.GetVisibilityIndex(), searchattribute.TestNameTypeMap.Custom())
 	if err != nil {
+		return err
+	}
+	if err := waitForYellowStatus(esClient, esConfig.GetVisibilityIndex()); err != nil {
 		return err
 	}
 	logger.Info("Index setup complete.", tag.ESIndex(esConfig.GetVisibilityIndex()))
 
+	return nil
+}
+
+func waitForYellowStatus(esClient esclient.IntegrationTestsClient, index string) error {
+	status, err := esClient.WaitForYellowStatus(context.Background(), index)
+	if err != nil {
+		return err
+	}
+	if status == "red" {
+		return fmt.Errorf("Elasticsearch index status for %s is red", index)
+	}
 	return nil
 }
 
@@ -511,6 +538,10 @@ func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
 
 func (tc *TestCluster) GetHost() *temporalImpl {
 	return tc.host
+}
+
+func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) {
+	tc.host.OverrideDCValue(t, key, value)
 }
 
 var errCannotAddCACertToPool = errors.New("failed adding CA to pool")

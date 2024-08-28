@@ -50,7 +50,6 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			resetRequest.NamespaceId,
 			resetRequest.Execution.WorkflowId,

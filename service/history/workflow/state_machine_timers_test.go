@@ -41,17 +41,19 @@ func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	now := time.Now()
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
-	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: 0})
-	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: 1})
-	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: 2})
-	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: 3})
+	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0"})
+	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "1"})
+	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "2"})
+	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: "3"})
 
 	require.Equal(t, 3, len(execInfo.StateMachineTimers))
-	require.Equal(t, int32(3), execInfo.StateMachineTimers[0].Infos[0].Type)
-	require.Equal(t, int32(0), execInfo.StateMachineTimers[1].Infos[0].Type)
-	require.Equal(t, int32(1), execInfo.StateMachineTimers[2].Infos[0].Type)
-	require.Equal(t, int32(2), execInfo.StateMachineTimers[2].Infos[1].Type)
+	require.Equal(t, "3", execInfo.StateMachineTimers[0].Infos[0].Type)
+	require.Equal(t, "0", execInfo.StateMachineTimers[1].Infos[0].Type)
+	require.Equal(t, "1", execInfo.StateMachineTimers[2].Infos[0].Type)
+	require.Equal(t, "2", execInfo.StateMachineTimers[2].Infos[1].Type)
 }
 
 func TestAddNextStateMachineTimerTask(t *testing.T) {
@@ -59,23 +61,20 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 	ms := workflow.NewMockMutableState(ctrl)
 
 	now := time.Now().UTC()
-	execInfo := &persistencespb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, MaxTransitionCount: 2},
-		},
-	}
 	var scheduledTasks []tasks.Task
 
-	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 	ms.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(task tasks.Task) {
 		scheduledTasks = append(scheduledTasks, task)
 	})
 
-	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: 0})
-	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: 1})
-	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: 2})
-	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: 3})
+	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0"})
+	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "1"})
+	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "2"})
+	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: "3"})
 
 	workflow.AddNextStateMachineTimerTask(ms)
 
@@ -86,7 +85,6 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 	require.Equal(t, "wf-id", task.GetWorkflowID())
 	require.Equal(t, "run-id", task.GetRunID())
 	require.Equal(t, int64(1), task.Version)
-	require.Equal(t, int64(2), task.MutableStateTransitionCount)
 	require.Equal(t, now.Add(-time.Hour), task.VisibilityTimestamp)
 
 	// First timer already scheduled should not generate any tasks.

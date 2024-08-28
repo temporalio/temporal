@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -65,17 +66,17 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 		resume: true,
 	}
 	highPriorityState.cond = sync.NewCond(&highPriorityState.mu)
-	highPriorityState.rateLimiter = quotas.NewDynamicRateLimiter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+	highPriorityState.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 		return float64(config.ReplicationStreamSenderHighPriorityQPS())
-	}), 1*time.Minute)
+	})
 
 	lowPriorityState := &flowControlState{
 		resume: true,
 	}
 	lowPriorityState.cond = sync.NewCond(&lowPriorityState.mu)
-	lowPriorityState.rateLimiter = quotas.NewDynamicRateLimiter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+	lowPriorityState.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 		return float64(config.ReplicationStreamSenderLowPriorityQPS())
-	}), 1*time.Minute)
+	})
 	flowControlStates[enums.TASK_PRIORITY_HIGH] = highPriorityState
 	flowControlStates[enums.TASK_PRIORITY_LOW] = lowPriorityState
 	return &SenderFlowControllerImpl{
@@ -113,7 +114,9 @@ func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControl
 func (s *SenderFlowControllerImpl) Wait(priority enums.TaskPriority) {
 	state, ok := s.flowControlStates[priority]
 	waitForRateLimiter := func(rateLimiter quotas.RateLimiter) {
-		err := rateLimiter.Wait(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // to avoid infinite wait
+		defer cancel()
+		err := rateLimiter.Wait(ctx)
 		if err != nil {
 			s.logger.Error("error waiting for rate limiter", tag.Error(err))
 		}
@@ -127,7 +130,9 @@ func (s *SenderFlowControllerImpl) Wait(priority enums.TaskPriority) {
 	state.mu.Lock()
 	if !state.resume {
 		state.waiters++
+		s.logger.Info(fmt.Sprintf("%v sender is paused", priority.String()))
 		state.cond.Wait()
+		s.logger.Info(fmt.Sprintf("%s sender is resumed", priority.String()))
 		state.waiters--
 	}
 	state.mu.Unlock()

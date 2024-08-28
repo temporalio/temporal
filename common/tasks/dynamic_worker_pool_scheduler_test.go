@@ -30,6 +30,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/metrics"
 )
 
 type testLimiter struct {
@@ -53,7 +54,7 @@ func TestDynamicWorkerPoolSchedulerLogic(t *testing.T) {
 	wg.Add(3)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	sched := NewDynamicWorkerPoolScheduler(testLimiter{})
+	sched := NewDynamicWorkerPoolScheduler(testLimiter{}, metrics.NoopMetricsHandler)
 
 	// First task, signals the wait group when done and allows more tasks to be processed in the spawned goroutine.
 	task1 := NewMockRunnable(ctrl)

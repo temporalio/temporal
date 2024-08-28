@@ -36,8 +36,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
@@ -49,6 +47,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -220,6 +219,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 
@@ -244,6 +244,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.NoError(err)
@@ -257,6 +258,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.NoError(err)
@@ -269,6 +271,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.NoError(err)
@@ -292,6 +295,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -304,6 +308,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -316,6 +321,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -327,6 +333,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.NoError(err)
@@ -349,6 +356,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -363,6 +371,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		workflowKey,
 		branchToken,
 		0,
+		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -840,4 +849,57 @@ func (s *contextSuite) TestUpdateShardInfo_FailsUnlessShardAcquired() {
 		called = true
 	}))
 	s.True(called)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
+
+	s.mockShard.config.ShardUpdateMinInterval = func() time.Duration { return 5 * time.Minute }
+	s.mockShard.config.ShardFirstUpdateInterval = func() time.Duration { return 10 * time.Second }
+	s.timeSource.Update(time.Now())
+
+	s.mockShard.initLastUpdatesTime()
+	s.mockShard.tasksCompletedSinceLastUpdate = 1
+	_any := gomock.Any()
+	s.mockShardManager.EXPECT().UpdateShard(_any, _any).Times(0)
+
+	// updating too early
+	var called bool
+	updateFunc := func() { called = true }
+
+	err := s.mockShard.updateShardInfo(1, updateFunc)
+
+	s.NoError(err)
+	s.True(called)
+	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 2)
+
+	// update after ShardFirstUpdateInterval
+	s.mockShard.initLastUpdatesTime()
+	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardFirstUpdateInterval() + 10*time.Second))
+	called = false
+	s.mockShardManager.EXPECT().UpdateShard(_any, _any).Return(nil).Times(1)
+	err = s.mockShard.updateShardInfo(1, updateFunc)
+
+	s.NoError(err)
+	s.True(called)
+	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 0)
+
+	// update again. This time update will not work since shard lastUpdate time was set during previous update
+	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardFirstUpdateInterval() + 15*time.Second))
+	called = false
+	s.mockShardManager.EXPECT().UpdateShard(_any, _any).Times(0)
+	err = s.mockShard.updateShardInfo(1, updateFunc)
+
+	s.NoError(err)
+	s.True(called)
+	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 1)
+
+	// now move past last updated interval. This time hard info should be updated/persisted
+	s.timeSource.Update(s.mockShard.lastUpdated.Add(s.mockShard.config.ShardUpdateMinInterval() + 10*time.Second))
+	called = false
+	s.mockShardManager.EXPECT().UpdateShard(_any, _any).Return(nil).Times(1)
+	err = s.mockShard.updateShardInfo(1, updateFunc)
+
+	s.NoError(err)
+	s.True(called)
+	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 0)
 }

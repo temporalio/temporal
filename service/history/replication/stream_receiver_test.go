@@ -34,14 +34,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -261,8 +260,8 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(lowWatermarkInfo)
 	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH).Return(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME)
 	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW).Return(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE)
-	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
-	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.highPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+	s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.NoError(err)
 	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{

@@ -25,21 +25,25 @@
 package dynamicconfig
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
-
-	enumspb "go.temporal.io/api/enums/v1"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type (
@@ -50,6 +54,32 @@ type (
 		client   Client
 		logger   log.Logger
 		errCount int64
+
+		cancelClientSubscription func()
+
+		subscriptionLock sync.Mutex          // protects subscriptions, subscriptionIdx, and callbackPool
+		subscriptions    map[Key]map[int]any // final "any" is *subscription[T]
+		subscriptionIdx  int
+		callbackPool     *goro.AdaptivePool
+
+		poller goro.Group
+	}
+
+	subscription[T any] struct {
+		// constant:
+		prec []Constraints
+		f    func(T)
+		def  T
+		cdef *[]TypedConstrainedValue[T]
+		// protected by subscriptionLock in Collection:
+		prev T
+	}
+
+	subscriptionCallbackSettings struct {
+		MinWorkers   int
+		MaxWorkers   int
+		TargetDelay  time.Duration
+		ShrinkFactor float64
 	}
 
 	// These function types follow a similar pattern:
@@ -77,14 +107,113 @@ const (
 var (
 	errKeyNotPresent        = errors.New("key not present")
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
+
+	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
+	durationType  = reflect.TypeOf(time.Duration(0))
+	stringType    = reflect.TypeOf("")
 )
 
-// NewCollection creates a new collection
+// NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
+// Get will work without Start/Stop.
 func NewCollection(client Client, logger log.Logger) *Collection {
 	return &Collection{
-		client:   client,
-		logger:   logger,
-		errCount: -1,
+		client:        client,
+		logger:        logger,
+		errCount:      -1,
+		subscriptions: make(map[Key]map[int]any),
+	}
+}
+
+func (c *Collection) Start() {
+	s := DynamicConfigSubscriptionCallback.Get(c)()
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
+	if notifyingClient, ok := c.client.(NotifyingClient); ok {
+		c.cancelClientSubscription = notifyingClient.Subscribe(c.keysChanged)
+	} else {
+		c.poller.Go(c.pollForChanges)
+	}
+}
+
+func (c *Collection) Stop() {
+	c.poller.Cancel()
+	c.poller.Wait()
+	if c.cancelClientSubscription != nil {
+		c.cancelClientSubscription()
+	}
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	c.callbackPool.Stop()
+	c.callbackPool = nil
+}
+
+// Implement pingable.Pingable
+func (c *Collection) GetPingChecks() []pingable.Check {
+	return []pingable.Check{
+		{
+			Name:    "dynamic config callbacks",
+			Timeout: 5 * time.Second,
+			Ping: func() []pingable.Pingable {
+				c.subscriptionLock.Lock()
+				defer c.subscriptionLock.Unlock()
+				if c.callbackPool == nil {
+					return nil
+				}
+				var wg sync.WaitGroup
+				wg.Add(1)
+				c.callbackPool.Do(wg.Done)
+				wg.Wait()
+				return nil
+			},
+		},
+	}
+}
+
+func (c *Collection) pollForChanges(ctx context.Context) error {
+	interval := DynamicConfigSubscriptionPollInterval.Get(c)
+	for ctx.Err() == nil {
+		util.InterruptibleSleep(ctx, interval())
+		c.pollOnce()
+	}
+	return ctx.Err()
+}
+
+func (c *Collection) pollOnce() {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	if c.callbackPool == nil {
+		return
+	}
+
+	for key, subs := range c.subscriptions {
+		setting := queryRegistry(key)
+		if setting == nil {
+			continue
+		}
+		for _, sub := range subs {
+			cvs := c.client.GetValue(key)
+			setting.dispatchUpdate(c, sub, cvs)
+		}
+	}
+}
+
+func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+	if c.callbackPool == nil {
+		return
+	}
+
+	for key, cvs := range changed {
+		setting := queryRegistry(key)
+		if setting == nil {
+			continue
+		}
+		// use setting.Key instead of key to avoid changing case again
+		for _, sub := range c.subscriptions[setting.Key()] {
+			setting.dispatchUpdate(c, sub, cvs)
+		}
 	}
 }
 
@@ -94,11 +223,6 @@ func (c *Collection) throttleLog() bool {
 	errCount := atomic.AddInt64(&c.errCount, 1)
 	// log only the first x errors and then one every x after that to reduce log noise
 	return errCount < errCountLogThreshold || errCount%errCountLogThreshold == 0
-}
-
-func (c *Collection) HasKey(key Key) bool {
-	cvs := c.client.GetValue(key)
-	return len(cvs) > 0
 }
 
 func findMatch[T any](cvs []ConstrainedValue, defaultCVs []TypedConstrainedValue[T], precedence []Constraints) (any, error) {
@@ -127,14 +251,27 @@ func matchAndConvert[T any](
 	c *Collection,
 	key Key,
 	def T,
-	cdef []TypedConstrainedValue[T],
+	cdef *[]TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	precedence []Constraints,
 ) T {
 	cvs := c.client.GetValue(key)
+	return matchAndConvertCvs(c, key, def, cdef, convert, precedence, cvs)
+}
 
-	defaultCVs := cdef
-	if defaultCVs == nil {
+func matchAndConvertCvs[T any](
+	c *Collection,
+	key Key,
+	def T,
+	cdef *[]TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	precedence []Constraints,
+	cvs []ConstrainedValue,
+) T {
+	var defaultCVs []TypedConstrainedValue[T]
+	if cdef != nil {
+		defaultCVs = *cdef
+	} else {
 		defaultCVs = []TypedConstrainedValue[T]{{Value: def}}
 	}
 
@@ -164,59 +301,66 @@ func matchAndConvert[T any](
 	return typedVal
 }
 
-func precedenceGlobal() []Constraints {
-	return []Constraints{
-		{},
+func subscribe[T any](
+	c *Collection,
+	key Key,
+	def T,
+	cdef *[]TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	prec []Constraints,
+	callback func(T),
+) (T, func()) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+
+	// get one value immediately (note that subscriptionLock is held here so we can't race with
+	// an update)
+	init := matchAndConvert(c, key, def, cdef, convert, prec)
+
+	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
+	// current value and skip the subscription.  The cancellation func returned is also nil.
+	if callback == nil {
+		return init, nil
+	}
+
+	c.subscriptionIdx++
+	id := c.subscriptionIdx
+
+	if c.subscriptions[key] == nil {
+		c.subscriptions[key] = make(map[int]any)
+	}
+
+	c.subscriptions[key][id] = &subscription[T]{
+		prec: prec,
+		f:    callback,
+		def:  def,
+		cdef: cdef,
+		prev: init,
+	}
+
+	return init, func() {
+		c.subscriptionLock.Lock()
+		defer c.subscriptionLock.Unlock()
+		delete(c.subscriptions[key], id)
 	}
 }
 
-func precedenceNamespace(namespace string) []Constraints {
-	return []Constraints{
-		{Namespace: namespace},
-		{},
-	}
-}
-
-func precedenceNamespaceID(namespaceID string) []Constraints {
-	return []Constraints{
-		{NamespaceID: namespaceID},
-		{},
-	}
-}
-
-func precedenceTaskQueue(namespace string, taskQueue string, taskType enumspb.TaskQueueType) []Constraints {
-	return []Constraints{
-		{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskType},
-		{Namespace: namespace, TaskQueueName: taskQueue},
-		// A task-queue-name-only filter applies to a single task queue name across all
-		// namespaces, with higher precedence than a namespace-only filter. This is intended to
-		// be used by defaultNumTaskQueuePartitions and is probably not useful otherwise.
-		{TaskQueueName: taskQueue},
-		{Namespace: namespace},
-		{},
-	}
-}
-
-func precedenceDestination(namespace string, destination string) []Constraints {
-	return []Constraints{
-		{Namespace: namespace, Destination: destination},
-		{Destination: destination},
-		{Namespace: namespace},
-		{},
-	}
-}
-
-func precedenceShardID(shardID int32) []Constraints {
-	return []Constraints{
-		{ShardID: shardID},
-		{},
-	}
-}
-
-func precedenceTaskType(taskType enumsspb.TaskType) []Constraints {
-	return []Constraints{
-		{TaskType: taskType},
-		{},
+// called with subscriptionLock
+func dispatchUpdate[T any](
+	c *Collection,
+	key Key,
+	convert func(value any) (T, error),
+	sub *subscription[T],
+	cvs []ConstrainedValue,
+) {
+	newVal := matchAndConvertCvs(c, key, sub.def, sub.cdef, convert, sub.prec, cvs)
+	// Unfortunately we have to use reflect.DeepEqual instead of just == because T is not comparable.
+	// We can't make T comparable because maps and slices are not comparable, and we want to support
+	// those directly. We could have two versions of this, one for comparable types and one for
+	// non-comparable, but it's not worth it.
+	if !reflect.DeepEqual(sub.prev, newVal) {
+		sub.prev = newVal
+		c.callbackPool.Do(func() { sub.f(newVal) })
 	}
 }
 
@@ -331,8 +475,10 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 		out := def
 		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result: &out,
-			// If we want more than one hook in the future, combine them with mapstructure.OrComposeDecodeHookFunc
-			DecodeHook: mapstructureHookDuration,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructureHookDuration,
+				mapstructureHookProtoEnum,
+			),
 		})
 		if err != nil {
 			return out, err
@@ -345,8 +491,24 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 // Parses string into time.Duration. mapstructure has an implementation of this already but it
 // calls time.ParseDuration and we want to use our own method.
 func mapstructureHookDuration(f, t reflect.Type, data any) (any, error) {
-	if t != reflect.TypeOf(time.Duration(0)) {
+	if t != durationType {
 		return data, nil
 	}
 	return convertDuration(data)
+}
+
+// Parses proto enum values from strings.
+func mapstructureHookProtoEnum(f, t reflect.Type, data any) (any, error) {
+	if f != stringType || !t.Implements(protoEnumType) {
+		return data, nil
+	}
+	vals := reflect.New(t).Interface().(protoreflect.Enum).Descriptor().Values()
+	str := strings.ToLower(data.(string)) // we checked f above so this can't fail
+	for i := 0; i < vals.Len(); i++ {
+		val := vals.Get(i)
+		if str == strings.ToLower(string(val.Name())) {
+			return val.Number(), nil
+		}
+	}
+	return nil, fmt.Errorf("name %q not found in enum %s", data, t.Name())
 }

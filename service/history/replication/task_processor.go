@@ -28,13 +28,12 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -55,6 +54,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -64,7 +64,8 @@ const (
 
 var (
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrUnknownReplicationTask     = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrCorruptedHistoryEventBatch = errors.New("corrupted history event batch, empty events")
 )
 
 type (
@@ -255,7 +256,9 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 			now := p.shard.GetTimeSource().Now()
 			metrics.ReplicationLatency.With(p.metricsHandler).Record(
 				now.Sub(taskCreationTime.AsTime()),
-				metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
+				metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+				metrics.SourceClusterTag(p.sourceCluster),
+			)
 		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
 			return err
@@ -415,7 +418,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 
 		if len(events) == 0 {
 			p.logger.Error("Empty events in a batch")
-			return nil, fmt.Errorf("corrupted history event batch, empty events")
+			return nil, ErrCorruptedHistoryEventBatch
 		}
 		firstEvent := events[0]
 		lastEvent := events[len(events)-1]
@@ -465,6 +468,23 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 				TaskId:         replicationTask.GetSourceTaskId(),
 				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 				Version:        lastItem.GetVersion(),
+				VisibilityTime: replicationTask.GetVisibilityTime(),
+			},
+		}, nil
+
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
+		taskAttributes := replicationTask.GetSyncHsmAttributes()
+
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
+			SourceClusterName: p.sourceCluster,
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId:    taskAttributes.GetNamespaceId(),
+				WorkflowId:     taskAttributes.GetWorkflowId(),
+				RunId:          taskAttributes.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 				VisibilityTime: replicationTask.GetVisibilityTime(),
 			},
 		}, nil
@@ -549,7 +569,8 @@ func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		metrics.ServiceErrNotFoundCounter.With(metricsScope).Record(1)
 	case *serviceerror.ResourceExhausted:
-		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
 	case *serviceerrors.RetryReplication:
 		metrics.ServiceErrRetryTaskCounter.With(metricsScope).Record(1)
 	default:

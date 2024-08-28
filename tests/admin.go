@@ -32,8 +32,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
@@ -110,5 +110,19 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 	s.NoError(err)
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
-	s.Equal(response1.DatabaseMutableState.ExecutionState, response2.DatabaseMutableState.ExecutionState)
+
+	// rebuild explicitly sets start time, thus start time will change after rebuild
+	s.Equal(response1.DatabaseMutableState.ExecutionState.CreateRequestId, response2.DatabaseMutableState.ExecutionState.CreateRequestId)
+	s.Equal(response1.DatabaseMutableState.ExecutionState.RunId, response2.DatabaseMutableState.ExecutionState.RunId)
+	s.Equal(response1.DatabaseMutableState.ExecutionState.State, response2.DatabaseMutableState.ExecutionState.State)
+	s.Equal(response1.DatabaseMutableState.ExecutionState.Status, response2.DatabaseMutableState.ExecutionState.Status)
+	s.Equal(response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
+
+	s.NotNil(response1.DatabaseMutableState.ExecutionState.StartTime)
+	s.NotNil(response2.DatabaseMutableState.ExecutionState.StartTime)
+
+	timeBefore := timestamp.TimeValue(response1.DatabaseMutableState.ExecutionState.StartTime)
+	timeAfter := timestamp.TimeValue(response2.DatabaseMutableState.ExecutionState.StartTime)
+
+	s.False(timeAfter.Before(timeBefore))
 }

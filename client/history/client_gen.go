@@ -418,6 +418,26 @@ func (c *clientImpl) ImportWorkflowExecution(
 	return response, nil
 }
 
+func (c *clientImpl) InvokeStateMachineMethod(
+	ctx context.Context,
+	request *historyservice.InvokeStateMachineMethodRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.InvokeStateMachineMethodResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowId())
+	var response *historyservice.InvokeStateMachineMethodResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.InvokeStateMachineMethod(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) IsActivityTaskValid(
 	ctx context.Context,
 	request *historyservice.IsActivityTaskValidRequest,
@@ -605,7 +625,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.GetHeartbeatRequest().GetTaskToken())
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
@@ -850,7 +870,7 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.GetCancelRequest().GetTaskToken())
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
@@ -875,7 +895,7 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.GetCompleteRequest().GetTaskToken())
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
@@ -900,7 +920,7 @@ func (c *clientImpl) RespondActivityTaskFailed(
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.GetFailedRequest().GetTaskToken())
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
@@ -925,7 +945,7 @@ func (c *clientImpl) RespondWorkflowTaskCompleted(
 ) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.GetCompleteRequest().GetTaskToken())
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
@@ -950,7 +970,7 @@ func (c *clientImpl) RespondWorkflowTaskFailed(
 ) (*historyservice.RespondWorkflowTaskFailedResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.GetFailedRequest().GetTaskToken())
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 

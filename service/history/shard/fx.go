@@ -28,13 +28,12 @@ import (
 	"context"
 	"sync/atomic"
 
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/configs"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(
@@ -43,7 +42,7 @@ var Module = fx.Options(
 		func(impl *ControllerImpl) Controller { return impl },
 		ContextFactoryProvider,
 		fx.Annotate(
-			func(p Controller) common.Pingable { return p },
+			func(p Controller) pingable.Pingable { return p },
 			fx.ResultTags(`group:"deadlockDetectorRoots"`),
 		),
 	),

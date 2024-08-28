@@ -67,6 +67,8 @@ func (s *SizeLimitFunctionalSuite) TearDownSuite() {
 }
 
 func (s *SizeLimitFunctionalSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
@@ -95,7 +97,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -137,7 +139,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -148,7 +150,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 	}
 
 	for i := int32(0); i < activityCount-1; i++ {
-		dwResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		dwResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -176,7 +178,7 @@ SignalLoop:
 		// Send another signal without RunID
 		signalName := "another signal"
 		signalInput := payloads.EncodeString("another signal input")
-		_, signalErr = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, signalErr = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -226,7 +228,7 @@ SignalLoop:
 	// verify visibility is correctly processed from open to close
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+			resp, err1 := s.client.ListClosedWorkflowExecutions(
 				NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       s.namespace,
@@ -288,7 +290,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		}, nil
 	}
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
@@ -309,7 +311,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		Identity:            identity,
 	}
 
-	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
 	go func() {
@@ -321,7 +323,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	case <-sigReadyToSendChan:
 	}
 
-	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()},
 		SignalName:        "signal-name",
@@ -347,7 +349,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
-  6 WorkflowExecutionFailed`, historyEvents)
+  6 WorkflowExecutionTerminated`, historyEvents)
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
@@ -373,7 +375,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -416,7 +418,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	}
 
 	poller := &TaskPoller{
-		Engine:              s.engine,
+		Client:              s.client,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -426,7 +428,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		T:                   s.T(),
 	}
 
-	dwResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	dwResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -445,7 +447,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	}
 
 	// Send another signal without RunID
-	_, signalErr := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, signalErr := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -472,7 +474,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	// verify visibility is correctly processed from open to close
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+			resp, err1 := s.client.ListClosedWorkflowExecutions(
 				NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       s.namespace,
@@ -519,7 +521,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -533,7 +535,7 @@ SignalLoop:
 		signalName := "another signal"
 		signalInput, err := payloads.Encode(largePayload)
 		s.NoError(err)
-		_, signalErr = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, signalErr = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -573,7 +575,7 @@ SignalLoop:
 	// verify visibility is correctly processed from open to close
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+			resp, err1 := s.client.ListClosedWorkflowExecutions(
 				NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       s.namespace,

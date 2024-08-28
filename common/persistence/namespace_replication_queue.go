@@ -29,26 +29,17 @@ package persistence
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 )
 
 const (
-	purgeInterval                    = 5 * time.Minute
 	localNamespaceReplicationCluster = "namespaceReplication"
 )
 
@@ -76,29 +67,21 @@ func NewNamespaceReplicationQueue(
 	}
 
 	return &namespaceReplicationQueueImpl{
-		queue:               queue,
-		clusterName:         clusterName,
-		metricsHandler:      metricsHandler,
-		logger:              logger,
-		ackNotificationChan: make(chan bool),
-		done:                make(chan bool),
-		status:              common.DaemonStatusInitialized,
-		serializer:          serializer,
+		queue:          queue,
+		clusterName:    clusterName,
+		metricsHandler: metricsHandler,
+		logger:         logger,
+		serializer:     serializer,
 	}, nil
 }
 
 type (
 	namespaceReplicationQueueImpl struct {
-		queue               Queue
-		clusterName         string
-		metricsHandler      metrics.Handler
-		logger              log.Logger
-		ackLevelUpdated     bool
-		ackNotificationChan chan bool
-		done                chan bool
-		status              int32
-		gorogrp             goro.Group
-		serializer          serialization.Serializer
+		queue          Queue
+		clusterName    string
+		metricsHandler metrics.Handler
+		logger         log.Logger
+		serializer     serialization.Serializer
 	}
 
 	// NamespaceReplicationQueue is used to publish and list namespace replication tasks
@@ -112,6 +95,7 @@ type (
 		) ([]*replicationspb.ReplicationTask, int64, error)
 		UpdateAckLevel(ctx context.Context, lastProcessedMessageID int64, clusterName string) error
 		GetAckLevels(ctx context.Context) (map[string]int64, error)
+		DeleteMessagesBefore(ctx context.Context, exclusiveMessageID int64) error
 
 		PublishToDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error
 		GetMessagesFromDLQ(
@@ -126,30 +110,11 @@ type (
 
 		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
 		DeleteMessageFromDLQ(ctx context.Context, messageID int64) error
-		Start()
-		Stop()
 	}
 )
 
-func (q *namespaceReplicationQueueImpl) Start() {
-	if !atomic.CompareAndSwapInt32(&q.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
-		return
-	}
-
-	q.gorogrp.Go(q.purgeProcessor)
-}
-
-func (q *namespaceReplicationQueueImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(&q.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
-		return
-	}
-	close(q.done)
-
-	q.gorogrp.Cancel()
-}
-
 func (q *namespaceReplicationQueueImpl) Close() {
-	q.Stop()
+	q.queue.Close()
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
@@ -206,6 +171,19 @@ func (q *namespaceReplicationQueueImpl) UpdateAckLevel(
 	clusterName string,
 ) error {
 	return q.updateAckLevelWithRetry(ctx, lastProcessedMessageID, clusterName, false)
+}
+
+func (q *namespaceReplicationQueueImpl) DeleteMessagesBefore(
+	ctx context.Context,
+	exclusiveMessageID int64,
+) error {
+	err := q.queue.DeleteMessagesBefore(ctx, exclusiveMessageID)
+	if err != nil {
+		return err
+	}
+	metrics.NamespaceReplicationTaskAckLevelGauge.With(q.metricsHandler).
+		Record(float64(exclusiveMessageID), metrics.OperationTag(metrics.PersistenceNamespaceReplicationQueueScope))
+	return nil
 }
 
 func (q *namespaceReplicationQueueImpl) updateAckLevelWithRetry(
@@ -271,11 +249,6 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 	}
 	if err != nil {
 		return fmt.Errorf("failed to update ack level: %v", err)
-	}
-
-	select {
-	case q.ackNotificationChan <- true:
-	default:
 	}
 
 	return nil
@@ -380,62 +353,4 @@ func (q *namespaceReplicationQueueImpl) DeleteMessageFromDLQ(
 ) error {
 
 	return q.queue.DeleteMessageFromDLQ(ctx, messageID)
-}
-
-func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
-	ctx context.Context,
-) error {
-	ackLevelByCluster, err := q.GetAckLevels(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to purge messages: %v", err)
-	}
-
-	if len(ackLevelByCluster) == 0 {
-		return nil
-	}
-
-	var minAckLevel *int64
-	for _, ackLevel := range ackLevelByCluster {
-		if minAckLevel == nil || ackLevel < *minAckLevel {
-			minAckLevel = util.Ptr(ackLevel)
-		}
-	}
-	if minAckLevel == nil {
-		return nil
-	}
-
-	err = q.queue.DeleteMessagesBefore(ctx, *minAckLevel)
-	if err != nil {
-		return fmt.Errorf("failed to purge messages: %v", err)
-	}
-	metrics.NamespaceReplicationTaskAckLevelGauge.With(q.metricsHandler).
-		Record(float64(*minAckLevel), metrics.OperationTag(metrics.PersistenceNamespaceReplicationQueueScope))
-	return nil
-}
-
-func (q *namespaceReplicationQueueImpl) purgeProcessor(
-	ctx context.Context,
-) error {
-	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
-
-	ticker := time.NewTicker(purgeInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-q.done:
-			return nil
-		case <-ticker.C:
-			if q.ackLevelUpdated {
-				err := q.purgeAckedMessages(ctx)
-				if err != nil {
-					q.logger.Warn("Failed to purge acked namespace replication messages.", tag.Error(err))
-				} else {
-					q.ackLevelUpdated = false
-				}
-			}
-		case <-q.ackNotificationChan:
-			q.ackLevelUpdated = true
-		}
-	}
 }

@@ -32,18 +32,17 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/worker_versioning"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/consts"
@@ -78,7 +77,7 @@ func Invoke(
 			ctx,
 			request.NamespaceId,
 			request.Request.Execution.WorkflowId,
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
 			return nil, err
@@ -92,9 +91,8 @@ func Invoke(
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -124,9 +122,16 @@ func Invoke(
 	}
 
 	if !mutableState.HadOrHasWorkflowTask() {
-		// workflow has no workflow task ever scheduled, this usually is due to firstWorkflowTaskBackoff (cron / retry)
-		// in this case, don't buffer the query, because it is almost certain the query will time out.
-		return nil, consts.ErrWorkflowTaskNotScheduled
+		// Workflow has no workflow task scheduled.
+		// This can be due to firstWorkflowTaskBackoff (cron / retry)
+		// In this case, check if query can wait.
+		queryWillTimeout, err := queryWillTimeoutsBeforeFirstWorkflowTaskStart(ctx, mutableState)
+		if err != nil {
+			return nil, err
+		}
+		if queryWillTimeout {
+			return nil, consts.ErrWorkflowTaskNotScheduled
+		}
 	}
 
 	if mutableState.GetExecutionInfo().WorkflowTaskAttempt >= failQueryWorkflowTaskAttemptCount {
@@ -239,6 +244,30 @@ func Invoke(
 		metrics.ConsistentQueryTimeoutCount.With(scope).Record(1)
 		return nil, ctx.Err()
 	}
+}
+
+func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
+	ctx context.Context, mutableState workflow.MutableState,
+) (bool, error) {
+	startEvent, err := mutableState.GetStartEvent(ctx)
+	if err != nil {
+		return false, err
+	}
+	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
+	workflowTaskBackoffDuration := timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff())
+
+	workflowStart := mutableState.GetExecutionInfo().StartTime.AsTime().UTC()
+	workflowTaskStart := workflowStart.Add(workflowTaskBackoffDuration)
+
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return true, nil
+	}
+	deadline = deadline.UTC()
+	if workflowTaskStart.After(deadline) {
+		return true, nil
+	}
+	return false, nil
 }
 
 func queryDirectlyThroughMatching(

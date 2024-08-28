@@ -32,11 +32,6 @@ import (
 	"strings"
 	"sync"
 
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/encoding/protojson"
-
-	"gopkg.in/yaml.v3"
-
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/query/v1"
@@ -44,10 +39,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
+	"gopkg.in/yaml.v3"
 )
 
 type SomeJSONStruct struct {
@@ -405,7 +402,7 @@ func (s *ClientFunctionalSuite) httpRequest(expectedStatus int, req *http.Reques
 func (s *ClientFunctionalSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
 	_, respBody := s.httpGet(
 		http.StatusOK,
-		"/namespaces/"+s.namespace+"/search-attributes",
+		"/cluster/namespaces/"+s.namespace+"/search-attributes",
 		"application/json",
 	)
 	s.T().Log(string(respBody))

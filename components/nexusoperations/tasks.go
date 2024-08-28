@@ -30,27 +30,12 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-var (
-	TaskTypeTimeout = hsm.TaskType{
-		ID:   3,
-		Name: "nexusoperations.Timeout",
-	}
-	TaskTypeInvocation = hsm.TaskType{
-		ID:   4,
-		Name: "nexusoperations.Invocation",
-	}
-	TaskTypeBackoff = hsm.TaskType{
-		ID:   5,
-		Name: "nexusoperations.Backoff",
-	}
-	TaskTypeCancelation = hsm.TaskType{
-		ID:   6,
-		Name: "nexusoperations.Cancelation",
-	}
-	TaskTypeCancelationBackoff = hsm.TaskType{
-		ID:   7,
-		Name: "nexusoperations.CancelationBackoff",
-	}
+const (
+	TaskTypeTimeout            = "nexusoperations.Timeout"
+	TaskTypeInvocation         = "nexusoperations.Invocation"
+	TaskTypeBackoff            = "nexusoperations.Backoff"
+	TaskTypeCancelation        = "nexusoperations.Cancelation"
+	TaskTypeCancelationBackoff = "nexusoperations.CancelationBackoff"
 )
 
 type TimeoutTask struct {
@@ -59,7 +44,7 @@ type TimeoutTask struct {
 
 var _ hsm.Task = TimeoutTask{}
 
-func (TimeoutTask) Type() hsm.TaskType {
+func (TimeoutTask) Type() string {
 	return TaskTypeTimeout
 }
 
@@ -102,17 +87,17 @@ func (TimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type InvocationTask struct {
-	Destination string
+	EndpointName string
 }
 
 var _ hsm.Task = InvocationTask{}
 
-func (InvocationTask) Type() hsm.TaskType {
+func (InvocationTask) Type() string {
 	return TaskTypeInvocation
 }
 
 func (t InvocationTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.Destination}
+	return hsm.TaskKindOutbound{Destination: t.EndpointName}
 }
 
 func (InvocationTask) Concurrent() bool {
@@ -123,7 +108,7 @@ type InvocationTaskSerializer struct{}
 
 func (InvocationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return InvocationTask{Destination: kind.Destination}, nil
+		return InvocationTask{EndpointName: kind.Destination}, nil
 	}
 	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
 }
@@ -138,7 +123,7 @@ type BackoffTask struct {
 
 var _ hsm.Task = BackoffTask{}
 
-func (BackoffTask) Type() hsm.TaskType {
+func (BackoffTask) Type() string {
 	return TaskTypeBackoff
 }
 
@@ -164,17 +149,17 @@ func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type CancelationTask struct {
-	Destination string
+	EndpointName string
 }
 
 var _ hsm.Task = CancelationTask{}
 
-func (CancelationTask) Type() hsm.TaskType {
+func (CancelationTask) Type() string {
 	return TaskTypeCancelation
 }
 
 func (t CancelationTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.Destination}
+	return hsm.TaskKindOutbound{Destination: t.EndpointName}
 }
 
 func (CancelationTask) Concurrent() bool {
@@ -185,7 +170,7 @@ type CancelationTaskSerializer struct{}
 
 func (CancelationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return CancelationTask{Destination: kind.Destination}, nil
+		return CancelationTask{EndpointName: kind.Destination}, nil
 	}
 	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
 }
@@ -200,7 +185,7 @@ type CancelationBackoffTask struct {
 
 var _ hsm.Task = CancelationBackoffTask{}
 
-func (CancelationBackoffTask) Type() hsm.TaskType {
+func (CancelationBackoffTask) Type() string {
 	return TaskTypeCancelationBackoff
 }
 
@@ -226,19 +211,19 @@ func (CancelationBackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {
-	if err := reg.RegisterTaskSerializer(TaskTypeTimeout.ID, TimeoutTaskSerializer{}); err != nil {
+	if err := reg.RegisterTaskSerializer(TaskTypeTimeout, TimeoutTaskSerializer{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterTaskSerializer(TaskTypeInvocation.ID, InvocationTaskSerializer{}); err != nil {
+	if err := reg.RegisterTaskSerializer(TaskTypeInvocation, InvocationTaskSerializer{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterTaskSerializer(TaskTypeBackoff.ID, BackoffTaskSerializer{}); err != nil {
+	if err := reg.RegisterTaskSerializer(TaskTypeBackoff, BackoffTaskSerializer{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterTaskSerializer(TaskTypeCancelation.ID, CancelationTaskSerializer{}); err != nil {
+	if err := reg.RegisterTaskSerializer(TaskTypeCancelation, CancelationTaskSerializer{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterTaskSerializer(TaskTypeCancelationBackoff.ID, CancelationBackoffTaskSerializer{}); err != nil { // nolint:revive
+	if err := reg.RegisterTaskSerializer(TaskTypeCancelationBackoff, CancelationBackoffTaskSerializer{}); err != nil { // nolint:revive
 		return err
 	}
 	return nil

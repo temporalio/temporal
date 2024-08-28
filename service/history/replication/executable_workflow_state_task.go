@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -66,6 +65,7 @@ func NewExecutableWorkflowStateTask(
 	task *replicationspb.SyncWorkflowStateTaskAttributes,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
+	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableWorkflowStateTask {
 	namespaceID := task.GetWorkflowState().ExecutionInfo.NamespaceId
 	workflowID := task.GetWorkflowState().ExecutionInfo.WorkflowId
@@ -82,6 +82,7 @@ func NewExecutableWorkflowStateTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			priority,
+			replicationTask,
 		),
 		req: &historyservice.ReplicateWorkflowStateRequest{
 			NamespaceId:   namespaceID,

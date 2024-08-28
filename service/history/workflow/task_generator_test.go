@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -334,20 +333,25 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
-	subStateMachinesByType := map[int32]*persistencespb.StateMachineMap{}
+
+	mutableState := NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
+	mutableState.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
+
+	subStateMachinesByType := map[string]*persistencespb.StateMachineMap{}
 	reg := hsm.NewRegistry()
 	require.NoError(t, RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
 	require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
-	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType, nil)
+	node, err := hsm.NewRoot(reg, StateMachineType, nil, subStateMachinesByType, mutableState)
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 
-	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &common.Callback{
-		Variant: &common.Callback_Nexus_{
-			Nexus: &common.Callback_Nexus{
+	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+		Variant: &persistencespb.Callback_Nexus_{
+			Nexus: &persistencespb.Callback_Nexus{
 				Url: "http://localhost?foo=bar",
 			},
 		},
@@ -359,14 +363,14 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &common.Callback{
-		Variant: &common.Callback_Nexus_{
-			Nexus: &common.Callback_Nexus{
+	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+		Variant: &persistencespb.Callback_Nexus_{
+			Nexus: &persistencespb.Callback_Nexus{
 				Url: "http://localhost?foo=bar",
 			},
 		},
 	})
-	callbackToBackoff.PublicInfo.State = enumspb.CALLBACK_STATE_SCHEDULED
+	callbackToBackoff.CallbackInfo.State = enumsspb.CALLBACK_STATE_SCHEDULED
 	_, err = coll.Add("backoff", callbackToBackoff)
 	require.NoError(t, err)
 	err = coll.Transition("backoff", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
@@ -378,14 +382,10 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mutableState := NewMockMutableState(ctrl)
 	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node }).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{
-				NamespaceFailoverVersion: 3,
-				MaxTransitionCount:       2,
-			},
+			{NamespaceFailoverVersion: 3, TransitionCount: 3},
 		},
 	}).AnyTimes()
 	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
@@ -413,45 +413,64 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	}
 	require.Equal(t, tests.WorkflowKey, invocationTask.WorkflowKey)
 	require.Equal(t, "http://localhost", invocationTask.Destination)
-	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
 				{
-					Type: callbacks.StateMachineType.ID,
+					Type: callbacks.StateMachineType,
 					Id:   "sched",
 				},
 			},
-			MutableStateNamespaceFailoverVersion: 3,
-			MutableStateTransitionCount:          2,
-			MachineTransitionCount:               1,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineTransitionCount: 1,
 		},
-		Type: callbacks.TaskTypeInvocation.ID,
+		Type: callbacks.TaskTypeInvocation,
 		Data: nil,
 	}, invocationTask.Info)
 
 	require.Equal(t, tests.WorkflowKey, backoffTask.WorkflowKey)
 	require.Equal(t, int64(3), backoffTask.Version)
-	require.Equal(t, int64(2), backoffTask.MutableStateTransitionCount)
 
 	timers := mutableState.GetExecutionInfo().StateMachineTimers
 	require.Equal(t, 1, len(timers))
 	protorequire.ProtoEqual(t, &persistencespb.StateMachineTimerGroup{
-		Deadline:  callbackToBackoff.PublicInfo.NextAttemptScheduleTime,
+		Deadline:  callbackToBackoff.NextAttemptScheduleTime,
 		Scheduled: true,
 		Infos: []*persistencespb.StateMachineTaskInfo{
 			{
 				Ref: &persistencespb.StateMachineRef{
 					Path: []*persistencespb.StateMachineKey{
 						{
-							Type: callbacks.StateMachineType.ID,
+							Type: callbacks.StateMachineType,
 							Id:   "backoff",
 						},
 					},
-					MutableStateNamespaceFailoverVersion: 3,
-					MutableStateTransitionCount:          2,
-					MachineTransitionCount:               1,
+					MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineTransitionCount: 1,
 				},
-				Type: callbacks.TaskTypeBackoff.ID,
+				Type: callbacks.TaskTypeBackoff,
 				Data: nil,
 			},
 		},
@@ -464,6 +483,8 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:               "endpoint",
+				EndpointId:             "endpoint-id",
 				Service:                "some-service",
 				Operation:              "some-op",
 				ScheduleToCloseTimeout: durationpb.New(time.Hour),
@@ -491,11 +512,18 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 					Id:   opNode.Key.ID,
 				},
 			},
-			MutableStateNamespaceFailoverVersion: 3,
-			MutableStateTransitionCount:          2,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineLastUpdateVersionedTransition: nil,
 			MachineTransitionCount:               0, // concurrent tasks don't store the machine transition count.
 		},
-		Type: nexusoperations.TaskTypeTimeout.ID,
+		Type: nexusoperations.TaskTypeTimeout,
 		Data: nil,
 	}, timers[1].Infos[0])
 }

@@ -31,8 +31,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -52,9 +53,9 @@ var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
 // An action (ie "mitigate and allow"), an error (ie "deny") or neither (ie "allow") is returned.
 func ResolveDuplicateWorkflowID(
 	shardContext shard.Context,
-	workflowID,
-	newRunID,
-	currentRunID string,
+	workflowKey definition.WorkflowKey,
+	namespaceEntry *namespace.Namespace,
+	newRunID string,
 	currentState enumsspb.WorkflowExecutionState,
 	currentStatus enumspb.WorkflowExecutionStatus,
 	currentStartRequestID string,
@@ -69,11 +70,11 @@ func ResolveDuplicateWorkflowID(
 		switch wfIDConflictPolicy {
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
 			msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowID, currentRunID)
+			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			return nil, ErrUseCurrentExecution
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, newRunID, workflowID)
+			return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, workflowKey, namespaceEntry, newRunID)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
 		}
@@ -86,11 +87,11 @@ func ResolveDuplicateWorkflowID(
 		case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
 			if _, ok := consts.FailedWorkflowStatuses[currentStatus]; !ok {
 				msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
-				return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowID, currentRunID)
+				return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
 			}
 		case enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
 			msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
-			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowID, currentRunID)
+			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id reuse policy: %v.", wfIDReusePolicy))
 		}
@@ -109,11 +110,20 @@ func ResolveDuplicateWorkflowID(
 func resolveDuplicateWorkflowStart(
 	shardContext shard.Context,
 	currentWorkflowStartTime time.Time,
+	workflowKey definition.WorkflowKey,
+	namespaceEntry *namespace.Namespace,
 	newRunID string,
-	workflowID string,
 ) (UpdateWorkflowActionFunc, error) {
 
-	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval()
+	if namespaceEntry == nil {
+		return nil, &serviceerror.Internal{
+			Message: fmt.Sprintf("Unknown namespace entry for %v.", workflowKey),
+		}
+	}
+
+	nsName := namespaceEntry.Name().String()
+	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval(nsName)
+
 	now := shardContext.GetTimeSource().Now().UTC()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
@@ -125,7 +135,7 @@ func resolveDuplicateWorkflowStart(
 	// abort the entire request.
 	msg := fmt.Sprintf(
 		"Too many restarts for workflow %s. Time since last start: %d ms",
-		workflowID,
+		workflowKey.WorkflowID,
 		timeSinceStart.Milliseconds(),
 	)
 	return nil, &serviceerror.ResourceExhausted{
@@ -158,13 +168,12 @@ func terminateWorkflowAction(
 func generateWorkflowAlreadyStartedError(
 	errMsg string,
 	createRequestID string,
-	workflowID string,
-	runID string,
+	workflowKey definition.WorkflowKey,
 ) error {
 	return serviceerror.NewWorkflowExecutionAlreadyStarted(
-		fmt.Sprintf(errMsg, workflowID, runID),
+		fmt.Sprintf(errMsg, workflowKey.WorkflowID, workflowKey.RunID),
 		createRequestID,
-		runID,
+		workflowKey.RunID,
 	)
 }
 

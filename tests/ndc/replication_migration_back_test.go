@@ -43,27 +43,26 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/replication/eventhandler"
+	"go.temporal.io/server/tests"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
-
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/adminservicemock/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	test "go.temporal.io/server/common/testing"
-	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tests"
 )
 
 type (
@@ -120,7 +119,7 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
-		dynamicconfig.NamespaceCacheRefreshInterval.Key():       tests.NamespaceCacheRefreshInterval,
+		dynamicconfig.NamespaceCacheRefreshInterval.Key():       dynamicconfig.NamespaceCacheRefreshInterval,
 	}
 	s.controller = gomock.NewController(s.T())
 	mockActiveStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
@@ -249,12 +248,10 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 // Test scenario: workflow was running in cluster-1, then migrated to cluster-2, then migrated to cluster-1, then we want to migrate to cluster-2.
 // passive cluster is cluster 2.
 // events are organized in 8 batches: [{1,1}], [{2,1}], [{3,1}], [{4,1},{5,1}], [{6,2},{7,2}], [{8,2}], [{9,2},{10,2}], [{11,11},{12,11}]
-// version history is [{5,1},{10,2},{12,11}], when any event(s) id from 1 to 10 is supplied, it should import events 1 to 10 (inclusive).
-// i.e. when history replication task with batch [{2,1}] is supplied, it should import all events [1 to 10].
+// version history is [{5,1},{10,2},{12,11},{15,12}], when history replication task with events [9,2},{10,2}] is supplied, it should import events with id 1 to 10 (inclusive),
+// Any history task contains batch before event 9 will be considered as invalid.
 func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMigrationBack_ReplicationTaskContainsLocalEvents() {
-	for i := 0; i < 7; i++ {
-		s.longRunningMigrationBackReplicationTaskContainsLocalEventsTestBase(fmt.Sprintf("ndc-test-migration-back-local-%d", i), uuid.New(), i, 0, 7)
-	}
+	s.longRunningMigrationBackReplicationTaskContainsLocalEventsTestBase(fmt.Sprintf("ndc-test-migration-back-local-%d", 6), uuid.New(), 6, 0, 7)
 }
 
 func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationTaskContainsLocalEventsTestBase(
@@ -316,7 +313,6 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 
 	// when handle migration back case, passive will need to fetch the history from active cluster
 	s.mockActiveGetRawHistoryApiCalls(workflowId, runId, eventBatches[0:7], history)
-
 	s.mockAdminClient["cluster-a"].(*adminservicemock.MockAdminServiceClient).EXPECT().
 		GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: s.namespaceID.String(),
@@ -395,11 +391,10 @@ func (s *ReplicationMigrationBackTestSuite) assertHistoryEvents(
 		nil,
 		mockClientBean,
 		serializer,
-		nil,
 		s.logger,
 	)
 
-	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
 		ctx, s.passiveClusterName, namespace.ID(namespaceId), workflowId, runId, startEventId, startEventVersion, endEventId, endEventVersion)
 
 	index := 0
@@ -429,7 +424,7 @@ func (s *ReplicationMigrationBackTestSuite) mockActiveGetRawHistoryApiCalls(
 	lastBatch := eventBatches[len(eventBatches)-1]
 	lastEvent := lastBatch[len(lastBatch)-1]
 	if len(eventBatches) == 1 {
-		s.mockActiveGetRawHistoryResponse(workflowID, runID, eventBatches[0][0].EventId, eventBatches[0][0].Version, lastEvent.EventId, lastEvent.Version, nil, &adminservice.GetWorkflowExecutionRawHistoryResponse{
+		s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.EventId, lastEvent.Version, nil, &adminservice.GetWorkflowExecutionRawHistoryResponse{
 			HistoryBatches: []*commonpb.DataBlob{
 				s.serializeEvents(eventBatches[0]),
 			},
@@ -438,7 +433,7 @@ func (s *ReplicationMigrationBackTestSuite) mockActiveGetRawHistoryApiCalls(
 		return
 	}
 	token := []byte(runID + "-next-page-token" + "0")
-	s.mockActiveGetRawHistoryResponse(workflowID, runID, eventBatches[0][0].EventId, eventBatches[0][0].Version, lastEvent.EventId, lastEvent.Version, nil, &adminservice.GetWorkflowExecutionRawHistoryResponse{
+	s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.EventId, lastEvent.Version, nil, &adminservice.GetWorkflowExecutionRawHistoryResponse{
 		NextPageToken: token,
 		HistoryBatches: []*commonpb.DataBlob{
 			s.serializeEvents(eventBatches[0]),
@@ -447,7 +442,7 @@ func (s *ReplicationMigrationBackTestSuite) mockActiveGetRawHistoryApiCalls(
 	}, nil).Times(1)
 	for i := 1; i < len(eventBatches); i++ {
 		if i == len(eventBatches)-1 {
-			s.mockActiveGetRawHistoryResponse(workflowID, runID, eventBatches[0][0].EventId, eventBatches[0][0].Version, lastEvent.EventId, lastEvent.Version, token, &adminservice.GetWorkflowExecutionRawHistoryResponse{
+			s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.EventId, lastEvent.Version, token, &adminservice.GetWorkflowExecutionRawHistoryResponse{
 				HistoryBatches: []*commonpb.DataBlob{
 					s.serializeEvents(eventBatches[i]),
 				},
@@ -456,7 +451,7 @@ func (s *ReplicationMigrationBackTestSuite) mockActiveGetRawHistoryApiCalls(
 			break
 		}
 		nextToken := []byte(runID + "-next-page-token" + string(rune(i)))
-		s.mockActiveGetRawHistoryResponse(workflowID, runID, eventBatches[0][0].EventId, eventBatches[0][0].Version, lastEvent.EventId, lastEvent.Version, token, &adminservice.GetWorkflowExecutionRawHistoryResponse{
+		s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.EventId, lastEvent.Version, token, &adminservice.GetWorkflowExecutionRawHistoryResponse{
 			NextPageToken: nextToken,
 			HistoryBatches: []*commonpb.DataBlob{
 				s.serializeEvents(eventBatches[i]),

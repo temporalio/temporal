@@ -36,5 +36,8 @@ enum PredicateType {
     PREDICATE_TYPE_NAMESPACE_ID = 6;
     PREDICATE_TYPE_TASK_TYPE = 7;
     PREDICATE_TYPE_DESTINATION = 8;
-    PREDICATE_TYPE_STATE_MACHINE_TASK_TYPE = 9;
+    PREDICATE_TYPE_OUTBOUND_TASK_GROUP = 9;
+    // Predicate used for grouping outbound tasks. Consists of task_group, namespace_id, and destination.
+    // This replaces a previous implementation which used an AND predicate over 3 separate predicate types.
+    PREDICATE_TYPE_OUTBOUND_TASK = 10;
 }

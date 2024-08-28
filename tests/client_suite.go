@@ -52,12 +52,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/multierr"
-
-	"go.temporal.io/server/common/testing/historyrequire"
-	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/components/nexusoperations"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -66,7 +60,12 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
+	"go.uber.org/multierr"
 )
 
 type (
@@ -108,6 +107,7 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): limit,
 		dynamicconfig.EnableNexus.Key():                                     true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
+		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 
@@ -118,13 +118,14 @@ func (s *ClientFunctionalSuite) TearDownSuite() {
 }
 
 func (s *ClientFunctionalSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
-	s.testCluster.host.dcClient.OverrideValue(
-		s.T(),
+	s.OverrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
@@ -147,8 +148,12 @@ func (s *ClientFunctionalSuite) SetupTest() {
 }
 
 func (s *ClientFunctionalSuite) TearDownTest() {
-	s.worker.Stop()
-	s.sdkClient.Close()
+	if s.worker != nil {
+		s.worker.Stop()
+	}
+	if s.sdkClient != nil {
+		s.sdkClient.Close()
+	}
 }
 
 // testDataConverter implements encoded.DataConverter using gob
@@ -857,7 +862,7 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 	// stop worker
 	s.worker.Stop()
 	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
-	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.client.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: stickyQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: s.taskQueue},
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -886,7 +891,7 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 	s.Equal(stickyQueue, ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
 
 	// now poll from normal queue, and it should see the full history.
-	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
@@ -1328,7 +1333,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	}
 
 	workflowFn := func(ctx workflow.Context) error {
-		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(arg string) (string, error) {
+		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
 			return "my-update-result", nil
 		})
 		if err != nil {
@@ -1363,12 +1368,13 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	updateHandleCh := make(chan sdkclient.WorkflowUpdateHandle)
 	updateErrCh := make(chan error)
 	go func() {
-		handle, err := s.sdkClient.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
-			UpdateID:   tv.UpdateID(),
-			UpdateName: tv.HandlerName(),
-			WorkflowID: tv.WorkflowID(),
-			RunID:      tv.RunID(),
-			Args:       []interface{}{"update-value"},
+		handle, err := s.sdkClient.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
+			UpdateID:     tv.UpdateID(),
+			UpdateName:   tv.HandlerName(),
+			WorkflowID:   tv.WorkflowID(),
+			RunID:        tv.RunID(),
+			Args:         []interface{}{"update-value"},
+			WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
 		})
 		updateErrCh <- err
 		updateHandleCh <- handle
@@ -1888,7 +1894,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 		searchattribute.ExecutionStatus, "Running",
 		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(v2))
 	s.Eventually(func() bool {
-		resp, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		resp, err := s.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.namespace,
 			Query:     query,
 		})
@@ -1896,7 +1902,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// reset it using v2 as the bad build ID
-	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.client.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace:       s.namespace,
 		VisibilityQuery: query,
 		JobId:           uuid.New(),

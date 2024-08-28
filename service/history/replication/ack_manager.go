@@ -34,8 +34,6 @@ import (
 
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
@@ -52,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -67,6 +66,11 @@ type (
 			ctx context.Context,
 			task tasks.Task,
 		) (*replicationspb.ReplicationTask, error)
+		ConvertTaskByCluster(
+			ctx context.Context,
+			task tasks.Task,
+			targetClusterID int32,
+		) (*replicationspb.ReplicationTask, error)
 		GetReplicationTasksIter(
 			ctx context.Context,
 			pollingCluster string,
@@ -76,18 +80,19 @@ type (
 	}
 
 	ackMgrImpl struct {
-		currentClusterName string
-		shardContext       shard.Context
-		config             *configs.Config
-		workflowCache      wcache.Cache
-		eventBlobCache     persistence.XDCCache
-		executionMgr       persistence.ExecutionManager
-		metricsHandler     metrics.Handler
-		logger             log.Logger
-		retryPolicy        backoff.RetryPolicy
-		namespaceRegistry  namespace.Registry
-		pageSize           dynamicconfig.IntPropertyFn
-		maxSkipTaskCount   dynamicconfig.IntPropertyFn
+		currentClusterName       string
+		shardContext             shard.Context
+		config                   *configs.Config
+		workflowCache            wcache.Cache
+		eventBlobCache           persistence.XDCCache
+		replicationProgressCache ProgressCache
+		executionMgr             persistence.ExecutionManager
+		metricsHandler           metrics.Handler
+		logger                   log.Logger
+		retryPolicy              backoff.RetryPolicy
+		namespaceRegistry        namespace.Registry
+		pageSize                 dynamicconfig.IntPropertyFn
+		maxSkipTaskCount         dynamicconfig.IntPropertyFn
 
 		sync.Mutex
 		// largest replication task ID generated
@@ -108,6 +113,7 @@ func NewAckManager(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	eventBlobCache persistence.XDCCache,
+	replicationProgressCache ProgressCache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {
@@ -120,18 +126,19 @@ func NewAckManager(
 		WithBackoffCoefficient(1)
 
 	return &ackMgrImpl{
-		currentClusterName: currentClusterName,
-		shardContext:       shardContext,
-		config:             shardContext.GetConfig(),
-		workflowCache:      workflowCache,
-		eventBlobCache:     eventBlobCache,
-		executionMgr:       executionMgr,
-		metricsHandler:     shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
-		logger:             log.With(logger, tag.ComponentReplicatorQueue),
-		retryPolicy:        retryPolicy,
-		namespaceRegistry:  shardContext.GetNamespaceRegistry(),
-		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize,
-		maxSkipTaskCount:   config.ReplicatorProcessorMaxSkipTaskCount,
+		currentClusterName:       currentClusterName,
+		shardContext:             shardContext,
+		config:                   shardContext.GetConfig(),
+		workflowCache:            workflowCache,
+		eventBlobCache:           eventBlobCache,
+		replicationProgressCache: replicationProgressCache,
+		executionMgr:             executionMgr,
+		metricsHandler:           shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
+		logger:                   log.With(logger, tag.ComponentReplicatorQueue),
+		retryPolicy:              retryPolicy,
+		namespaceRegistry:        shardContext.GetNamespaceRegistry(),
+		pageSize:                 config.ReplicatorProcessorFetchTasksBatchSize,
+		maxSkipTaskCount:         config.ReplicatorProcessorMaxSkipTaskCount,
 
 		maxTaskID:       nil,
 		sanityCheckTime: time.Time{},
@@ -194,6 +201,8 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 	return *maxTaskID, maxVisibilityTimestamp
 }
 
+// TODO: deprecate this method
+// It's only used by the replication DLQ v1 logic.
 func (p *ackMgrImpl) GetTask(
 	ctx context.Context,
 	taskInfo *replicationspb.ReplicationTaskInfo,
@@ -207,7 +216,7 @@ func (p *ackMgrImpl) GetTask(
 				taskInfo.GetWorkflowId(),
 				taskInfo.GetRunId(),
 			),
-			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+			VisibilityTimestamp: time.Unix(0, 0),
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
 			ScheduledEventID:    taskInfo.ScheduledEventId,
@@ -219,7 +228,7 @@ func (p *ackMgrImpl) GetTask(
 				taskInfo.GetWorkflowId(),
 				taskInfo.GetRunId(),
 			),
-			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+			VisibilityTimestamp: time.Unix(0, 0),
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
 			FirstEventID:        taskInfo.FirstEventId,
@@ -236,6 +245,16 @@ func (p *ackMgrImpl) GetTask(
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
 			Priority:            taskInfo.GetPriority(),
+		})
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
+		return p.ConvertTask(ctx, &tasks.SyncHSMTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0),
+			TaskID:              taskInfo.TaskId,
 		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
@@ -435,9 +454,41 @@ func (p *ackMgrImpl) ConvertTask(
 			p.eventBlobCache,
 			p.executionMgr,
 			p.logger,
+			p.config,
+		)
+	case *tasks.SyncHSMTask:
+		return convertSyncHSMReplicationTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.workflowCache,
 		)
 	default:
 		return nil, errUnknownReplicationTask
+	}
+}
+
+func (p *ackMgrImpl) ConvertTaskByCluster(
+	ctx context.Context,
+	task tasks.Task,
+	targetClusterID int32,
+) (*replicationspb.ReplicationTask, error) {
+	switch task := task.(type) {
+	case *tasks.SyncVersionedTransitionTask:
+		return convertSyncVersionedTransitionTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.shardContext.GetShardID(),
+			p.workflowCache,
+			p.eventBlobCache,
+			p.replicationProgressCache,
+			targetClusterID,
+			p.executionMgr,
+			p.logger,
+		)
+	default:
+		return p.ConvertTask(ctx, task)
 	}
 }
 

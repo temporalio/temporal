@@ -33,9 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 )
 
@@ -219,8 +217,10 @@ func (s *fifoSchedulerSuite) TestStartStopWorkers() {
 func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 	return NewFIFOScheduler[*MockTask](
 		&FIFOSchedulerOptions{
-			QueueSize:   1,
-			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
+			QueueSize: 1,
+			WorkerCount: func(_ func(int)) (v int, cancel func()) {
+				return 1, func() {}
+			},
 		},
 		log.NewNoopLogger(),
 	)

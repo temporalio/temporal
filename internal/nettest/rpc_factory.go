@@ -28,10 +28,9 @@ import (
 	"context"
 	"net"
 
+	"go.temporal.io/server/common"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"go.temporal.io/server/common"
 )
 
 // RPCFactory is a common.RPCFactory implementation that uses a PipeListener to create connections. It is useful for
@@ -79,6 +78,10 @@ func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 
 func (f *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 	return f.dial(f.listener.Addr().String())
+}
+
+func (f *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient, error) {
+	panic("unimplemented in the nettest package")
 }
 
 func (f *RPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn {

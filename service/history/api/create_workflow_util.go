@@ -26,19 +26,13 @@ package api
 
 import (
 	"context"
-	"go.temporal.io/server/api/schedule/v1"
-	"go.temporal.io/server/common/sdk"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
-	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/worker/scheduler"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/schedule/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -48,9 +42,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
+	schedulerhsm "go.temporal.io/server/components/scheduler"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -94,7 +93,7 @@ func NewWorkflowWithSignal(
 	// This workflow is created for the hsm attached to it and will not generate actual workflow tasks.
 	// This is a bit of a hacky way to distinguish between a "real" workflow and a top level state machine.
 	// This code will change as the scheduler HSM project progresses.
-	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.NamespaceId)
+	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.StartRequest.Namespace)
 	if hsmOnlyWorkflow {
 		args := schedule.StartScheduleArgs{}
 		if err := sdk.PreferProtoDataConverter.FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
@@ -102,11 +101,12 @@ func NewWorkflowWithSignal(
 		}
 
 		// Key ID is left empty as the scheduler machine is a singleton.
-		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType.ID}, schedulerhsm.NewScheduler(&args))
+		tweakables := shard.GetConfig().HsmSchedulerTweakables(startRequest.StartRequest.Namespace)
+		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerhsm.NewScheduler(&args, &tweakables))
 		if err != nil {
 			return nil, err
 		}
-		err = hsm.MachineTransition(node, func(scheduler schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
+		err = hsm.MachineTransition(node, func(scheduler *schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
 			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
 		})
 		if err != nil {
@@ -154,6 +154,7 @@ func NewWorkflowWithSignal(
 			startRequest.StartRequest.Identity,
 			nil,
 			nil,
+			false,
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history

@@ -37,8 +37,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -60,6 +58,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -379,6 +378,48 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncWorkflowState() {
 			RunId:       runID,
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 			Version:     1,
+		},
+	}
+
+	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
+	s.NoError(err)
+	s.Equal(request, dlqTask)
+}
+
+func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncHSM() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	task := &replicationspb.ReplicationTask{
+		SourceTaskId: rand.Int63(),
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{SyncHsmAttributes: &replicationspb.SyncHSMAttributes{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			VersionHistory: &historyspb.VersionHistory{
+				BranchToken: []byte("branchToken"),
+				Items: []*historyspb.VersionHistoryItem{{
+					EventId: 10,
+					Version: 20,
+				}},
+			},
+			StateMachineNode: &persistencespb.StateMachineNode{
+				Data: []byte("stateMachineData"),
+			},
+		}},
+		VisibilityTime: timestamppb.New(time.Now()),
+	}
+	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.shardID,
+		SourceClusterName: cluster.TestAlternativeClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId:    namespaceID,
+			WorkflowId:     workflowID,
+			RunId:          runID,
+			TaskId:         task.GetSourceTaskId(),
+			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+			VisibilityTime: task.GetVisibilityTime(),
 		},
 	}
 

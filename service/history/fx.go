@@ -25,12 +25,7 @@
 package history
 
 import (
-	"net"
-
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -51,6 +46,9 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
+	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
@@ -59,14 +57,13 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
-	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 )
 
 var Module = fx.Options(
@@ -77,7 +74,7 @@ var Module = fx.Options(
 	events.Module,
 	cache.Module,
 	archival.Module,
-	fx.Provide(dynamicconfig.NewCollection),
+	dynamicconfig.Module,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
@@ -93,7 +90,9 @@ var Module = fx.Options(
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
-	fx.Provide(ServiceProvider),
+	fx.Provide(ServerProvider),
+	fx.Provide(NewService),
+	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
@@ -102,28 +101,8 @@ var Module = fx.Options(
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )
 
-func ServiceProvider(
-	grpcServerOptions []grpc.ServerOption,
-	serviceConfig *configs.Config,
-	visibilityMgr manager.VisibilityManager,
-	handler *Handler,
-	logger log.SnTaggedLogger,
-	grpcListener net.Listener,
-	membershipMonitor membership.Monitor,
-	metricsHandler metrics.Handler,
-	healthServer *health.Server,
-) *Service {
-	return NewService(
-		grpcServerOptions,
-		serviceConfig,
-		visibilityMgr,
-		handler,
-		logger,
-		grpcListener,
-		membershipMonitor,
-		metricsHandler,
-		healthServer,
-	)
+func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
+	return grpc.NewServer(grpcServerOptions...)
 }
 
 func ServiceResolverProvider(
@@ -142,6 +121,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceExecutionManager:  args.PersistenceExecutionManager,
 		persistenceShardManager:      args.PersistenceShardManager,
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
+		persistenceHealthSignal:      args.PersistenceHealthSignal,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
@@ -156,6 +136,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
 		taskQueueManager:             args.TaskQueueManager,
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
+		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -201,11 +182,13 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
+	serviceConfig *configs.Config,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
+		serviceConfig.LogAllReqErrors,
 	)
 }
 
@@ -215,7 +198,8 @@ func RateLimitInterceptorProvider(
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{
-			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+			healthpb.Health_Check_FullMethodName:                         0, // exclude health check requests from rate limiting.
+			historyservice.HistoryService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
 		},
 	)
 }
@@ -281,6 +265,7 @@ func VisibilityManagerProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	namespaceRegistry namespace.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -289,6 +274,7 @@ func VisibilityManagerProvider(
 		esProcessorConfig,
 		saProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -316,4 +302,12 @@ func EventNotifierProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func ReplicationProgressCacheProvider(
+	serviceConfig *configs.Config,
+	logger log.Logger,
+	handler metrics.Handler,
+) replication.ProgressCache {
+	return replication.NewProgressCache(serviceConfig, logger, handler)
 }

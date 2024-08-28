@@ -23,10 +23,12 @@
 package workflow
 
 import (
+	"errors"
 	"slices"
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -34,8 +36,6 @@ import (
 // AddNextStateMachineTimerTask generates a state machine timer task if the first deadline doesn't have a task scheduled
 // yet.
 func AddNextStateMachineTimerTask(ms MutableState) {
-	transitionHistory := ms.GetExecutionInfo().TransitionHistory
-	versionedTransition := transitionHistory[len(transitionHistory)-1]
 	timers := ms.GetExecutionInfo().StateMachineTimers
 	if len(timers) == 0 {
 		return
@@ -46,10 +46,9 @@ func AddNextStateMachineTimerTask(ms MutableState) {
 		return
 	}
 	ms.AddTasks(&tasks.StateMachineTimerTask{
-		WorkflowKey:                 ms.GetWorkflowKey(),
-		VisibilityTimestamp:         timerGroup.Deadline.AsTime(),
-		Version:                     versionedTransition.NamespaceFailoverVersion,
-		MutableStateTransitionCount: versionedTransition.MaxTransitionCount,
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: timerGroup.Deadline.AsTime(),
+		Version:             ms.GetCurrentVersion(),
 	})
 	timerGroup.Scheduled = true
 }
@@ -70,4 +69,56 @@ func TrackStateMachineTimer(ms MutableState, deadline time.Time, taskInfo *persi
 	} else {
 		execInfo.StateMachineTimers = slices.Insert(execInfo.StateMachineTimers, idx, group)
 	}
+}
+
+// TrimStateMachineTimers returns of copy of trimmed the StateMachineTimers slice by removing any timer tasks that are
+// associated with an HSM node that has been deleted or updated on or after the provided minVersionedTransition.
+func TrimStateMachineTimers(
+	mutableState MutableState,
+	minVersionedTransition *persistencespb.VersionedTransition,
+) error {
+	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) == 0 {
+		// Reset all the state machine timers, we'll recreate them all.
+		mutableState.GetExecutionInfo().StateMachineTimers = nil
+		return nil
+	}
+
+	hsmRoot := mutableState.HSM()
+	trimmedStateMachineTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(mutableState.GetExecutionInfo().StateMachineTimers))
+	for _, timerGroup := range mutableState.GetExecutionInfo().StateMachineTimers {
+		trimmedTaskInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(timerGroup.Infos))
+		for _, taskInfo := range timerGroup.GetInfos() {
+
+			node, err := hsmRoot.Child(hsm.Ref{
+				StateMachineRef: taskInfo.Ref,
+			}.StateMachinePath())
+			if err != nil {
+				if errors.Is(err, hsm.ErrStateMachineNotFound) {
+					// node deleted, trim the task
+					continue
+				}
+				return err
+			}
+
+			if CompareVersionedTransition(
+				node.InternalRepr().LastUpdateVersionedTransition,
+				minVersionedTransition,
+			) >= 0 {
+				// node recently updated, trim the task.
+				// A complementary step is then required to regenerate timer tasks for it.
+				continue
+			}
+
+			trimmedTaskInfos = append(trimmedTaskInfos, taskInfo)
+		}
+		if len(trimmedTaskInfos) > 0 {
+			trimmedStateMachineTimers = append(trimmedStateMachineTimers, &persistencespb.StateMachineTimerGroup{
+				Infos:     trimmedTaskInfos,
+				Deadline:  timerGroup.Deadline,
+				Scheduled: timerGroup.Scheduled,
+			})
+		}
+	}
+	mutableState.GetExecutionInfo().StateMachineTimers = trimmedStateMachineTimers
+	return nil
 }

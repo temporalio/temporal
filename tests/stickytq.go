@@ -34,10 +34,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
@@ -63,7 +62,7 @@ func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -93,7 +92,7 @@ func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		if failureCount > 0 {
 			// send a signal on third failure to be buffered, forcing a non-transient workflow task when buffer is flushed
 			/*if failureCount == 3 {
-				err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+				err := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 					Namespace:            s.namespace,
 					WorkflowExecution: workflowExecution,
 					SignalName:        "signalB",
@@ -116,7 +115,7 @@ func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	}
 
 	poller := &TaskPoller{
-		Engine:                       s.engine,
+		Client:                       s.client,
 		Namespace:                    s.namespace,
 		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:                     identity,
@@ -131,7 +130,7 @@ func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
@@ -172,7 +171,7 @@ WaitForStickyTimeoutLoop:
 		s.NoError(err)
 	}
 
-	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
@@ -256,7 +255,7 @@ func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -297,7 +296,7 @@ func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:                       s.engine,
+		Client:                       s.client,
 		Namespace:                    s.namespace,
 		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:                     identity,
@@ -312,7 +311,7 @@ func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
@@ -323,7 +322,7 @@ func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
 	s.NoError(err)
 
 	// Reset sticky taskqueue before sticky workflow task starts
-	_, err = s.engine.ResetStickyTaskQueue(NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
+	_, err = s.client.ResetStickyTaskQueue(NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
 		Namespace: s.namespace,
 		Execution: workflowExecution,
 	})
@@ -360,7 +359,7 @@ WaitForStickyTimeoutLoop:
 		s.NoError(err)
 	}
 
-	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",

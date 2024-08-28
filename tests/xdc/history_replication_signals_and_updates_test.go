@@ -47,9 +47,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -62,6 +59,8 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/tests"
+	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // This suite contains tests of scenarios in which conflicting histories arise during history replication. To do that we
@@ -132,8 +131,7 @@ func TestHistoryReplicationSignalsAndUpdatesTestSuite(t *testing.T) {
 
 func (s *hrsuTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():                            true,
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Key(): true,
+		dynamicconfig.EnableReplicationStream.Key(): true,
 	}
 	// s.logger = log.NewNoopLogger()
 	s.setupSuite(
@@ -726,15 +724,13 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilAccepted(ctx context.Context, up
 	updateResponse := make(chan error)
 	processWorkflowTaskResponse := make(chan error)
 	go func() {
-		_, err := c.client.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
-			UpdateID:   updateId,
-			WorkflowID: c.t.tv.WorkflowID(),
-			RunID:      c.t.tv.RunID(),
-			UpdateName: "the-test-doesn't-use-this",
-			Args:       []interface{}{arg},
-			WaitPolicy: &updatepb.WaitPolicy{
-				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
-			},
+		_, err := c.client.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
+			UpdateID:     updateId,
+			WorkflowID:   c.t.tv.WorkflowID(),
+			RunID:        c.t.tv.RunID(),
+			UpdateName:   "the-test-doesn't-use-this",
+			Args:         []interface{}{arg},
+			WaitForStage: sdkclient.WorkflowUpdateStageAccepted,
 		})
 		c.t.s.NoError(err)
 		updateResponse <- err
@@ -750,7 +746,7 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilAccepted(ctx context.Context, up
 
 func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -765,7 +761,7 @@ func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 
 func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -780,7 +776,7 @@ func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 
 func (c *hrsuTestCluster) pollAndErrorWhileProcessingWorkflowTask() error {
 	poller := &tests.TaskPoller{
-		Engine:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.GetFrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),

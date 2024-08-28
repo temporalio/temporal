@@ -33,7 +33,6 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 )
@@ -81,19 +81,20 @@ type reachabilityCalculator struct {
 	cache                        reachabilityCache
 	nsID                         namespace.ID
 	nsName                       namespace.Name
-	taskQueue                    string
+	taskQueue                    *tqid.TaskQueueFamily
 	assignmentRules              []*persistencespb.AssignmentRule
 	redirectRules                []*persistencespb.RedirectRule
 	buildIdVisibilityGracePeriod time.Duration
+	tqConfig                     *taskQueueConfig
 }
 
 func newReachabilityCalculator(
 	data *persistencespb.VersioningData,
 	rCache reachabilityCache,
-	nsID,
-	nsName,
-	taskQueue string,
+	nsID, nsName string,
+	taskQueue *tqid.TaskQueueFamily,
 	buildIdVisibilityGracePeriod time.Duration,
+	tqConfig *taskQueueConfig,
 ) *reachabilityCalculator {
 	return &reachabilityCalculator{
 		cache:                        rCache,
@@ -103,6 +104,7 @@ func newReachabilityCalculator(
 		assignmentRules:              data.GetAssignmentRules(),
 		redirectRules:                data.GetRedirectRules(),
 		buildIdVisibilityGracePeriod: buildIdVisibilityGracePeriod,
+		tqConfig:                     tqConfig,
 	}
 }
 
@@ -114,16 +116,16 @@ func getBuildIdTaskReachability(
 	buildId string,
 ) (enumspb.BuildIdTaskReachability, error) {
 	reachability, exitPoint, err := rc.run(ctx, buildId)
-	metrics.ReachabilityExitPointCounter.With(metricsHandler.WithTags(
-		metrics.NamespaceTag(rc.nsName.String()),
-		metrics.TaskQueueTag(rc.taskQueue)),
-	).Record(1, metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))
+	handler := metrics.GetPerTaskQueueFamilyScope(metricsHandler, rc.nsName.String(), rc.taskQueue, rc.tqConfig.BreakdownMetricsByTaskQueue())
+	metrics.ReachabilityExitPointCounter.With(handler).Record(1,
+		metrics.WorkerBuildIdTag(buildId, rc.tqConfig.BreakdownMetricsByBuildID()),
+		metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))
 	logger.Info("Calculated reachability for build id",
 		tag.WorkerBuildId(buildId),
 		tag.BuildIdTaskReachabilityTag(reachability.String()),
 		tag.ReachabilityExitPointTag(reachabilityExitPoint2TagValue[exitPoint]),
 		tag.WorkflowNamespace(rc.nsName.String()),
-		tag.WorkflowTaskQueueName(rc.taskQueue),
+		tag.WorkflowTaskQueueName(rc.taskQueue.Name()),
 	)
 	return reachability, err
 }
@@ -219,18 +221,18 @@ func (rc *reachabilityCalculator) existsBackloggedActivityOrWFTaskAssignedToAny(
 }
 
 func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTargetOrDefault(buildId string) bool {
-	foundUnconditionalRule := false
+	foundFullyRampedRule := false
 	for _, r := range getActiveAssignmentRules(rc.assignmentRules) {
 		if r.GetRule().GetTargetBuildId() == buildId {
 			return true
 		}
-		if r.GetRule().GetPercentageRamp() == nil {
-			// rules after an unconditional rule will not be reached
-			foundUnconditionalRule = true
+		if isFullyRamped(r.GetRule()) {
+			// rules after a fully-ramped rule will not be reached
+			foundFullyRampedRule = true
 			break
 		}
 	}
-	if !foundUnconditionalRule && buildId == "" {
+	if !foundFullyRampedRule && buildId == "" {
 		// unversioned is the default, and is reachable
 		return true
 	}
@@ -259,7 +261,7 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	open bool,
 ) string {
 	slices.Sort(buildIdsOfInterest)
-	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(rc.taskQueue)))
+	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(rc.taskQueue.Name())))
 	var statusFilter string
 	var escapedBuildIds []string
 	var includeNull bool
@@ -299,12 +301,12 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }
 
-// getDefaultBuildId gets the build ID mentioned in the first unconditional Assignment Rule.
+// getDefaultBuildId gets the build ID mentioned in the first fully-ramped Assignment Rule.
 // If there is no default Build ID, the result for the unversioned queue will be returned.
 // This should only be called on the root.
 func getDefaultBuildId(assignmentRules []*persistencespb.AssignmentRule) string {
 	for _, ar := range getActiveAssignmentRules(assignmentRules) {
-		if isUnconditional(ar.GetRule()) {
+		if isFullyRamped(ar.GetRule()) {
 			return ar.GetRule().GetTargetBuildId()
 		}
 	}

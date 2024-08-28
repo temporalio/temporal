@@ -80,6 +80,7 @@ type Config struct {
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
+	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -97,6 +98,7 @@ type Config struct {
 	ShardIOTimeout               dynamicconfig.DurationPropertyFn
 	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
 	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
+	ShardFinalizerTimeout        dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -125,7 +127,7 @@ type Config struct {
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
-	TimerProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
+	TimerProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	TimerProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TimerProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TimerProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
@@ -139,11 +141,11 @@ type Config struct {
 	TimerQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	RetentionTimerJitterDuration                     dynamicconfig.DurationPropertyFn
 
-	MemoryTimerProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
+	MemoryTimerProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 
 	// TransferQueueProcessor settings
 	TransferTaskBatchSize                               dynamicconfig.IntPropertyFn
-	TransferProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
+	TransferProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	TransferProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TransferProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TransferProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
@@ -165,11 +167,15 @@ type Config struct {
 	OutboundProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
 	OutboundProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	OutboundProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
+	OutboundQueuePendingTaskCriticalCount               dynamicconfig.IntPropertyFn
+	OutboundQueuePendingTaskMaxCount                    dynamicconfig.IntPropertyFn
 	OutboundQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueHostSchedulerMaxTaskRPS                dynamicconfig.FloatPropertyFnWithDestinationFilter
-	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedPropertyFnWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
+	OutboundQueueCircuitBreakerSettings                 dynamicconfig.TypedSubscribableWithDestinationFilter[dynamicconfig.CircuitBreakerSettings]
+	OutboundStandbyTaskMissingEventsDiscardDelay        dynamicconfig.DurationPropertyFnWithDestinationFilter
+	OutboundStandbyTaskMissingEventsDestinationDownErr  dynamicconfig.BoolPropertyFnWithDestinationFilter
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -184,6 +190,10 @@ type Config struct {
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
+
+	// ShardFirstUpdateMinInterval defines how soon _first_ hard update should happen.
+	ShardFirstUpdateInterval dynamicconfig.DurationPropertyFn
+
 	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed before the shard info can be updated before
 	// history.shardUpdateMinInterval has passed
 	ShardUpdateMinTasksCompleted dynamicconfig.IntPropertyFn
@@ -245,9 +255,6 @@ type Config struct {
 	WorkflowTaskCriticalAttempts dynamicconfig.IntPropertyFn
 	WorkflowTaskRetryMaxInterval dynamicconfig.DurationPropertyFn
 
-	// ContinueAsNewMinInterval is the minimal interval between continue_as_new to prevent tight continue_as_new loop.
-	ContinueAsNewMinInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
-
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
@@ -266,11 +273,12 @@ type Config struct {
 	ReplicationTaskProcessorShardQPS                     dynamicconfig.FloatPropertyFn
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
 	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
+	ReplicationMultipleBatches                           dynamicconfig.BoolPropertyFn
 
 	ReplicationStreamSyncStatusDuration                 dynamicconfig.DurationPropertyFn
 	ReplicationProcessorSchedulerQueueSize              dynamicconfig.IntPropertyFn
-	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.IntPropertyFn
-	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
+	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.TypedSubscribable[int]
+	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationEagerRefreshNamespace              dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
@@ -279,6 +287,9 @@ type Config struct {
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
 	ReplicationReceiverMaxOutstandingTaskCount          dynamicconfig.IntPropertyFn
+	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
+	ReplicationProgressCacheMaxSize                     dynamicconfig.IntPropertyFn
+	ReplicationProgressCacheTTL                         dynamicconfig.DurationPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -296,7 +307,7 @@ type Config struct {
 	// ===== Visibility related =====
 	// VisibilityQueueProcessor settings
 	VisibilityTaskBatchSize                               dynamicconfig.IntPropertyFn
-	VisibilityProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
+	VisibilityProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	VisibilityProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	VisibilityProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
 	VisibilityProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
@@ -326,7 +337,7 @@ type Config struct {
 	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
-	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
+	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	ArchivalProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
 	ArchivalTaskBatchSize                               dynamicconfig.IntPropertyFn
 	ArchivalProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
@@ -344,9 +355,18 @@ type Config struct {
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	WorkflowIdReuseMinimalInterval dynamicconfig.DurationPropertyFn
+	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFnWithNamespaceFilter[schedulerhsm.Tweakables]
+
+	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
+	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
+
+	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+
+	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -374,7 +394,6 @@ func NewConfig(
 		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
 		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
-		ContinueAsNewMinInterval:             dynamicconfig.ContinueAsNewMinInterval.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:       dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:      dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
@@ -399,6 +418,7 @@ func NewConfig(
 		EnableHostLevelHistoryCache:           dynamicconfig.EnableHostHistoryCache.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
+		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
@@ -413,6 +433,7 @@ func NewConfig(
 		ShardIOTimeout:               dynamicconfig.ShardIOTimeout.Get(dc),
 		ShardLingerOwnershipCheckQPS: dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
 		ShardLingerTimeLimit:         dynamicconfig.ShardLingerTimeLimit.Get(dc),
+		ShardFinalizerTimeout:        dynamicconfig.ShardFinalizerTimeout.Get(dc),
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
@@ -439,7 +460,7 @@ func NewConfig(
 		TaskSchedulerGlobalNamespaceMaxQPS:       dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
-		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Get(dc),
+		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),
 		TimerProcessorSchedulerActiveRoundRobinWeights:   dynamicconfig.TimerProcessorSchedulerActiveRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)).Get(dc),
 		TimerProcessorSchedulerStandbyRoundRobinWeights:  dynamicconfig.TimerProcessorSchedulerStandbyRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)).Get(dc),
 		TimerProcessorUpdateAckInterval:                  dynamicconfig.TimerProcessorUpdateAckInterval.Get(dc),
@@ -453,10 +474,10 @@ func NewConfig(
 		TransferQueueMaxReaderCount:                      dynamicconfig.TransferQueueMaxReaderCount.Get(dc),
 		RetentionTimerJitterDuration:                     dynamicconfig.RetentionTimerJitterDuration.Get(dc),
 
-		MemoryTimerProcessorSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Get(dc),
+		MemoryTimerProcessorSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
 
 		TransferTaskBatchSize:                               dynamicconfig.TransferTaskBatchSize.Get(dc),
-		TransferProcessorSchedulerWorkerCount:               dynamicconfig.TransferProcessorSchedulerWorkerCount.Get(dc),
+		TransferProcessorSchedulerWorkerCount:               dynamicconfig.TransferProcessorSchedulerWorkerCount.Subscribe(dc),
 		TransferProcessorSchedulerActiveRoundRobinWeights:   dynamicconfig.TransferProcessorSchedulerActiveRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)).Get(dc),
 		TransferProcessorSchedulerStandbyRoundRobinWeights:  dynamicconfig.TransferProcessorSchedulerStandbyRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)).Get(dc),
 		TransferProcessorMaxPollRPS:                         dynamicconfig.TransferProcessorMaxPollRPS.Get(dc),
@@ -477,11 +498,15 @@ func NewConfig(
 		OutboundProcessorUpdateAckInterval:                  dynamicconfig.OutboundProcessorUpdateAckInterval.Get(dc),
 		OutboundProcessorUpdateAckIntervalJitterCoefficient: dynamicconfig.OutboundProcessorUpdateAckIntervalJitterCoefficient.Get(dc),
 		OutboundProcessorPollBackoffInterval:                dynamicconfig.OutboundProcessorPollBackoffInterval.Get(dc),
+		OutboundQueuePendingTaskCriticalCount:               dynamicconfig.OutboundQueuePendingTaskCriticalCount.Get(dc),
+		OutboundQueuePendingTaskMaxCount:                    dynamicconfig.OutboundQueuePendingTaskMaxCount.Get(dc),
 		OutboundQueueMaxReaderCount:                         dynamicconfig.OutboundQueueMaxReaderCount.Get(dc),
 		OutboundQueueGroupLimiterBufferSize:                 dynamicconfig.OutboundQueueGroupLimiterBufferSize.Get(dc),
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),
 		OutboundQueueHostSchedulerMaxTaskRPS:                dynamicconfig.OutboundQueueHostSchedulerMaxTaskRPS.Get(dc),
-		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Get(dc),
+		OutboundQueueCircuitBreakerSettings:                 dynamicconfig.OutboundQueueCircuitBreakerSettings.Subscribe(dc),
+		OutboundStandbyTaskMissingEventsDestinationDownErr:  dynamicconfig.OutboundStandbyTaskMissingEventsDestinationDownErr.Get(dc),
+		OutboundStandbyTaskMissingEventsDiscardDelay:        dynamicconfig.OutboundStandbyTaskMissingEventsDiscardDelay.Get(dc),
 
 		ReplicatorProcessorMaxPollInterval:                  dynamicconfig.ReplicatorProcessorMaxPollInterval.Get(dc),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient.Get(dc),
@@ -493,8 +518,8 @@ func NewConfig(
 		ReplicationEnableUpdateWithNewTaskMerge:             dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Get(dc),
 		ReplicationStreamSyncStatusDuration:                 dynamicconfig.ReplicationStreamSyncStatusDuration.Get(dc),
 		ReplicationProcessorSchedulerQueueSize:              dynamicconfig.ReplicationProcessorSchedulerQueueSize.Get(dc),
-		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Get(dc),
-		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Get(dc),
+		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Subscribe(dc),
+		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Subscribe(dc),
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationEagerRefreshNamespace:              dynamicconfig.EnableEagerNamespaceRefresher.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
@@ -503,11 +528,15 @@ func NewConfig(
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
 		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
+		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
+		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
+		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
+		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),
 		ShardUpdateMinTasksCompleted:     dynamicconfig.ShardUpdateMinTasksCompleted.Get(dc),
 		ShardSyncMinInterval:             dynamicconfig.ShardSyncMinInterval.Get(dc),
 		ShardSyncTimerJitterCoefficient:  dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient.Get(dc),
@@ -564,6 +593,7 @@ func NewConfig(
 		ReplicationTaskProcessorNoTaskRetryWait:              dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait.Get(dc),
 		ReplicationTaskProcessorCleanupInterval:              dynamicconfig.ReplicationTaskProcessorCleanupInterval.Get(dc),
 		ReplicationTaskProcessorCleanupJitterCoefficient:     dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient.Get(dc),
+		ReplicationMultipleBatches:                           dynamicconfig.ReplicationMultipleBatches.Get(dc),
 
 		MaxBufferedQueryCount:                 dynamicconfig.MaxBufferedQueryCount.Get(dc),
 		MutableStateChecksumGenProbability:    dynamicconfig.MutableStateChecksumGenProbability.Get(dc),
@@ -578,7 +608,7 @@ func NewConfig(
 		VisibilityTaskBatchSize:                               dynamicconfig.VisibilityTaskBatchSize.Get(dc),
 		VisibilityProcessorMaxPollRPS:                         dynamicconfig.VisibilityProcessorMaxPollRPS.Get(dc),
 		VisibilityProcessorMaxPollHostRPS:                     dynamicconfig.VisibilityProcessorMaxPollHostRPS.Get(dc),
-		VisibilityProcessorSchedulerWorkerCount:               dynamicconfig.VisibilityProcessorSchedulerWorkerCount.Get(dc),
+		VisibilityProcessorSchedulerWorkerCount:               dynamicconfig.VisibilityProcessorSchedulerWorkerCount.Subscribe(dc),
 		VisibilityProcessorSchedulerActiveRoundRobinWeights:   dynamicconfig.VisibilityProcessorSchedulerActiveRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)).Get(dc),
 		VisibilityProcessorSchedulerStandbyRoundRobinWeights:  dynamicconfig.VisibilityProcessorSchedulerStandbyRoundRobinWeights.WithDefault(ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)).Get(dc),
 		VisibilityProcessorMaxPollInterval:                    dynamicconfig.VisibilityProcessorMaxPollInterval.Get(dc),
@@ -613,7 +643,7 @@ func NewConfig(
 		ArchivalTaskBatchSize:                               dynamicconfig.ArchivalTaskBatchSize.Get(dc),
 		ArchivalProcessorMaxPollRPS:                         dynamicconfig.ArchivalProcessorMaxPollRPS.Get(dc),
 		ArchivalProcessorMaxPollHostRPS:                     dynamicconfig.ArchivalProcessorMaxPollHostRPS.Get(dc),
-		ArchivalProcessorSchedulerWorkerCount:               dynamicconfig.ArchivalProcessorSchedulerWorkerCount.Get(dc),
+		ArchivalProcessorSchedulerWorkerCount:               dynamicconfig.ArchivalProcessorSchedulerWorkerCount.Subscribe(dc),
 		ArchivalProcessorMaxPollInterval:                    dynamicconfig.ArchivalProcessorMaxPollInterval.Get(dc),
 		ArchivalProcessorMaxPollIntervalJitterCoefficient:   dynamicconfig.ArchivalProcessorMaxPollIntervalJitterCoefficient.Get(dc),
 		ArchivalProcessorUpdateAckInterval:                  dynamicconfig.ArchivalProcessorUpdateAckInterval.Get(dc),
@@ -627,10 +657,19 @@ func NewConfig(
 		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
 		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
-		SendRawWorkflowHistory:         dynamicconfig.SendRawWorkflowHistory.Get(dc),
-		WorkflowIdReuseMinimalInterval: dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
+		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
 
 		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
+		HsmSchedulerTweakables:      schedulerhsm.CurrentTweakables.Get(dc),
+
+		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
+		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
+
+		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
+
+		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 
 	return cfg

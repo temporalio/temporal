@@ -24,7 +24,9 @@ package tasks
 
 import (
 	"context"
+	"time"
 
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -61,22 +63,32 @@ func (a RunnableTask) Run(ctx context.Context) {
 type RateLimitedTaskRunnable struct {
 	Runnable
 	Limiter quotas.RateLimiter
+
+	metricsHandler metrics.Handler
 }
 
 // NewRateLimitedTaskRunnableFromTask creates a [NewRateLimitedTaskRunnable] from a [Task] and a [rate.Limiter].
-func NewRateLimitedTaskRunnableFromTask(task Task, limiter quotas.RateLimiter) RateLimitedTaskRunnable {
+func NewRateLimitedTaskRunnableFromTask(
+	task Task,
+	limiter quotas.RateLimiter,
+	metricsHandler metrics.Handler,
+) RateLimitedTaskRunnable {
 	return RateLimitedTaskRunnable{
 		Runnable: RunnableTask{task},
 		Limiter:  limiter,
+
+		metricsHandler: metricsHandler,
 	}
 }
 
 // Run the embedded [Runnable], applying the rate limiter.
 func (r RateLimitedTaskRunnable) Run(ctx context.Context) {
+	t0 := time.Now()
 	if err := r.Limiter.Wait(ctx); err != nil {
 		r.Abort()
 		return
 	}
 
+	metrics.RateLimitedTaskRunnableWaitTime.With(r.metricsHandler).Record(time.Since(t0))
 	r.Runnable.Run(ctx)
 }

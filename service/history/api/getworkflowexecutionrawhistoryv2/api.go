@@ -29,7 +29,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -201,7 +200,7 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 		return nil, err
 	}
 
-	if req.GetStartEventId() == common.EmptyVersion || req.GetStartEventVersion() == common.EmptyVersion {
+	if req.GetStartEventId() == common.EmptyEventID || req.GetStartEventVersion() == common.EmptyVersion {
 		// If start event is not set, get the events from the first event
 		// As the API is exclusive-exclusive, use first event id - 1 here
 		req.StartEventId = common.FirstEventID - 1

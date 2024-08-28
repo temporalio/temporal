@@ -31,13 +31,12 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -165,4 +164,8 @@ func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.Wo
 		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
 	}
 	return nil
+}
+
+func StampForBuildId(buildId string) *commonpb.WorkerVersionStamp {
+	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
 }

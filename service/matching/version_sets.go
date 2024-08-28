@@ -25,17 +25,15 @@
 package matching
 
 import (
-	"fmt"
-
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
+	"slices"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/slices"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
@@ -44,10 +42,8 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 )
 
-var (
-	// Error used to signal that a queue has no versioning data. This shouldn't escape matching.
-	errEmptyVersioningData = serviceerror.NewInternal("versioning data is empty")
-)
+// Error used to signal that a queue has no versioning data. This shouldn't escape matching.
+var errEmptyVersioningData = serviceerror.NewInternal("versioning data is empty")
 
 // ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
 // If maxSets is given, the last sets up to maxSets will be returned.
@@ -388,7 +384,7 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 // lookupVersionSetForPoll is that we never redirect, we just need to return an error or not.
 // Requires: caps is not nil
 // Returns:
-// - whether the build ID was found
+// - whether the build ID was found in version sets
 // - error (can only be nil or serviceerror.NewerBuildExists)
 func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.

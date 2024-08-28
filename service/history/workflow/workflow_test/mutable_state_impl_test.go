@@ -36,8 +36,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
@@ -47,7 +45,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -63,6 +60,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
@@ -152,7 +150,15 @@ func (c *mutationTestCase) startWFT(
 		t.Fatal(err)
 	}
 
-	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "", nil, nil)
+	_, wft, err = ms.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		wft.RequestID,
+		wft.TaskQueue,
+		"",
+		nil,
+		nil,
+		false,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,6 +229,7 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 	clusterMetadata.EXPECT().ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(),
 		nsEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	clusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
 	executionManager := shardContext.Resource.ExecutionMgr
 	executionManager.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
@@ -457,6 +464,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				"---",
 				nil,
 				nil,
+				false,
 			)
 			require.NoError(t, err)
 			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{

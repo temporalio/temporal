@@ -27,7 +27,6 @@ package recordactivitytaskstarted
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -56,7 +56,6 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		request.Clock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.WorkflowExecution.WorkflowId,
@@ -122,18 +121,14 @@ func Invoke(
 
 			scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
 			namespaceName := namespaceEntry.Name()
-			taskQueueName := ai.GetTaskQueue()
-
 			metrics.TaskScheduleToStartLatency.With(
-				metrics.GetPerTaskQueueScope(
+				workflow.GetPerTaskQueueFamilyScope(
 					taggedMetrics,
-					namespaceName.String(),
-					taskQueueName,
-					enumspb.TASK_QUEUE_KIND_NORMAL,
-				)).Record(
-				scheduleToStartLatency,
-				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-			)
+					namespaceName,
+					ai.GetTaskQueue(),
+					shard.GetConfig(),
+				),
+			).Record(scheduleToStartLatency)
 
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt

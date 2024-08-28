@@ -34,16 +34,10 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/api/adminservice/v1"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -53,7 +47,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
+	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -67,8 +61,10 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -94,6 +90,9 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -113,6 +112,7 @@ type (
 		mockVisibilityProcessor  *queues.MockQueue
 		mockArchivalProcessor    *queues.MockQueue
 		mockMemoryScheduledQueue *queues.MockQueue
+		mockOutboundProcessor    *queues.MockQueue
 		mockNamespaceCache       *namespace.MockRegistry
 		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
@@ -158,16 +158,19 @@ func (s *engineSuite) SetupTest() {
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
 	s.mockMemoryScheduledQueue = queues.NewMockQueue(s.controller)
+	s.mockOutboundProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().Category().Return(tasks.CategoryArchival).AnyTimes()
 	s.mockMemoryScheduledQueue.EXPECT().Category().Return(tasks.CategoryMemoryTimer).AnyTimes()
+	s.mockOutboundProcessor.EXPECT().Category().Return(tasks.CategoryOutbound).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockMemoryScheduledQueue.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockOutboundProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
@@ -178,7 +181,7 @@ func (s *engineSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	s.eventsCache = events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
@@ -236,6 +239,7 @@ func (s *engineSuite) SetupTest() {
 			s.mockVisibilityProcessor.Category():  s.mockVisibilityProcessor,
 			s.mockArchivalProcessor.Category():    s.mockArchivalProcessor,
 			s.mockMemoryScheduledQueue.Category(): s.mockMemoryScheduledQueue,
+			s.mockOutboundProcessor.Category():    s.mockOutboundProcessor,
 		},
 		eventsReapplier:            s.mockEventsReapplier,
 		workflowResetter:           s.mockWorkflowResetter,
@@ -378,14 +382,14 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	s.Equal(int64(4), response.NextEventId)
 
 	// long poll, new event happen before long poll timeout
-	go asycWorkflowUpdate(time.Second * 2)
+	go asycWorkflowUpdate(time.Second)
 	start := time.Now().UTC()
 	pollResponse, err := s.mockHistoryEngine.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
 		Execution:           &execution,
 		ExpectedNextEventId: 4,
 	})
-	s.True(time.Now().UTC().After(start.Add(time.Second * 1)))
+	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.Nil(err)
 	s.Equal(int64(5), pollResponse.GetNextEventId())
 	waitGroup.Wait()
@@ -394,7 +398,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	ctx := context.Background()
 
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 		RunId:      tests.RunID,
 	}
@@ -409,7 +413,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 		execution.GetRunId(),
 		log.NewTestLogger(),
 	)
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wfMs := workflow.TestCloneToProto(ms)
@@ -421,41 +425,37 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	asyncBranchTokenUpdate := func(delay time.Duration) {
 		timer := time.NewTimer(delay)
 		<-timer.C
-		newExecution := &commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.RunId,
-		}
-		ms.GetExecutionInfo().GetVersionHistories()
 		s.mockHistoryEngine.eventNotifier.NotifyNewHistoryEvent(events.NewNotification(
-			"tests.NamespaceID",
-			newExecution,
+			ms.GetWorkflowKey().NamespaceID,
+			execution,
 			int64(1),
 			int64(0),
-			int64(4),
+			int64(12),
 			int64(1),
 			enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			ms.GetExecutionInfo().GetVersionHistories()))
+			ms.GetExecutionInfo().GetVersionHistories()),
+		)
 	}
 
 	// return immediately, since the expected next event ID appears
 	response0, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
-		Execution:           &execution,
+		Execution:           execution,
 		ExpectedNextEventId: 3,
 	})
 	s.Nil(err)
 	s.Equal(int64(4), response0.GetNextEventId())
 
 	// long poll, new event happen before long poll timeout
-	go asyncBranchTokenUpdate(time.Second * 2)
+	go asyncBranchTokenUpdate(time.Second)
 	start := time.Now().UTC()
 	response1, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
-		Execution:           &execution,
+		Execution:           execution,
 		ExpectedNextEventId: 10,
 	})
-	s.True(time.Now().UTC().After(start.Add(time.Second * 1)))
+	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.Nil(err)
 	s.Equal(response0.GetCurrentBranchToken(), response1.GetCurrentBranchToken())
 }
@@ -479,6 +479,8 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	// right now the next event ID is 4
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
+
+	s.mockShard.GetConfig().LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Second)
 
 	// long poll, no event happen after long poll timeout
 	response, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
@@ -690,7 +692,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 		s.mockShard,
 		tests.NamespaceID,
 		&execution,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
@@ -4489,7 +4491,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 		s.mockShard,
 		tests.NamespaceID,
 		&we,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
@@ -5336,7 +5338,10 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 		return &persistenceResponse, nil
 	})
 
-	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(), s.mockShard.GetMetricsHandler(), s.mockShard.Resource.Logger)
+	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.Resource.Logger,
+		s.config.LogAllReqErrors)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
@@ -5370,7 +5375,10 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 		return &persistenceResponse, nil
 	})
 
-	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(), s.mockShard.GetMetricsHandler(), s.mockShard.Resource.Logger)
+	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.Resource.Logger,
+		s.config.LogAllReqErrors)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		firstWorkflowTaskBackoff := time.Second
 		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
@@ -6252,7 +6260,7 @@ func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we *commonpb
 		s.mockShard,
 		tests.NamespaceID,
 		we,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil
@@ -6324,6 +6332,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 		identity,
 		nil,
 		nil,
+		false,
 	)
 
 	return event

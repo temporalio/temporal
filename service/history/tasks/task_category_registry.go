@@ -26,8 +26,7 @@ package tasks
 
 import (
 	"fmt"
-
-	"golang.org/x/exp/maps"
+	"maps"
 )
 
 type (
@@ -58,6 +57,7 @@ func NewDefaultTaskCategoryRegistry() *MutableTaskCategoryRegistry {
 			CategoryVisibility.ID():  CategoryVisibility,
 			CategoryReplication.ID(): CategoryReplication,
 			CategoryMemoryTimer.ID(): CategoryMemoryTimer,
+			CategoryOutbound.ID():    CategoryOutbound,
 		},
 	}
 }

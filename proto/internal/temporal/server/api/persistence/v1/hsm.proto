@@ -29,13 +29,36 @@ import "google/protobuf/timestamp.proto";
 
 // A node in a hierarchical state machine tree.
 message StateMachineNode {
+    // Serialized data of the underlying state machine.
+    bytes data = 1;
+    // Map of state machine type to a map of machines by ID.
+    map<string, StateMachineMap> children = 2;
+
+    // Versioned transition when the node was instantiated.
+    // This field, plus node path uniquely identifies a state machine node in a mutable state instance.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used to uniquely identify a node.
+    // NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
+    // with the initial namespace failover version.
+    VersionedTransition initial_versioned_transition = 3;
+
+    // Versioned transition when the node was last updated.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used for non-concurrent task staleness check or to determine whether this node should be synced
+    // during state replication.
+    VersionedTransition last_update_versioned_transition = 4;
+
     // Number of transitions on this state machine object.
     // Used to verify that a task is not stale if the state machine does not allow concurrent task execution.
-    int64 transition_count = 1;
-
-    // Seralized data of the underlying state machine.
-    bytes data = 2;
-    map<int32, StateMachineMap> children = 3;
+    // The transition count monotonically increases with each state transition and only resets when the entire 
+    // mutable state was rebuilt. This case is handled by the task_generation_shard_clock_timestamp field in 
+    // WorkflowExecutionInfo.
+    // NOTE: This field is cluster specific and cannot be replicated.
+    // NOTE: This field will be made obsolete when transition history is enabled in favor of
+    // last_update_versioned_transition.
+    int64 transition_count = 100;
 }
 
 // Map of state machine ID to StateMachineNode.
@@ -47,7 +70,7 @@ message StateMachineMap {
 
 message StateMachineKey {
     // Addressable type of the corresponding state machine in a single tree level.
-    int32 type = 1;
+    string type = 1;
     // Addressable ID of the corresponding state machine in a single tree level.
     string id = 2;
 }
@@ -56,23 +79,42 @@ message StateMachineKey {
 message StateMachineRef {
     // Nested path to a state machine.
     repeated StateMachineKey path = 1;
-    // Namespace failover version on the corresponding mutable state object, used for staleness detection when global
-    // namespaces are enabled.
-    int64 mutable_state_namespace_failover_version = 2;
-    // Number of transitions on the corresponding mutable state object. Used to verify that a task is not referencing a
-    // stale state or, in some situations, that the task itself is not stale.
-    int64 mutable_state_transition_count = 3;
+
+    // Versioned transition of the ref was instantiated.
+    // Used to verify that the ref is not referencing a stale state or, in some situations, 
+    // that the ref itself is not stale.
+    // NOTE: If transition history is disabled, the field will not be specified and
+    // cannot be used for staleness check.
+    VersionedTransition mutable_state_versioned_transition = 2;
+
+    // Versioned transition when the state machine node was instantiated.
+    // This field, plus node path uniquely identifies a state machine node in a mutable state instance.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used to uniquely identify a node.
+    // NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
+    // with the initial namespace failover version.
+    VersionedTransition machine_initial_versioned_transition = 3;
+
+    // Versioned transition when the state machine node was last updated.
+    // If not specified, this reference is considered non-concurrent, 
+    // and should match the last_update_versioned_transition on the corresponding state machine node.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used for non-concurrent task staleness check.
+    VersionedTransition machine_last_update_versioned_transition = 4;
+
     // Number of transitions executed on the referenced state machine node at the time this Ref is instantiated.
-    // If non-zero, the state machine is assumed to support only non-concurrent tasks, and this number should match the
-    // number of state transitions on the corresponding state machine object.
-    int64 machine_transition_count = 4;
+    // If non-zero, this reference is considered non-concurrent and this number should match the number of state
+    // transitions on the corresponding state machine node.
+    // This field will be obsolete once mutable state transition history is productionized.
+    int64 machine_transition_count = 100;
 }
 
 message StateMachineTaskInfo {
     // Reference to a state machine.
     StateMachineRef ref = 1;
     // Task type. Not to be confused with the state machine's type in the `ref` field.
-    int32 type = 2;
+    string type = 2;
     // Opaque data attached to this task. May be nil. Deserialized by a registered TaskSerializer for this type.
     bytes data = 3;
 }
@@ -85,25 +127,37 @@ message StateMachineTimerGroup {
     // (-- api-linter: core::0142::time-field-names=disabled
     //     aip.dev/not-precedent: Ignoring lint rules. --)
     google.protobuf.Timestamp deadline = 2;
-
     // Whether or not a task was put in the queue for this group's deadline.
     bool scheduled = 3;
 }
 
-// Keeps track of the ranges of transition counts per namespace failover version.
-// Each task generated by the HSM framework is imprinted with the current transaction’s `NamespaceFailoverVersion` and
-// `MaxTransitionCount` at the end of the transaction.
-// When a task is being processed, the `StateTransitionHistory` is compared with the imprinted task information to
-// verify that a task is not referencing a stale state or that the task itself is not stale.
-// For example, if the state has a history of `[{v: 1, t: 3}, {v: 2, t: 5}]`, task A `{v: 2, t: 4}` **is not**
-// referencing stale state because for version `2` transitions `4-5` are valid, while task B `{v: 2, t: 6}` **is**
-// referencing stale state because the transition count is out of range for version `2`.
-// Furthermore, task C `{v: 1, t: 4}` itself is stale because it is referencing an impossible state, likely due to post
-// split-brain reconciliation.
+// VersionedTransition is a unique identifier for a specific mutable state transition.
 message VersionedTransition {
     // The namespace failover version at transition time.
     int64 namespace_failover_version = 1;
-    // Maximum state transition count perceived during the specified namespace_failover_version.
-    int64 max_transition_count = 2;
+    // State transition count perceived during the specified namespace_failover_version.
+    int64 transition_count = 2;
+}
+
+message StateMachineTombstoneBatch {
+    // The versioned transition in which the tombstones were created.
+    VersionedTransition versioned_transition = 1;
+    repeated StateMachineTombstone state_machine_tombstones = 2; 
+}
+
+message StateMachineTombstone {
+    oneof state_machine_key {
+        int64 activity_scheduled_event_id = 1;
+        string timer_id = 2;
+        int64 child_execution_initiated_event_id = 3;
+        int64 request_cancel_initiated_event_id = 4;
+        int64 signal_external_initiated_event_id = 5;
+        string update_id = 6;
+        StateMachinePath state_machine_path = 7;
+    }
+}
+
+message StateMachinePath {
+    repeated StateMachineKey path = 1;
 }
 

@@ -47,10 +47,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/atomic"
-	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -64,6 +60,9 @@ import (
 	"go.temporal.io/server/tests"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
+	"go.uber.org/atomic"
+	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // This file contains tests for the history replication DLQ feature. It uses a faulty replication task executor to force

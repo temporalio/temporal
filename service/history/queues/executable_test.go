@@ -37,21 +37,20 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/queues/queuestest"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -162,6 +161,13 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 		{
 			name:                         "NotFoundError",
 			taskErr:                      serviceerror.NewNotFound("not found error"),
+			expectError:                  false,
+			expectedAttemptNoUserLatency: attemptNoUserLatency,
+			expectBackoff:                false,
+		},
+		{
+			name:                         "NotFoundErrorWrapped",
+			taskErr:                      fmt.Errorf("%w: some reason", consts.ErrWorkflowCompleted),
 			expectError:                  false,
 			expectedAttemptNoUserLatency: attemptNoUserLatency,
 			expectBackoff:                false,
