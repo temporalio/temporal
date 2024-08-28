@@ -69,6 +69,7 @@ type (
 		BatchSize            dynamicconfig.IntPropertyFn
 		MaxPendingTasksCount dynamicconfig.IntPropertyFn
 		PollBackoffInterval  dynamicconfig.DurationPropertyFn
+		MaxPredicateDepth    dynamicconfig.IntPropertyFn
 	}
 
 	SliceIterator func(s Slice)
@@ -268,19 +269,19 @@ func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
 		incomingSlice := incomingSlices[incomingSliceIdx]
 
 		if currentSlice.Scope().Range.InclusiveMin.CompareTo(incomingSlice.Scope().Range.InclusiveMin) < 0 {
-			mergeOrAppendSlice(mergedSlices, currentSlice)
+			mergeOrAppendSlice(mergedSlices, currentSlice, r.options.MaxPredicateDepth())
 			currentSliceElement = currentSliceElement.Next()
 		} else {
-			mergeOrAppendSlice(mergedSlices, incomingSlice)
+			mergeOrAppendSlice(mergedSlices, incomingSlice, r.options.MaxPredicateDepth())
 			incomingSliceIdx++
 		}
 	}
 
 	for ; currentSliceElement != nil; currentSliceElement = currentSliceElement.Next() {
-		mergeOrAppendSlice(mergedSlices, currentSliceElement.Value.(Slice))
+		mergeOrAppendSlice(mergedSlices, currentSliceElement.Value.(Slice), r.options.MaxPredicateDepth())
 	}
 	for _, slice := range incomingSlices[incomingSliceIdx:] {
-		mergeOrAppendSlice(mergedSlices, slice)
+		mergeOrAppendSlice(mergedSlices, slice, r.options.MaxPredicateDepth())
 	}
 
 	// clear existing list
@@ -551,6 +552,7 @@ func (r *ReaderImpl) verifyPendingTaskSize() bool {
 func mergeOrAppendSlice(
 	slices *list.List,
 	incomingSlice Slice,
+	maxPredicateDepth int,
 ) {
 	if slices.Len() == 0 {
 		slices.PushBack(incomingSlice)
@@ -564,7 +566,7 @@ func mergeOrAppendSlice(
 		return
 	}
 
-	mergedSlices := lastSlice.MergeWithSlice(incomingSlice)
+	mergedSlices := lastSlice.MergeWithSlice(incomingSlice, maxPredicateDepth)
 	slices.Remove(lastElement)
 	for _, mergedSlice := range mergedSlices {
 		slices.PushBack(mergedSlice)

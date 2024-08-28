@@ -35,5 +35,7 @@ type (
 		// two predicates are mathmatically equivalent, Equals may still
 		// return false.
 		Equals(Predicate[T]) bool
+
+		Depth() int
 	}
 )

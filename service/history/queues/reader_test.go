@@ -512,6 +512,7 @@ func (s *readerSuite) newTestReader(
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),
 			MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
 			PollBackoffInterval:  dynamicconfig.GetDurationPropertyFn(200 * time.Millisecond),
+			MaxPredicateDepth:    dynamicconfig.GetIntPropertyFn(10),
 		},
 		s.mockScheduler,
 		s.mockRescheduler,

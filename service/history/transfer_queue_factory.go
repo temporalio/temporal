@@ -249,6 +249,7 @@ func (f *transferQueueFactory) CreateQueue(
 				BatchSize:            f.Config.TransferTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.TransferProcessorPollBackoffInterval,
+				MaxPredicateDepth:    f.Config.QueuePredicateMaxDepth,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,

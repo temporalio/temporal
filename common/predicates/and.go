@@ -89,6 +89,15 @@ func (a *AndImpl[T]) Equals(
 	return predicatesEqual(a.Predicates, andPredicate.Predicates)
 }
 
+func (o *AndImpl[T]) Depth() int {
+	depth := 0
+	for _, p := range o.Predicates {
+		depth = max(depth, p.Depth())
+	}
+
+	return depth + 1
+}
+
 // appendPredicates adds new predicates to the slice of existing predicates
 // dropping any duplicated predicates where duplication is determined by Predicate.Equals.
 // appendPredicates assumes that there's no duplication in new predicates.

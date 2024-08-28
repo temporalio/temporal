@@ -42,3 +42,7 @@ func (a *UniversalImpl[T]) Equals(
 	_, ok := predicate.(*UniversalImpl[T])
 	return ok
 }
+
+func (a *UniversalImpl[T]) Depth() int {
+	return 1
+}

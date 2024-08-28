@@ -213,7 +213,7 @@ func (s *sliceSuite) TestMergeWithSlice_SamePredicate() {
 	incomingSlice := s.newTestSlice(incomingRange, nil, nil)
 	totalExecutables += len(incomingSlice.pendingExecutables)
 
-	mergedSlices := slice.MergeWithSlice(incomingSlice)
+	mergedSlices := slice.MergeWithSlice(incomingSlice, 10)
 	s.Len(mergedSlices, 1)
 
 	s.validateMergedSlice(slice, incomingSlice, mergedSlices, totalExecutables)
@@ -232,10 +232,29 @@ func (s *sliceSuite) TestMergeWithSlice_SameRange() {
 	incomingSlice := s.newTestSlice(r, nil, taskTypes)
 	totalExecutables += len(incomingSlice.pendingExecutables)
 
-	mergedSlices := slice.MergeWithSlice(incomingSlice)
+	mergedSlices := slice.MergeWithSlice(incomingSlice, 10)
 	s.Len(mergedSlices, 1)
 
 	s.validateMergedSlice(slice, incomingSlice, mergedSlices, totalExecutables)
+}
+
+func (s *sliceSuite) TestMergeWithSlice_MaxPredicateDepthApplied() {
+	r := NewRandomRange()
+	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	slice := s.newTestSlice(r, namespaceIDs, nil)
+	totalExecutables := len(slice.pendingExecutables)
+
+	taskTypes := []enumsspb.TaskType{
+		enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+	}
+	incomingSlice := s.newTestSlice(r, nil, taskTypes)
+	totalExecutables += len(incomingSlice.pendingExecutables)
+
+	mergedSlices := slice.MergeWithSlice(incomingSlice, 1)
+	s.Len(mergedSlices, 1)
+
+	s.True(mergedSlices[0].Scope().Predicate.Equals(predicates.Universal[tasks.Task]()))
 }
 
 func (s *sliceSuite) TestMergeWithSlice_SameMinKey() {
@@ -252,7 +271,7 @@ func (s *sliceSuite) TestMergeWithSlice_SameMinKey() {
 	incomingSlice := s.newTestSlice(incomingRange, incomingNamespaceIDs, nil)
 	totalExecutables += len(incomingSlice.pendingExecutables)
 
-	mergedSlices := slice.MergeWithSlice(incomingSlice)
+	mergedSlices := slice.MergeWithSlice(incomingSlice, 10)
 	s.Len(mergedSlices, 2)
 
 	s.validateMergedSlice(slice, incomingSlice, mergedSlices, totalExecutables)
@@ -272,7 +291,7 @@ func (s *sliceSuite) TestMergeWithSlice_SameMaxKey() {
 	incomingSlice := s.newTestSlice(incomingRange, incomingNamespaceIDs, nil)
 	totalExecutables += len(incomingSlice.pendingExecutables)
 
-	mergedSlices := slice.MergeWithSlice(incomingSlice)
+	mergedSlices := slice.MergeWithSlice(incomingSlice, 10)
 	s.Len(mergedSlices, 2)
 
 	s.validateMergedSlice(slice, incomingSlice, mergedSlices, totalExecutables)
@@ -296,7 +315,7 @@ func (s *sliceSuite) TestMergeWithSlice_DifferentMinMaxKey() {
 	s.validateSliceState(slice)
 	s.validateSliceState(incomingSlice)
 
-	mergedSlices := slice.MergeWithSlice(incomingSlice)
+	mergedSlices := slice.MergeWithSlice(incomingSlice, 10)
 	s.Len(mergedSlices, 3)
 
 	s.validateMergedSlice(slice, incomingSlice, mergedSlices, totalExecutables)

@@ -112,12 +112,20 @@ func (s *Scope) CanMergeByPredicate(
 
 func (s *Scope) MergeByPredicate(
 	incomingScope Scope,
+	maxPredicateDepth int,
 ) Scope {
 	if !s.CanMergeByPredicate(incomingScope) {
 		panic(fmt.Sprintf("Unable to merge scope with range %v with range %v by predicate", s.Range, incomingScope.Range))
 	}
 
-	return NewScope(s.Range, tasks.OrPredicates(s.Predicate, incomingScope.Predicate))
+	merged := tasks.OrPredicates(s.Predicate, incomingScope.Predicate)
+	// 0 == unlimited
+	if maxPredicateDepth > 0 && merged.Depth() > maxPredicateDepth {
+		// Due to the limitations in predicate merging logic, the predicate depth can easily grow unbounded.
+		// The simplest mitigation is to stop merging and replace with the univeral predicate.
+		merged = predicates.Universal[tasks.Task]()
+	}
+	return NewScope(s.Range, merged)
 }
 
 func (s *Scope) IsEmpty() bool {

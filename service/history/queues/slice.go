@@ -47,7 +47,7 @@ type (
 		SplitByRange(tasks.Key) (left Slice, right Slice)
 		SplitByPredicate(tasks.Predicate) (pass Slice, fail Slice)
 		CanMergeWithSlice(Slice) bool
-		MergeWithSlice(Slice) []Slice
+		MergeWithSlice(slice Slice, maxPredicateDepth int) []Slice
 		CompactWithSlice(Slice) Slice
 		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
@@ -167,9 +167,9 @@ func (s *SliceImpl) CanMergeWithSlice(slice Slice) bool {
 	return s != slice && s.scope.Range.CanMerge(slice.Scope().Range)
 }
 
-func (s *SliceImpl) MergeWithSlice(slice Slice) []Slice {
+func (s *SliceImpl) MergeWithSlice(slice Slice, maxPredicateDepth int) []Slice {
 	if s.scope.Range.InclusiveMin.CompareTo(slice.Scope().Range.InclusiveMin) > 0 {
-		return slice.MergeWithSlice(s)
+		return slice.MergeWithSlice(s, maxPredicateDepth)
 	}
 
 	if !s.CanMergeWithSlice(slice) {
@@ -191,12 +191,12 @@ func (s *SliceImpl) MergeWithSlice(slice Slice) []Slice {
 
 	if currentRightMax := currentRightSlice.Scope().Range.ExclusiveMax; incomingSlice.CanSplitByRange(currentRightMax) {
 		leftIncomingSlice, rightIncomingSlice := incomingSlice.splitByRange(currentRightMax)
-		mergedMidSlice := currentRightSlice.mergeByPredicate(leftIncomingSlice)
+		mergedMidSlice := currentRightSlice.mergeByPredicate(leftIncomingSlice, maxPredicateDepth)
 		mergedSlices = appendMergedSlice(mergedSlices, mergedMidSlice)
 		mergedSlices = appendMergedSlice(mergedSlices, rightIncomingSlice)
 	} else {
 		currentMidSlice, currentRightSlice := currentRightSlice.splitByRange(incomingSlice.Scope().Range.ExclusiveMax)
-		mergedMidSlice := currentMidSlice.mergeByPredicate(incomingSlice)
+		mergedMidSlice := currentMidSlice.mergeByPredicate(incomingSlice, maxPredicateDepth)
 		mergedSlices = appendMergedSlice(mergedSlices, mergedMidSlice)
 		mergedSlices = appendMergedSlice(mergedSlices, currentRightSlice)
 	}
@@ -219,7 +219,7 @@ func (s *SliceImpl) mergeByRange(incomingSlice *SliceImpl) *SliceImpl {
 	)
 }
 
-func (s *SliceImpl) mergeByPredicate(incomingSlice *SliceImpl) *SliceImpl {
+func (s *SliceImpl) mergeByPredicate(incomingSlice *SliceImpl, maxPredicateDepth int) *SliceImpl {
 	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
 	mergedIterators := s.mergeIterators(incomingSlice)
 
@@ -227,7 +227,7 @@ func (s *SliceImpl) mergeByPredicate(incomingSlice *SliceImpl) *SliceImpl {
 	incomingSlice.destroy()
 
 	return s.newSlice(
-		s.scope.MergeByPredicate(incomingSlice.scope),
+		s.scope.MergeByPredicate(incomingSlice.scope, maxPredicateDepth),
 		mergedIterators,
 		mergedTaskTracker,
 	)

@@ -42,3 +42,7 @@ func (n *EmptyImpl[T]) Equals(
 	_, ok := predicate.(*EmptyImpl[T])
 	return ok
 }
+
+func (o *EmptyImpl[T]) Depth() int {
+	return 1
+}

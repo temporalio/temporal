@@ -142,3 +142,13 @@ func (s *andSuite) TestAnd_Equals() {
 	s.False(p.Equals(Empty[int]()))
 	s.False(p.Equals(Universal[int]()))
 }
+
+func (s *andSuite) TestAnd_Depth() {
+	p1 := newTestPredicate(1, 2, 3)
+	p2 := newTestPredicate(2, 3, 4)
+	p := And(p1, p2)
+
+	s.Equal(2, p.Depth())
+	p = And(Or(p1, p2), p1)
+	s.Equal(3, p.Depth())
+}

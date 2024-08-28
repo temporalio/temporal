@@ -98,3 +98,9 @@ func (s *notSuite) TestNot_Equals() {
 	s.False(p.Equals(Empty[int]()))
 	s.False(p.Equals(Universal[int]()))
 }
+
+func (s *notSuite) TestNot_Depth() {
+	p1 := newTestPredicate(1, 2, 3)
+	p := Not[int](p1)
+	s.Equal(2, p.Depth())
+}

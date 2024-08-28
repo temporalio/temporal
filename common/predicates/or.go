@@ -88,3 +88,12 @@ func (o *OrImpl[T]) Equals(
 
 	return predicatesEqual(o.Predicates, orPredicate.Predicates)
 }
+
+func (o *OrImpl[T]) Depth() int {
+	depth := 0
+	for _, p := range o.Predicates {
+		depth = max(depth, p.Depth())
+	}
+
+	return depth + 1
+}
