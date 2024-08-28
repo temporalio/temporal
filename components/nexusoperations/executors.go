@@ -117,9 +117,20 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadOperationArgs(ctx, env, ref)
+	args, err := e.loadOperationArgs(ctx, ns, env, ref)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
+	}
+
+	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
+	// indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
+	if args.endpointID == "" {
+		return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
+			Message: "endpoint not registered",
+			Response: &http.Response{
+				StatusCode: http.StatusNotFound,
+			},
+		})
 	}
 
 	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
@@ -198,6 +209,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
+		Links: []nexus.Link{args.nexusLink},
 	})
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
@@ -215,6 +227,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 					Operation: rawResult.Pending.Operation,
 					ID:        rawResult.Pending.ID,
 				},
+				Links: rawResult.Links,
 			}
 		} else {
 			var payload *commonpb.Payload
@@ -252,10 +265,16 @@ type startArgs struct {
 	endpointID               string
 	header                   map[string]string
 	payload                  *commonpb.Payload
+	nexusLink                nexus.Link
 	namespaceFailoverVersion int64
 }
 
-func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
+func (e taskExecutor) loadOperationArgs(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	env hsm.Environment,
+	ref hsm.Ref,
+) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
@@ -278,6 +297,17 @@ func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment
 		}
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
+		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+			Namespace:  ns.Name().String(),
+			WorkflowId: ref.WorkflowKey.WorkflowID,
+			RunId:      ref.WorkflowKey.RunID,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   event.GetEventId(),
+					EventType: event.GetEventType(),
+				},
+			},
+		})
 		args.namespaceFailoverVersion = event.Version
 		return nil
 	})
@@ -298,6 +328,30 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				return hsm.TransitionOutput{}, err
 			}
 			if result.Pending != nil {
+				var links []*commonpb.Link
+				for _, nexusLink := range result.Links {
+					switch nexusLink.Type {
+					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
+						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+						if err != nil {
+							// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+							// so ignoring the error for now; we will revisit how to handle these errors later.
+							e.Logger.Error(
+								fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+								tag.Error(err),
+							)
+							continue
+						}
+						links = append(links, &commonpb.Link{
+							Variant: &commonpb.Link_WorkflowEvent_{
+								WorkflowEvent: link,
+							},
+						})
+					default:
+						// If the link data type is unsupported, just ignore it for now.
+						e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+					}
+				}
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
 				// to allow it to complete via callback.
 				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
@@ -309,6 +363,8 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 							RequestId:        operation.RequestId,
 						},
 					}
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					e.Links = links
 				})
 				return TransitionStarted.Apply(operation, EventStarted{
 					Time:       env.Now(),

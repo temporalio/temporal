@@ -59,13 +59,6 @@ type NamespaceIDAndDestination struct {
 	Destination string
 }
 
-// OutboundTaskGroupNamespaceIDAndDestination is the key for grouping tasks by task type namespace ID and destination.
-type OutboundTaskGroupNamespaceIDAndDestination struct {
-	TaskGroup   string
-	NamespaceID string
-	Destination string
-}
-
 type GrouperStateMachineNamespaceIDAndDestination struct {
 }
 
@@ -73,7 +66,7 @@ func (g GrouperStateMachineNamespaceIDAndDestination) Key(task tasks.Task) (key 
 	return g.KeyTyped(task)
 }
 
-func (GrouperStateMachineNamespaceIDAndDestination) KeyTyped(task tasks.Task) (key OutboundTaskGroupNamespaceIDAndDestination) {
+func (GrouperStateMachineNamespaceIDAndDestination) KeyTyped(task tasks.Task) (key tasks.TaskGroupNamespaceIDAndDestination) {
 	destGetter, ok := task.(tasks.HasDestination)
 	var dest string
 	if ok {
@@ -84,7 +77,7 @@ func (GrouperStateMachineNamespaceIDAndDestination) KeyTyped(task tasks.Task) (k
 	if ok {
 		smt = smtGetter.StateMachineTaskType()
 	}
-	return OutboundTaskGroupNamespaceIDAndDestination{
+	return tasks.TaskGroupNamespaceIDAndDestination{
 		TaskGroup:   smt,
 		NamespaceID: task.GetNamespaceID(),
 		Destination: dest,
@@ -92,17 +85,16 @@ func (GrouperStateMachineNamespaceIDAndDestination) KeyTyped(task tasks.Task) (k
 }
 
 func (GrouperStateMachineNamespaceIDAndDestination) Predicate(keys []any) tasks.Predicate {
-	pred := predicates.Empty[tasks.Task]()
-	for _, anyKey := range keys {
-		// Assume predicate is only called with keys returned from OutboundTaskGroupNamespaceIDAndDestination.Key()
-		key := anyKey.(OutboundTaskGroupNamespaceIDAndDestination)
-		pred = predicates.Or(pred, predicates.And(
-			tasks.NewOutboundTaskGroupPredicate([]string{key.TaskGroup}),
-			tasks.NewNamespacePredicate([]string{key.NamespaceID}),
-			tasks.NewDestinationPredicate([]string{key.Destination}),
-		))
+	if len(keys) == 0 {
+		return predicates.Empty[tasks.Task]()
 	}
-	return pred
+	groups := make([]tasks.TaskGroupNamespaceIDAndDestination, len(keys))
+	for i, anyKey := range keys {
+		// Assume predicate is only called with keys returned from OutboundTaskGroupNamespaceIDAndDestination.Key()
+		key := anyKey.(tasks.TaskGroupNamespaceIDAndDestination)
+		groups[i] = key
+	}
+	return tasks.NewOutboundTaskPredicate(groups)
 }
 
 var _ Grouper = GrouperStateMachineNamespaceIDAndDestination{}

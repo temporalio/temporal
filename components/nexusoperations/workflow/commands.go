@@ -70,15 +70,22 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
+	var endpointID string
 	endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
-			return workflow.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
+			if !ch.config.EndpointNotFoundAlwaysNonRetryable(nsName) {
+				return workflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
+				}
 			}
+			// Ignore, and let the operation fail when the task is executed.
+		} else {
+			return err
 		}
-		return err
+	} else {
+		endpointID = endpoint.Id
 	}
 
 	if len(attrs.Service) > ch.config.MaxServiceNameLength(nsName) {
@@ -136,7 +143,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
 				Endpoint:                     attrs.Endpoint,
-				EndpointId:                   endpoint.Id,
+				EndpointId:                   endpointID,
 				Service:                      attrs.Service,
 				Operation:                    attrs.Operation,
 				Input:                        attrs.Input,

@@ -306,7 +306,12 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 }
 
 // StartOperation implements the nexus.Handler interface.
-func (h *nexusHandler) StartOperation(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (result nexus.HandlerStartOperationResult[any], retErr error) {
+func (h *nexusHandler) StartOperation(
+	ctx context.Context,
+	service, operation string,
+	input *nexus.LazyValue,
+	options nexus.StartOperationOptions,
+) (result nexus.HandlerStartOperationResult[any], retErr error) {
 	oc, err := h.getOperationContext(ctx, "StartNexusOperation")
 	if err != nil {
 		return nil, err
@@ -314,12 +319,21 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 	ctx = oc.augmentContext(ctx, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
+	var links []*nexuspb.Link
+	for _, nexusLink := range options.Links {
+		links = append(links, &nexuspb.Link{
+			Url:  nexusLink.URL.String(),
+			Type: nexusLink.Type,
+		})
+	}
+
 	startOperationRequest := nexuspb.StartOperationRequest{
 		Service:        service,
 		Operation:      operation,
 		Callback:       options.CallbackURL,
 		CallbackHeader: options.CallbackHeader,
 		RequestId:      options.RequestID,
+		Links:          links,
 	}
 	request := oc.matchingRequest(&nexuspb.Request{
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
@@ -364,6 +378,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 		return nil, h.convertOutcomeToNexusHandlerError(t)
+
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_SyncSuccess:
@@ -371,11 +386,28 @@ func (h *nexusHandler) StartOperation(ctx context.Context, service, operation st
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
 			}, nil
+
 		case *nexuspb.StartOperationResponse_AsyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
+			var nexusLinks []nexus.Link
+			for _, link := range t.AsyncSuccess.GetLinks() {
+				linkURL, err := url.Parse(link.Url)
+				if err != nil {
+					// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+					// so ignoring the error for now; we will revisit how to handle these errors later.
+					oc.logger.Error(fmt.Sprintf("failed to parse link url: %s", link.Url), tag.Error(err))
+					continue
+				}
+				nexusLinks = append(nexusLinks, nexus.Link{
+					URL:  linkURL,
+					Type: link.GetType(),
+				})
+			}
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationID: t.AsyncSuccess.GetOperationId(),
+				Links:       nexusLinks,
 			}, nil
+
 		case *nexuspb.StartOperationResponse_OperationError:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
 			oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
