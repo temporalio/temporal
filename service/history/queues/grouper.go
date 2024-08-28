@@ -85,16 +85,19 @@ func (GrouperStateMachineNamespaceIDAndDestination) KeyTyped(task tasks.Task) (k
 }
 
 func (GrouperStateMachineNamespaceIDAndDestination) Predicate(keys []any) tasks.Predicate {
-	if len(keys) == 0 {
-		return predicates.Empty[tasks.Task]()
-	}
-	groups := make([]tasks.TaskGroupNamespaceIDAndDestination, len(keys))
-	for i, anyKey := range keys {
+	pred := predicates.Empty[tasks.Task]()
+
+	for _, anyKey := range keys {
 		// Assume predicate is only called with keys returned from OutboundTaskGroupNamespaceIDAndDestination.Key()
 		key := anyKey.(tasks.TaskGroupNamespaceIDAndDestination)
-		groups[i] = key
+		pred = predicates.Or(pred, predicates.And(
+			tasks.NewOutboundTaskGroupPredicate([]string{key.TaskGroup}),
+			tasks.NewNamespacePredicate([]string{key.NamespaceID}),
+			tasks.NewDestinationPredicate([]string{key.Destination}),
+		))
 	}
-	return tasks.NewOutboundTaskPredicate(groups)
+	return pred
+
 }
 
 var _ Grouper = GrouperStateMachineNamespaceIDAndDestination{}

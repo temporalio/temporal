@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -75,6 +76,18 @@ func TestGrouperStateMachineNamespaceIDAndDestination_Predicate(t *testing.T) {
 	}
 	p := g.Predicate(untypedGroups)
 
-	expected := tasks.NewOutboundTaskPredicate(groups)
+	expected := predicates.Or(
+		predicates.And(
+			tasks.NewOutboundTaskGroupPredicate([]string{"1"}),
+			tasks.NewNamespacePredicate([]string{"n1"}),
+			tasks.NewDestinationPredicate([]string{"d1"}),
+		),
+		predicates.And(
+			tasks.NewOutboundTaskGroupPredicate([]string{"2"}),
+			tasks.NewNamespacePredicate([]string{"n2"}),
+			tasks.NewDestinationPredicate([]string{"d2"}),
+		),
+	)
+
 	require.Equal(t, expected, p)
 }
