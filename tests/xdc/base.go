@@ -70,7 +70,8 @@ type (
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 
-		startTime time.Time
+		startTime        time.Time
+		clusterConnected bool
 	}
 )
 
@@ -96,6 +97,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
+	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
 
 	fileName := "../testdata/xdc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
@@ -161,11 +163,11 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	time.Sleep(time.Millisecond * 200)
 }
 
-func (s *xdcBaseSuite) waitForClusterConnected() {
-	s.logger.Debug("wait for clusters to be synced")
+func (s *xdcBaseSuite) waitForClusterConnected(cluster *tests.TestCluster, source string, target string) {
+	s.logger.Debug("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Debug("check if replication tasks are replicated to cluster 2")
-		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		s.logger.Debug("check if replication tasks are replicated")
+		resp, err := cluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
 		s.logger.Debug("get replication status response", tag.Error(err))
 		s.logger.Debug("check 1")
 		if !(assert.NoError(c, err) &&
@@ -185,7 +187,7 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 			return
 		}
 		s.logger.Debug("check 3")
-		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
+		standbyAckInfo, ok := shard.RemoteClusters[target]
 		if !(assert.True(c, ok) &&
 			assert.NotNil(c, standbyAckInfo) &&
 			assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId) &&
@@ -195,8 +197,8 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 			s.logger.Debug("check failed 3")
 			return
 		}
-		s.logger.Debug("clusters synced")
-	}, 60*time.Second, 1*time.Second)
+		s.logger.Debug("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
+	}, 90*time.Second, 1*time.Second)
 }
 
 func (s *xdcBaseSuite) tearDownSuite() {
@@ -211,6 +213,10 @@ func (s *xdcBaseSuite) setupTest(waitForClusterConnected bool) {
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	if waitForClusterConnected {
-		s.waitForClusterConnected()
+		if !s.clusterConnected {
+			s.waitForClusterConnected(s.cluster1, s.clusterNames[0], s.clusterNames[1])
+			s.waitForClusterConnected(s.cluster2, s.clusterNames[1], s.clusterNames[0])
+			s.clusterConnected = true
+		}
 	}
 }

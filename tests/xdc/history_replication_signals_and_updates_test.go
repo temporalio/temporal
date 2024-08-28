@@ -165,7 +165,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 }
 
 func (s *hrsuTestSuite) SetupTest() {
-	s.setupTest(false)
+	s.setupTest(true)
 }
 
 func (s *hrsuTestSuite) TearDownSuite() {

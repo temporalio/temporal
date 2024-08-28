@@ -85,7 +85,8 @@ type AdvVisCrossDCTestSuite struct {
 	testSearchAttributeKey string
 	testSearchAttributeVal string
 
-	startTime time.Time
+	startTime        time.Time
+	clusterConnected bool
 }
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
@@ -164,15 +165,19 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.testSearchAttributeVal = "test value"
 }
 
-func (s *AdvVisCrossDCTestSuite) waitForClusterConnected() {
-	s.logger.Debug("wait for clusters to be synced")
+func (s *AdvVisCrossDCTestSuite) waitForClusterConnected(cluster *tests.TestCluster, source string, target string) {
+	s.logger.Debug("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Debug("check if replication tasks are replicated to cluster 2")
-		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		s.logger.Debug("check if replication tasks are replicated")
+		resp, err := cluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		s.logger.Debug("get replication status response", tag.Error(err))
+		s.logger.Debug("check 1")
 		if !(assert.NoError(c, err) &&
 			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
+			s.logger.Debug("check failed 1")
 			return
 		}
+		s.logger.Debug("check 2")
 		shard := resp.Shards[0]
 		if !(assert.NotNil(c, shard) &&
 			assert.True(c, shard.MaxReplicationTaskId > 0) &&
@@ -180,19 +185,22 @@ func (s *AdvVisCrossDCTestSuite) waitForClusterConnected() {
 			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
 			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
 			assert.NotNil(c, shard.RemoteClusters)) {
+			s.logger.Debug("check failed 2")
 			return
 		}
-		standbyAckInfo, ok := shard.RemoteClusters[clusterNameAdvVis[1]]
+		s.logger.Debug("check 3")
+		standbyAckInfo, ok := shard.RemoteClusters[target]
 		if !(assert.True(c, ok) &&
 			assert.NotNil(c, standbyAckInfo) &&
 			assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId) &&
 			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
 			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
 			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
+			s.logger.Debug("check failed 3")
 			return
 		}
-		s.logger.Debug("clusters synced")
-	}, 60*time.Second, 1*time.Second)
+		s.logger.Debug("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
+	}, 90*time.Second, 1*time.Second)
 }
 
 func (s *AdvVisCrossDCTestSuite) SetupTest() {
@@ -201,7 +209,11 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 
-	s.waitForClusterConnected()
+	if !s.clusterConnected {
+		s.waitForClusterConnected(s.cluster1, clusterNameAdvVis[0], clusterNameAdvVis[1])
+		s.waitForClusterConnected(s.cluster2, clusterNameAdvVis[1], clusterNameAdvVis[0])
+		s.clusterConnected = true
+	}
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
