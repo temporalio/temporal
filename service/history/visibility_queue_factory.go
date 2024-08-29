@@ -154,6 +154,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 				BatchSize:            f.Config.VisibilityTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,

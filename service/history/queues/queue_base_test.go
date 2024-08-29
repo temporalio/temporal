@@ -77,6 +77,7 @@ var testQueueOptions = &Options{
 		BatchSize:            dynamicconfig.GetIntPropertyFn(10),
 		MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
 		PollBackoffInterval:  dynamicconfig.GetDurationPropertyFn(200 * time.Millisecond),
+		MaxPredicateSize:     dynamicconfig.GetIntPropertyFn(0),
 	},
 	MonitorOptions: MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
