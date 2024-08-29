@@ -71,7 +71,7 @@ func SyncWorkflowState(
 		response.Attributes = &historyservice.SyncWorkflowStateResponse_Mutation{
 			Mutation: &replicationpb.SyncWorkflowStateMutationAttributes{
 				StateMutation:                     mutation,
-				InclusiveStartVersionedTransition: request.VersionedTransition,
+				ExclusiveStartVersionedTransition: request.VersionedTransition,
 			},
 		}
 	} else {
