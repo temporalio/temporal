@@ -89,9 +89,9 @@ func (a *AndImpl[T]) Equals(
 	return predicatesEqual(a.Predicates, andPredicate.Predicates)
 }
 
-func (o *AndImpl[T]) Size() int {
+func (a *AndImpl[T]) Size() int {
 	size := EmptyPredicateProtoSize
-	for _, p := range o.Predicates {
+	for _, p := range a.Predicates {
 		size += p.Size()
 	}
 

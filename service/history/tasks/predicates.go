@@ -198,8 +198,8 @@ func (t *TypePredicate) Equals(predicate Predicate) bool {
 	return maps.Equal(t.Types, typePrediate.Types)
 }
 
-func (n *TypePredicate) Size() int {
-	return predicates.EmptyPredicateProtoSize + 4*len(n.Types) // Type is enum which is an int32
+func (t *TypePredicate) Size() int {
+	return predicates.EmptyPredicateProtoSize + 4*len(t.Types) // Type is enum which is an int32
 }
 
 // TaskGroupNamespaceIDAndDestination is the key for grouping tasks by task type namespace ID and destination.
@@ -248,9 +248,9 @@ func (t *OutboundTaskPredicate) Equals(predicate Predicate) bool {
 	return maps.Equal(t.Groups, outboundPredicate.Groups)
 }
 
-func (n *OutboundTaskPredicate) Size() int {
+func (t *OutboundTaskPredicate) Size() int {
 	size := predicates.EmptyPredicateProtoSize
-	for g := range n.Groups {
+	for g := range t.Groups {
 		size += len(g.TaskGroup) + len(g.NamespaceID) + len(g.Destination)
 	}
 	return size

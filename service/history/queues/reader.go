@@ -269,19 +269,19 @@ func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
 		incomingSlice := incomingSlices[incomingSliceIdx]
 
 		if currentSlice.Scope().Range.InclusiveMin.CompareTo(incomingSlice.Scope().Range.InclusiveMin) < 0 {
-			mergeOrAppendSlice(mergedSlices, currentSlice, r.options.MaxPredicateSize())
+			mergeOrAppendSlice(mergedSlices, currentSlice)
 			currentSliceElement = currentSliceElement.Next()
 		} else {
-			mergeOrAppendSlice(mergedSlices, incomingSlice, r.options.MaxPredicateSize())
+			mergeOrAppendSlice(mergedSlices, incomingSlice)
 			incomingSliceIdx++
 		}
 	}
 
 	for ; currentSliceElement != nil; currentSliceElement = currentSliceElement.Next() {
-		mergeOrAppendSlice(mergedSlices, currentSliceElement.Value.(Slice), r.options.MaxPredicateSize())
+		mergeOrAppendSlice(mergedSlices, currentSliceElement.Value.(Slice))
 	}
 	for _, slice := range incomingSlices[incomingSliceIdx:] {
-		mergeOrAppendSlice(mergedSlices, slice, r.options.MaxPredicateSize())
+		mergeOrAppendSlice(mergedSlices, slice)
 	}
 
 	// clear existing list
@@ -552,7 +552,6 @@ func (r *ReaderImpl) verifyPendingTaskSize() bool {
 func mergeOrAppendSlice(
 	slices *list.List,
 	incomingSlice Slice,
-	maxPredicateDepth int,
 ) {
 	if slices.Len() == 0 {
 		slices.PushBack(incomingSlice)

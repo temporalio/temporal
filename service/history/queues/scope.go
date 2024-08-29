@@ -117,8 +117,7 @@ func (s *Scope) MergeByPredicate(
 		panic(fmt.Sprintf("Unable to merge scope with range %v with range %v by predicate", s.Range, incomingScope.Range))
 	}
 
-	merged := tasks.OrPredicates(s.Predicate, incomingScope.Predicate)
-	return NewScope(s.Range, merged)
+	return NewScope(s.Range, tasks.OrPredicates(s.Predicate, incomingScope.Predicate))
 }
 
 func (s *Scope) IsEmpty() bool {

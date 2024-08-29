@@ -55,6 +55,6 @@ func (n *EmptyImpl[T]) Equals(
 	return ok
 }
 
-func (o *EmptyImpl[T]) Size() int {
+func (*EmptyImpl[T]) Size() int {
 	return EmptyPredicateProtoSize
 }
