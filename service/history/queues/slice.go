@@ -27,6 +27,7 @@ package queues
 import (
 	"fmt"
 
+	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 	expmaps "golang.org/x/exp/maps"
 )
@@ -47,8 +48,8 @@ type (
 		SplitByRange(tasks.Key) (left Slice, right Slice)
 		SplitByPredicate(tasks.Predicate) (pass Slice, fail Slice)
 		CanMergeWithSlice(Slice) bool
-		MergeWithSlice(Slice) []Slice
-		CompactWithSlice(Slice) Slice
+		MergeWithSlice(slice Slice) []Slice
+		CompactWithSlice(slice Slice) Slice
 		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
@@ -71,6 +72,8 @@ type (
 
 		*executableTracker
 		monitor Monitor
+
+		maxPredicateSizeFn func() int
 	}
 )
 
@@ -80,17 +83,21 @@ func NewSlice(
 	monitor Monitor,
 	scope Scope,
 	grouper Grouper,
+	maxPredicateSizeFn func() int,
 ) *SliceImpl {
-	return &SliceImpl{
+	s := &SliceImpl{
 		paginationFnProvider: paginationFnProvider,
 		executableFactory:    executableFactory,
 		scope:                scope,
 		iterators: []Iterator{
 			NewIterator(paginationFnProvider, scope.Range),
 		},
-		executableTracker: newExecutableTracker(grouper),
-		monitor:           monitor,
+		executableTracker:  newExecutableTracker(grouper),
+		monitor:            monitor,
+		maxPredicateSizeFn: maxPredicateSizeFn,
 	}
+	s.ensurePredicateSizeLimit()
+	return s
 }
 
 func (s *SliceImpl) Scope() Scope {
@@ -359,6 +366,7 @@ func (s *SliceImpl) shrinkPredicate() {
 	}
 
 	s.scope.Predicate = s.grouper.Predicate(expmaps.Keys(pendingPerKey))
+	s.ensurePredicateSizeLimit()
 }
 
 func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, error) {
@@ -459,10 +467,22 @@ func (s *SliceImpl) newSlice(
 		iterators:            iterators,
 		executableTracker:    tracker,
 		monitor:              s.monitor,
+		maxPredicateSizeFn:   s.maxPredicateSizeFn,
 	}
+	slice.ensurePredicateSizeLimit()
 	slice.monitor.SetSlicePendingTaskCount(slice, len(slice.executableTracker.pendingExecutables))
 
 	return slice
+}
+
+func (s *SliceImpl) ensurePredicateSizeLimit() {
+	maxPredicateSize := s.maxPredicateSizeFn()
+	// 0 == unlimited
+	if maxPredicateSize > 0 && s.scope.Predicate.Size() > maxPredicateSize {
+		// Due to the limitations in predicate merging logic, the predicate size can easily grow unbounded.
+		// The simplest mitigation is to stop merging and replace with the univeral predicate.
+		s.scope.Predicate = predicates.Universal[tasks.Task]()
+	}
 }
 
 func appendMergedSlice(
