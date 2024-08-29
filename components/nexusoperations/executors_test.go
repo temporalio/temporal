@@ -312,19 +312,26 @@ func TestProcessInvocationTask(t *testing.T) {
 			metricsHandler := metrics.NewMockHandler(ctrl)
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
-				timer := metrics.NewMockTimerIface(ctrl)
+				latencyTimer := metrics.NewMockTimerIface(ctrl)
+				ssTimer := metrics.NewMockTimerIface(ctrl)
 				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
-				timer.EXPECT().Record(gomock.Any(),
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(latencyTimer)
+				latencyTimer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestScheduleToStartLatency.Name()).Return(ssTimer)
+				ssTimer.EXPECT().Record(gomock.Any(),
+					metrics.NamespaceTag("ns-name"),
+					metrics.DestinationTag("endpoint"),
+					metrics.NexusMethodTag("StartOperation"),
+				)
 			}
 
 			endpointReg := nexustest.FakeEndpointRegistry{
