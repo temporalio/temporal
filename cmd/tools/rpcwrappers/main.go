@@ -98,6 +98,7 @@ var (
 		"client.admin.StreamWorkflowReplicationMessages":            true,
 		"metricsClient.admin.StreamWorkflowReplicationMessages":     true,
 		"retryableClient.admin.StreamWorkflowReplicationMessages":   true,
+		"lazyClient.admin.StreamWorkflowReplicationMessages":        true,
 		"client.history.StreamWorkflowReplicationMessages":          true,
 		"metricsClient.history.StreamWorkflowReplicationMessages":   true,
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
@@ -139,6 +140,11 @@ var (
 		// these get routed to the parent
 		"RecordChildExecutionCompletedRequest.ChildExecution":          true,
 		"VerifyChildExecutionCompletionRecordedRequest.ChildExecution": true,
+	}
+
+	lazyClientMap = map[string]string{
+		"admin":    "GetAdminClient",
+		"frontend": "GetWorkflowServiceClient",
 	}
 )
 
@@ -349,10 +355,11 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	respType := mt.Out(0)
 
 	fields := map[string]string{
-		"Method":       m.Name,
-		"RequestType":  reqType.String(),
-		"ResponseType": respType.String(),
-		"MetricPrefix": fmt.Sprintf("%s%sClient", strings.ToUpper(service.name[:1]), service.name[1:]),
+		"Method":        m.Name,
+		"RequestType":   reqType.String(),
+		"ResponseType":  respType.String(),
+		"MetricPrefix":  fmt.Sprintf("%s%sClient", strings.ToUpper(service.name[:1]), service.name[1:]),
+		"GetLazyClient": lazyClientMap[service.name],
 	}
 	if longPollContext[key] {
 		fields["LongPoll"] = "LongPoll"
@@ -539,6 +546,35 @@ func (c *retryableClient) {{.Method}}(
 `)
 }
 
+func generateLazyClient(w io.Writer, service service) {
+	writeTemplatedCode(w, service, `
+package {{.ServiceName}}
+
+import (
+	"context"
+
+	"{{.ServicePackagePath}}"
+	"google.golang.org/grpc"
+)
+`)
+
+	writeTemplatedMethods(w, service, "lazyClient", `
+func (c *lazyClient) {{.Method}}(
+	ctx context.Context,
+	request {{.RequestType}},
+	opts ...grpc.CallOption,
+) ({{.ResponseType}}, error) {
+	var resp {{.ResponseType}}
+	client, err := c.clientProvider.{{.GetLazyClient}}()
+	if err != nil {
+		return resp, err
+	}
+
+	return client.{{.Method}}(ctx, request, opts...)
+}
+`)
+}
+
 func callWithFile(f func(io.Writer, service), service service, filename string, licenseText string) {
 	w, err := os.Create(filename + "_gen.go")
 	if err != nil {
@@ -577,8 +613,10 @@ func main() {
 	svc := services[i]
 
 	licenseText := readLicenseFile(*licenseFlag)
-
 	callWithFile(svc.clientGenerator, svc, "client", licenseText)
 	callWithFile(generateMetricClient, svc, "metric_client", licenseText)
 	callWithFile(generateRetryableClient, svc, "retryable_client", licenseText)
+	if svc.name == "admin" || svc.name == "frontend" {
+		callWithFile(generateLazyClient, svc, "lazy_client", "")
+	}
 }
