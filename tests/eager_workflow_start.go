@@ -36,10 +36,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/common/dynamicconfig"
 )
 
 func (s *FunctionalSuite) defaultWorkflowID() string {

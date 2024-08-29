@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
-
 	"go.temporal.io/server/common/log"
 )
 

@@ -33,9 +33,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/sync/semaphore"
-	"golang.org/x/time/rate"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -47,6 +44,8 @@ import (
 	"go.temporal.io/server/common/pingable"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 )
 
 const (

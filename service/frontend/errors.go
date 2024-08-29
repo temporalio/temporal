@@ -95,6 +95,7 @@ var (
 	errMultiOpUpdateFirstExecutionRunId                   = serviceerror.NewInvalidArgument("FirstExecutionRunId is not allowed.")
 	errMultiOpUpdateExecutionRunId                        = serviceerror.NewInvalidArgument("RunId is not allowed.")
 	errMultiOpEagerWorkflow                               = serviceerror.NewInvalidArgument("RequestEagerExecution is not supported.")
+	errMultiOpStartDelay                                  = serviceerror.NewInvalidArgument("WorkflowStartDelay is not supported.")
 	errMultiOpNotStartAndUpdate                           = serviceerror.NewInvalidArgument("Operations have to be exactly [Start, Update].")
 	errMultiOpAborted                                     = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 

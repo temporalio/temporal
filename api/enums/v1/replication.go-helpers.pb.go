@@ -43,6 +43,7 @@ var (
 		"SyncHsmTask":                   9,
 		"BackfillHistoryTask":           10,
 		"VerifyVersionedTransitionTask": 11,
+		"SyncVersionedTransitionTask":   12,
 	}
 )
 

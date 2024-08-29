@@ -43,12 +43,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 )
 
@@ -62,6 +62,32 @@ func (s *ClientFunctionalSuite) mustToPayload(v any) *commonpb.Payload {
 }
 
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
+	callerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "caller-ns",
+		WorkflowId: "caller-wf-id",
+		RunId:      "caller-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   5,
+				EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+			},
+		},
+	}
+	callerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(callerLink)
+
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   5,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+
 	type testcase struct {
 		outcome   string
 		endpoint  *nexuspb.Endpoint
@@ -91,12 +117,19 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				s.Equal("http://localhost/callback", start.Callback)
 				s.Equal("request-id", start.RequestId)
 				s.Equal("value", res.Request.Header["key"])
+				s.Len(start.GetLinks(), 1)
+				s.Equal(callerNexusLink.URL.String(), start.Links[0].GetUrl())
+				s.Equal(callerNexusLink.Type, start.Links[0].Type)
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_StartOperation{
 						StartOperation: &nexuspb.StartOperationResponse{
 							Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
 								AsyncSuccess: &nexuspb.StartOperationResponse_Async{
 									OperationId: "test-id",
+									Links: []*nexuspb.Link{{
+										Url:  handlerNexusLink.URL.String(),
+										Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
+									}},
 								},
 							},
 						},
@@ -106,6 +139,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				require.NoError(t, err)
 				require.Equal(t, "test-id", res.Pending.ID)
+				require.Len(t, res.Links, 1)
+				require.Equal(t, handlerNexusLink.URL.String(), res.Links[0].URL.String())
+				require.Equal(t, handlerNexusLink.Type, res.Links[0].Type)
 			},
 		},
 		{
@@ -205,6 +241,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				CallbackURL: "http://localhost/callback",
 				RequestID:   "request-id",
 				Header:      header,
+				Links:       []nexus.Link{callerNexusLink},
 			})
 			var unexpectedResponseErr *nexus.UnexpectedResponseError
 			return err == nil || !(errors.As(err, &unexpectedResponseErr) && unexpectedResponseErr.Response.StatusCode == http.StatusNotFound)
@@ -851,7 +888,6 @@ func getDispatchByNsAndTqURL(address string, namespace string, taskQueue string)
 }
 
 func (s *ClientFunctionalSuite) createNexusEndpoint(name string, taskQueue string) *nexuspb.Endpoint {
-	name = strings.ReplaceAll(name, "-", "_")
 	resp, err := s.operatorClient.CreateNexusEndpoint(NewContext(), &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: name,

@@ -29,7 +29,6 @@ import (
 	"strings"
 
 	"github.com/temporalio/sqlparser"
-
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"

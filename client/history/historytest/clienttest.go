@@ -38,8 +38,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/embedded"
-	"google.golang.org/grpc"
-
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client/history"
@@ -51,6 +49,7 @@ import (
 	"go.temporal.io/server/internal/nettest"
 	historyserver "go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/grpc"
 )
 
 // fakeTracerProvider is needed to construct a [historyserver.Handler] object.

@@ -31,8 +31,6 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"gopkg.in/yaml.v3"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
+	"gopkg.in/yaml.v3"
 )
 
 type (

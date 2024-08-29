@@ -49,11 +49,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -80,6 +75,10 @@ import (
 	e "go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -416,7 +415,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskQueueNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errTaskQueueNotSet, err)
+	s.Equal(serviceerror.NewInvalidArgument("missing task queue name"), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionTimeout() {
@@ -2724,24 +2723,6 @@ func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	s.NotNil(resp)
 }
 
-func (s *workflowHandlerSuite) Test_ValidateTaskQueue() {
-	wh := s.getWorkflowHandler(s.newConfig())
-
-	tq := taskqueuepb.TaskQueue{Name: "\x87\x01"}
-	err := wh.validateTaskQueue(&tq)
-	s.Error(err)
-	s.Contains(err.Error(), "is not a valid UTF-8 string")
-
-	tq = taskqueuepb.TaskQueue{Name: "valid-tq-name"}
-	err = wh.validateTaskQueue(&tq)
-	s.NoError(err)
-
-	tq = taskqueuepb.TaskQueue{Name: "valid-tq-name", NormalName: "\x87\x01", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
-	err = wh.validateTaskQueue(&tq)
-	s.Error(err)
-	s.Contains(err.Error(), "is not a valid UTF-8 string")
-}
-
 func (s *workflowHandlerSuite) TestExecuteMultiOperation() {
 	ctx := context.Background()
 	config := s.newConfig()
@@ -2923,6 +2904,23 @@ func (s *workflowHandlerSuite) TestExecuteMultiOperation() {
 
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpEagerWorkflow, errMultiOpAborted}, err)
+		})
+
+		// unique to MultiOperation:
+		s.Run("`workflow_start_delay` is invalid", func() {
+			startReq := validStartReq()
+			startReq.WorkflowStartDelay = durationpb.New(1 * time.Second)
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpStartDelay, errMultiOpAborted}, err)
 		})
 	})
 

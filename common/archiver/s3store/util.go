@@ -41,13 +41,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.uber.org/multierr"
-	"google.golang.org/protobuf/proto"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/multierr"
+	"google.golang.org/protobuf/proto"
 )
 
 // encoding & decoding util

@@ -32,11 +32,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
+	expmaps "golang.org/x/exp/maps"
 )
 
 type RpoSuite struct {
