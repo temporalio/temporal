@@ -69,6 +69,7 @@ type (
 		BatchSize            dynamicconfig.IntPropertyFn
 		MaxPendingTasksCount dynamicconfig.IntPropertyFn
 		PollBackoffInterval  dynamicconfig.DurationPropertyFn
+		MaxPredicateSize     dynamicconfig.IntPropertyFn
 	}
 
 	SliceIterator func(s Slice)
