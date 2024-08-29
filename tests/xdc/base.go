@@ -42,6 +42,9 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -53,8 +56,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -100,6 +101,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
+	// Always force SA cache readthrough for tests to avoid propagation delays causing flakiness.
+	s.dynamicConfigOverrides[dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key()] = true
 
 	fileName := "../testdata/xdc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
