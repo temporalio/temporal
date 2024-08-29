@@ -62,8 +62,8 @@ message WorkflowMutableStateMutation{
     map<int64, SignalInfo> updated_signal_infos = 5;
     map<string, UpdateInfo> updated_update_infos = 6;
     repeated StateMachineNodeMutation updated_sub_state_machines = 7;
-    
-    // The following deleted_* fields are computed based on the 
+
+    // The following deleted_* fields are computed based on the
     // sub_state_machine_tombstone_batches field of mutable state.
     repeated int64 deleted_activities = 8;
     repeated string deleted_timers = 9;
@@ -72,6 +72,7 @@ message WorkflowMutableStateMutation{
     repeated int64 deleted_signal_infos = 12;
     repeated string deleted_update_infos = 13;
     repeated StateMachinePath deleted_sub_state_machines = 14;
+    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
     
     repeated string signal_requested_ids = 15;
     // Partial WorkflowExecutionInfo. Some fields, such as
