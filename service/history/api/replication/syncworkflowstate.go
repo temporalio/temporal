@@ -11,6 +11,8 @@ import (
 	replicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -35,6 +37,7 @@ func SyncWorkflowState(
 	shardContext shard.Context,
 	request *historyservice.SyncWorkflowStateRequest,
 	workflowCache wcache.Cache,
+	logger log.Logger,
 ) (_ *historyservice.SyncWorkflowStateResponse, retError error) {
 	wfCtx, releaseFunc, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -87,21 +90,11 @@ func SyncWorkflowState(
 	releaseFunc = nil
 
 	if len(newRunId) > 0 {
-		branchToken, err := getNewRunBranchToken(ctx, shardContext, workflowCache, namespace.ID(request.GetNamespaceId()), request.Execution.GetWorkflowId(), newRunId)
+		newRunInfo, err := getNewRunInfo(ctx, shardContext, workflowCache, namespace.ID(request.GetNamespaceId()), request.Execution.GetWorkflowId(), newRunId, logger)
 		if err != nil {
 			return nil, err
 		}
-		newRunEvents, err := getEventsBlob(ctx, shardContext, branchToken, common.FirstEventID, common.FirstEventID+1)
-		if err != nil {
-			return nil, err
-		}
-		if len(newRunEvents) == 0 {
-			return nil, serviceerror.NewInternal("new run events is empty")
-		}
-		response.NewRunInfo = &replicationpb.NewRunInfo{
-			RunId:      newRunId,
-			EventBatch: newRunEvents[0], // we only send first batch for new run
-		}
+		response.NewRunInfo = newRunInfo
 	}
 
 	events, err := getSyncStateEvents(ctx, shardContext, request.VersionHistories, mu.GetExecutionInfo().GetVersionHistories())
@@ -113,7 +106,7 @@ func SyncWorkflowState(
 	return response, nil
 }
 
-func getNewRunBranchToken(ctx context.Context, shardContext shard.Context, workflowCache wcache.Cache, namespaceId namespace.ID, workflowId string, runId string) (_ []byte, retError error) {
+func getNewRunInfo(ctx context.Context, shardContext shard.Context, workflowCache wcache.Cache, namespaceId namespace.ID, workflowId string, runId string, logger log.Logger) (_ *replicationpb.NewRunInfo, retError error) {
 	wfCtx, releaseFunc, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		shardContext,
@@ -124,19 +117,47 @@ func getNewRunBranchToken(ctx context.Context, shardContext shard.Context, workf
 		},
 		locks.PriorityLow,
 	)
-	defer releaseFunc(retError)
+	defer func() {
+		if releaseFunc != nil {
+			releaseFunc(retError)
+		}
+	}()
+
 	if err != nil {
 		return nil, err
 	}
 	mu, err := wfCtx.LoadMutableState(ctx, shardContext)
-	if err != nil {
+	switch err.(type) {
+	case nil:
+	case *serviceerror.NotFound:
+		logger.Info("new run not found", tag.WorkflowNamespaceID(namespaceId.String()), tag.WorkflowID(workflowId), tag.WorkflowRunID(runId))
+		return nil, nil
+	default:
 		return nil, err
 	}
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(mu.GetExecutionInfo().VersionHistories)
 	if err != nil {
 		return nil, err
 	}
-	return versionHistory.BranchToken, nil
+	releaseFunc(nil)
+	releaseFunc = nil
+	newRunEvents, err := getEventsBlob(ctx, shardContext, versionHistory.BranchToken, common.FirstEventID, common.FirstEventID+1)
+	switch err.(type) {
+	case nil:
+	case *serviceerror.NotFound:
+		logger.Info("new run event not found", tag.WorkflowNamespaceID(namespaceId.String()), tag.WorkflowID(workflowId), tag.WorkflowRunID(runId))
+		return nil, nil
+	default:
+		return nil, err
+	}
+	if len(newRunEvents) == 0 {
+		logger.Info("new run event is empty", tag.WorkflowNamespaceID(namespaceId.String()), tag.WorkflowID(workflowId), tag.WorkflowRunID(runId))
+		return nil, nil
+	}
+	return &replicationpb.NewRunInfo{
+		RunId:      runId,
+		EventBatch: newRunEvents[0],
+	}, nil
 }
 
 func getMutation(mutableState workflow.MutableState, versionedTransition *persistencepb.VersionedTransition) (*persistencepb.WorkflowMutableStateMutation, error) {
