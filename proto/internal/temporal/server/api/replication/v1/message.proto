@@ -226,5 +226,6 @@ message VerifyVersionedTransitionTaskAttributes {
 }
 
 message SyncVersionedTransitionTaskAttributes {
-    // TODO
+    repeated temporal.api.common.v1.DataBlob event_batches = 1;
+    NewRunInfo new_run_info = 2;
 }
