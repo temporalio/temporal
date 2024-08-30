@@ -815,6 +815,21 @@ func (c *retryableClient) ScanWorkflowExecutions(
 	return resp, err
 }
 
+func (c *retryableClient) ShutdownWorker(
+	ctx context.Context,
+	request *workflowservice.ShutdownWorkerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ShutdownWorkerResponse, error) {
+	var resp *workflowservice.ShutdownWorkerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ShutdownWorker(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,

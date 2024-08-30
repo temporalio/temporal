@@ -210,19 +210,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 }
 
-func (s *DescribeTaskQueueSuite) isBacklogHeadCreateTimeCorrect(actualBacklogAge time.Duration, expectEmptyBacklog bool) bool {
-	return expectEmptyBacklog == (actualBacklogAge == time.Duration(0))
-}
-
-func (s *DescribeTaskQueueSuite) isAddDispatchTasksRateCorrect(
-	actualAddTasksRate float32, actualDispatchTasksRate float32, expectAddRate, expectDispatchRate bool) bool {
-	return expectDispatchRate == (actualDispatchTasksRate != 0) && (expectAddRate == (actualAddTasksRate != 0))
-}
-
-func (s *DescribeTaskQueueSuite) isBacklogCountCorrect(actualBacklogCounter int64, expectedBacklogCount int64) bool {
-	return actualBacklogCounter == expectedBacklogCount
-}
-
 func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 	tq string,
 	expectedBacklogCount map[enumspb.TaskQueueType]int64,

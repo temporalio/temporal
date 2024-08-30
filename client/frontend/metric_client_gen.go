@@ -761,6 +761,20 @@ func (c *metricClient) ScanWorkflowExecutions(
 	return c.client.ScanWorkflowExecutions(ctx, request, opts...)
 }
 
+func (c *metricClient) ShutdownWorker(
+	ctx context.Context,
+	request *workflowservice.ShutdownWorkerRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ShutdownWorkerResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientShutdownWorker")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ShutdownWorker(ctx, request, opts...)
+}
+
 func (c *metricClient) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
