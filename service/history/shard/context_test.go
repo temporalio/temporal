@@ -350,7 +350,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
 	// add task fails with error that suggests operation can't possibly succeed, no task notification
-	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(persistence.ErrPersistenceLimitExceeded).Times(1)
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(persistence.ErrPersistenceSystemLimitExceeded).Times(1)
 	err := s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
@@ -365,7 +365,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 	// add task succeeds but second operation fails, send task notification
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).Times(1)
-	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(persistence.ErrPersistenceLimitExceeded).Times(1)
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(persistence.ErrPersistenceSystemLimitExceeded).Times(1)
 	err = s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,

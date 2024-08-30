@@ -136,7 +136,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 	// no remaining tokens
 	err = s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request)
 	s.Error(err)
-	s.ErrorIs(err, persistence.ErrPersistenceLimitExceeded)
+	s.ErrorIs(err, persistence.ErrPersistenceSystemLimitExceeded)
 }
 
 func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
@@ -188,7 +188,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 
 	err = s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request)
 	s.Error(err)
-	s.ErrorIs(err, persistence.ErrPersistenceLimitExceeded)
+	s.ErrorIs(err, persistence.ErrPersistenceSystemLimitExceeded)
 }
 
 func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
@@ -214,5 +214,5 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 
 	// no remaining tokens
 	_, err = s.visibilityManager.GetWorkflowExecution(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
+	s.Equal(persistence.ErrPersistenceSystemLimitExceeded, err)
 }
