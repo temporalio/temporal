@@ -94,6 +94,15 @@ func (s *predicatesSuite) TestNamespacePredicate_Equals() {
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
+func (s *predicatesSuite) TestNamespacePredicate_Size() {
+	namespaceIDs := []string{uuid.New(), uuid.New()}
+
+	p := NewNamespacePredicate(namespaceIDs)
+
+	// UUID length is 36 and 4 bytes accounted for proto overhead.
+	s.Equal(76, p.Size())
+}
+
 func (s *predicatesSuite) TestTypePredicate_Test() {
 	types := []enumsspb.TaskType{
 		enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
@@ -150,6 +159,17 @@ func (s *predicatesSuite) TestTypePredicate_Equals() {
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
+func (s *predicatesSuite) TestTypePredicate_Size() {
+	types := []enumsspb.TaskType{
+		enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
+		enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION,
+	}
+	p := NewTypePredicate(types)
+
+	// enum size is 4 and 4 bytes accounted for proto overhead.
+	s.Equal(12, p.Size())
+}
+
 func (s *predicatesSuite) TestDestinationPredicate_Test() {
 	destinations := []string{uuid.New(), uuid.New()}
 
@@ -183,6 +203,15 @@ func (s *predicatesSuite) TestDestinationPredicate_Equals() {
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
+func (s *predicatesSuite) TestDestinationPredicate_Size() {
+	destinations := []string{uuid.New(), uuid.New()}
+
+	p := NewDestinationPredicate(destinations)
+
+	// UUID length is 36 and 4 bytes accounted for proto overhead.
+	s.Equal(76, p.Size())
+}
+
 func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Test() {
 	groups := []string{"1", "2"}
 
@@ -214,6 +243,15 @@ func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Equals() {
 	s.False(p.Equals(NewOutboundTaskGroupPredicate([]string{"3", "4"})))
 	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
 	s.False(p.Equals(predicates.Universal[Task]()))
+}
+
+func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Size() {
+	groups := []string{uuid.New(), uuid.New()}
+
+	p := NewOutboundTaskGroupPredicate(groups)
+
+	// UUID length is 36 and 4 bytes accounted for proto overhead.
+	s.Equal(76, p.Size())
 }
 
 func (s *predicatesSuite) TestOutboundTaskPredicate_Test() {
@@ -285,6 +323,16 @@ func (s *predicatesSuite) TestOutboundTaskPredicate_Equals() {
 	})))
 	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
 	s.False(p.Equals(predicates.Universal[Task]()))
+}
+
+func (s *predicatesSuite) TestOutboundTaskPredicate_Size() {
+	groups := []TaskGroupNamespaceIDAndDestination{
+		{"g1", "n1", "d1"},
+		{"g2", "n2", "d2"},
+	}
+	p := NewOutboundTaskPredicate(groups)
+
+	s.Equal(16, p.Size())
 }
 
 func (s *predicatesSuite) TestAndPredicates() {

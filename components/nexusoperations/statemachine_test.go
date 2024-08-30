@@ -444,43 +444,26 @@ func TestCompleteExternally(t *testing.T) {
 }
 
 func TestCancel(t *testing.T) {
-	t.Run("before started", func(t *testing.T) {
-		backend := &hsmtest.NodeBackend{}
-		root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
-		op, err := hsm.MachineData[nexusoperations.Operation](root)
-		require.NoError(t, err)
-		_, err = op.Cancel(root, time.Now())
-		require.NoError(t, err)
-		require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_CANCELED, op.State())
-		require.Equal(t, 1, len(backend.Events))
-		attrs := backend.Events[0].GetNexusOperationCanceledEventAttributes()
-		require.Equal(t, int64(1), attrs.ScheduledEventId)
-		require.Equal(t, "operation canceled before started", attrs.Failure.Cause.Message)
-		require.NotNil(t, attrs.Failure.Cause.GetCanceledFailureInfo())
+	backend := &hsmtest.NodeBackend{}
+	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	op, err := hsm.MachineData[nexusoperations.Operation](root)
+	require.NoError(t, err)
+	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
+		Time: time.Now(),
+		Attributes: &historypb.NexusOperationStartedEventAttributes{
+			OperationId: "op-id",
+		},
+		Node: root,
 	})
-
-	t.Run("after started", func(t *testing.T) {
-		backend := &hsmtest.NodeBackend{}
-		root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
-		op, err := hsm.MachineData[nexusoperations.Operation](root)
-		require.NoError(t, err)
-		_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
-			Time: time.Now(),
-			Attributes: &historypb.NexusOperationStartedEventAttributes{
-				OperationId: "op-id",
-			},
-			Node: root,
-		})
-		require.NoError(t, err)
-		_, err = op.Cancel(root, time.Now())
-		require.NoError(t, err)
-		require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
-		node, err := root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
-		require.NoError(t, err)
-		cancelation, err := hsm.MachineData[nexusoperations.Cancelation](node)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, cancelation.State())
-	})
+	require.NoError(t, err)
+	_, err = op.Cancel(root, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
+	node, err := root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
+	require.NoError(t, err)
+	cancelation, err := hsm.MachineData[nexusoperations.Cancelation](node)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, cancelation.State())
 }
 
 func TestCancelationValidTransitions(t *testing.T) {
@@ -591,6 +574,25 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// Assert no additional tasks are generated
 	require.Equal(t, 0, len(out.Tasks))
+}
+
+func TestCancelationBeforeStarted(t *testing.T) {
+	// Setup
+	backend := &hsmtest.NodeBackend{}
+	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), 0))
+	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+		return op.Cancel(root, time.Now())
+	}))
+	require.Len(t, root.Outputs(), 2)
+	require.Len(t, root.Outputs()[0].Outputs[0].Tasks, 1)
+	require.Equal(t, nexusoperations.TaskTypeInvocation, root.Outputs()[0].Outputs[0].Tasks[0].Type())
+	require.Len(t, root.Outputs()[1].Outputs[0].Tasks, 0)
+
+	node, err := root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
+	require.NoError(t, err)
+	cancelation, err := hsm.MachineData[nexusoperations.Cancelation](node)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, cancelation.State())
 }
 
 func TestOperationCompareState(t *testing.T) {

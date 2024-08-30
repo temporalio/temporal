@@ -98,13 +98,13 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 	}
-	handlerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
-	require.NoError(t, err)
+	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	cases := []struct {
 		name                       string
 		endpointNotFound           bool
 		eventHasNoEndpointID       bool
+		operationIsCanceled        bool
 		checkStartOperationOptions func(t *testing.T, options nexus.StartOperationOptions)
 		onStartOperation           func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
 		expectedMetricOutcome      string
@@ -352,6 +352,22 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, 1, len(events))
 			},
 		},
+		{
+			name:                "operation already canceled",
+			operationIsCanceled: true,
+			requestTimeout:      time.Hour,
+			destinationDown:     false,
+			onStartOperation:    nil, // This should not be called if the operation is already canceled.
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_CANCELED, op.State())
+				require.Nil(t, op.LastAttemptFailure)
+				require.Equal(t, 1, len(events))
+				require.NotNil(t, events[0].GetNexusOperationCanceledEventAttributes().Failure.Cause.GetCanceledFailureInfo())
+				require.Equal(t,
+					"operation canceled before it was started",
+					events[0].GetNexusOperationCanceledEventAttributes().Failure.Cause.Message)
+			},
+		},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -381,6 +397,12 @@ func TestProcessInvocationTask(t *testing.T) {
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
 			node := newOperationNode(t, backend, backend.Events[0])
 			env := fakeEnv{node}
+			if tc.operationIsCanceled {
+				op, err := hsm.MachineData[nexusoperations.Operation](node)
+				require.NoError(t, err)
+				_, err = op.Cancel(node, time.Now())
+				require.NoError(t, err)
+			}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 				namespace.NewNamespaceForTest(&persistence.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
