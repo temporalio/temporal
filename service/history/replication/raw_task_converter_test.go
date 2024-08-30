@@ -1090,7 +1090,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
 		{
-			EventId: nextEventID - 1,
+			EventId: nextEventID,
 			Version: version,
 		},
 	}
@@ -1192,11 +1192,18 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		s.runID,
 		targetClusterID,
 	).Return(nil)
+
+	taskVersionHistoryItems := []*historyspb.VersionHistoryItem{
+		{
+			EventId: nextEventID - 1,
+			Version: version,
+		},
+	}
 	s.progressCache.EXPECT().Update(
 		s.runID,
 		targetClusterID,
 		nil,
-		versionHistoryItems,
+		taskVersionHistoryItems,
 	).Return(nil)
 
 	result, err := convertSyncVersionedTransitionTask(ctx, s.shardContext, task, shardID, s.workflowCache, nil, s.progressCache, targetClusterID, s.executionManager, s.logger)
@@ -1209,7 +1216,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 				NamespaceId:         task.NamespaceID,
 				WorkflowId:          task.WorkflowID,
 				RunId:               task.RunID,
-				EventVersionHistory: versionHistory.Items,
+				EventVersionHistory: taskVersionHistoryItems,
 				EventBatches:        []*commonpb.DataBlob{events},
 				NewRunInfo: &replicationspb.NewRunInfo{
 					EventBatch: newEvents,
