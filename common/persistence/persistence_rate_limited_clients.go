@@ -1177,11 +1177,11 @@ func allow(
 		shardID,
 		callerInfo.CallOrigin,
 	)
-	if ok := namespaceRateLimiter.Allow(now, quotaRequest); !ok {
-		return ErrPersistenceNamespaceLimitExceeded
-	}
 	if ok := shardRateLimiter.Allow(now, quotaRequest); !ok {
 		return ErrPersistenceNamespaceShardLimitExceeded
+	}
+	if ok := namespaceRateLimiter.Allow(now, quotaRequest); !ok {
+		return ErrPersistenceNamespaceLimitExceeded
 	}
 	if ok := systemRateLimiter.Allow(now, quotaRequest); !ok {
 		return ErrPersistenceSystemLimitExceeded
