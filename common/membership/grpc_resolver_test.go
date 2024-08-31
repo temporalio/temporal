@@ -91,7 +91,7 @@ func TestGRPCBuilder(t *testing.T) {
 	// dialedAddress is the actual address that the gRPC framework dialed after resolving the URL using our resolver.
 	var dialedAddress string
 
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		url,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
@@ -100,7 +100,7 @@ func TestGRPCBuilder(t *testing.T) {
 		}),
 	)
 	require.NoError(t, err)
-
+	conn.Connect()
 	require.NoError(t, <-serverErrs)
 
 	// The gRPC library calls [resolver.Resolver.Close] when the connection is closed in a background goroutine, so we
