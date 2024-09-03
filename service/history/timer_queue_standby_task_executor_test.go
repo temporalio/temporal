@@ -1743,6 +1743,114 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	s.Equal(futureDeadline, info.StateMachineTimers[0].Deadline.AsTime())
 }
 
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_ValidConcurrentTaskIsKept() {
+	reg := s.mockShard.StateMachineRegistry()
+	s.NoError(dummy.RegisterStateMachine(reg))
+	s.NoError(dummy.RegisterTaskSerializers(reg))
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	ms := workflow.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{
+		VersionHistories: &historypb.VersionHistories{
+			CurrentVersionHistoryIndex: 0,
+			Histories: []*historypb.VersionHistory{
+				{
+					Items: []*historypb.VersionHistoryItem{
+						{EventId: 1, Version: 2},
+					},
+				},
+			},
+		},
+	}
+
+	root, err := hsm.NewRoot(
+		reg,
+		workflow.StateMachineType,
+		ms,
+		make(map[string]*persistencespb.StateMachineMap),
+		ms,
+	)
+	s.NoError(err)
+
+	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().GetNextEventID().Return(int64(2))
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(
+		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	).AnyTimes()
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+
+	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
+	s.NoError(err)
+
+	dummyRoot, err := root.Child([]hsm.Key{
+		{Type: dummy.StateMachineType, ID: "dummy"},
+	})
+	s.NoError(err)
+	err = hsm.MachineTransition(dummyRoot, func(sm *dummy.Dummy) (hsm.TransitionOutput, error) {
+		return dummy.Transition0.Apply(sm, dummy.Event0{})
+	})
+	s.NoError(err)
+	err = hsm.MachineTransition(dummyRoot, func(sm *dummy.Dummy) (hsm.TransitionOutput, error) {
+		return dummy.Transition0.Apply(sm, dummy.Event0{})
+	})
+	s.NoError(err)
+
+	// Track a task with a past deadline. Should get executed.
+	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(-time.Hour), &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 0,
+			},
+			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+			},
+		},
+		Type: dummy.TaskTypeTimer,
+		Data: []byte{1}, // Mark the task as concurrent
+	})
+
+	wfCtx := workflow.NewMockContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, locks.PriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	task := &tasks.StateMachineTimerTask{
+		WorkflowKey: tests.WorkflowKey,
+		Version:     2,
+	}
+
+	//nolint:revive // unchecked-type-assertion
+	timerQueueStandbyTaskExecutor := newTimerQueueStandbyTaskExecutor(
+		s.mockShard,
+		mockCache,
+		s.mockDeleteManager,
+		s.mockNDCHistoryResender,
+		s.mockResendHandler,
+		s.mockMatchingClient,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		s.clusterName,
+		s.config,
+	).(*timerQueueStandbyTaskExecutor)
+
+	err = timerQueueStandbyTaskExecutor.executeStateMachineTimerTask(context.Background(), task)
+	s.ErrorIs(err, consts.ErrTaskRetry)
+	s.Equal(1, len(info.StateMachineTimers))
+}
+
 func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_StaleStateMachine() {
 	reg := s.mockShard.StateMachineRegistry()
 	s.NoError(dummy.RegisterStateMachine(reg))
