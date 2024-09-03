@@ -1052,7 +1052,6 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-	fmt.Printf("Name of the task queue is %s:\n", request.TaskQueuePartition.TaskQueue)
 	if request.GetVersions() == nil {
 		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build ID as a member of the BuildIds list")
 	}
