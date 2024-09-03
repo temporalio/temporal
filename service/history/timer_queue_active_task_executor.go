@@ -569,6 +569,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		return err
 	}
 
+	if !t.isValidWorkflowRunTimeoutTask(mutableState, task) {
+		return nil
+	}
+
 	timeoutFailure := failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval := backoff.NoBackoff
 	retryState := enumspb.RETRY_STATE_TIMEOUT
@@ -699,7 +703,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return nil
 	}
 
-	if !t.isValidExecutionTimeoutTask(mutableState, task) {
+	if !t.isValidWorkflowExecutionTimeoutTask(mutableState, task) {
 		return nil
 	}
 

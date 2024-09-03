@@ -30,6 +30,8 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -172,7 +174,36 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 	return nil
 }
 
-func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
+func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
+	mutableState workflow.MutableState,
+	expirationTime *timestamppb.Timestamp,
+) bool {
+	if expirationTime == nil {
+		return false
+	}
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return false
+	}
+
+	now := t.shardContext.GetTimeSource().Now()
+	expired := queues.IsTimeExpired(now, expirationTime.AsTime())
+
+	return expired
+
+}
+
+func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
+	mutableState workflow.MutableState,
+	task *tasks.WorkflowRunTimeoutTask,
+) bool {
+	executionInfo := mutableState.GetExecutionInfo()
+
+	// Check if workflow execution timeout is not expired
+	// This can happen if the workflow is reset but old timer task is still fired.
+	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowExecutionExpirationTime)
+}
+
+func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
 	mutableState workflow.MutableState,
 	task *tasks.WorkflowExecutionTimeoutTask,
 ) bool {
@@ -183,24 +214,16 @@ func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
 		return false
 	}
 
-	if !mutableState.IsWorkflowExecutionRunning() {
-		return false
-	}
+	// Check if workflow execution timeout is not expired
+	// This can happen if the workflow is reset since reset re-calculates
+	// the execution timeout but shares the same firstRunID as the base run
+	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowExecutionExpirationTime)
 
 	// NOTE: we don't need to do version check here because if we were to do it, we need to compare the task version
 	// and the start version in the first run. However, failover & conflict resolution will never change
 	// the first event of a workflowID (the history tree model we are using always share at least one node),
 	// meaning start version check will always pass.
 	// Also there's no way we can perform version check before first run may already be deleted due to retention
-
-	// Check if workflow timeout is not expired
-	// This can happen if the workflow is reset since reset re-calculates
-	// the execution timeout but shares the same firstRunID as the base run
-
-	now := t.shardContext.GetTimeSource().Now()
-	expired := queues.IsTimeExpired(now, executionInfo.WorkflowExecutionExpirationTime.AsTime())
-
-	return expired
 }
 
 func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
