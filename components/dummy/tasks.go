@@ -30,8 +30,8 @@ import (
 )
 
 const (
-	TaskTypeTimer     = "dummy.Immediate"
-	TaskTypeImmediate = "dummy.Timer"
+	TaskTypeTimer     = "dummy.Timer"
+	TaskTypeImmediate = "dummy.Immediate"
 )
 
 type ImmediateTask struct {
@@ -66,7 +66,8 @@ func (ImmediateTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type TimerTask struct {
-	Deadline time.Time
+	Deadline   time.Time
+	concurrent bool
 }
 
 var _ hsm.Task = TimerTask{}
@@ -79,21 +80,33 @@ func (t TimerTask) Kind() hsm.TaskKind {
 	return hsm.TaskKindTimer{Deadline: t.Deadline}
 }
 
-func (TimerTask) Concurrent() bool {
-	return false
+func (t TimerTask) Concurrent() bool {
+	return t.concurrent
+}
+
+func (t TimerTask) Validate(*hsm.Node) error {
+	// In case the task is considered concurrent, consider it valid for now.
+	return nil
 }
 
 type TimerTaskSerializer struct{}
 
 func (TimerTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return TimerTask{Deadline: kind.Deadline}, nil
+		return TimerTask{Deadline: kind.Deadline, concurrent: len(data) > 0}, nil
 	}
 	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
 }
 
-func (TimerTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
-	return nil, nil
+func (s TimerTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
+	if tt, ok := task.(TimerTask); ok {
+		if tt.concurrent {
+			// Non empty data marks the task as concurrent.
+			return []byte{1}, nil
+		}
+		return nil, nil
+	}
+	return nil, fmt.Errorf("incompatible task: %v", task)
 }
 
 func RegisterTaskSerializers(reg *hsm.Registry) error {

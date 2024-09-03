@@ -27,6 +27,7 @@ import (
 	"errors"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/configs"
@@ -87,90 +88,13 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		}
 	}
 
-	nsName, err := e.shardContext.GetNamespaceRegistry().GetNamespaceName(
-		namespace.ID(task.GetNamespaceID()),
-	)
-	if err != nil {
-		return respond(err)
-	}
-
-	ref, smt, err := stateMachineTask(e.shardContext, task)
-	if err != nil {
-		return respond(err)
-	}
-
-	if err := validateTaskByClock(e.shardContext, task); err != nil {
-		return respond(err)
-	}
-
-	destination := ""
-	if dtask, ok := task.(tasks.HasDestination); ok {
-		destination = dtask.GetDestination()
-	}
-
-	actionFn := func(ctx context.Context) (any, error) {
-		err := e.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-			if smt.Concurrent() {
-				//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
-				concurrentSmt := smt.(hsm.ConcurrentTask)
-				return concurrentSmt.Validate(node)
-			}
-			return nil
-		})
-		if err != nil {
-			if errors.Is(err, consts.ErrStaleReference) {
-				// If the reference is stale, then the task was already executed in
-				// the active queue, and there is nothing to do here.
-				return nil, nil
-			}
-			return nil, err
-		}
-
-		// If there was no error from Access nor from the accessor function, then the task
-		// is still valid for processing based on the current state of the machine.
-		// The *likely* reasons are: a) delay in the replication stack; b) destination is down.
-		// In any case, the task needs to be retried.
-		var postActionInfoErr error = consts.ErrTaskRetry
-		if e.config.OutboundStandbyTaskMissingEventsDestinationDownErr(nsName.String(), destination) {
-			// Wrap the retry error with DestinationDownError so it can trigger the circuit breaker on
-			// the standby side. This won't do any harm, at most some delay processing the standby task.
-			// Assuming the dynamic config OutboundStandbyTaskMissingEventsDiscardDelay is long enough,
-			// it should give enough time for the active side to execute the task successfully, and the
-			// standby side to process it as well without discarding the task.
-			postActionInfoErr = queues.NewDestinationDownError(
-				"standby task executor returned retryable error",
-				postActionInfoErr,
-			)
-		}
-		return postActionInfoErr, nil
-	}
-
-	err = e.processTask(
-		ctx,
-		task,
-		actionFn,
-		getStandbyPostActionFn(
-			task,
-			e.Now,
-			0, // We don't need resend delay since we don't do fetch history.
-			e.config.OutboundStandbyTaskMissingEventsDiscardDelay(nsName.String(), destination),
-			// We don't need to fetch history from remote for state machine to sync.
-			// So, just use the noop post action which will return a retry error
-			// if the task didn't succeed.
-			standbyTaskPostActionNoOp,
-			standbyOutboundTaskPostActionTaskDiscarded,
-		),
-	)
-
-	return respond(err)
+	return respond(e.processTask(ctx, task))
 }
 
 func (e *outboundQueueStandbyTaskExecutor) processTask(
 	ctx context.Context,
 	task tasks.Task,
-	actionFn func(context.Context) (any, error),
-	postActionFn standbyPostActionFn,
-) (retError error) {
+) error {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -180,15 +104,67 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 	if err != nil {
 		return err
 	}
+
 	if !nsRecord.IsOnCluster(e.clusterName) {
 		// namespace is not replicated to local cluster, ignore corresponding tasks
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(ctx)
+	if err := validateTaskByClock(e.shardContext, task); err != nil {
+		return err
+	}
+
+	ref, smt, err := stateMachineTask(e.shardContext, task)
 	if err != nil {
 		return err
 	}
 
-	return postActionFn(ctx, task, historyResendInfo, e.logger)
+	err = e.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		if smt.Concurrent() {
+			//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
+			concurrentSmt := smt.(hsm.ConcurrentTask)
+			return concurrentSmt.Validate(node)
+		}
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, consts.ErrStaleReference) {
+			// If the reference is stale, then the task was already executed in
+			// the active queue, and there is nothing to do here.
+			return nil
+		}
+		return err
+	}
+
+	// If there was no error from Access nor from the accessor function, then the task
+	// is still valid for processing based on the current state of the machine.
+	// The *likely* reasons are: a) delay in the replication stack; b) destination is down.
+	// In any case, the task needs to be retried (or discarded, based on the configured discard delay).
+
+	destination := ""
+	if dtask, ok := task.(tasks.HasDestination); ok {
+		destination = dtask.GetDestination()
+	}
+
+	discardTime := task.GetVisibilityTime().Add(e.config.OutboundStandbyTaskMissingEventsDiscardDelay(nsRecord.Name().String(), destination))
+	// now > task start time + discard delay
+	if e.Now().After(discardTime) {
+		e.logger.Warn("Discarding standby outbound task due to task being pending for too long.", tag.Task(task))
+		return consts.ErrTaskDiscarded
+	}
+
+	err = consts.ErrTaskRetry
+	if e.config.OutboundStandbyTaskMissingEventsDestinationDownErr(nsRecord.Name().String(), destination) {
+		// Wrap the retry error with DestinationDownError so it can trigger the circuit breaker on
+		// the standby side. This won't do any harm, at most some delay processing the standby task.
+		// Assuming the dynamic config OutboundStandbyTaskMissingEventsDiscardDelay is long enough,
+		// it should give enough time for the active side to execute the task successfully, and the
+		// standby side to process it as well without discarding the task.
+		err = queues.NewDestinationDownError(
+			"standby task executor returned retryable error",
+			err,
+		)
+	}
+	return err
 }
