@@ -5116,6 +5116,7 @@ type DescribeTaskQueuePartitionResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
 	VersionsInfoInternal map[string]*v113.TaskQueueVersionInfoInternal `protobuf:"bytes,1,rep,name=versions_info_internal,json=versionsInfoInternal,proto3" json:"versions_info_internal,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
