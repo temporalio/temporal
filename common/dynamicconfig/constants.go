@@ -409,6 +409,11 @@ If exceeded, failure will be truncated before being stored in mutable state.`,
 		1*1024*1024,
 		`MutableStateSizeLimitWarn is the per workflow execution mutable state size limit in bytes for warning`,
 	)
+	MutableStateTombstoneCountLimit = NewGlobalIntSetting(
+		"limit.mutableStateTombstoneCountLimit",
+		16,
+		`MutableStateTombstoneCountLimit is the maximum number of deleted sub state machines tracked in mutable state.`,
+	)
 	HistoryCountSuggestContinueAsNew = NewNamespaceIntSetting(
 		"limit.historyCount.suggestContinueAsNew",
 		4*1024,

@@ -155,7 +155,7 @@ type (
 
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
-		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId
+		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId since last update
 
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
@@ -167,6 +167,8 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
+		// Total number of tomestones tracked in mutable state
+		totalTombstones int
 		// Buffer events from DB
 		bufferEventsInDB []*historypb.HistoryEvent
 		// Indicates the workflow state in DB, can be used to calculate
@@ -269,6 +271,7 @@ func NewMutableState(
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
 		approximateSize:          0,
+		totalTombstones:          0,
 		currentVersion:           namespaceEntry.FailoverVersion(),
 		bufferEventsInDB:         nil,
 		stateInDB:                enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
@@ -411,6 +414,10 @@ func NewMutableStateFromDB(
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
 	for requestID := range mutableState.pendingSignalRequestedIDs {
 		mutableState.approximateSize += len(requestID)
+	}
+
+	for _, tombstoneBatch := range dbRecord.ExecutionInfo.SubStateMachineTombstoneBatches {
+		mutableState.totalTombstones += len(tombstoneBatch.StateMachineTombstones)
 	}
 
 	mutableState.approximateSize += dbRecord.ExecutionState.Size() - mutableState.executionState.Size()
@@ -5214,6 +5221,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err := ms.closeTransactionUpdateTransitionHistory(
 		transactionPolicy,
 		workflowEventsSeq,
+		bufferEvents,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -5221,6 +5229,8 @@ func (ms *MutableStateImpl) closeTransaction(
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
+
+	ms.closeTransactionTrackTombstones(transactionPolicy)
 
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
@@ -5318,6 +5328,7 @@ func (ms *MutableStateImpl) closeTransactionHandleSpeculativeWorkflowTask(
 func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	transactionPolicy TransactionPolicy,
 	workflowEventsSeq []*persistence.WorkflowEvents,
+	newBufferEvents []*historypb.HistoryEvent,
 ) error {
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
@@ -5340,7 +5351,12 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		return nil
 	}
 
-	if !ms.HSM().Dirty() && len(workflowEventsSeq) == 0 && len(ms.syncActivityTasks) == 0 {
+	// TODO: treat changes for transient workflow task or signalRequestID removal as state transition as well.
+	// Those changes are not replicated today.
+	if !ms.HSM().Dirty() &&
+		len(workflowEventsSeq) == 0 &&
+		len(newBufferEvents) == 0 &&
+		len(ms.syncActivityTasks) == 0 {
 		return nil
 	}
 
@@ -5361,7 +5377,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 		return
 	}
 
-	if len(ms.executionInfo.TransitionHistory) == 0 {
+	if !ms.transitionHistoryEnabled {
 		// transition history is not enabled
 		return
 	}
@@ -5408,6 +5424,83 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 	}
 
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
+}
+
+func (ms *MutableStateImpl) closeTransactionTrackTombstones(
+	transactionPolicy TransactionPolicy,
+) {
+	if transactionPolicy != TransactionPolicyActive {
+		// Passive/Replication logic will update tombstone list when applying mutable state
+		// snapshot or mutation.
+		return
+	}
+
+	if !ms.transitionHistoryEnabled {
+		// transition history is not enabled
+		return
+	}
+
+	var tombstones []*persistencespb.StateMachineTombstone
+	for scheduledEventID := range ms.deleteActivityInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+				ActivityScheduledEventId: scheduledEventID,
+			},
+		})
+	}
+	for timerID := range ms.deleteTimerInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+				TimerId: timerID,
+			},
+		})
+	}
+	for initiatedEventId := range ms.deleteChildExecutionInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+				ChildExecutionInitiatedEventId: initiatedEventId,
+			},
+		})
+	}
+	for initiatedEventId := range ms.deleteRequestCancelInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+				RequestCancelInitiatedEventId: initiatedEventId,
+			},
+		})
+	}
+	for initiatedEventId := range ms.deleteSignalInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+				SignalExternalInitiatedEventId: initiatedEventId,
+			},
+		})
+	}
+	// Entire signalRequestedIDs will be synced if updated, so we don't track individual signalRequestedID tombstone.
+	// TODO: Track signalRequestedID tombstone when we support syncing partial signalRequestedIDs.
+	// This requires tracking the lastUpdateVersionedTransition for each signalRequestedID,
+	// which is not supported by today's DB schema.
+	// TODO: we don't delete updateInfo and StateMachine today. Track them here when we do.
+
+	tombstoneBatch := &persistencespb.StateMachineTombstoneBatch{
+		VersionedTransition:    ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+		StateMachineTombstones: tombstones,
+	}
+	ms.executionInfo.SubStateMachineTombstoneBatches = append(ms.executionInfo.SubStateMachineTombstoneBatches, tombstoneBatch)
+
+	ms.totalTombstones += len(tombstones)
+	ms.capTombstoneCount()
+}
+
+// capTombstoneCount limits the total number of tombstones stored in the mutable state.
+// This method should be called whenever tombstone batch list is updated or synced.
+func (ms *MutableStateImpl) capTombstoneCount() {
+	tombstoneCountLimit := ms.config.MutableStateTombstoneCountLimit()
+	for ms.totalTombstones > tombstoneCountLimit &&
+		len(ms.executionInfo.SubStateMachineTombstoneBatches) > 0 {
+		ms.totalTombstones -= len(ms.executionInfo.SubStateMachineTombstoneBatches[0].StateMachineTombstones)
+		ms.executionInfo.SubStateMachineTombstoneBatches = ms.executionInfo.SubStateMachineTombstoneBatches[1:]
+	}
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareTasks(
