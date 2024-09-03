@@ -148,8 +148,8 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 	}
 
 	discardTime := task.GetVisibilityTime().Add(e.config.OutboundStandbyTaskMissingEventsDiscardDelay(nsRecord.Name().String(), destination))
-	// now < task start time + discard delay
-	if e.Now().Before(discardTime) {
+	// now > task start time + discard delay
+	if e.Now().After(discardTime) {
 		e.logger.Warn("Discarding standby outbound task due to task being pending for too long.", tag.Task(task))
 		return consts.ErrTaskDiscarded
 	}
