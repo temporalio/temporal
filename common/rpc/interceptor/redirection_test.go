@@ -180,11 +180,11 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"GetWorkerVersioningRules":         {},
 		"GetWorkerTaskReachability":        {},
 
-		"StartBatchOperation":    {},
-		"StopBatchOperation":     {},
-		"DescribeBatchOperation": {},
-		"ListBatchOperations":    {},
-		"UpdateActivityOptions":  {},
+		"StartBatchOperation":       {},
+		"StopBatchOperation":        {},
+		"DescribeBatchOperation":    {},
+		"ListBatchOperations":       {},
+		"UpdateActivityOptionsById": {},
 	}, apis)
 }
 

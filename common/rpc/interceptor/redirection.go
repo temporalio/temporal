@@ -121,11 +121,11 @@ var (
 		"GetWorkerVersioningRules":         func() any { return &workflowservice.GetWorkerVersioningRulesResponse{} },
 		"GetWorkerTaskReachability":        func() any { return &workflowservice.GetWorkerTaskReachabilityResponse{} },
 
-		"StartBatchOperation":    func() any { return &workflowservice.StartBatchOperationResponse{} },
-		"StopBatchOperation":     func() any { return &workflowservice.StopBatchOperationResponse{} },
-		"DescribeBatchOperation": func() any { return &workflowservice.DescribeBatchOperationResponse{} },
-		"ListBatchOperations":    func() any { return &workflowservice.ListBatchOperationsResponse{} },
-		"UpdateActivityOptions":  func() any { return &workflowservice.UpdateActivityOptionsResponse{} },
+		"StartBatchOperation":       func() any { return &workflowservice.StartBatchOperationResponse{} },
+		"StopBatchOperation":        func() any { return &workflowservice.StopBatchOperationResponse{} },
+		"DescribeBatchOperation":    func() any { return &workflowservice.DescribeBatchOperationResponse{} },
+		"ListBatchOperations":       func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"UpdateActivityOptionsById": func() any { return &workflowservice.UpdateActivityOptionsByIdResponse{} },
 	}
 )
 

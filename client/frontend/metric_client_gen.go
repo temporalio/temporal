@@ -859,19 +859,20 @@ func (c *metricClient) TerminateWorkflowExecution(
 	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
-func (c *metricClient) UpdateActivityOptions(
+func (c *metricClient) UpdateActivityOptionsById(
 	ctx context.Context,
-	request *workflowservice.UpdateActivityOptionsRequest,
+	request *workflowservice.UpdateActivityOptionsByIdRequest,
 	opts ...grpc.CallOption,
-) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
+) (_ *workflowservice.UpdateActivityOptionsByIdResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateActivityOptions")
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateActivityOptionsById")
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.UpdateActivityOptions(ctx, request, opts...)
+	return c.client.UpdateActivityOptionsById(ctx, request, opts...)
 }
+
 
 func (c *metricClient) UpdateNamespace(
 	ctx context.Context,

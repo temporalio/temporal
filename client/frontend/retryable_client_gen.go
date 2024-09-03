@@ -920,20 +920,21 @@ func (c *retryableClient) TerminateWorkflowExecution(
 	return resp, err
 }
 
-func (c *retryableClient) UpdateActivityOptions(
+func (c *retryableClient) UpdateActivityOptionsById(
 	ctx context.Context,
-	request *workflowservice.UpdateActivityOptionsRequest,
+	request *workflowservice.UpdateActivityOptionsByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateActivityOptionsResponse, error) {
-	var resp *workflowservice.UpdateActivityOptionsResponse
+) (*workflowservice.UpdateActivityOptionsByIdResponse, error) {
+	var resp *workflowservice.UpdateActivityOptionsByIdResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.UpdateActivityOptions(ctx, request, opts...)
+		resp, err = c.client.UpdateActivityOptionsById(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
+
 
 func (c *retryableClient) UpdateNamespace(
 	ctx context.Context,

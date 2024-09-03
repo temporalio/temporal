@@ -623,15 +623,16 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateActivityOptions(
+func (c *clientImpl) UpdateActivityOptionsById(
 	ctx context.Context,
-	request *workflowservice.UpdateActivityOptionsRequest,
+	request *workflowservice.UpdateActivityOptionsByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateActivityOptionsResponse, error) {
+) (*workflowservice.UpdateActivityOptionsByIdResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateActivityOptions(ctx, request, opts...)
+	return c.client.UpdateActivityOptionsById(ctx, request, opts...)
 }
+
 
 func (c *clientImpl) UpdateNamespace(
 	ctx context.Context,
