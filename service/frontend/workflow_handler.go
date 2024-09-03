@@ -2605,6 +2605,12 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 	return &workflowservice.ResetStickyTaskQueueResponse{}, nil
 }
 
+func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflowservice.ShutdownWorkerRequest) (_ *workflowservice.ShutdownWorkerResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	return &workflowservice.ShutdownWorkerResponse{}, nil
+}
+
 // QueryWorkflow returns query result for a specified workflow execution
 func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflowservice.QueryWorkflowRequest) (_ *workflowservice.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)

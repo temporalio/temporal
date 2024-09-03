@@ -144,6 +144,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RecordActivityTaskHeartbeatById":    {},
 		"RequestCancelWorkflowExecution":     {},
 		"ResetStickyTaskQueue":               {},
+		"ShutdownWorker":                     {},
 		"ResetWorkflowExecution":             {},
 		"RespondActivityTaskCanceled":        {},
 		"RespondActivityTaskCanceledById":    {},

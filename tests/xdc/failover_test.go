@@ -55,6 +55,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -64,7 +66,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -2403,10 +2404,6 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 // }
 
 func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
-	if !tests.UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
-
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2763,10 +2760,6 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
-	if !tests.UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
-
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2893,10 +2886,6 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
-	if !tests.UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
-
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 

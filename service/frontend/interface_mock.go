@@ -854,6 +854,21 @@ func (mr *MockHandlerMockRecorder) ScanWorkflowExecutions(arg0, arg1 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScanWorkflowExecutions", reflect.TypeOf((*MockHandler)(nil).ScanWorkflowExecutions), arg0, arg1)
 }
 
+// ShutdownWorker mocks base method.
+func (m *MockHandler) ShutdownWorker(arg0 context.Context, arg1 *v10.ShutdownWorkerRequest) (*v10.ShutdownWorkerResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ShutdownWorker", arg0, arg1)
+	ret0, _ := ret[0].(*v10.ShutdownWorkerResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ShutdownWorker indicates an expected call of ShutdownWorker.
+func (mr *MockHandlerMockRecorder) ShutdownWorker(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShutdownWorker", reflect.TypeOf((*MockHandler)(nil).ShutdownWorker), arg0, arg1)
+}
+
 // SignalWithStartWorkflowExecution mocks base method.
 func (m *MockHandler) SignalWithStartWorkflowExecution(arg0 context.Context, arg1 *v10.SignalWithStartWorkflowExecutionRequest) (*v10.SignalWithStartWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()

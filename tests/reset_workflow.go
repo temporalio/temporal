@@ -36,6 +36,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api/resetworkflow"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *FunctionalSuite) TestResetWorkflow() {
@@ -214,6 +216,127 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	})
 	s.NoError(err)
 	s.Equal(we.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
+}
+
+func (s *FunctionalSuite) TestResetWorkflowAfterTimeout() {
+	startTime := time.Now().UTC()
+	tv := testvars.New(s.T())
+
+	identity := "worker1"
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	// let workflow to timeout
+	time.Sleep(time.Second) //nolint:forbidigo
+
+	var historyEvents []*historypb.HistoryEvent
+	s.Eventually(func() bool {
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: tv.WorkflowID(),
+			RunId:      we.RunId,
+		})
+		lastEvent := historyEvents[len(historyEvents)-1]
+		s.NotNil(historyEvents)
+
+		return lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT
+
+	}, 2*time.Second, 200*time.Millisecond)
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionTimedOut`, historyEvents)
+
+	startFilter := &filterpb.StartTimeFilter{
+		EarliestTime: timestamppb.New(startTime),
+		LatestTime:   timestamppb.New(time.Now().UTC()),
+	}
+
+	// wait till workflow is closed
+	closedCount := 0
+	s.Eventually(func() bool {
+		resp, err := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 100,
+			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: tv.WorkflowID(),
+			}},
+		})
+		s.NoError(err)
+		closedCount = len(resp.Executions)
+		if closedCount == 0 {
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+		}
+
+		return closedCount > 0
+
+	}, 5*time.Second, 500*time.Millisecond)
+	s.Equal(1, closedCount)
+
+	_, err = s.client.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tv.WorkflowID(),
+			RunId:      we.RunId,
+		},
+		Reason:                    "reset execution from test",
+		RequestId:                 uuid.New(),
+		WorkflowTaskFinishEventId: 3,
+	})
+	s.NoError(err)
+
+	var executions []*commonpb.WorkflowExecution
+
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		time.Sleep(200 * time.Millisecond) //nolint:forbidigo
+		executions = append(executions, task.WorkflowExecution)
+		return []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("simple success"),
+				}},
+			}}, nil
+	}
+
+	poller := &TaskPoller{
+		Client:              s.client,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	events := s.getHistory(s.namespace, executions[0])
+	// because we don't have any tasks, workflow reset will add task started/failed events.
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":1}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 WorkflowExecutionCompleted`, events)
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {

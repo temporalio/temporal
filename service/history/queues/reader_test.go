@@ -190,7 +190,7 @@ func (s *readerSuite) TestMergeSlices() {
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -217,7 +217,7 @@ func (s *readerSuite) TestAppendSlices() {
 	incomingScopes := scopes[totalScopes/2:]
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
 	}
 
 	reader.AppendSlices(incomingSlices...)
@@ -501,7 +501,7 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{})
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
 		slices = append(slices, slice)
 	}
 
@@ -512,6 +512,7 @@ func (s *readerSuite) newTestReader(
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),
 			MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
 			PollBackoffInterval:  dynamicconfig.GetDurationPropertyFn(200 * time.Millisecond),
+			MaxPredicateSize:     dynamicconfig.GetIntPropertyFn(10),
 		},
 		s.mockScheduler,
 		s.mockRescheduler,

@@ -307,6 +307,7 @@ func (f *outboundQueueFactory) CreateQueue(
 				BatchSize:            f.Config.OutboundTaskBatchSize,
 				MaxPendingTasksCount: f.Config.OutboundQueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.OutboundProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.OutboundQueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,

@@ -117,9 +117,20 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadOperationArgs(ctx, ns, env, ref)
+	args, err := e.loadOperationArgs(ctx, ns, env, ref, task)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
+	}
+
+	if args.cancelRequested {
+		// TODO(bergundy): Properly support cancel before started. We need to transmit this intent to cancel to the
+		// handler because we don't know for sure that the operation hasn't been started.
+		return e.saveResult(ctx, env, ref, nil, &nexus.UnsuccessfulOperationError{
+			State: nexus.OperationStateCanceled,
+			Failure: nexus.Failure{
+				Message: "operation canceled before it was started",
+			},
+		})
 	}
 
 	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
@@ -194,11 +205,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
-	nexusLink, err := ConvertLinkWorkflowEventToNexusLink(args.workflowEventLink)
-	if err != nil {
-		return err
-	}
-
 	callCtx, cancel := context.WithTimeout(
 		ctx,
 		e.Config.RequestTimeout(ns.Name().String(), task.EndpointName),
@@ -214,7 +220,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
-		Links: []nexus.Link{nexusLink},
+		Links: []nexus.Link{args.nexusLink},
 	})
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
@@ -270,8 +276,9 @@ type startArgs struct {
 	endpointID               string
 	header                   map[string]string
 	payload                  *commonpb.Payload
-	workflowEventLink        *commonpb.Link_WorkflowEvent
+	nexusLink                nexus.Link
 	namespaceFailoverVersion int64
+	cancelRequested          bool
 }
 
 func (e taskExecutor) loadOperationArgs(
@@ -279,13 +286,22 @@ func (e taskExecutor) loadOperationArgs(
 	ns *namespace.Namespace,
 	env hsm.Environment,
 	ref hsm.Ref,
+	task InvocationTask,
 ) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
+		if err := task.Validate(node); err != nil {
+			return err
+		}
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
 		operation, err := hsm.MachineData[Operation](node)
+		if err != nil {
+			return err
+		}
+
+		args.cancelRequested, err = operation.cancelRequested(node)
 		if err != nil {
 			return err
 		}
@@ -302,7 +318,7 @@ func (e taskExecutor) loadOperationArgs(
 		}
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
-		args.workflowEventLink = &commonpb.Link_WorkflowEvent{
+		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
 			RunId:      ref.WorkflowKey.RunID,
@@ -312,7 +328,7 @@ func (e taskExecutor) loadOperationArgs(
 					EventType: event.GetEventType(),
 				},
 			},
-		}
+		})
 		args.namespaceFailoverVersion = event.Version
 		return nil
 	})
@@ -339,7 +355,12 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
 						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 						if err != nil {
-							// silently ignore for now
+							// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+							// so ignoring the error for now; we will revisit how to handle these errors later.
+							e.Logger.Error(
+								fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+								tag.Error(err),
+							)
 							continue
 						}
 						links = append(links, &commonpb.Link{
@@ -440,6 +461,9 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 }
 
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
+	if err := task.Validate(node); err != nil {
+		return err
+	}
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
@@ -578,6 +602,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 			// Operation is already in a terminal state.
 			return fmt.Errorf("%w: operation already in terminal state", consts.ErrStaleReference)
 		}
+
 		args.service = op.Service
 		args.operation = op.Operation
 		args.operationID = op.OperationId
