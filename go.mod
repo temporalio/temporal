@@ -1,6 +1,6 @@
 module go.temporal.io/server
 
-go 1.22.3
+go 1.22.6
 
 require (
 	cloud.google.com/go/storage v1.41.0
