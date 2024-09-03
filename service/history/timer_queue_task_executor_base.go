@@ -186,8 +186,10 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	}
 
 	now := t.shardContext.GetTimeSource().Now()
-	expired := queues.IsTimeExpired(now, expirationTime.AsTime())
-
+	taskTriggerAt := expirationTime.AsTime()
+	expired := queues.IsTimeExpired(now, taskTriggerAt)
+	println(fmt.Sprintf("expiration time: %v", taskTriggerAt))
+	println(fmt.Sprintf("now: %v", now))
 	return expired
 
 }
@@ -200,7 +202,7 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
 
 	// Check if workflow execution timeout is not expired
 	// This can happen if the workflow is reset but old timer task is still fired.
-	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowExecutionExpirationTime)
+	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowRunExpirationTime)
 }
 
 func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(

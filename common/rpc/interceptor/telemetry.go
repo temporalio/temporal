@@ -511,7 +511,7 @@ func GetMetricsHandlerFromContext(
 ) metrics.Handler {
 	handler, ok := ctx.Value(metricsCtxKey).(metrics.Handler)
 	if !ok {
-		logger.Error("unable to get metrics scope")
+		logger.Info("unable to get metrics scope")
 		return metrics.NoopMetricsHandler
 	}
 	return handler
