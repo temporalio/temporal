@@ -30,8 +30,8 @@ import (
 )
 
 const (
-	TaskTypeTimer     = "dummy.Immediate"
-	TaskTypeImmediate = "dummy.Timer"
+	TaskTypeTimer     = "dummy.Timer"
+	TaskTypeImmediate = "dummy.Immediate"
 )
 
 type ImmediateTask struct {
