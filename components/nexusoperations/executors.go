@@ -293,9 +293,6 @@ func (e taskExecutor) loadOperationArgs(
 		if err := task.Validate(node); err != nil {
 			return err
 		}
-		if err := node.CheckRunning(); err != nil {
-			return err
-		}
 		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
 			return err
@@ -464,9 +461,6 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 	if err := task.Validate(node); err != nil {
 		return err
 	}
-	if err := node.CheckRunning(); err != nil {
-		return err
-	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		return TransitionRescheduled.Apply(op, EventRescheduled{
 			Node: node,
@@ -476,9 +470,6 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 
 func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
 	if err := task.Validate(node); err != nil {
-		return err
-	}
-	if err := node.CheckRunning(); err != nil {
 		return err
 	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
