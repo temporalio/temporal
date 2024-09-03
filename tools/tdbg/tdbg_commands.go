@@ -523,7 +523,7 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 				&cli.StringFlag{
 					Name:  FlagTaskQueueType,
 					Value: "TASK_QUEUE_TYPE_WORKFLOW",
-					Usage: "Task Queue type: activity, workflow",
+					Usage: "Task Queue type: activity, workflow, nexus (experimental)",
 				},
 				&cli.Int64Flag{
 					Name:  FlagPartitionID,

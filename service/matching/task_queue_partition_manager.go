@@ -27,7 +27,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -488,8 +487,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for bid := range buildIds {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
-			PhysicalTaskQueueInfo:   &taskqueuespb.PhysicalTaskQueueInfo{},
-			InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{},
+			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
 		physicalQueue, err := pm.getPhysicalQueue(ctx, bid)
 		if err != nil {
@@ -500,10 +498,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		if reportStats {
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
-			fmt.Println(vInfo.PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount, vInfo.PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogAge, vInfo.PhysicalTaskQueueInfo.TaskQueueStats.TasksAddRate, vInfo.PhysicalTaskQueueInfo.TaskQueueStats.TasksDispatchRate)
 		}
 		if internalTaskQueueStatus {
-			vInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
+			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
 		}
 		versionsInfo[bid] = vInfo
 	}

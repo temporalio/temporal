@@ -578,5 +578,6 @@ message InternalTaskQueueStatus {
 }
 
 message DescribeTaskQueuePartitionResponse {
+  // contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
   map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
 }

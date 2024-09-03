@@ -59,13 +59,13 @@ message InternalTaskQueueStatus {
 
 message TaskQueueVersionInfoInternal {
     PhysicalTaskQueueInfo physical_task_queue_info = 2;
-    InternalTaskQueueStatus internal_task_queue_status = 3;
 }
 
 message PhysicalTaskQueueInfo {
     // Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
     repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
     temporal.api.taskqueue.v1.TaskQueueStats task_queue_stats = 2;
+    InternalTaskQueueStatus internal_task_queue_status = 3;
 }
 
 // Represents a normal or sticky partition of a task queue.

@@ -88,7 +88,7 @@ var (
 	FlagEncoding                   = "encoding"
 	FlagPartitionID                = "partition-id"
 	FlagStickyName                 = "sticky-name"
-	FlagBuildIDs                   = "build-ids"
-	FlagUnversioned                = "unversioned"
-	FlagAllActive                  = "all-active"
+	FlagBuildIDs                   = "select-build-id"
+	FlagUnversioned                = "select-unversioned"
+	FlagAllActive                  = "select-all-active"
 )

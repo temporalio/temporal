@@ -1715,29 +1715,50 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 		ReportPollers:                 true,
 		ReportInternalTaskQueueStatus: true,
 	}
+	unversionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
+		Pollers: []*taskqueuepb.PollerInfo(nil),
+		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: 0,
+			ApproximateBacklogAge:   nil,
+			TasksAddRate:            0,
+			TasksDispatchRate:       0,
+		},
+		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: 0,
+			AckLevel:  0,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: 0,
+				EndId:   0,
+			},
+			ReadBufferLength: 0,
+		},
+	}
+	versionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
+		Pollers: []*taskqueuepb.PollerInfo(nil),
+		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: 100,
+			ApproximateBacklogAge:   nil,
+			TasksAddRate:            10.21,
+			TasksDispatchRate:       10.50,
+		},
+		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: 1,
+			AckLevel:  1,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: 1,
+				EndId:   1000,
+			},
+			ReadBufferLength: 10,
+		},
+	}
+
 	matchingMockResponse := &matchingservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
 			unversioned: {
-				InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
-					ReadLevel: 0,
-					AckLevel:  0,
-					TaskIdBlock: &taskqueuepb.TaskIdBlock{
-						StartId: 0,
-						EndId:   0,
-					},
-					ReadBufferLength: 0,
-				},
+				PhysicalTaskQueueInfo: unversionedPhysicalTaskQueueInfo,
 			},
 			buildID: {
-				InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
-					ReadLevel: 1,
-					AckLevel:  1,
-					TaskIdBlock: &taskqueuepb.TaskIdBlock{
-						StartId: 1,
-						EndId:   1000,
-					},
-					ReadBufferLength: 10,
-				},
+				PhysicalTaskQueueInfo: versionedPhysicalTaskQueueInfo,
 			},
 		},
 	}
@@ -1752,17 +1773,14 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 	s.NotNil(resp)
 	s.Equal(2, len(resp.VersionsInfoInternal))
 
-	// validating the unversioned queue
-	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetReadLevel())
-	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetAckLevel())
-	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetReadBufferLength())
-	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetTaskIdBlock().GetStartId())
-	s.Equal(int64(0), resp.VersionsInfoInternal[unversioned].InternalTaskQueueStatus.GetTaskIdBlock().GetEndId())
+	s.validatePhysicalTaskQueueInfo(unversionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[unversioned].GetPhysicalTaskQueueInfo())
+	s.validatePhysicalTaskQueueInfo(versionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[buildID].GetPhysicalTaskQueueInfo())
+}
 
-	// validating the versioned queue
-	s.Equal(int64(1), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetReadLevel())
-	s.Equal(int64(1), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetAckLevel())
-	s.Equal(int64(10), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetReadBufferLength())
-	s.Equal(int64(1), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetTaskIdBlock().GetStartId())
-	s.Equal(int64(1000), resp.VersionsInfoInternal[buildID].InternalTaskQueueStatus.GetTaskIdBlock().GetEndId())
+func (s *adminHandlerSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo,
+	responsePhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo) {
+
+	s.Equal(expectedPhysicalTaskQueueInfo.GetPollers(), responsePhysicalTaskQueueInfo.GetPollers())
+	s.Equal(expectedPhysicalTaskQueueInfo.GetTaskQueueStats(), responsePhysicalTaskQueueInfo.GetTaskQueueStats())
+	s.Equal(expectedPhysicalTaskQueueInfo.GetInternalTaskQueueStatus(), responsePhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 }

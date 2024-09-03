@@ -1647,7 +1647,6 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 	return &adminservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: resp.VersionsInfoInternal,
 	}, nil
-
 }
 
 func (adh *AdminHandler) DeleteWorkflowExecution(
