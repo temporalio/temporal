@@ -442,11 +442,6 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 			return nil, nil
 		}
 
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
-			return nil, nil
-		}
-
 		startVersion, err := mutableState.GetStartVersion()
 		if err != nil {
 			return nil, err

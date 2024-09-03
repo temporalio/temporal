@@ -178,17 +178,15 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	mutableState workflow.MutableState,
 	expirationTime *timestamppb.Timestamp,
 ) bool {
-	if expirationTime == nil {
-		return false
-	}
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return false
 	}
 
 	now := t.shardContext.GetTimeSource().Now()
-	taskTriggerAt := expirationTime.AsTime()
-	expired := queues.IsTimeExpired(now, taskTriggerAt)
-	println(fmt.Sprintf("expiration time: %v", taskTriggerAt))
+	taskShouldTriggerAt := expirationTime.AsTime()
+	expired := queues.IsTimeExpired(now, taskShouldTriggerAt)
+	// QQQQQQQQQQ
+	println(fmt.Sprintf("expiration time: %v", taskShouldTriggerAt))
 	println(fmt.Sprintf("now: %v", now))
 	return expired
 

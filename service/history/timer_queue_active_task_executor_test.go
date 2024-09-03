@@ -1459,7 +1459,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Fire() {
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	expirationTime := time.Duration(10 * time.Second)
+	expirationTime := 10 * time.Second
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
