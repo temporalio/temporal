@@ -1021,11 +1021,11 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	if ms.executionInfo.UpdateInfos == nil {
 		return nil, serviceerror.NewNotFound("update not found")
 	}
-	rec, ok := ms.executionInfo.UpdateInfos[updateID]
+	ui, ok := ms.executionInfo.UpdateInfos[updateID]
 	if !ok {
 		return nil, serviceerror.NewNotFound("update not found")
 	}
-	completion := rec.GetCompletion()
+	completion := ui.GetCompletion()
 	if completion == nil {
 		return nil, serviceerror.NewInternal("update has not completed")
 	}
