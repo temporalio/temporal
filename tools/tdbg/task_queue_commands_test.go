@@ -105,6 +105,11 @@ func (s *taskQueueCommandTestSuite) TestDescribeTaskQueuePartition() {
 			err:        nil,
 		},
 		{
+			Name:       "task queue type: nexus",
+			inputFlags: []string{"--task-queue-type", "TASK_QUEUE_TYPE_NEXUS"},
+			err:        nil,
+		},
+		{
 			Name:       "task queue type: invalid",
 			inputFlags: []string{"--task-queue-type", "false"},
 			err:        errors.New("invalid task queue type"), // nolint
@@ -126,17 +131,17 @@ func (s *taskQueueCommandTestSuite) TestDescribeTaskQueuePartition() {
 		},
 		{
 			Name:       "multiple buildId's",
-			inputFlags: []string{"--build-ids", "['1', '2']"},
+			inputFlags: []string{"--select-build-id", "['1', '2']"},
 			err:        nil,
 		},
 		{
 			Name:       "unversioned: false",
-			inputFlags: []string{"--unversioned", "false"},
+			inputFlags: []string{"--select-unversioned", "false"},
 			err:        nil,
 		},
 		{
 			Name:       "allActive: false",
-			inputFlags: []string{"--all-active", "false"},
+			inputFlags: []string{"--select-all-active", "false"},
 			err:        nil,
 		},
 	}
