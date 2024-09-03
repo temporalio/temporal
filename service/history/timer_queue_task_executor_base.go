@@ -185,9 +185,6 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	now := t.shardContext.GetTimeSource().Now()
 	taskShouldTriggerAt := expirationTime.AsTime()
 	expired := queues.IsTimeExpired(now, taskShouldTriggerAt)
-	// QQQQQQQQQQ
-	println(fmt.Sprintf("expiration time: %v", taskShouldTriggerAt))
-	println(fmt.Sprintf("now: %v", now))
 	return expired
 
 }

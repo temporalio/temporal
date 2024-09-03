@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -1517,9 +1516,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Retry() {
 
 	executionRunTimeout := time.Duration(10 * time.Second)
 	workflowRunTimeout := time.Duration(200 * time.Second)
-	// QQQQQQQQ
-	workflowRunExpirationTime := timestamppb.New(s.now.Add(executionRunTimeout))
-	println(fmt.Sprintf("workflowRunExpirationTime : %v", workflowRunExpirationTime.AsTime()))
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
