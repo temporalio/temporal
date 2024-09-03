@@ -97,20 +97,6 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	return consts.ErrTaskDiscarded
 }
 
-func standbyOutboundTaskPostActionTaskDiscarded(
-	_ context.Context,
-	taskInfo tasks.Task,
-	postActionInfo interface{},
-	logger log.Logger,
-) error {
-	if postActionInfo == nil {
-		return nil
-	}
-
-	logger.Warn("Discarding standby outbound task due to task being pending for too long.", tag.Task(taskInfo))
-	return consts.ErrTaskDiscarded
-}
-
 type (
 	historyResendInfo struct {
 

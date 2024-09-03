@@ -523,10 +523,12 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 				if task.Concurrent() {
 					//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
 					concurrentTask := task.(hsm.ConcurrentTask)
-					return concurrentTask.Validate(node)
+					if err := concurrentTask.Validate(node); err != nil {
+						return err
+					}
 				}
-				// If the task is expired and still valid in the standby queue,
-				// then the state machine is stale.
+				// If the timer fired and the task is still valid in the standby queue, wait for the active cluster to
+				// transition and invalidate the task.
 				return consts.ErrTaskRetry
 			},
 		)

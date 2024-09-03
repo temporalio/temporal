@@ -59,6 +59,9 @@ func (TimeoutTask) Concurrent() bool {
 
 // Validate checks if the timeout task is still valid to execute for the given node state.
 func (t TimeoutTask) Validate(node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
 	op, err := hsm.MachineData[Operation](node)
 	if err != nil {
 		return err
@@ -106,6 +109,9 @@ func (InvocationTask) Concurrent() bool {
 }
 
 func (t InvocationTask) Validate(node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
 	op, err := hsm.MachineData[Operation](node)
 	if err != nil {
 		return err
@@ -152,6 +158,9 @@ func (BackoffTask) Concurrent() bool {
 }
 
 func (t BackoffTask) Validate(node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
 	op, err := hsm.MachineData[Operation](node)
 	if err != nil {
 		return err
