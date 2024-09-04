@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/api/taskqueue/v1"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -15,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -117,6 +120,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 			s.mockVisibilityManager,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			log.NewMockLogger(s.controller),
 		))
 }
 
@@ -199,6 +203,18 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+
+	// should emit a warning when BuildIds is set as a SA
+	saPayload, err = searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_TEXT)
+	s.NoError(err)
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		"BuildIds": saPayload,
+	}
+	mockedLogger, ok := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	s.True(ok)
+	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
+	_, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
+	s.NoError(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
@@ -233,6 +249,74 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
 	s.Equal(executionTimeout, attributes.GetWorkflowRunTimeout().AsDuration())
 	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
+	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
+
+	// setting BuildId as a SA which should return an error
+	attributes.SearchAttributes = &commonpb.SearchAttributes{}
+	saPayload, err := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	s.NoError(err)
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		"BuildIds": saPayload,
+	}
+
+	mockedLogger, ok := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	s.True(ok)
+	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
+	_, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
+		tests.Namespace,
+		attributes,
+		executionInfo,
+	)
+	s.NoError(err)
+}
+
+func (s *commandAttrValidatorSuite) TestValidateCommandStartChildWorkflowSearchAttributes_BuildID() {
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+	workflowTypeName := "workflowType"
+	tq := "test-tq"
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
+
+	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		Namespace:           s.testTargetNamespaceID.String(),
+		WorkflowId:          "child-123",
+		WorkflowType:        &commonpb.WorkflowType{Name: workflowTypeName},
+		TaskQueue:           &taskqueue.TaskQueue{Name: tq},
+		WorkflowTaskTimeout: durationpb.New(time.Since(time.Now())),
+	}
+
+	// setting BuildId as a SA which should return an error
+	attributes.SearchAttributes = &commonpb.SearchAttributes{}
+	saPayload, err := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	s.NoError(err)
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		"BuildIds": saPayload,
+	}
+
+	mockedLogger, ok := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	s.True(ok)
+	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
+	_, err = s.validator.ValidateStartChildExecutionAttributes(
+		s.testNamespaceID,
+		s.testTargetNamespaceID,
+		"test-target-namespace",
+		attributes,
+		&persistencespb.WorkflowExecutionInfo{
+			TaskQueue: tq,
+		},
+		nil,
+	)
+	s.NoError(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {

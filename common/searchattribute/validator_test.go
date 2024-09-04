@@ -3,8 +3,11 @@ package searchattribute
 import (
 	"testing"
 
+	"go.temporal.io/server/common/log"
+
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -48,6 +51,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewMockLogger(gomock.NewController(s.T())),
 	)
 
 	namespace := "namespace"
@@ -110,6 +114,18 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
+
+	mockLogger, ok := saValidator.logger.(*log.MockLogger)
+	s.True(ok)
+	mockLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.").Times(1)
+
+	saPayload, err := EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_TEXT)
+	s.NoError(err)
+	attr.IndexedFields = map[string]*commonpb.Payload{
+		"BuildIds": saPayload,
+	}
+	err = saValidator.Validate(attr, namespace)
+	s.NoError(err)
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressError() {
@@ -126,6 +142,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressEr
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		log.NewMockLogger(gomock.NewController(s.T())),
 	)
 
 	namespace := "namespace"
@@ -153,6 +170,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewMockLogger(gomock.NewController(s.T())),
 	)
 
 	namespace := "test-namespace"
@@ -217,6 +235,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewMockLogger(gomock.NewController(s.T())),
 	)
 
 	namespace := "namespace"
@@ -257,6 +276,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewMockLogger(gomock.NewController(s.T())),
 	)
 
 	namespace := "test-namespace"

@@ -202,6 +202,7 @@ func NewWorkflowHandler(
 				config.VisibilityAllowList,
 			),
 			config.SuppressErrorSetSystemSearchAttribute,
+			logger,
 		),
 		archivalMetadata:    archivalMetadata,
 		healthServer:        healthServer,

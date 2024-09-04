@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"go.temporal.io/server/common/log"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -28,6 +30,7 @@ type (
 		// suppressErrorSetSystemSearchAttribute suppresses errors when the user
 		// attempts to set values in system search attributes.
 		suppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		logger                                log.Logger
 	}
 )
 
@@ -41,6 +44,7 @@ func NewValidator(
 	visibilityManager manager.VisibilityManager,
 	allowList dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	suppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	logger log.Logger,
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:              searchAttributesProvider,
@@ -51,6 +55,7 @@ func NewValidator(
 		visibilityManager:                     visibilityManager,
 		allowList:                             allowList,
 		suppressErrorSetSystemSearchAttribute: suppressErrorSetSystemSearchAttribute,
+		logger:                                logger,
 	}
 }
 
@@ -94,7 +99,9 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 				fmt.Sprintf("%s attribute can't be set in SearchAttributes", saFieldName),
 			)
 		}
-
+		if saFieldName == BuildIds {
+			v.logger.Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
+		}
 		saType, err := saTypeMap.getType(saFieldName, customCategory|predefinedCategory)
 		if err != nil {
 			if errors.Is(err, ErrInvalidName) {
@@ -191,4 +198,8 @@ func (v *Validator) getAlias(saFieldName string, namespaceName string) (string, 
 		}
 	}
 	return saFieldName, nil
+}
+
+func (v *Validator) GetLogger() log.Logger {
+	return v.logger
 }
