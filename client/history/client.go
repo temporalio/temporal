@@ -258,9 +258,6 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	var streamClient historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
-		ctx, cancel := c.createContext(ctx)
-		defer cancel()
-		metadata.NewOutgoingContext(ctx, ctxMetadata)
 		streamClient, err = client.StreamWorkflowReplicationMessages(
 			metadata.NewOutgoingContext(ctx, ctxMetadata),
 			opts...)
