@@ -263,13 +263,13 @@ func (u *Update) WaitLifecycleStage(
 func (u *Update) abort(reason AbortReason) {
 	u.instrumentation.countAborted()
 
-	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
+	const preAcceptedStates = stateSet(stateCreated | stateAdmitted | stateSent)
 	if u.state.Matches(preAcceptedStates) {
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, reason.Error())
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
 	}
 
-	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
+	const preCompletedStates = stateSet(stateAccepted)
 	if u.state.Matches(preCompletedStates) {
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
 	}
@@ -494,18 +494,24 @@ func (u *Update) onAcceptanceMsg(
 			return
 		}
 		u.request = nil
-		beforeCommitState := u.setState(stateAccepted)
-		if beforeCommitState == stateProvisionallyAccepted {
-			// If Update is accepted and completed on the same WFT, then state transitions are:
-			// ProvisionallyAccepted -> ProvisionallyCompleted -> Accepted -> Completed.
-			// To prevent race condition with checks in WaitLifecycleStage, accepted future
-			// must be set after outcome future. Therefore, set accepted future here
-			// only if state transition is ProvisionallyAccepted -> Accepted.
-			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+
+		// If Update is accepted and completed on the same WFT, then its state transitions
+		// from ProvisionallyAccepted to ProvisionallyCompleted and, on commit of acceptance
+		// message, Update is in ProvisionallyCompleted state.
+		// To prevent race condition with checks in WaitLifecycleStage, accepted future
+		// must be set after outcome future.
+		// Therefore, if Update is in ProvisionallyCompleted state, it skips Accepted state
+		// and setting of accepted future is delayed. Update goes to ProvisionallyCompletedAfterAccepted
+		// state instead, which is handled in onResponseMsg.
+		if u.state == stateProvisionallyCompleted {
+			u.state = stateProvisionallyCompletedAfterAccepted
+			return
 		}
+		u.setState(stateAccepted)
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
-		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
+		if u.state != stateProvisionallyAccepted {
 			return
 		}
 		u.acceptedEventID = common.EmptyEventID
@@ -582,23 +588,24 @@ func (u *Update) onResponseMsg(
 	u.instrumentation.countResponseMsg()
 	prevState := u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
-		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
+		if !u.state.Matches(stateSet(stateProvisionallyCompleted | stateProvisionallyCompletedAfterAccepted)) {
 			return
 		}
 		beforeCommitState := u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
-		if beforeCommitState == stateAccepted {
-			// If Update is accepted and completed on the same WFT, then state transitions are:
-			// ProvisionallyAccepted -> ProvisionallyCompleted -> Accepted -> Completed.
-			// To prevent race condition with checks in WaitLifecycleStage, accepted future
-			// must be set after outcome future. Therefore, set accepted future here
-			// if state transition is Accepted -> Completed.
+		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
+			// If Update is accepted and completed on the same WFT, then it gets to ProvisionallyCompleted
+			// state from ProvisionallyAccepted state. OnAfterCommit handler of acceptance
+			// message changes state to ProvisionallyCompletedAfterAccepted.
+			// In this state accepted future must be set after outcome future to prevent race condition
+			// with checks in WaitLifecycleStage. It wasn't set in onAcceptanceMsg, and now it is time to
+			// do it. Update skips Accepted state and goes directly to Completed state.
 			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 		}
 		u.onComplete()
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
-		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
+		if u.state != stateProvisionallyCompleted {
 			return
 		}
 		u.setState(prevState)
