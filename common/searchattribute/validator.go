@@ -118,7 +118,11 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 				fmt.Sprintf("%s attribute can't be set in SearchAttributes", saFieldName),
 			)
 		}
-
+		if saFieldName == BuildIds {
+			return serviceerror.NewInvalidArgument(
+				fmt.Sprintf("%s buildID attribute can't be set in SearchAttributes", saFieldName),
+			)
+		}
 		saType, err := saTypeMap.getType(saFieldName, customCategory|predefinedCategory)
 		if err != nil {
 			if errors.Is(err, ErrInvalidName) {
