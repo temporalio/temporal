@@ -263,13 +263,13 @@ func (u *Update) WaitLifecycleStage(
 func (u *Update) abort(reason AbortReason) {
 	u.instrumentation.countAborted()
 
-	const preAcceptedStates = stateSet(stateCreated | stateAdmitted | stateSent)
-	if u.state.Matches(preAcceptedStates) {
+	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
+	if u.state.Matches(preAcceptedStates | stateSet(stateProvisionallyCompletedAfterAccepted)) {
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, reason.Error())
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
 	}
 
-	const preCompletedStates = stateSet(stateAccepted)
+	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
 	if u.state.Matches(preCompletedStates) {
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
 	}
