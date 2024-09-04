@@ -211,6 +211,18 @@ func (u *Update) WaitLifecycleStage(
 			if rejection != nil {
 				return statusRejected(rejection), nil
 			}
+			// Even if only ACCEPTED stage was requested, check if Update was completed on the same WFT,
+			// and return Update result if it was.
+			if u.outcome.Ready() {
+				var outcome *updatepb.Outcome
+				outcome, err = u.outcome.Get(stCtx)
+				if err == nil {
+					return statusCompleted(outcome), nil
+				}
+				// If outcome future returned an error, then ACCEPTED is the most advanced stage reached,
+				// and it should be returned to the caller (because it was requested).
+				// This can happen when Workflow completes after accepting but not completing Update.
+			}
 			return statusAccepted(), nil
 		}
 
@@ -482,8 +494,15 @@ func (u *Update) onAcceptanceMsg(
 			return
 		}
 		u.request = nil
-		u.setState(stateAccepted)
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+		beforeCommitState := u.setState(stateAccepted)
+		if beforeCommitState == stateProvisionallyAccepted {
+			// If Update is accepted and completed on the same WFT, then state transitions are:
+			// ProvisionallyAccepted -> ProvisionallyCompleted -> Accepted -> Completed.
+			// To prevent race condition with checks in WaitLifecycleStage, accepted future
+			// must be set after outcome future. Therefore, set accepted future here
+			// only if state transition is ProvisionallyAccepted -> Accepted.
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+		}
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
 		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
@@ -566,8 +585,16 @@ func (u *Update) onResponseMsg(
 		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
 			return
 		}
-		u.setState(stateCompleted)
+		beforeCommitState := u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
+		if beforeCommitState == stateAccepted {
+			// If Update is accepted and completed on the same WFT, then state transitions are:
+			// ProvisionallyAccepted -> ProvisionallyCompleted -> Accepted -> Completed.
+			// To prevent race condition with checks in WaitLifecycleStage, accepted future
+			// must be set after outcome future. Therefore, set accepted future here
+			// if state transition is Accepted -> Completed.
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+		}
 		u.onComplete()
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
