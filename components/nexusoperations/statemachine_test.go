@@ -583,16 +583,37 @@ func TestCancelationBeforeStarted(t *testing.T) {
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return op.Cancel(root, time.Now())
 	}))
-	require.Len(t, root.Outputs(), 2)
+	require.Len(t, root.Outputs(), 1)
 	require.Len(t, root.Outputs()[0].Outputs[0].Tasks, 1)
 	require.Equal(t, nexusoperations.TaskTypeInvocation, root.Outputs()[0].Outputs[0].Tasks[0].Type())
-	require.Len(t, root.Outputs()[1].Outputs[0].Tasks, 0)
 
 	node, err := root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 	require.NoError(t, err)
 	cancelation, err := hsm.MachineData[nexusoperations.Cancelation](node)
 	require.NoError(t, err)
-	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, cancelation.State())
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED, cancelation.State())
+
+	root.ClearTransactionState()
+
+	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+		return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
+			Time: time.Now(),
+			Node: root,
+			Attributes: &historypb.NexusOperationStartedEventAttributes{
+				OperationId: "test",
+			},
+		})
+	}))
+	require.Len(t, root.Outputs(), 2)
+	require.Len(t, root.Outputs()[0].Outputs[0].Tasks, 0)
+	require.Len(t, root.Outputs()[1].Outputs[0].Tasks, 1)
+	require.Equal(t, nexusoperations.TaskTypeCancelation, root.Outputs()[1].Outputs[0].Tasks[0].Type())
+
+	node, err = root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
+	require.NoError(t, err)
+	cancelation, err = hsm.MachineData[nexusoperations.Cancelation](node)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, cancelation.State())
 }
 
 func TestOperationCompareState(t *testing.T) {
