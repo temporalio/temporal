@@ -310,7 +310,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if err := r.failInflightActivity(
-		resetMutableState.GetExecutionInfo().StartTime.AsTime(),
+		resetMutableState.GetExecutionState().StartTime.AsTime(),
 		resetMutableState,
 		resetReason,
 	); err != nil {
