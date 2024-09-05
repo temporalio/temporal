@@ -25,8 +25,11 @@
 package client
 
 import (
+	"time"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -36,7 +39,8 @@ import (
 )
 
 var (
-	retryPolicy = common.CreatePersistenceClientRetryPolicy()
+	retryPolicy               = common.CreatePersistenceClientRetryPolicy()
+	namespaceQueueRetryPolicy = backoff.NewConstantDelayRetryPolicy(time.Millisecond * 50).WithMaximumAttempts(10)
 )
 
 type (
@@ -218,7 +222,7 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (persistence.NamespaceRepli
 	if f.metricsHandler != nil && f.healthSignals != nil {
 		result = persistence.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = persistence.NewQueuePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = persistence.NewQueuePersistenceRetryableClient(result, namespaceQueueRetryPolicy, IsNamespaceQueueTransientError)
 	return persistence.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsHandler, f.logger)
 }
 
@@ -258,6 +262,15 @@ func (f *factoryImpl) Close() {
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.Unavailable:
+		return true
+	}
+
+	return false
+}
+
+func IsNamespaceQueueTransientError(err error) bool {
+	switch err.(type) {
+	case *serviceerror.Unavailable, *persistence.ConditionFailedError:
 		return true
 	}
 
