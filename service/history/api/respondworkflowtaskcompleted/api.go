@@ -634,13 +634,22 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	effects.Apply(ctx)
 
 	if !ms.IsWorkflowExecutionRunning() {
-		// If the workflow completed itself with one of the completion commands,
-		// abort all waiters with "workflow completed" error.
-		// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
-		// - updates that were received while this WFT was running,
-		// - updates that were accepted but not completed by this WFT.
-		// It is important to call this after applying effects to be sure there are no unprocessed effects.
-		updateRegistry.Abort(update.AbortReasonWorkflowCompleted)
+		// Because all unprocessed Updates were already rejected, the registry has only:
+		//   - Updates that were received while this WFT was running,
+		//   - Updates that were accepted and still not completed.
+		// If the Workflow completed itself with one of the completion commands without creating new run,
+		// abort all Updates with "workflow completed" error.
+		// If new run was created (ContinueAsNew, Retry, Cron), then Updates that were received while
+		// this WFT was running are aborted with retryable "workflow is closing" error.
+		// SDK will retry API call and it should land on the new run.
+
+		// It is important to call this after applying effects to be sure there are no pending effects.
+
+		if newMutableState != nil {
+			updateRegistry.Abort(update.AbortReasonWorkflowContinuing)
+		} else {
+			updateRegistry.Abort(update.AbortReasonWorkflowCompleted)
+		}
 	}
 
 	// Create speculative workflow task after mutable state is persisted.

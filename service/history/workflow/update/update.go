@@ -271,6 +271,11 @@ func (u *Update) abort(reason AbortReason) {
 
 	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
 	if u.state.Matches(preCompletedStates) {
+		// Accepted Update can't be applied to the new run, and must to be aborted
+		// same way as if Workflow is completed.
+		if reason == AbortReasonWorkflowContinuing {
+			reason = AbortReasonWorkflowCompleted
+		}
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
 	}
 
