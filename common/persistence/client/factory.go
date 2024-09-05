@@ -40,7 +40,7 @@ import (
 
 var (
 	retryPolicy               = common.CreatePersistenceClientRetryPolicy()
-	namespaceQueueRetryPolicy = backoff.NewConstantDelayRetryPolicy(time.Millisecond * 100).WithMaximumAttempts(5)
+	namespaceQueueRetryPolicy = backoff.NewConstantDelayRetryPolicy(time.Millisecond * 50).WithMaximumAttempts(10)
 )
 
 type (
