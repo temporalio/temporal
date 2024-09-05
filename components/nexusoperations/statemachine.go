@@ -139,6 +139,14 @@ func (o Operation) Cancelation(node *hsm.Node) (*Cancelation, error) {
 	return &cancelation, err
 }
 
+func (o Operation) CancelationNode(node *hsm.Node) (*hsm.Node, error) {
+	child, err := node.Child([]hsm.Key{CancelationMachineKey})
+	if errors.Is(err, hsm.ErrStateMachineNotFound) {
+		return nil, nil
+	}
+	return child, err
+}
+
 // transitionTasks returns tasks that are emitted as transition outputs.
 func (o Operation) transitionTasks() ([]hsm.Task, error) {
 	switch o.State() { // nolint:exhaustive
@@ -415,6 +423,20 @@ var TransitionStarted = hsm.NewTransition(
 	func(op Operation, event EventStarted) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
 		op.OperationId = event.Attributes.OperationId
+
+		// If cancelation is requested already, schedule sending the cancelation request.
+		child, err := op.CancelationNode(event.Node)
+		if err != nil {
+			return hsm.TransitionOutput{}, err
+		}
+		if child != nil {
+			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
+				return TransitionCancelationScheduled.Apply(c, EventCancelationScheduled{
+					Time: event.Time,
+					Node: child,
+				})
+			})
+		}
 		return op.output()
 	},
 )
@@ -451,13 +473,8 @@ func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, er
 	// Operation wasn't started yet, we don't know how to cancel it ATM.
 	// TODO(bergundy): Support cancel-before-started.
 	if o.OperationId == "" {
-		return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
-			return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-				Err:  fmt.Errorf("cannot send cancelation for an unstarted operation"),
-				Time: t,
-				Node: child,
-			})
-		})
+		// Don't schedule the cancelation yet. We may schedule it again once the operation is started.
+		return hsm.TransitionOutput{}, nil
 	}
 	return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
 		return TransitionCancelationScheduled.Apply(c, EventCancelationScheduled{
@@ -585,7 +602,9 @@ func (c Cancelation) output(node *hsm.Node) (hsm.TransitionOutput, error) {
 func (c Cancelation) progress() (int, int32, error) {
 	switch c.State() {
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED:
-		return 0, 0, serviceerror.NewInvalidArgument("uninitialized cancelation state")
+		// UNSPECIFIED is a valid state since the cancelation may not initially get scheduled if the operation hasn't
+		// been started yet.
+		return 0, 0, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
 		return 1, c.GetAttempt() * 2, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:

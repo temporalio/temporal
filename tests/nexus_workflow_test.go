@@ -1087,6 +1087,130 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionInternalAuth() 
 	s.Equal("result", result)
 }
 
+func (s *ClientFunctionalSuite) TestNexusOperationCancelBeforeStarted_CancelationEventuallyDelivered() {
+	ctx := NewContext()
+	taskQueue := s.randomizeStr(s.T().Name())
+	endpointName := RandomizedNexusEndpoint(s.T().Name())
+
+	canStartCh := make(chan struct{})
+	cancelSentCh := make(chan struct{})
+
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			select {
+			case <-canStartCh:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+		},
+		OnCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+			cancelSentCh <- struct{}{}
+			return nil
+		},
+	}
+	listenAddr := nexustest.AllocListenAddress(s.T())
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
+
+	_, err := s.operatorClient.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
+	pollResp, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueue.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     s.mustToPayload("input"),
+					},
+				},
+			},
+			// Also wake the workflow up so it can cancel the operation.
+			{
+				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+				Attributes: &commandpb.Command_StartTimerCommandAttributes{
+					StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+						TimerId:            "1",
+						StartToFireTimeout: durationpb.New(time.Millisecond),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Poll and cancel the operation.
+	pollResp, err = s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueue.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+
+	// Get the scheduleEventId to issue the cancel command.
+	scheduledEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationScheduledEventAttributes() != nil
+	})
+	s.Greater(scheduledEventIdx, 0)
+	scheduledEventID := pollResp.History.Events[scheduledEventIdx].EventId
+
+	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+					RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+						ScheduledEventId: scheduledEventID,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	canStartCh <- struct{}{}
+	<-cancelSentCh
+
+	// Terminate the workflow for good measure.
+	err = s.sdkClient.TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
+	s.NoError(err)
+}
+
 func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletionAfterReset() {
 	ctx := NewContext()
 	taskQueue := s.randomizeStr(s.T().Name())
