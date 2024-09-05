@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -59,7 +58,6 @@ type (
 	// namespaceHandler implements the namespace-related APIs specified by the [workflowservice] package,
 	// such as registering, updating, and querying namespaces.
 	namespaceHandler struct {
-		maxBadBinaryCount      dynamicconfig.IntPropertyFnWithNamespaceFilter
 		logger                 log.Logger
 		metadataMgr            persistence.MetadataManager
 		clusterMetadata        cluster.Metadata
@@ -67,8 +65,8 @@ type (
 		namespaceAttrValidator *namespace.AttrValidatorImpl
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
-		supportsSchedules      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		timeSource             clock.TimeSource
+		config                 *Config
 	}
 )
 
@@ -88,18 +86,16 @@ var (
 
 // newNamespaceHandler create a new namespace handler
 func newNamespaceHandler(
-	maxBadBinaryCount dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicator namespace.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
-	supportsSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	timeSource clock.TimeSource,
+	config *Config,
 ) *namespaceHandler {
 	return &namespaceHandler{
-		maxBadBinaryCount:      maxBadBinaryCount,
 		logger:                 logger,
 		metadataMgr:            metadataMgr,
 		clusterMetadata:        clusterMetadata,
@@ -107,8 +103,8 @@ func newNamespaceHandler(
 		namespaceAttrValidator: namespace.NewAttrValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
-		supportsSchedules:      supportsSchedules,
 		timeSource:             timeSource,
+		config:                 config,
 	}
 }
 
@@ -485,7 +481,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			config.VisibilityArchivalUri = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
-			maxLength := d.maxBadBinaryCount(updateRequest.GetNamespace())
+			maxLength := d.config.MaxBadBinaries(updateRequest.GetNamespace())
 			// only do merging
 			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UTC())
 			config.BadBinaries = &bb
@@ -699,7 +695,12 @@ func (d *namespaceHandler) createResponse(
 		Data:        info.Data,
 		Id:          info.Id,
 
-		SupportsSchedules: d.supportsSchedules(info.Name),
+		Capabilities: &namespacepb.NamespaceInfo_Capabilities{
+			EagerWorkflowStart: d.config.EnableEagerWorkflowStart(info.Name),
+			SyncUpdate:         d.config.EnableUpdateWorkflowExecution(info.Name),
+			AsyncUpdate:        d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+		},
+		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}
 
 	configResult := &namespacepb.NamespaceConfig{
