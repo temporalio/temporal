@@ -25,6 +25,8 @@
 package client
 
 import (
+	"time"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -34,7 +36,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
-	"time"
 )
 
 var (
