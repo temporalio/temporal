@@ -148,6 +148,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 			s.mockVisibilityManager,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			log.NewMockLogger(s.controller),
 		))
 }
 
@@ -231,15 +232,16 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 
-	// should fail when BuildIds is set as a SA
-	saPayload, err = searchattribute.EncodeValue("123", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	// should emit a warning when BuildIds is set as a SA
+	saPayload, err = searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_TEXT)
 	s.NoError(err)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"BuildIds": saPayload,
 	}
+	mockedLogger := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
 	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
-	s.Error(err)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
+	s.NoError(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
@@ -277,19 +279,20 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 
 	// setting BuildId as a SA which should return an error
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-	saPayload, err := searchattribute.EncodeValue("123", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	saPayload, err := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"BuildIds": saPayload,
 	}
 
+	mockedLogger := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
 	fc, err = s.validator.validateContinueAsNewWorkflowExecutionAttributes(
 		tests.Namespace,
 		attributes,
 		executionInfo,
 	)
-	s.Error(err)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
+	s.NoError(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateCommandStartChildWorkflowSearchAttributes_BuildID() {
@@ -310,31 +313,34 @@ func (s *commandAttrValidatorSuite) TestValidateCommandStartChildWorkflowSearchA
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
 	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
-		Namespace:    s.testTargetNamespaceID.String(),
-		WorkflowId:   "child-123",
-		WorkflowType: &commonpb.WorkflowType{Name: workflowTypeName},
-		TaskQueue:    &taskqueue.TaskQueue{Name: tq},
+		Namespace:           s.testTargetNamespaceID.String(),
+		WorkflowId:          "child-123",
+		WorkflowType:        &commonpb.WorkflowType{Name: workflowTypeName},
+		TaskQueue:           &taskqueue.TaskQueue{Name: tq},
+		WorkflowTaskTimeout: durationpb.New(time.Since(time.Now())),
 	}
 
 	// setting BuildId as a SA which should return an error
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-	saPayload, err := searchattribute.EncodeValue("123", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	saPayload, err := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"BuildIds": saPayload,
 	}
 
-	fc, err := s.validator.validateStartChildExecutionAttributes(
+	mockedLogger := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
+	_, err = s.validator.validateStartChildExecutionAttributes(
 		s.testNamespaceID,
 		s.testTargetNamespaceID,
 		"test-target-namespace",
 		attributes,
-		nil,
+		&persistencespb.WorkflowExecutionInfo{
+			TaskQueue: tq,
+		},
 		nil,
 	)
-	s.Error(err)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
-
+	s.NoError(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {

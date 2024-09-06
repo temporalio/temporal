@@ -124,9 +124,6 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		}
 		if saFieldName == BuildIds {
 			v.logger.Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf("%s attribute can't be set in SearchAttributes", saFieldName),
-			)
 		}
 		saType, err := saTypeMap.getType(saFieldName, customCategory|predefinedCategory)
 		if err != nil {
@@ -224,4 +221,8 @@ func (v *Validator) getAlias(saFieldName string, namespaceName string) (string, 
 		}
 	}
 	return saFieldName, nil
+}
+
+func (v *Validator) GetLogger() log.Logger {
+	return v.logger
 }
