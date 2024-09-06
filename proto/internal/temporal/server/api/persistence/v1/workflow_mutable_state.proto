@@ -72,14 +72,14 @@ message WorkflowMutableStateMutation{
     repeated int64 deleted_signal_infos = 12;
     repeated string deleted_update_infos = 13;
     repeated StateMachinePath deleted_sub_state_machines = 14;
-    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
+    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 15;
     
-    repeated string signal_requested_ids = 15;
+    repeated string signal_requested_ids = 16;
     // Partial WorkflowExecutionInfo. Some fields, such as
     // update_infos and sub_state_machines_by_type, are not populated here.
-    // Instead, only diffs are synced in the deleted_* and updated_* fields above.
-    WorkflowExecutionInfo execution_info = 16;
-    WorkflowExecutionState execution_state = 17;
+    // Instead, only diffs are synced in the sub_state_machine_tombstone_batches and updated_* fields above.
+    WorkflowExecutionInfo execution_info = 17;
+    WorkflowExecutionState execution_state = 18;
 
     // TODO: uncomment buffered_events field when we are ready to replicate
     // mutable state as well.

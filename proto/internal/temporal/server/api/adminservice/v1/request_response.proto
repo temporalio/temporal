@@ -573,7 +573,7 @@ message SyncWorkflowStateRequest {
 message SyncWorkflowStateResponse {
   oneof attributes {
     replication.v1.SyncWorkflowStateMutationAttributes mutation = 1;
-    replication.v1.SyncWorkflowStateSnapshotAttributes state = 2;
+    replication.v1.SyncWorkflowStateSnapshotAttributes snapshot = 2;
   }
   repeated temporal.api.common.v1.DataBlob event_batches = 3;
   replication.v1.NewRunInfo new_run_info = 4;
