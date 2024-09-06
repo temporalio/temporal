@@ -83,6 +83,16 @@ func (c *clientImpl) CloseShard(
 	return c.client.CloseShard(ctx, request, opts...)
 }
 
+func (c *clientImpl) DeepHealthCheck(
+	ctx context.Context,
+	request *adminservice.DeepHealthCheckRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DeepHealthCheckResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeepHealthCheck(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,

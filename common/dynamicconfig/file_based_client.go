@@ -37,12 +37,11 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"golang.org/x/exp/maps"
-	"gopkg.in/yaml.v3"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	expmaps "golang.org/x/exp/maps"
+	"gopkg.in/yaml.v3"
 )
 
 var _ Client = (*fileBasedClient)(nil)
@@ -212,7 +211,7 @@ func (fc *fileBasedClient) Update() error {
 	}
 
 	fc.subscriptionLock.Lock()
-	subscriptions := maps.Values(fc.subscriptions)
+	subscriptions := expmaps.Values(fc.subscriptions)
 	fc.subscriptionLock.Unlock()
 
 	for _, update := range subscriptions {

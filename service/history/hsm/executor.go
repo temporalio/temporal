@@ -84,4 +84,4 @@ type TimerExecutor[T Task] func(env Environment, node *Node, task T) error
 
 // RemoteExecutor is responsible for executing remote methods.
 // // Implementations should be registered via [RegisterRemoteExecutors] to handle specific methods.
-type RemoteExecutor[I any, O any] func(ctx context.Context, env Environment, ref Ref, input I) (O, error)
+type RemoteExecutor func(ctx context.Context, env Environment, ref Ref, input any) (any, error)

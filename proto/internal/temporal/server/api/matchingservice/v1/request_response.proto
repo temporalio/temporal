@@ -329,6 +329,17 @@ message GetBuildIdTaskQueueMappingResponse {
     repeated string task_queues = 1;
 }
 
+message ForceLoadTaskQueuePartitionRequest {
+    string namespace_id = 1;
+
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+}
+
+message ForceLoadTaskQueuePartitionResponse {
+    bool was_unloaded = 1;
+}
+
+
 message ForceUnloadTaskQueueRequest {
     string namespace_id = 1;
     string task_queue = 2;

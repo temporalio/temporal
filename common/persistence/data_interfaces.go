@@ -34,16 +34,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // CreateWorkflowMode workflow creation mode
@@ -130,6 +128,7 @@ type (
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
+		StartTime        *time.Time
 	}
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record

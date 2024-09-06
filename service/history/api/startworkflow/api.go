@@ -35,26 +35,22 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/common/enums"
-
 	"go.temporal.io/server/api/historyservice/v1"
-
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/tasktoken"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -147,12 +143,12 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	if request.RequestEagerExecution {
-		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(
-			1,
-			metrics.NamespaceTag(s.namespace.Name().String()),
-			metrics.TaskQueueTag(request.TaskQueue.Name),
-			metrics.WorkflowTypeTag(request.WorkflowType.Name),
-		)
+		metrics.WorkflowEagerExecutionCounter.With(
+			workflow.GetPerTaskQueueFamilyScope(
+				metricsHandler, s.namespace.Name(), request.TaskQueue.Name, s.shardContext.GetConfig(),
+				metrics.WorkflowTypeTag(request.WorkflowType.Name),
+			),
+		).Record(1)
 
 		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
 		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
@@ -169,13 +165,13 @@ func (s *Starter) prepare(ctx context.Context) error {
 
 func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
 	metricsHandler := s.shardContext.GetMetricsHandler()
-	metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).Record(
-		1,
-		metrics.NamespaceTag(s.namespace.Name().String()),
-		metrics.TaskQueueTag(s.request.StartRequest.TaskQueue.Name),
-		metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
-		metrics.ReasonTag(metrics.ReasonString(reason)),
-	)
+	metrics.WorkflowEagerExecutionDeniedCounter.With(
+		workflow.GetPerTaskQueueFamilyScope(
+			metricsHandler, s.namespace.Name(), s.request.StartRequest.TaskQueue.Name, s.shardContext.GetConfig(),
+			metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
+			metrics.ReasonTag(metrics.ReasonString(reason)),
+		),
+	).Record(1)
 }
 
 func (s *Starter) requestEagerStart() bool {
@@ -376,12 +372,9 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	workflowID := s.request.StartRequest.WorkflowId
 
 	currentWorkflowStartTime := time.Time{}
-	if s.shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(s.namespace.Name().String()) {
-		var err error
-		currentWorkflowStartTime, err = s.getWorkflowStartTime(ctx, currentWorkflowConditionFailed.RunID)
-		if err != nil {
-			return nil, err
-		}
+	if s.shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(s.namespace.Name().String()) &&
+		currentWorkflowConditionFailed.StartTime != nil {
+		currentWorkflowStartTime = *currentWorkflowConditionFailed.StartTime
 	}
 
 	workflowKey := definition.NewWorkflowKey(
@@ -516,32 +509,6 @@ func (s *Starter) respondToRetriedRequest(
 	}
 
 	return s.generateResponse(runID, mutableStateInfo.workflowTask, events)
-}
-
-func (s *Starter) getWorkflowStartTime(ctx context.Context, runID string) (_ time.Time, retErr error) {
-	var workflowStartTime time.Time
-
-	// We technically never want to create a new execution but in practice this should not happen.
-	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
-		ctx,
-		s.shardContext,
-		s.namespace.ID(),
-		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
-		locks.PriorityHigh,
-	)
-	if err != nil {
-		return workflowStartTime, err
-	}
-
-	defer func() { releaseFn(retErr) }()
-
-	mutableState, err := workflowContext.LoadMutableState(ctx, s.shardContext)
-	if err != nil {
-		return workflowStartTime, err
-	}
-
-	workflowStartTime = mutableState.GetExecutionInfo().GetStartTime().AsTime()
-	return workflowStartTime, nil
 }
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the

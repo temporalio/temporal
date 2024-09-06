@@ -49,44 +49,6 @@ import (
 )
 
 type (
-	taskQueuePartitionManager interface {
-		Start()
-		Stop(unloadCause)
-		WaitUntilInitialized(context.Context) error
-		// AddTask adds a task to the task queue. This method will first attempt a synchronous
-		// match with a poller. When that fails, task will be written to database and later
-		// asynchronously matched with a poller
-		// Returns the build ID assigned to the task according to the assignment rules (if any),
-		// and a boolean indicating if sync-match happened or not.
-		AddTask(ctx context.Context, params addTaskParams) (buildId string, syncMatch bool, err error)
-		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
-		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
-		// from this task queue to pollers
-		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
-		// ProcessSpooledTask dispatches a task to a poller. When there are no pollers to pick
-		// up the task, this method will return error. Task will not be persisted to db
-		ProcessSpooledTask(ctx context.Context, task *internalTask, assignedBuildId string) error
-		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
-		// if dispatched to local poller then nil and nil is returned.
-		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// DispatchNexusTask dispatches a nexus task to a local or remote poller. If forwarded then result or
-		// error is returned, if dispatched to local poller then nil and nil is returned.
-		DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
-		GetUserDataManager() userDataManager
-		// MarkAlive updates the liveness timer to keep this partition manager alive.
-		MarkAlive()
-		GetAllPollerInfo() []*taskqueuepb.PollerInfo
-		// HasPollerAfter checks pollers on the queue associated with the given buildId, or the unversioned queue if an empty string is given
-		HasPollerAfter(buildId string, accessTime time.Time) bool
-		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues
-		HasAnyPollerAfter(accessTime time.Time) bool
-		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
-		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		Describe(buildIds map[string]bool, includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
-		String() string
-		Partition() tqid.Partition
-		LongPollExpirationInterval() time.Duration
-	}
 
 	// Represents a single partition of a (user-level) Task Queue in memory state. Under the hood, each Task Queue
 	// partition is made of one or more DB-level queues. There is always a default DB queue. For
@@ -107,13 +69,13 @@ type (
 		// is delegated to the defaultQueue.
 		defaultQueue physicalTaskQueueManager
 		// used for non-sticky versioned queues (one for each version)
-		versionedQueues      map[string]physicalTaskQueueManager
-		versionedQueuesLock  sync.RWMutex // locks mutation of versionedQueues
-		userDataManager      userDataManager
-		logger               log.Logger
-		throttledLogger      log.ThrottledLogger
-		matchingClient       matchingservice.MatchingServiceClient
-		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
+		versionedQueues     map[string]physicalTaskQueueManager
+		versionedQueuesLock sync.RWMutex // locks mutation of versionedQueues
+		userDataManager     userDataManager
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		matchingClient      matchingservice.MatchingServiceClient
+		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 	}
 )
 
@@ -135,26 +97,26 @@ func newTaskQueuePartitionManager(
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName))
-	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
-		e.metricsHandler.WithTags(
-			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-			metrics.TaskQueueTypeTag(partition.TaskType())),
+	taggedMetricsHandler := metrics.GetPerTaskQueuePartitionScope(
+		e.metricsHandler,
 		nsName,
-		partition.RpcName(),
-		partition.Kind(),
+		partition,
+		tqConfig.BreakdownMetricsByTaskQueue(),
+		tqConfig.BreakdownMetricsByPartition(),
+		metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
 	)
 
 	pm := &taskQueuePartitionManagerImpl{
-		engine:               e,
-		partition:            partition,
-		ns:                   ns,
-		config:               tqConfig,
-		logger:               logger,
-		throttledLogger:      throttledLogger,
-		matchingClient:       e.matchingRawClient,
-		taggedMetricsHandler: taggedMetricsHandler,
-		versionedQueues:      make(map[string]physicalTaskQueueManager),
-		userDataManager:      userDataManager,
+		engine:          e,
+		partition:       partition,
+		ns:              ns,
+		config:          tqConfig,
+		logger:          logger,
+		throttledLogger: throttledLogger,
+		matchingClient:  e.matchingRawClient,
+		metricsHandler:  taggedMetricsHandler,
+		versionedQueues: make(map[string]physicalTaskQueueManager),
+		userDataManager: userDataManager,
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
@@ -182,6 +144,10 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.defaultQueue.Stop(unloadCause)
 	pm.userDataManager.Stop()
 	pm.engine.updateTaskQueuePartitionGauge(pm, -1)
+}
+
+func (pm *taskQueuePartitionManagerImpl) Namespace() *namespace.Namespace {
+	return pm.ns
 }
 
 func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
@@ -224,7 +190,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 
 	if pm.partition.IsRoot() && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
-		pm.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
+		pm.metricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
 	}
 
 	isActive, err := pm.isActiveInCluster()
@@ -400,7 +366,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		request.VersionDirective,
-		request.GetForwardInfo(),
+		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
+		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
+		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
+		// more important to allow the parent partition to make a fresh versioning decision in case the child partition
+		// did not have up-to-date User Data when selected a dispatch build ID.
+		nil,
 		request.GetQueryRequest().GetExecution().GetRunId(),
 	)
 	if err != nil {
@@ -423,7 +394,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
-		request.GetForwardInfo(),
+		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
+		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
+		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
+		// more important to allow the parent partition to make a fresh versioning decision in case the child partition
+		// did not have up-to-date User Data when selected a dispatch build ID.
+		nil,
 		"",
 	)
 	if err != nil {
@@ -494,11 +470,10 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 }
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
+	ctx context.Context,
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
-	defer pm.versionedQueuesLock.RUnlock()
-
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
@@ -507,25 +482,22 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			buildIds[k] = true
 		}
 	}
+	pm.versionedQueuesLock.RUnlock()
 
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for bid := range buildIds {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
-		var physicalQueue physicalTaskQueueManager
-		if vq, ok := pm.versionedQueues[bid]; ok {
-			physicalQueue = vq
-		} else if bid == "" {
-			physicalQueue = pm.defaultQueue
+		physicalQueue, err := pm.getPhysicalQueue(ctx, bid)
+		if err != nil {
+			return nil, err
 		}
-		if physicalQueue != nil {
-			if reportPollers {
-				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
-			}
-			if reportStats {
-				vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
-			}
+		if reportPollers {
+			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
+		}
+		if reportStats {
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
 		}
 		versionsInfo[bid] = vInfo
 	}
@@ -549,6 +521,54 @@ func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Durat
 
 func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) context.Context {
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(pm.ns.Name().String()))
+}
+
+// ForceLoadAllNonRootPartitions spins off go routines which make RPC calls to all the
+func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions() {
+	if !pm.partition.IsRoot() {
+		pm.logger.Info("ForceLoadAllNonRootPartitions called on non-root partition. Prevented circular keep alive (loading) of partitions.")
+		return
+	}
+
+	partition := pm.partition
+	taskQueue := partition.TaskQueue()
+
+	namespaceId := partition.NamespaceId()
+	taskQueueName := taskQueue.Name()
+	taskQueueType := taskQueue.TaskType()
+	partitionTotal := pm.config.NumReadPartitions()
+
+	// record total - 1 as we won't try to forceLoad the Root partition.
+	pm.metricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitions.Name()).Record(int64(partitionTotal) - 1)
+
+	for partitionId := 1; partitionId < partitionTotal; partitionId++ {
+
+		go func() {
+			ctx := pm.callerInfoContext(context.Background())
+			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
+				NamespaceId: namespaceId,
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     taskQueueName,
+					TaskQueueType: taskQueueType,
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionId)},
+				},
+			})
+			if err != nil {
+				pm.logger.Error("Failed to force load non-root partition after root partition was loaded",
+					tag.Error(err))
+				return
+			}
+
+			if !resp.WasUnloaded {
+				// For the typical TaskQueue with 4 partitions, there is a 1/4 chance
+				// that a poller is load balanced to the root partition first.
+				// This metric will be used in conjunction with the one called earlier in the function
+				// To identify if we are making excessive/unnecessary/wasteful RPCs.
+				pm.metricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitionUnnecessarilyCounter.Name()).Record(1)
+			}
+
+		}()
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager, unloadCause unloadCause) {
@@ -842,10 +862,10 @@ func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueu
 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildPoll(buildId string) {
 	pm.logger.Warn("unknown build ID in poll", tag.BuildId(buildId))
-	pm.taggedMetricsHandler.Counter(metrics.UnknownBuildPollsCounter.Name()).Record(1)
+	pm.metricsHandler.Counter(metrics.UnknownBuildPollsCounter.Name()).Record(1)
 }
 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildTask(buildId string) {
 	pm.logger.Warn("unknown build ID in task", tag.BuildId(buildId))
-	pm.taggedMetricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
+	pm.metricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
 }

@@ -322,13 +322,19 @@ If you are using old Versioning API (i.e. using [Version Sets](https://docs.temp
 you can easily migrate to the new API.
 
 You don't need to change your worker code or Task Queue name. Only for your next 
-deployment, add an Assignment rule instead of a Version Set (incompatible Build ID).
+deployment, add an Assignment rule instead of a Version Set (incompatible Build ID). 
+The assignment rule can generally be done using the `insert-assignment-rule` command, 
+however, `commit-build-id` provides an idempotent replacement to both (now-deprecated) 
+`promote-set` and `add-new-default` operations. 
 
 The Version Sets added previously will be present and be used for the old Workflow
 executions. They will be cleaned up automatically once all their workflows pass their retention time.
 
 Note that:
 - For routing new executions, Assignment rules take precedence over the default Version Set.
+- If deploying your first build ID using the new API fails and you want to roll back,
+remove all the assignment rules so that the default Version Sets previously added be used
+again.
 - A single Build ID can either be added to a Version Set or Versioning Rules, not both.
 - It's not possible to add a Redirect Rule from a Version Set (or a Build of a Version Set)
 to another Build ID. This means you cannot redirect Workflows already started on a Version 

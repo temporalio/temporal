@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"

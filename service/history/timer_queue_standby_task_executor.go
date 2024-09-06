@@ -34,9 +34,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/service/history/replication/eventhandler"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -51,11 +48,13 @@ import (
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -517,15 +516,19 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 		mutableState workflow.MutableState,
 	) (any, error) {
 		processedTimers, err := t.executeStateMachineTimers(
+			ctx,
+			wfContext,
 			mutableState,
 			func(node *hsm.Node, task hsm.Task) error {
 				if task.Concurrent() {
 					//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
 					concurrentTask := task.(hsm.ConcurrentTask)
-					return concurrentTask.Validate(node)
+					if err := concurrentTask.Validate(node); err != nil {
+						return err
+					}
 				}
-				// If the task is expired and still valid in the standby queue,
-				// then the state machine is stale.
+				// If the timer fired and the task is still valid in the standby queue, wait for the active cluster to
+				// transition and invalidate the task.
 				return consts.ErrTaskRetry
 			},
 		)

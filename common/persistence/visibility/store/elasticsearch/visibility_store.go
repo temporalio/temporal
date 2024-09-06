@@ -42,7 +42,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -754,10 +753,10 @@ func (s *VisibilityStore) convertQuery(
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
-	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapperProvider)
+	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider)
 	queryConverter := NewQueryConverter(
 		nameInterceptor,
-		NewValuesInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider),
+		NewValuesInterceptor(namespace, saTypeMap),
 		saTypeMap,
 	)
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)

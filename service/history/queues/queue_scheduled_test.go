@@ -29,14 +29,13 @@ import (
 	"errors"
 	"math"
 	"math/rand"
+	"slices"
 	"testing"
 	"time"
 
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/slices"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"

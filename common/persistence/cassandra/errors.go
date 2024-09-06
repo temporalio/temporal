@@ -35,6 +35,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 var (
@@ -248,6 +249,7 @@ func extractCurrentWorkflowConflictError(
 			State:            executionState.State,
 			Status:           executionState.Status,
 			LastWriteVersion: lastWriteVersion,
+			StartTime:        timestamp.TimeValuePtr(executionState.StartTime),
 		}
 	}
 	return nil

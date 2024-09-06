@@ -38,8 +38,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/fx"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -51,6 +49,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	"go.uber.org/fx"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -118,9 +117,31 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadOperationArgs(ctx, env, ref)
+	args, err := e.loadOperationArgs(ctx, ns, env, ref, task)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
+	}
+
+	if args.cancelRequested {
+		// TODO(bergundy): Properly support cancel before started. We need to transmit this intent to cancel to the
+		// handler because we don't know for sure that the operation hasn't been started.
+		return e.saveResult(ctx, env, ref, nil, &nexus.UnsuccessfulOperationError{
+			State: nexus.OperationStateCanceled,
+			Failure: nexus.Failure{
+				Message: "operation canceled before it was started",
+			},
+		})
+	}
+
+	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
+	// indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
+	if args.endpointID == "" {
+		return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
+			Message: "endpoint not registered",
+			Response: &http.Response{
+				StatusCode: http.StatusNotFound,
+			},
+		})
 	}
 
 	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
@@ -178,6 +199,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,
 		Ref:         smRef,
+		RequestId:   args.requestID,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
@@ -198,6 +220,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
+		Links: []nexus.Link{args.nexusLink},
 	})
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
@@ -215,6 +238,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 					Operation: rawResult.Pending.Operation,
 					ID:        rawResult.Pending.ID,
 				},
+				Links: rawResult.Links,
 			}
 		} else {
 			var payload *commonpb.Payload
@@ -252,16 +276,29 @@ type startArgs struct {
 	endpointID               string
 	header                   map[string]string
 	payload                  *commonpb.Payload
+	nexusLink                nexus.Link
 	namespaceFailoverVersion int64
+	cancelRequested          bool
 }
 
-func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args startArgs, err error) {
+func (e taskExecutor) loadOperationArgs(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task InvocationTask,
+) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		if err := node.CheckRunning(); err != nil {
+		if err := task.Validate(node); err != nil {
 			return err
 		}
 		operation, err := hsm.MachineData[Operation](node)
+		if err != nil {
+			return err
+		}
+
+		args.cancelRequested, err = operation.cancelRequested(node)
 		if err != nil {
 			return err
 		}
@@ -278,6 +315,17 @@ func (e taskExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment
 		}
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
+		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+			Namespace:  ns.Name().String(),
+			WorkflowId: ref.WorkflowKey.WorkflowID,
+			RunId:      ref.WorkflowKey.RunID,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   event.GetEventId(),
+					EventType: event.GetEventType(),
+				},
+			},
+		})
 		args.namespaceFailoverVersion = event.Version
 		return nil
 	})
@@ -298,6 +346,30 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				return hsm.TransitionOutput{}, err
 			}
 			if result.Pending != nil {
+				var links []*commonpb.Link
+				for _, nexusLink := range result.Links {
+					switch nexusLink.Type {
+					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
+						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+						if err != nil {
+							// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+							// so ignoring the error for now; we will revisit how to handle these errors later.
+							e.Logger.Error(
+								fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+								tag.Error(err),
+							)
+							continue
+						}
+						links = append(links, &commonpb.Link{
+							Variant: &commonpb.Link_WorkflowEvent_{
+								WorkflowEvent: link,
+							},
+						})
+					default:
+						// If the link data type is unsupported, just ignore it for now.
+						e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+					}
+				}
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
 				// to allow it to complete via callback.
 				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
@@ -309,6 +381,8 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 							RequestId:        operation.RequestId,
 						},
 					}
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					e.Links = links
 				})
 				return TransitionStarted.Apply(operation, EventStarted{
 					Time:       env.Now(),
@@ -384,7 +458,7 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 }
 
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
-	if err := node.CheckRunning(); err != nil {
+	if err := task.Validate(node); err != nil {
 		return err
 	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
@@ -396,9 +470,6 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 
 func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
 	if err := task.Validate(node); err != nil {
-		return err
-	}
-	if err := node.CheckRunning(); err != nil {
 		return err
 	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
@@ -522,6 +593,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 			// Operation is already in a terminal state.
 			return fmt.Errorf("%w: operation already in terminal state", consts.ErrStaleReference)
 		}
+
 		args.service = op.Service
 		args.operation = op.Operation
 		args.operationID = op.OperationId

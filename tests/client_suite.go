@@ -52,13 +52,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/multierr"
-
-	"go.temporal.io/server/common/testing/historyrequire"
-	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -67,7 +60,12 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
+	"go.uber.org/multierr"
 )
 
 type (
@@ -127,8 +125,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
-	s.testCluster.host.dcClient.OverrideValue(
-		s.T(),
+	s.OverrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
 

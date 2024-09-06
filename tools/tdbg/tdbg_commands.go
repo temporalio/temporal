@@ -83,7 +83,7 @@ func getCommands(
 				&cli.StringFlag{
 					Name:  FlagDLQVersion,
 					Usage: "Version of DLQ to manage, options: v1, v2",
-					Value: "v1",
+					Value: "v2",
 				},
 			},
 		},

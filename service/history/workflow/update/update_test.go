@@ -36,8 +36,6 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payloads"
 	. "go.temporal.io/server/common/testing/protoutils"
@@ -45,6 +43,7 @@ import (
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const (

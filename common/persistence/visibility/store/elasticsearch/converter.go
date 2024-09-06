@@ -28,7 +28,6 @@ package elasticsearch
 
 import (
 	"github.com/temporalio/sqlparser"
-
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )

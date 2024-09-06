@@ -27,6 +27,7 @@ package metrics
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/cactus/go-statsd-client/v5/statsd"
@@ -34,8 +35,6 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
-	"golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
@@ -108,6 +107,9 @@ type (
 		// HandlerPath if specified will be used instead of using the default
 		// HTTP handler path "/metrics".
 		HandlerPath string `yaml:"handlerPath"`
+
+		// LoggerRPS sets the RPS of the logger provided to prometheus. Default of 0 means no limit.
+		LoggerRPS float64 `yaml:"loggerRPS"`
 
 		// Configs below are kept for backwards compatibility with previously exposed tally prometheus.Configuration.
 
@@ -295,6 +297,10 @@ func NewScope(logger log.Logger, c *Config) tally.Scope {
 		if err != nil {
 			logger.Fatal("invalid sanitize options input on prometheus config", tag.Error(err))
 			return nil
+		}
+
+		if c.Prometheus.LoggerRPS > 0 {
+			logger = log.NewThrottledLogger(logger, func() float64 { return c.Prometheus.LoggerRPS })
 		}
 
 		return newPrometheusScope(

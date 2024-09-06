@@ -26,8 +26,20 @@ import (
 	"fmt"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
+)
+
+var (
+	// EmptyVersionedTransition is the zero value for VersionedTransition.
+	// It's not a valid versioned transition for a workflow, and should only
+	// be used for representing the absence of a versioned transition.
+	// EmptyVersionedTransition is also considered less than any non-empty versioned transition.
+	EmptyVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: common.EmptyVersion,
+		TransitionCount:          0,
+	}
 )
 
 // UpdatedTransitionHistory takes a slice of transition history and returns a new slice that includes the max state
@@ -108,25 +120,39 @@ func TransitionHistoryStalenessCheck(
 // CompareVersionedTransition compares two VersionedTransition structs.
 // Returns -1 if a < b, 0 if a == b, 1 if a > b.
 //
-// A VersionedTransition  is considered less than another
+// A VersionedTransition is considered less than another
 // if its NamespaceFailoverVersion is less than the other's.
 // Or if the NamespaceFailoverVersion is the same, then the TransitionCount is compared.
+// Nil is considered the same as EmptyVersionedTransition, thus smaller than any non-empty versioned transition.
 func CompareVersionedTransition(
 	a, b *persistencespb.VersionedTransition,
 ) int {
-	if a.NamespaceFailoverVersion < b.NamespaceFailoverVersion {
+	if a.GetNamespaceFailoverVersion() < b.GetNamespaceFailoverVersion() {
 		return -1
 	}
-	if a.NamespaceFailoverVersion > b.NamespaceFailoverVersion {
+	if a.GetNamespaceFailoverVersion() > b.GetNamespaceFailoverVersion() {
 		return 1
 	}
 
-	if a.TransitionCount < b.TransitionCount {
+	if a.GetTransitionCount() < b.GetTransitionCount() {
 		return -1
 	}
-	if a.TransitionCount > b.TransitionCount {
+	if a.GetTransitionCount() > b.GetTransitionCount() {
 		return 1
 	}
 
 	return 0
+}
+
+func CopyVersionedTransitions(
+	transitions []*persistencespb.VersionedTransition,
+) []*persistencespb.VersionedTransition {
+	if transitions == nil {
+		return nil
+	}
+	copied := make([]*persistencespb.VersionedTransition, len(transitions))
+	for i, t := range transitions {
+		copied[i] = common.CloneProto(t)
+	}
+	return copied
 }

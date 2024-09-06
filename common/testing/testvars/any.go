@@ -26,6 +26,7 @@ package testvars
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 )
@@ -62,4 +63,14 @@ func (a Any) Int() int {
 func (a Any) EventID() int64 {
 	// This produces EventID in XX0YY format, where XX is unique for every test and YY is a random number.
 	return int64(randInt(a.testHash, 2, 1, 2))
+}
+
+func (a Any) ApplicationFailure() *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: a.String(),
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         a.String(),
+			NonRetryable: false,
+		}},
+	}
 }
