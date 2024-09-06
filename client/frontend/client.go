@@ -24,7 +24,6 @@
 
 // Generates all three generated files in this package:
 //go:generate go run ../../cmd/tools/rpcwrappers -service frontend
-//go:generate mockgen -copyright_file ../../LICENSE -package workflowservicemock -destination ../../api/workflowservicemock/v1/service_grpc.pb.mock.go go.temporal.io/api/workflowservice/v1 WorkflowServiceClient
 
 package frontend
 
