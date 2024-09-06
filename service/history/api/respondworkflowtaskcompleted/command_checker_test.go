@@ -25,10 +25,11 @@
 package respondworkflowtaskcompleted
 
 import (
-	"go.temporal.io/api/taskqueue/v1"
 	"math/rand"
 	"testing"
 	"time"
+
+	"go.temporal.io/api/taskqueue/v1"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"

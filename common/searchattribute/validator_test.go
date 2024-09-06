@@ -25,8 +25,9 @@
 package searchattribute
 
 import (
-	"go.temporal.io/server/common/log"
 	"testing"
+
+	"go.temporal.io/server/common/log"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"

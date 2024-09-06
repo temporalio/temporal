@@ -27,6 +27,7 @@ package searchattribute
 import (
 	"errors"
 	"fmt"
+
 	"go.temporal.io/server/common/log"
 
 	commonpb "go.temporal.io/api/common/v1"
