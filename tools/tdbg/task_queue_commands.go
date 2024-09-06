@@ -182,7 +182,7 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 	req := &adminservice.DescribeTaskQueuePartitionRequest{
 		Namespace:          namespace,
 		TaskQueuePartition: tqPartition,
-		BuildId: &taskqueue.TaskQueueVersionSelection{
+		BuildIds: &taskqueue.TaskQueueVersionSelection{
 			BuildIds:    buildIDs,
 			Unversioned: unversioned,
 			AllActive:   allActive,

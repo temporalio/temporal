@@ -567,7 +567,7 @@ message DescribeTaskQueuePartitionRequest {
   string namespace = 1;
   temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
   // Absent means unversioned queue. Ignored for sticky partitions.
-  temporal.api.taskqueue.v1.TaskQueueVersionSelection build_id = 3;
+  temporal.api.taskqueue.v1.TaskQueueVersionSelection build_ids = 3;
 }
 
 message InternalTaskQueueStatus {

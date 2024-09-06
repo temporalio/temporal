@@ -1633,7 +1633,7 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 	resp, err := adh.matchingClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 		NamespaceId:                   namespaceID.String(),
 		TaskQueuePartition:            request.GetTaskQueuePartition(),
-		Versions:                      request.GetBuildId(),
+		Versions:                      request.GetBuildIds(),
 		ReportStats:                   true,
 		ReportPollers:                 true,
 		ReportInternalTaskQueueStatus: true,

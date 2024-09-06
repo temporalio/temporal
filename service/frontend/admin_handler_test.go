@@ -1767,7 +1767,7 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 	resp, err := handler.DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
 		Namespace:          s.namespace.String(),
 		TaskQueuePartition: tqPartitionRequest,
-		BuildId:            buildIdRequest,
+		BuildIds:           buildIdRequest,
 	})
 	s.NoError(err)
 	s.NotNil(resp)
