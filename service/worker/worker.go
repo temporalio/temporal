@@ -26,6 +26,8 @@ package worker
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sync/atomic"
 
 	sdkworker "go.temporal.io/sdk/worker"
@@ -73,6 +75,7 @@ func (wm *workerManager) Start() {
 	}
 
 	defaultWorkerOptions := sdkworker.Options{
+		Identity: fmt.Sprintf("temporal-system@%d", os.Getpid()),
 		// TODO: add dynamic config for worker options
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
@@ -86,6 +89,7 @@ func (wm *workerManager) Start() {
 			// use default worker
 			wc.RegisterWorkflow(defaultWorker)
 		} else {
+			wfWorkerOptions.Options.Identity = fmt.Sprintf("temporal-system@%d", os.Getpid())
 			// this worker component requires a dedicated worker
 			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, wfWorkerOptions.TaskQueue, wfWorkerOptions.Options)
 			wc.RegisterWorkflow(dedicatedWorker)
@@ -102,6 +106,7 @@ func (wm *workerManager) Start() {
 
 			// this worker component requires a dedicated worker for activities
 			activityWorkerOptions.Options.DisableWorkflowWorker = true
+			activityWorkerOptions.Options.Identity = fmt.Sprintf("temporal-system@%d", os.Getpid())
 			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)
 			wc.RegisterActivities(activityWorker)
 			wm.workers = append(wm.workers, activityWorker)

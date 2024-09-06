@@ -26,6 +26,8 @@ package scanner
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -169,6 +171,7 @@ func (s *Scanner) Start() error {
 	ctx, s.lifecycleCancel = context.WithCancel(ctx)
 
 	workerOpts := worker.Options{
+		Identity:                               fmt.Sprintf("temporal-system@%d", os.Getpid()),
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.context.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
 		MaxConcurrentActivityTaskPollers:       s.context.cfg.MaxConcurrentActivityTaskPollers(),

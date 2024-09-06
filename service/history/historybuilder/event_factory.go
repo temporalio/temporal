@@ -27,6 +27,9 @@ package historybuilder
 import (
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -40,8 +43,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type EventFactory struct {

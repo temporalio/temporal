@@ -35,6 +35,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/fx"
+	expmaps "golang.org/x/exp/maps"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
@@ -54,8 +57,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
-	"go.uber.org/fx"
-	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -484,7 +485,7 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeout
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
-	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
+	sdkoptions.Identity = fmt.Sprintf("temporal-system@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
 	// increase these if we're supposed to run with more allocation
 	sdkoptions.MaxConcurrentWorkflowTaskPollers *= allocation.Local
 	sdkoptions.MaxConcurrentActivityTaskPollers *= allocation.Local
