@@ -191,7 +191,6 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 
 func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
 	mutableState workflow.MutableState,
-	task *tasks.WorkflowRunTimeoutTask,
 ) bool {
 	executionInfo := mutableState.GetExecutionInfo()
 

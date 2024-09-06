@@ -569,7 +569,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		return err
 	}
 
-	if !t.isValidWorkflowRunTimeoutTask(mutableState, task) {
+	if !t.isValidWorkflowRunTimeoutTask(mutableState) {
 		return nil
 	}
 

@@ -438,7 +438,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 ) error {
 
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		if !t.isValidWorkflowRunTimeoutTask(mutableState, timerTask) {
+		if !t.isValidWorkflowRunTimeoutTask(mutableState) {
 			return nil, nil
 		}
 
